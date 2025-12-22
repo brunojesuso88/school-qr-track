@@ -7,9 +7,15 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Textarea } from '@/components/ui/textarea';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Calendar } from '@/components/ui/calendar';
 import { toast } from 'sonner';
-import { Plus, Search, QrCode, Edit2, Trash2, Download, User } from 'lucide-react';
+import { Plus, Search, QrCode, Edit2, Trash2, Download, User, CalendarIcon, FileText } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
+import { format, parse } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
+import { cn } from '@/lib/utils';
 
 interface Student {
   id: string;
@@ -23,6 +29,7 @@ interface Student {
   qr_code: string;
   status: string;
   created_at: string;
+  birth_date: string | null;
 }
 
 interface ClassItem {
@@ -30,6 +37,24 @@ interface ClassItem {
   name: string;
   shift: string;
 }
+
+interface Occurrence {
+  id: string;
+  student_id: string;
+  type: string;
+  description: string | null;
+  date: string;
+  created_at: string;
+}
+
+const OCCURRENCE_TYPES = [
+  { value: 'early_leave', label: 'Saída Antecipada' },
+  { value: 'illness', label: 'Doença' },
+  { value: 'medical_certificate', label: 'Atestado Médico' },
+  { value: 'late_arrival', label: 'Atraso' },
+  { value: 'discipline', label: 'Ocorrência Disciplinar' },
+  { value: 'other', label: 'Outros' },
+];
 
 const Students = () => {
   const [students, setStudents] = useState<Student[]>([]);
@@ -40,14 +65,23 @@ const Students = () => {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
+  const [occurrencesStudent, setOccurrencesStudent] = useState<Student | null>(null);
+  const [occurrences, setOccurrences] = useState<Occurrence[]>([]);
+  const [isOccurrenceDialogOpen, setIsOccurrenceDialogOpen] = useState(false);
+  const [birthDate, setBirthDate] = useState<Date | undefined>(undefined);
 
   const [formData, setFormData] = useState({
     full_name: '',
-    student_id: '',
     class: '',
     shift: 'morning',
     guardian_name: '',
     guardian_phone: '',
+  });
+
+  const [occurrenceForm, setOccurrenceForm] = useState({
+    type: '',
+    description: '',
+    date: new Date(),
   });
 
   useEffect(() => {
@@ -81,10 +115,39 @@ const Students = () => {
       setStudents(data || []);
     } catch (error) {
       console.error('Error fetching students:', error);
-      toast.error('Failed to load students');
+      toast.error('Falha ao carregar alunos');
     } finally {
       setLoading(false);
     }
+  };
+
+  const fetchOccurrences = async (studentId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('occurrences')
+        .select('*')
+        .eq('student_id', studentId)
+        .order('date', { ascending: false });
+
+      if (error) throw error;
+      setOccurrences(data || []);
+    } catch (error) {
+      console.error('Error fetching occurrences:', error);
+      toast.error('Falha ao carregar ocorrências');
+    }
+  };
+
+  const generateStudentId = (fullName: string, birthDate: Date | undefined): string => {
+    if (!fullName || !birthDate) return '';
+    
+    const nameParts = fullName.trim().split(' ');
+    const initials = nameParts
+      .filter(part => part.length > 0)
+      .map(part => part[0].toUpperCase())
+      .join('');
+    
+    const dateStr = format(birthDate, 'ddMMyyyy');
+    return `${initials}${dateStr}`;
   };
 
   const generateQRCode = () => {
@@ -94,24 +157,35 @@ const Students = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    if (!birthDate) {
+      toast.error('Data de nascimento é obrigatória');
+      return;
+    }
+
+    const studentId = generateStudentId(formData.full_name, birthDate);
+
     try {
       if (editingStudent) {
         const { error } = await supabase
           .from('students')
           .update({
             ...formData,
+            student_id: studentId,
+            birth_date: format(birthDate, 'yyyy-MM-dd'),
             shift: formData.shift as 'morning' | 'afternoon' | 'evening',
           })
           .eq('id', editingStudent.id);
 
         if (error) throw error;
-        toast.success('Student updated successfully');
+        toast.success('Aluno atualizado com sucesso');
       } else {
         const qrCode = generateQRCode();
         const { error } = await supabase
           .from('students')
           .insert({
             ...formData,
+            student_id: studentId,
+            birth_date: format(birthDate, 'yyyy-MM-dd'),
             shift: formData.shift as 'morning' | 'afternoon' | 'evening',
             qr_code: qrCode,
           });
@@ -127,10 +201,52 @@ const Students = () => {
     } catch (error: any) {
       console.error('Error saving student:', error);
       if (error.message?.includes('duplicate')) {
-        toast.error('Student ID already exists');
+        toast.error('ID do aluno já existe');
       } else {
-        toast.error('Failed to save student');
+        toast.error('Falha ao salvar aluno');
       }
+    }
+  };
+
+  const handleAddOccurrence = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!occurrencesStudent) return;
+
+    try {
+      const { error } = await supabase
+        .from('occurrences')
+        .insert({
+          student_id: occurrencesStudent.id,
+          type: occurrenceForm.type,
+          description: occurrenceForm.description || null,
+          date: format(occurrenceForm.date, 'yyyy-MM-dd'),
+        });
+
+      if (error) throw error;
+      toast.success('Ocorrência registrada com sucesso');
+      setIsOccurrenceDialogOpen(false);
+      setOccurrenceForm({ type: '', description: '', date: new Date() });
+      fetchOccurrences(occurrencesStudent.id);
+    } catch (error) {
+      console.error('Error adding occurrence:', error);
+      toast.error('Falha ao registrar ocorrência');
+    }
+  };
+
+  const handleDeleteOccurrence = async (id: string) => {
+    if (!confirm('Tem certeza que deseja excluir esta ocorrência?')) return;
+
+    try {
+      const { error } = await supabase.from('occurrences').delete().eq('id', id);
+      if (error) throw error;
+      toast.success('Ocorrência excluída');
+      if (occurrencesStudent) {
+        fetchOccurrences(occurrencesStudent.id);
+      }
+    } catch (error) {
+      console.error('Error deleting occurrence:', error);
+      toast.error('Falha ao excluir ocorrência');
     }
   };
 
@@ -138,38 +254,43 @@ const Students = () => {
     setEditingStudent(student);
     setFormData({
       full_name: student.full_name,
-      student_id: student.student_id,
       class: student.class,
       shift: student.shift,
       guardian_name: student.guardian_name,
       guardian_phone: student.guardian_phone,
     });
+    setBirthDate(student.birth_date ? parse(student.birth_date, 'yyyy-MM-dd', new Date()) : undefined);
     setIsDialogOpen(true);
   };
 
+  const handleViewOccurrences = (student: Student) => {
+    setOccurrencesStudent(student);
+    fetchOccurrences(student.id);
+  };
+
   const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this student?')) return;
+    if (!confirm('Tem certeza que deseja excluir este aluno?')) return;
 
     try {
       const { error } = await supabase.from('students').delete().eq('id', id);
       if (error) throw error;
-      toast.success('Student deleted');
+      toast.success('Aluno excluído');
       fetchStudents();
     } catch (error) {
       console.error('Error deleting student:', error);
-      toast.error('Failed to delete student');
+      toast.error('Falha ao excluir aluno');
     }
   };
 
   const resetForm = () => {
     setFormData({
       full_name: '',
-      student_id: '',
       class: '',
       shift: 'morning',
       guardian_name: '',
       guardian_phone: '',
     });
+    setBirthDate(undefined);
   };
 
   const downloadQRCode = (student: Student) => {
@@ -216,14 +337,21 @@ const Students = () => {
 
   const uniqueClasses = [...new Set(students.map((s) => s.class))];
 
+  const getOccurrenceTypeLabel = (type: string) => {
+    return OCCURRENCE_TYPES.find(t => t.value === type)?.label || type;
+  };
+
+  // Auto-generate student ID when name or birth date changes
+  const generatedStudentId = generateStudentId(formData.full_name, birthDate);
+
   return (
     <DashboardLayout>
       <div className="space-y-6">
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-semibold">Students</h1>
-            <p className="text-muted-foreground">Manage student records and QR codes</p>
+            <h1 className="text-2xl font-semibold">Alunos</h1>
+            <p className="text-muted-foreground">Gerenciar registros de alunos e QR codes</p>
           </div>
           <Dialog open={isDialogOpen} onOpenChange={(open) => {
             setIsDialogOpen(open);
@@ -235,19 +363,19 @@ const Students = () => {
             <DialogTrigger asChild>
               <Button>
                 <Plus className="w-4 h-4 mr-2" />
-                Add Student
+                Adicionar Aluno
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-md">
+            <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
               <DialogHeader>
-                <DialogTitle>{editingStudent ? 'Edit Student' : 'Register New Student'}</DialogTitle>
+                <DialogTitle>{editingStudent ? 'Editar Aluno' : 'Cadastrar Novo Aluno'}</DialogTitle>
                 <DialogDescription>
-                  {editingStudent ? 'Update student information' : 'Fill in the student details below'}
+                  {editingStudent ? 'Atualizar informações do aluno' : 'Preencha os dados do aluno abaixo'}
                 </DialogDescription>
               </DialogHeader>
               <form onSubmit={handleSubmit} className="space-y-4 mt-4">
                 <div className="space-y-2">
-                  <Label htmlFor="full_name">Full Name</Label>
+                  <Label htmlFor="full_name">Nome Completo</Label>
                   <Input
                     id="full_name"
                     value={formData.full_name}
@@ -256,13 +384,43 @@ const Students = () => {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="student_id">Student ID</Label>
+                  <Label>Data de Nascimento</Label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className={cn(
+                          "w-full justify-start text-left font-normal",
+                          !birthDate && "text-muted-foreground"
+                        )}
+                      >
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {birthDate ? format(birthDate, "PPP", { locale: ptBR }) : <span>Selecione a data</span>}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar
+                        mode="single"
+                        selected={birthDate}
+                        onSelect={setBirthDate}
+                        disabled={(date) => date > new Date() || date < new Date("1900-01-01")}
+                        initialFocus
+                        className={cn("p-3 pointer-events-auto")}
+                      />
+                    </PopoverContent>
+                  </Popover>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="student_id">ID do Aluno (gerado automaticamente)</Label>
                   <Input
                     id="student_id"
-                    value={formData.student_id}
-                    onChange={(e) => setFormData({ ...formData, student_id: e.target.value })}
-                    required
+                    value={generatedStudentId}
+                    disabled
+                    className="bg-muted"
                   />
+                  <p className="text-xs text-muted-foreground">
+                    Gerado a partir do nome e data de nascimento
+                  </p>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
@@ -306,7 +464,7 @@ const Students = () => {
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="guardian_name">Guardian Name</Label>
+                  <Label htmlFor="guardian_name">Nome do Responsável</Label>
                   <Input
                     id="guardian_name"
                     value={formData.guardian_name}
@@ -315,7 +473,7 @@ const Students = () => {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="guardian_phone">Guardian Phone (WhatsApp)</Label>
+                  <Label htmlFor="guardian_phone">Telefone do Responsável (WhatsApp)</Label>
                   <Input
                     id="guardian_phone"
                     type="tel"
@@ -326,7 +484,7 @@ const Students = () => {
                   />
                 </div>
                 <Button type="submit" className="w-full">
-                  {editingStudent ? 'Update Student' : 'Register Student'}
+                  {editingStudent ? 'Atualizar Aluno' : 'Cadastrar Aluno'}
                 </Button>
               </form>
             </DialogContent>
@@ -340,7 +498,7 @@ const Students = () => {
               <div className="flex-1 relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input
-                  placeholder="Search by name or ID..."
+                  placeholder="Buscar por nome ou ID..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="pl-10"
@@ -348,7 +506,7 @@ const Students = () => {
               </div>
               <Select value={filterClass} onValueChange={setFilterClass}>
                 <SelectTrigger className="w-full sm:w-40">
-                  <SelectValue placeholder="All Classes" />
+                  <SelectValue placeholder="Todas as Turmas" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todas as Turmas</SelectItem>
@@ -404,17 +562,20 @@ const Students = () => {
                     <span className={`text-xs px-2 py-1 rounded-full ${
                       student.status === 'active' ? 'bg-success/10 text-success' : 'bg-muted text-muted-foreground'
                     }`}>
-                      {student.status}
+                      {student.status === 'active' ? 'Ativo' : student.status}
                     </span>
                   </div>
 
                   <div className="text-xs space-y-1 text-muted-foreground mb-4">
-                    <p><span className="font-medium text-foreground">Class:</span> {student.class}</p>
-                    <p><span className="font-medium text-foreground">Shift:</span> {student.shift}</p>
-                    <p><span className="font-medium text-foreground">Guardian:</span> {student.guardian_name}</p>
+                    <p><span className="font-medium text-foreground">Turma:</span> {student.class}</p>
+                    <p><span className="font-medium text-foreground">Turno:</span> {student.shift === 'morning' ? 'Manhã' : student.shift === 'afternoon' ? 'Tarde' : 'Noite'}</p>
+                    <p><span className="font-medium text-foreground">Responsável:</span> {student.guardian_name}</p>
+                    {student.birth_date && (
+                      <p><span className="font-medium text-foreground">Nascimento:</span> {format(parse(student.birth_date, 'yyyy-MM-dd', new Date()), 'dd/MM/yyyy')}</p>
+                    )}
                   </div>
 
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 flex-wrap">
                     <Button
                       variant="outline"
                       size="sm"
@@ -423,6 +584,13 @@ const Students = () => {
                     >
                       <QrCode className="w-3 h-3 mr-1" />
                       QR
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleViewOccurrences(student)}
+                    >
+                      <FileText className="w-3 h-3" />
                     </Button>
                     <Button variant="ghost" size="sm" onClick={() => handleEdit(student)}>
                       <Edit2 className="w-3 h-3" />
@@ -439,11 +607,11 @@ const Students = () => {
           <Card>
             <CardContent className="p-12 text-center">
               <User className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
-              <h3 className="font-medium mb-1">No students found</h3>
+              <h3 className="font-medium mb-1">Nenhum aluno encontrado</h3>
               <p className="text-sm text-muted-foreground">
                 {searchTerm || filterClass !== 'all'
-                  ? 'Try adjusting your filters'
-                  : 'Add your first student to get started'}
+                  ? 'Tente ajustar os filtros'
+                  : 'Adicione seu primeiro aluno para começar'}
               </p>
             </CardContent>
           </Card>
@@ -453,7 +621,7 @@ const Students = () => {
         <Dialog open={!!selectedStudent} onOpenChange={() => setSelectedStudent(null)}>
           <DialogContent className="max-w-sm text-center">
             <DialogHeader>
-              <DialogTitle>Student QR Code</DialogTitle>
+              <DialogTitle>QR Code do Aluno</DialogTitle>
               <DialogDescription>{selectedStudent?.full_name}</DialogDescription>
             </DialogHeader>
             {selectedStudent && (
@@ -472,10 +640,133 @@ const Students = () => {
                 </div>
                 <Button onClick={() => downloadQRCode(selectedStudent)}>
                   <Download className="w-4 h-4 mr-2" />
-                  Download QR Code
+                  Baixar QR Code
                 </Button>
               </div>
             )}
+          </DialogContent>
+        </Dialog>
+
+        {/* Occurrences Modal */}
+        <Dialog open={!!occurrencesStudent} onOpenChange={() => setOccurrencesStudent(null)}>
+          <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Ocorrências - {occurrencesStudent?.full_name}</DialogTitle>
+              <DialogDescription>
+                Registro de ocorrências do aluno
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 mt-4">
+              <Button onClick={() => setIsOccurrenceDialogOpen(true)} className="w-full">
+                <Plus className="w-4 h-4 mr-2" />
+                Nova Ocorrência
+              </Button>
+
+              {occurrences.length > 0 ? (
+                <div className="space-y-3">
+                  {occurrences.map((occurrence) => (
+                    <Card key={occurrence.id}>
+                      <CardContent className="p-4">
+                        <div className="flex items-start justify-between">
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs px-2 py-1 rounded-full bg-primary/10 text-primary font-medium">
+                                {getOccurrenceTypeLabel(occurrence.type)}
+                              </span>
+                              <span className="text-xs text-muted-foreground">
+                                {format(parse(occurrence.date, 'yyyy-MM-dd', new Date()), 'dd/MM/yyyy')}
+                              </span>
+                            </div>
+                            {occurrence.description && (
+                              <p className="text-sm text-muted-foreground">{occurrence.description}</p>
+                            )}
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleDeleteOccurrence(occurrence.id)}
+                          >
+                            <Trash2 className="w-3 h-3 text-destructive" />
+                          </Button>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-8 text-muted-foreground">
+                  <FileText className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                  <p>Nenhuma ocorrência registrada</p>
+                </div>
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Add Occurrence Dialog */}
+        <Dialog open={isOccurrenceDialogOpen} onOpenChange={setIsOccurrenceDialogOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Nova Ocorrência</DialogTitle>
+              <DialogDescription>
+                Registrar nova ocorrência para {occurrencesStudent?.full_name}
+              </DialogDescription>
+            </DialogHeader>
+            <form onSubmit={handleAddOccurrence} className="space-y-4 mt-4">
+              <div className="space-y-2">
+                <Label>Tipo de Ocorrência</Label>
+                <Select
+                  value={occurrenceForm.type}
+                  onValueChange={(value) => setOccurrenceForm({ ...occurrenceForm, type: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione o tipo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {OCCURRENCE_TYPES.map((type) => (
+                      <SelectItem key={type.value} value={type.value}>
+                        {type.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Data</Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className="w-full justify-start text-left font-normal"
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {format(occurrenceForm.date, "PPP", { locale: ptBR })}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={occurrenceForm.date}
+                      onSelect={(date) => date && setOccurrenceForm({ ...occurrenceForm, date })}
+                      initialFocus
+                      className={cn("p-3 pointer-events-auto")}
+                    />
+                  </PopoverContent>
+                </Popover>
+              </div>
+              <div className="space-y-2">
+                <Label>Descrição (opcional)</Label>
+                <Textarea
+                  value={occurrenceForm.description}
+                  onChange={(e) => setOccurrenceForm({ ...occurrenceForm, description: e.target.value })}
+                  placeholder="Detalhes da ocorrência..."
+                  rows={3}
+                />
+              </div>
+              <Button type="submit" className="w-full" disabled={!occurrenceForm.type}>
+                Registrar Ocorrência
+              </Button>
+            </form>
           </DialogContent>
         </Dialog>
       </div>
