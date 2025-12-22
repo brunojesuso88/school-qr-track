@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import DashboardLayout from '@/components/DashboardLayout';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -68,7 +68,34 @@ const Students = () => {
   const [occurrencesStudent, setOccurrencesStudent] = useState<Student | null>(null);
   const [occurrences, setOccurrences] = useState<Occurrence[]>([]);
   const [isOccurrenceDialogOpen, setIsOccurrenceDialogOpen] = useState(false);
-  const [birthDate, setBirthDate] = useState<Date | undefined>(undefined);
+  const [birthDay, setBirthDay] = useState('');
+  const [birthMonth, setBirthMonth] = useState('');
+  const [birthYear, setBirthYear] = useState('');
+
+  const currentYear = new Date().getFullYear();
+  const years = Array.from({ length: 30 }, (_, i) => currentYear - 3 - i);
+  const months = [
+    { value: '01', label: 'Janeiro' },
+    { value: '02', label: 'Fevereiro' },
+    { value: '03', label: 'Março' },
+    { value: '04', label: 'Abril' },
+    { value: '05', label: 'Maio' },
+    { value: '06', label: 'Junho' },
+    { value: '07', label: 'Julho' },
+    { value: '08', label: 'Agosto' },
+    { value: '09', label: 'Setembro' },
+    { value: '10', label: 'Outubro' },
+    { value: '11', label: 'Novembro' },
+    { value: '12', label: 'Dezembro' },
+  ];
+  const days = Array.from({ length: 31 }, (_, i) => String(i + 1).padStart(2, '0'));
+
+  const getBirthDate = (): Date | undefined => {
+    if (birthDay && birthMonth && birthYear) {
+      return new Date(parseInt(birthYear), parseInt(birthMonth) - 1, parseInt(birthDay));
+    }
+    return undefined;
+  };
 
   const [formData, setFormData] = useState({
     full_name: '',
@@ -157,6 +184,7 @@ const Students = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    const birthDate = getBirthDate();
     if (!birthDate) {
       toast.error('Data de nascimento é obrigatória');
       return;
@@ -259,7 +287,16 @@ const Students = () => {
       guardian_name: student.guardian_name,
       guardian_phone: student.guardian_phone,
     });
-    setBirthDate(student.birth_date ? parse(student.birth_date, 'yyyy-MM-dd', new Date()) : undefined);
+    if (student.birth_date) {
+      const parsed = parse(student.birth_date, 'yyyy-MM-dd', new Date());
+      setBirthDay(String(parsed.getDate()).padStart(2, '0'));
+      setBirthMonth(String(parsed.getMonth() + 1).padStart(2, '0'));
+      setBirthYear(String(parsed.getFullYear()));
+    } else {
+      setBirthDay('');
+      setBirthMonth('');
+      setBirthYear('');
+    }
     setIsDialogOpen(true);
   };
 
@@ -290,7 +327,9 @@ const Students = () => {
       guardian_name: '',
       guardian_phone: '',
     });
-    setBirthDate(undefined);
+    setBirthDay('');
+    setBirthMonth('');
+    setBirthYear('');
   };
 
   const downloadQRCode = (student: Student) => {
@@ -342,7 +381,7 @@ const Students = () => {
   };
 
   // Auto-generate student ID when name or birth date changes
-  const generatedStudentId = generateStudentId(formData.full_name, birthDate);
+  const generatedStudentId = generateStudentId(formData.full_name, getBirthDate());
 
   return (
     <DashboardLayout>
@@ -385,30 +424,38 @@ const Students = () => {
                 </div>
                 <div className="space-y-2">
                   <Label>Data de Nascimento</Label>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
-                        className={cn(
-                          "w-full justify-start text-left font-normal",
-                          !birthDate && "text-muted-foreground"
-                        )}
-                      >
-                        <CalendarIcon className="mr-2 h-4 w-4" />
-                        {birthDate ? format(birthDate, "PPP", { locale: ptBR }) : <span>Selecione a data</span>}
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0" align="start">
-                      <Calendar
-                        mode="single"
-                        selected={birthDate}
-                        onSelect={setBirthDate}
-                        disabled={(date) => date > new Date() || date < new Date("1900-01-01")}
-                        initialFocus
-                        className={cn("p-3 pointer-events-auto")}
-                      />
-                    </PopoverContent>
-                  </Popover>
+                  <div className="grid grid-cols-3 gap-2">
+                    <Select value={birthDay} onValueChange={setBirthDay}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Dia" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {days.map((day) => (
+                          <SelectItem key={day} value={day}>{day}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Select value={birthMonth} onValueChange={setBirthMonth}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Mês" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {months.map((month) => (
+                          <SelectItem key={month.value} value={month.value}>{month.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Select value={birthYear} onValueChange={setBirthYear}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Ano" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {years.map((year) => (
+                          <SelectItem key={year} value={String(year)}>{year}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="student_id">ID do Aluno (gerado automaticamente)</Label>
