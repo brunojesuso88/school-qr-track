@@ -1,5 +1,4 @@
-import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { useAuth } from '@/contexts/AuthContext';
+import { Link, useLocation } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import {
   LayoutDashboard,
@@ -8,21 +7,21 @@ import {
   Calendar,
   Bell,
   Settings,
-  LogOut,
   Menu,
   X,
   GraduationCap,
+  BookOpen,
 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
 import { useState } from 'react';
 
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-  { name: 'Students', href: '/students', icon: Users },
-  { name: 'Scan QR', href: '/scan', icon: QrCode },
-  { name: 'Attendance', href: '/attendance', icon: Calendar },
-  { name: 'Notifications', href: '/notifications', icon: Bell },
-  { name: 'Settings', href: '/settings', icon: Settings },
+  { name: 'Alunos', href: '/students', icon: Users },
+  { name: 'Turmas', href: '/classes', icon: BookOpen },
+  { name: 'Escanear QR', href: '/scan', icon: QrCode },
+  { name: 'Frequência', href: '/attendance', icon: Calendar },
+  { name: 'Notificações', href: '/notifications', icon: Bell },
+  { name: 'Configurações', href: '/settings', icon: Settings },
 ];
 
 interface DashboardLayoutProps {
@@ -31,14 +30,7 @@ interface DashboardLayoutProps {
 
 const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
   const location = useLocation();
-  const navigate = useNavigate();
-  const { signOut, user } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-
-  const handleSignOut = async () => {
-    await signOut();
-    navigate('/auth');
-  };
 
   return (
     <div className="min-h-screen bg-background flex">
@@ -96,30 +88,6 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
             })}
           </nav>
 
-          {/* User info & logout */}
-          <div className="p-4 border-t border-sidebar-border">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="w-9 h-9 rounded-full bg-sidebar-accent flex items-center justify-center">
-                <span className="text-sm font-medium text-sidebar-accent-foreground">
-                  {user?.email?.[0].toUpperCase() || 'A'}
-                </span>
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-sidebar-foreground truncate">
-                  {user?.user_metadata?.full_name || 'Administrator'}
-                </p>
-                <p className="text-xs text-sidebar-foreground/60 truncate">{user?.email}</p>
-              </div>
-            </div>
-            <Button
-              variant="ghost"
-              className="w-full justify-start text-sidebar-foreground/80 hover:text-sidebar-foreground hover:bg-sidebar-accent"
-              onClick={handleSignOut}
-            >
-              <LogOut className="w-4 h-4 mr-2" />
-              Sign Out
-            </Button>
-          </div>
         </div>
       </aside>
 

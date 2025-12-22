@@ -52,6 +52,36 @@ export type Database = {
           },
         ]
       }
+      classes: {
+        Row: {
+          created_at: string | null
+          description: string | null
+          id: string
+          name: string
+          shift: string
+          status: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          name: string
+          shift?: string
+          status?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          name?: string
+          shift?: string
+          status?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       notification_logs: {
         Row: {
           created_at: string | null
