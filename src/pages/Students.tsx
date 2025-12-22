@@ -758,7 +758,7 @@ const Students = () => {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todas as Turmas</SelectItem>
-                  {uniqueClasses.map((c) => (
+                  {uniqueClasses.filter((c) => c && c.trim() !== '').map((c) => (
                     <SelectItem key={c} value={c}>{c}</SelectItem>
                   ))}
                 </SelectContent>
