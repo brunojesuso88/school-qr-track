@@ -1,1 +1,4 @@
 project_id = "firhmtfjxagrmyltsypd"
+
+[functions.parse-students-pdf]
+verify_jwt = false
