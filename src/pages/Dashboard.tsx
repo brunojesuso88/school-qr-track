@@ -4,56 +4,51 @@ import DashboardLayout from '@/components/DashboardLayout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Users, UserCheck, UserX, Clock, TrendingUp, Calendar } from 'lucide-react';
 import { format } from 'date-fns';
-
 interface Stats {
   totalStudents: number;
   presentToday: number;
   absentToday: number;
   attendanceRate: number;
 }
-
 const Dashboard = () => {
   const [stats, setStats] = useState<Stats>({
     totalStudents: 0,
     presentToday: 0,
     absentToday: 0,
-    attendanceRate: 0,
+    attendanceRate: 0
   });
   const [recentAttendance, setRecentAttendance] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-
   useEffect(() => {
     fetchDashboardData();
   }, []);
-
   const fetchDashboardData = async () => {
     try {
       const today = format(new Date(), 'yyyy-MM-dd');
 
       // Fetch total students
-      const { count: totalStudents } = await supabase
-        .from('students')
-        .select('*', { count: 'exact', head: true })
-        .eq('status', 'active');
+      const {
+        count: totalStudents
+      } = await supabase.from('students').select('*', {
+        count: 'exact',
+        head: true
+      }).eq('status', 'active');
 
       // Fetch today's attendance
-      const { data: todayAttendance } = await supabase
-        .from('attendance')
-        .select('*, students(full_name, class)')
-        .eq('date', today)
-        .order('created_at', { ascending: false });
-
+      const {
+        data: todayAttendance
+      } = await supabase.from('attendance').select('*, students(full_name, class)').eq('date', today).order('created_at', {
+        ascending: false
+      });
       const presentToday = todayAttendance?.filter(a => a.status === 'present').length || 0;
       const absentToday = (totalStudents || 0) - presentToday;
-      const attendanceRate = totalStudents ? Math.round((presentToday / totalStudents) * 100) : 0;
-
+      const attendanceRate = totalStudents ? Math.round(presentToday / totalStudents * 100) : 0;
       setStats({
         totalStudents: totalStudents || 0,
         presentToday,
         absentToday,
-        attendanceRate,
+        attendanceRate
       });
-
       setRecentAttendance(todayAttendance?.slice(0, 5) || []);
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
@@ -61,48 +56,40 @@ const Dashboard = () => {
       setLoading(false);
     }
   };
-
-  const statCards = [
-    {
-      title: 'Total Students',
-      value: stats.totalStudents,
-      icon: Users,
-      description: 'Active students',
-      color: 'text-primary',
-      bgColor: 'bg-primary/10',
-    },
-    {
-      title: 'Present Today',
-      value: stats.presentToday,
-      icon: UserCheck,
-      description: 'Checked in',
-      color: 'text-success',
-      bgColor: 'bg-success/10',
-    },
-    {
-      title: 'Absent Today',
-      value: stats.absentToday,
-      icon: UserX,
-      description: 'Not checked in',
-      color: 'text-destructive',
-      bgColor: 'bg-destructive/10',
-    },
-    {
-      title: 'Attendance Rate',
-      value: `${stats.attendanceRate}%`,
-      icon: TrendingUp,
-      description: 'Today',
-      color: 'text-primary',
-      bgColor: 'bg-accent',
-    },
-  ];
-
-  return (
-    <DashboardLayout>
+  const statCards = [{
+    title: 'Total Students',
+    value: stats.totalStudents,
+    icon: Users,
+    description: 'Active students',
+    color: 'text-primary',
+    bgColor: 'bg-primary/10'
+  }, {
+    title: 'Present Today',
+    value: stats.presentToday,
+    icon: UserCheck,
+    description: 'Checked in',
+    color: 'text-success',
+    bgColor: 'bg-success/10'
+  }, {
+    title: 'Absent Today',
+    value: stats.absentToday,
+    icon: UserX,
+    description: 'Not checked in',
+    color: 'text-destructive',
+    bgColor: 'bg-destructive/10'
+  }, {
+    title: 'Attendance Rate',
+    value: `${stats.attendanceRate}%`,
+    icon: TrendingUp,
+    description: 'Today',
+    color: 'text-primary',
+    bgColor: 'bg-accent'
+  }];
+  return <DashboardLayout>
       <div className="space-y-6">
         {/* Header */}
         <div>
-          <h1 className="text-2xl font-semibold text-foreground">Dashboard</h1>
+          <h1 className="text-2xl font-semibold text-foreground">PAINEL</h1>
           <p className="text-muted-foreground mt-1">
             {format(new Date(), 'EEEE, MMMM d, yyyy')}
           </p>
@@ -110,8 +97,9 @@ const Dashboard = () => {
 
         {/* Stats Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {statCards.map((stat, index) => (
-            <Card key={stat.title} className="card-hover animate-fade-in" style={{ animationDelay: `${index * 50}ms` }}>
+          {statCards.map((stat, index) => <Card key={stat.title} className="card-hover animate-fade-in" style={{
+          animationDelay: `${index * 50}ms`
+        }}>
               <CardContent className="p-5">
                 <div className="flex items-start justify-between">
                   <div>
@@ -124,13 +112,14 @@ const Dashboard = () => {
                   </div>
                 </div>
               </CardContent>
-            </Card>
-          ))}
+            </Card>)}
         </div>
 
         {/* Recent Activity */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <Card className="animate-fade-in" style={{ animationDelay: '200ms' }}>
+          <Card className="animate-fade-in" style={{
+          animationDelay: '200ms'
+        }}>
             <CardHeader>
               <CardTitle className="text-lg flex items-center gap-2">
                 <Clock className="w-5 h-5 text-primary" />
@@ -139,19 +128,10 @@ const Dashboard = () => {
               <CardDescription>Latest attendance records today</CardDescription>
             </CardHeader>
             <CardContent>
-              {loading ? (
-                <div className="space-y-3">
-                  {[1, 2, 3].map((i) => (
-                    <div key={i} className="h-12 bg-muted animate-pulse rounded-lg" />
-                  ))}
-                </div>
-              ) : recentAttendance.length > 0 ? (
-                <div className="space-y-3">
-                  {recentAttendance.map((record) => (
-                    <div
-                      key={record.id}
-                      className="flex items-center justify-between p-3 bg-muted/50 rounded-lg"
-                    >
+              {loading ? <div className="space-y-3">
+                  {[1, 2, 3].map(i => <div key={i} className="h-12 bg-muted animate-pulse rounded-lg" />)}
+                </div> : recentAttendance.length > 0 ? <div className="space-y-3">
+                  {recentAttendance.map(record => <div key={record.id} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
                       <div className="flex items-center gap-3">
                         <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center">
                           <span className="text-sm font-medium text-primary">
@@ -164,26 +144,22 @@ const Dashboard = () => {
                         </div>
                       </div>
                       <div className="text-right">
-                        <span className={`text-xs px-2 py-1 rounded-full ${
-                          record.status === 'present' ? 'status-present' : 'status-absent'
-                        }`}>
+                        <span className={`text-xs px-2 py-1 rounded-full ${record.status === 'present' ? 'status-present' : 'status-absent'}`}>
                           {record.status}
                         </span>
                         <p className="text-xs text-muted-foreground mt-1">{record.time}</p>
                       </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-center py-8">
+                    </div>)}
+                </div> : <div className="text-center py-8">
                   <Calendar className="w-10 h-10 text-muted-foreground mx-auto mb-2" />
                   <p className="text-sm text-muted-foreground">No attendance records today</p>
-                </div>
-              )}
+                </div>}
             </CardContent>
           </Card>
 
-          <Card className="animate-fade-in" style={{ animationDelay: '250ms' }}>
+          <Card className="animate-fade-in" style={{
+          animationDelay: '250ms'
+        }}>
             <CardHeader>
               <CardTitle className="text-lg flex items-center gap-2">
                 <TrendingUp className="w-5 h-5 text-primary" />
@@ -192,10 +168,7 @@ const Dashboard = () => {
               <CardDescription>Common tasks</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
-              <a
-                href="/scan"
-                className="flex items-center gap-3 p-4 bg-primary/5 hover:bg-primary/10 rounded-xl transition-colors group"
-              >
+              <a href="/scan" className="flex items-center gap-3 p-4 bg-primary/5 hover:bg-primary/10 rounded-xl transition-colors group">
                 <div className="p-3 rounded-lg gradient-primary text-primary-foreground">
                   <QrCodeIcon className="w-5 h-5" />
                 </div>
@@ -204,10 +177,7 @@ const Dashboard = () => {
                   <p className="text-sm text-muted-foreground">Record student attendance</p>
                 </div>
               </a>
-              <a
-                href="/students"
-                className="flex items-center gap-3 p-4 bg-muted/50 hover:bg-muted rounded-xl transition-colors group"
-              >
+              <a href="/students" className="flex items-center gap-3 p-4 bg-muted/50 hover:bg-muted rounded-xl transition-colors group">
                 <div className="p-3 rounded-lg bg-secondary">
                   <Users className="w-5 h-5 text-secondary-foreground" />
                 </div>
@@ -216,10 +186,7 @@ const Dashboard = () => {
                   <p className="text-sm text-muted-foreground">Add or edit student records</p>
                 </div>
               </a>
-              <a
-                href="/attendance"
-                className="flex items-center gap-3 p-4 bg-muted/50 hover:bg-muted rounded-xl transition-colors group"
-              >
+              <a href="/attendance" className="flex items-center gap-3 p-4 bg-muted/50 hover:bg-muted rounded-xl transition-colors group">
                 <div className="p-3 rounded-lg bg-secondary">
                   <Calendar className="w-5 h-5 text-secondary-foreground" />
                 </div>
@@ -231,29 +198,14 @@ const Dashboard = () => {
             </CardContent>
           </Card>
         </div>
-
-        {/* Main Scan Button */}
-        <div className="flex justify-center pt-4 pb-8">
-          <a
-            href="/scan"
-            className="flex flex-col items-center gap-3 p-8 bg-gradient-to-br from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 rounded-2xl transition-all duration-300 shadow-lg hover:shadow-xl hover:scale-105 group"
-          >
-            <div className="p-5 rounded-full bg-primary-foreground/20">
-              <QrCodeIcon className="w-12 h-12 text-primary-foreground" />
-            </div>
-            <div className="text-center">
-              <p className="text-xl font-semibold text-primary-foreground">Escanear Alunos</p>
-              <p className="text-sm text-primary-foreground/80">Registrar presença via QR Code</p>
-            </div>
-          </a>
-        </div>
       </div>
-    </DashboardLayout>
-  );
+    </DashboardLayout>;
 };
-
-const QrCodeIcon = ({ className }: { className?: string }) => (
-  <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+const QrCodeIcon = ({
+  className
+}: {
+  className?: string;
+}) => <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
     <rect x="3" y="3" width="7" height="7" rx="1" />
     <rect x="14" y="3" width="7" height="7" rx="1" />
     <rect x="3" y="14" width="7" height="7" rx="1" />
@@ -261,7 +213,5 @@ const QrCodeIcon = ({ className }: { className?: string }) => (
     <rect x="18" y="14" width="3" height="3" />
     <rect x="14" y="18" width="3" height="3" />
     <rect x="18" y="18" width="3" height="3" />
-  </svg>
-);
-
+  </svg>;
 export default Dashboard;
