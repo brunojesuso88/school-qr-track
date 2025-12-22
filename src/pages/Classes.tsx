@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import DashboardLayout from '@/components/DashboardLayout';
@@ -9,7 +9,9 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { toast } from 'sonner';
-import { Plus, Edit2, Trash2, GraduationCap, Search, Users } from 'lucide-react';
+import { Plus, Edit2, Trash2, GraduationCap, Search, Users, Upload, FileText, Loader2 } from 'lucide-react';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Checkbox } from '@/components/ui/checkbox';
 
 interface ClassItem {
   id: string;
@@ -20,14 +22,32 @@ interface ClassItem {
   created_at: string;
 }
 
+interface ExtractedStudent {
+  full_name: string;
+  birth_date: string | null;
+  guardian_name: string;
+  guardian_phone: string;
+  class: string;
+  shift: string;
+  selected?: boolean;
+}
+
 const Classes = () => {
   const navigate = useNavigate();
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [classes, setClasses] = useState<ClassItem[]>([]);
   const [studentCounts, setStudentCounts] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingClass, setEditingClass] = useState<ClassItem | null>(null);
+  
+  // PDF Import state
+  const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
+  const [importingClass, setImportingClass] = useState<ClassItem | null>(null);
+  const [isProcessingPdf, setIsProcessingPdf] = useState(false);
+  const [extractedStudents, setExtractedStudents] = useState<ExtractedStudent[]>([]);
+  const [isSavingStudents, setIsSavingStudents] = useState(false);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -168,6 +188,128 @@ const Classes = () => {
     c.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  const handleImportClick = (classItem: ClassItem) => {
+    setImportingClass(classItem);
+    setExtractedStudents([]);
+    setIsImportDialogOpen(true);
+  };
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !importingClass) return;
+
+    if (file.type !== 'application/pdf') {
+      toast.error('Por favor, selecione um arquivo PDF');
+      return;
+    }
+
+    setIsProcessingPdf(true);
+    try {
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        const base64 = (event.target?.result as string)?.split(',')[1];
+        if (!base64) {
+          toast.error('Erro ao ler o arquivo');
+          setIsProcessingPdf(false);
+          return;
+        }
+
+        try {
+          const { data, error } = await supabase.functions.invoke('parse-students-pdf', {
+            body: { 
+              pdfBase64: base64, 
+              className: importingClass.name,
+              shift: importingClass.shift 
+            }
+          });
+
+          if (error) throw error;
+          
+          if (data.success && data.students?.length > 0) {
+            setExtractedStudents(data.students.map((s: ExtractedStudent) => ({ ...s, selected: true })));
+            toast.success(`${data.count} aluno(s) encontrado(s) no documento`);
+          } else {
+            toast.error(data.error || 'Nenhum aluno encontrado no documento');
+          }
+        } catch (err: any) {
+          console.error('Error processing PDF:', err);
+          toast.error(err.message || 'Erro ao processar PDF');
+        } finally {
+          setIsProcessingPdf(false);
+        }
+      };
+      reader.readAsDataURL(file);
+    } catch (err) {
+      console.error('Error reading file:', err);
+      toast.error('Erro ao ler o arquivo');
+      setIsProcessingPdf(false);
+    }
+
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const toggleStudentSelection = (index: number) => {
+    setExtractedStudents(prev => 
+      prev.map((s, i) => i === index ? { ...s, selected: !s.selected } : s)
+    );
+  };
+
+  const toggleAllStudents = (selected: boolean) => {
+    setExtractedStudents(prev => prev.map(s => ({ ...s, selected })));
+  };
+
+  const generateStudentId = (fullName: string, birthDate: string | null) => {
+    const nameParts = fullName.trim().split(' ');
+    const initials = nameParts.length >= 2 
+      ? (nameParts[0][0] + nameParts[nameParts.length - 1][0]).toUpperCase()
+      : nameParts[0].substring(0, 2).toUpperCase();
+    
+    const datePart = birthDate 
+      ? birthDate.replace(/-/g, '').substring(2)
+      : new Date().getTime().toString().slice(-6);
+    
+    const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+    return `${initials}${datePart}${random}`;
+  };
+
+  const handleSaveStudents = async () => {
+    const selectedStudents = extractedStudents.filter(s => s.selected);
+    if (selectedStudents.length === 0) {
+      toast.error('Selecione pelo menos um aluno para cadastrar');
+      return;
+    }
+
+    setIsSavingStudents(true);
+    try {
+      const studentsToInsert = selectedStudents.map(student => ({
+        full_name: student.full_name,
+        birth_date: student.birth_date || null,
+        guardian_name: student.guardian_name || 'Responsável',
+        guardian_phone: student.guardian_phone || '00000000000',
+        class: student.class,
+        shift: student.shift as 'morning' | 'afternoon' | 'evening',
+        student_id: generateStudentId(student.full_name, student.birth_date),
+        status: 'active'
+      }));
+
+      const { error } = await supabase.from('students').insert(studentsToInsert);
+      
+      if (error) throw error;
+      
+      toast.success(`${selectedStudents.length} aluno(s) cadastrado(s) com sucesso!`);
+      setIsImportDialogOpen(false);
+      setExtractedStudents([]);
+      fetchStudentCounts();
+    } catch (err: any) {
+      console.error('Error saving students:', err);
+      toast.error(err.message || 'Erro ao cadastrar alunos');
+    } finally {
+      setIsSavingStudents(false);
+    }
+  };
+
   return (
     <DashboardLayout>
       <div className="space-y-6">
@@ -294,15 +436,24 @@ const Classes = () => {
                     <p className="text-sm text-muted-foreground mb-4">{classItem.description}</p>
                   )}
 
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    className="w-full mb-3"
-                    onClick={() => handleViewStudents(classItem.name)}
-                  >
-                    <Users className="w-3 h-3 mr-2" />
-                    Ver Alunos ({studentCounts[classItem.name] || 0})
-                  </Button>
+                  <div className="flex gap-2 mb-3">
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      className="flex-1"
+                      onClick={() => handleViewStudents(classItem.name)}
+                    >
+                      <Users className="w-3 h-3 mr-2" />
+                      Ver Alunos ({studentCounts[classItem.name] || 0})
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleImportClick(classItem)}
+                    >
+                      <Upload className="w-3 h-3" />
+                    </Button>
+                  </div>
 
                   <div className="flex gap-2">
                     <Button variant="outline" size="sm" className="flex-1" onClick={() => handleEdit(classItem)}>
@@ -328,6 +479,144 @@ const Classes = () => {
             </CardContent>
           </Card>
         )}
+
+        {/* PDF Import Dialog */}
+        <Dialog open={isImportDialogOpen} onOpenChange={(open) => {
+          setIsImportDialogOpen(open);
+          if (!open) {
+            setImportingClass(null);
+            setExtractedStudents([]);
+          }
+        }}>
+          <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <FileText className="w-5 h-5" />
+                Importar Alunos via PDF
+              </DialogTitle>
+              <DialogDescription>
+                {importingClass && `Turma: ${importingClass.name} - ${getShiftLabel(importingClass.shift)}`}
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4 mt-4">
+              <input
+                type="file"
+                ref={fileInputRef}
+                accept="application/pdf"
+                onChange={handleFileSelect}
+                className="hidden"
+              />
+
+              {extractedStudents.length === 0 ? (
+                <div className="border-2 border-dashed border-muted-foreground/25 rounded-lg p-8 text-center">
+                  <Upload className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
+                  <h3 className="font-medium mb-2">Selecione um arquivo PDF</h3>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    O sistema irá utilizar IA para identificar e extrair os dados dos alunos
+                  </p>
+                  <Button 
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isProcessingPdf}
+                  >
+                    {isProcessingPdf ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Processando...
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="w-4 h-4 mr-2" />
+                        Selecionar PDF
+                      </>
+                    )}
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Checkbox
+                        checked={extractedStudents.every(s => s.selected)}
+                        onCheckedChange={(checked) => toggleAllStudents(!!checked)}
+                      />
+                      <span className="text-sm font-medium">
+                        {extractedStudents.filter(s => s.selected).length} de {extractedStudents.length} selecionado(s)
+                      </span>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={isProcessingPdf}
+                    >
+                      <Upload className="w-3 h-3 mr-2" />
+                      Novo PDF
+                    </Button>
+                  </div>
+
+                  <div className="border rounded-lg overflow-hidden">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="w-10"></TableHead>
+                          <TableHead>Nome</TableHead>
+                          <TableHead>Data Nasc.</TableHead>
+                          <TableHead>Responsável</TableHead>
+                          <TableHead>Telefone</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {extractedStudents.map((student, index) => (
+                          <TableRow key={index}>
+                            <TableCell>
+                              <Checkbox
+                                checked={student.selected}
+                                onCheckedChange={() => toggleStudentSelection(index)}
+                              />
+                            </TableCell>
+                            <TableCell className="font-medium">{student.full_name}</TableCell>
+                            <TableCell>{student.birth_date || '-'}</TableCell>
+                            <TableCell>{student.guardian_name || '-'}</TableCell>
+                            <TableCell>{student.guardian_phone || '-'}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+
+                  <div className="flex justify-end gap-2">
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setIsImportDialogOpen(false);
+                        setExtractedStudents([]);
+                      }}
+                    >
+                      Cancelar
+                    </Button>
+                    <Button
+                      onClick={handleSaveStudents}
+                      disabled={isSavingStudents || extractedStudents.filter(s => s.selected).length === 0}
+                    >
+                      {isSavingStudents ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Cadastrando...
+                        </>
+                      ) : (
+                        <>
+                          <Plus className="w-4 h-4 mr-2" />
+                          Cadastrar Selecionados
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     </DashboardLayout>
   );
