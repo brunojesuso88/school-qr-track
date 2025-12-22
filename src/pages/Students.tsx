@@ -72,6 +72,7 @@ const Students = () => {
   const [occurrencesStudent, setOccurrencesStudent] = useState<Student | null>(null);
   const [occurrences, setOccurrences] = useState<Occurrence[]>([]);
   const [isOccurrenceDialogOpen, setIsOccurrenceDialogOpen] = useState(false);
+  const [zoomPhotoStudent, setZoomPhotoStudent] = useState<Student | null>(null);
   const [birthDay, setBirthDay] = useState('');
   const [birthMonth, setBirthMonth] = useState('');
   const [birthYear, setBirthYear] = useState('');
@@ -758,10 +759,13 @@ const Students = () => {
                 <CardContent className="p-5">
                   <div className="flex items-start justify-between mb-4">
                     <div className="flex items-center gap-3">
-                      <div className={cn(
-                        "w-14 h-14 rounded-full flex items-center justify-center overflow-hidden border-2",
-                        student.status === 'active' ? "border-green-500 bg-green-500/10" : "border-red-500 bg-red-500/10"
-                      )}>
+                      <div 
+                        className={cn(
+                          "w-14 h-14 rounded-full flex items-center justify-center overflow-hidden border-2 cursor-pointer transition-transform hover:scale-105",
+                          student.status === 'active' ? "border-green-500 bg-green-500/10" : "border-red-500 bg-red-500/10"
+                        )}
+                        onClick={() => student.photo_url && setZoomPhotoStudent(student)}
+                      >
                         {student.photo_url ? (
                           <img
                             src={student.photo_url}
@@ -991,6 +995,38 @@ const Students = () => {
                 Registrar Ocorrência
               </Button>
             </form>
+          </DialogContent>
+        </Dialog>
+
+        {/* Photo Zoom Modal */}
+        <Dialog open={!!zoomPhotoStudent} onOpenChange={() => setZoomPhotoStudent(null)}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>{zoomPhotoStudent?.full_name}</DialogTitle>
+              <DialogDescription>{zoomPhotoStudent?.student_id}</DialogDescription>
+            </DialogHeader>
+            {zoomPhotoStudent?.photo_url && (
+              <div className="flex flex-col items-center gap-4 py-4">
+                <div className={cn(
+                  "w-64 h-64 rounded-full overflow-hidden border-4",
+                  zoomPhotoStudent.status === 'active' ? "border-green-500" : "border-red-500"
+                )}>
+                  <img
+                    src={zoomPhotoStudent.photo_url}
+                    alt={zoomPhotoStudent.full_name}
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+                <span className={cn(
+                  "text-sm px-3 py-1.5 rounded-full font-medium",
+                  zoomPhotoStudent.status === 'active' 
+                    ? 'bg-green-500/10 text-green-600' 
+                    : 'bg-red-500/10 text-red-600'
+                )}>
+                  {zoomPhotoStudent.status === 'active' ? 'Ativo' : 'Desistente'}
+                </span>
+              </div>
+            )}
           </DialogContent>
         </Dialog>
       </div>
