@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import DashboardLayout from '@/components/DashboardLayout';
 import { Card, CardContent } from '@/components/ui/card';
@@ -8,7 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { toast } from 'sonner';
-import { Plus, Edit2, Trash2, GraduationCap, Search } from 'lucide-react';
+import { Plus, Edit2, Trash2, GraduationCap, Search, Users } from 'lucide-react';
 
 interface ClassItem {
   id: string;
@@ -20,7 +21,9 @@ interface ClassItem {
 }
 
 const Classes = () => {
+  const navigate = useNavigate();
   const [classes, setClasses] = useState<ClassItem[]>([]);
+  const [studentCounts, setStudentCounts] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -34,6 +37,7 @@ const Classes = () => {
 
   useEffect(() => {
     fetchClasses();
+    fetchStudentCounts();
   }, []);
 
   const fetchClasses = async () => {
@@ -51,6 +55,29 @@ const Classes = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const fetchStudentCounts = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('students')
+        .select('class')
+        .eq('status', 'active');
+
+      if (error) throw error;
+      
+      const counts: Record<string, number> = {};
+      data?.forEach(student => {
+        counts[student.class] = (counts[student.class] || 0) + 1;
+      });
+      setStudentCounts(counts);
+    } catch (error) {
+      console.error('Error fetching student counts:', error);
+    }
+  };
+
+  const handleViewStudents = (className: string) => {
+    navigate(`/students?class=${encodeURIComponent(className)}`);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -266,6 +293,16 @@ const Classes = () => {
                   {classItem.description && (
                     <p className="text-sm text-muted-foreground mb-4">{classItem.description}</p>
                   )}
+
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    className="w-full mb-3"
+                    onClick={() => handleViewStudents(classItem.name)}
+                  >
+                    <Users className="w-3 h-3 mr-2" />
+                    Ver Alunos ({studentCounts[classItem.name] || 0})
+                  </Button>
 
                   <div className="flex gap-2">
                     <Button variant="outline" size="sm" className="flex-1" onClick={() => handleEdit(classItem)}>
