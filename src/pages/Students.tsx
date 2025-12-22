@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import DashboardLayout from '@/components/DashboardLayout';
@@ -12,7 +12,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { toast } from 'sonner';
-import { Plus, Search, QrCode, Edit2, Trash2, Download, User, CalendarIcon, FileText } from 'lucide-react';
+import { Plus, Search, QrCode, Edit2, Trash2, Download, User, CalendarIcon, FileText, Upload, Camera } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { format, parse } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -107,7 +107,13 @@ const Students = () => {
     shift: 'morning',
     guardian_name: '',
     guardian_phone: '',
+    status: 'active',
   });
+
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+  const photoInputRef = useRef<HTMLInputElement>(null);
 
   const [occurrenceForm, setOccurrenceForm] = useState({
     type: '',
@@ -185,6 +191,44 @@ const Students = () => {
     return `STU-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
   };
 
+  const handlePhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 5 * 1024 * 1024) {
+        toast.error('A foto deve ter no máximo 5MB');
+        return;
+      }
+      setPhotoFile(file);
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setPhotoPreview(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const uploadPhoto = async (studentId: string): Promise<string | null> => {
+    if (!photoFile) return null;
+
+    const fileExt = photoFile.name.split('.').pop();
+    const fileName = `${studentId}-${Date.now()}.${fileExt}`;
+
+    const { data, error } = await supabase.storage
+      .from('student-photos')
+      .upload(fileName, photoFile, { upsert: true });
+
+    if (error) {
+      console.error('Error uploading photo:', error);
+      throw error;
+    }
+
+    const { data: urlData } = supabase.storage
+      .from('student-photos')
+      .getPublicUrl(fileName);
+
+    return urlData.publicUrl;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -197,32 +241,70 @@ const Students = () => {
     const studentId = generateStudentId(formData.full_name, birthDate);
 
     try {
+      setIsUploadingPhoto(true);
+      let photoUrl: string | null = null;
+
       if (editingStudent) {
+        // Upload new photo if selected
+        if (photoFile) {
+          photoUrl = await uploadPhoto(editingStudent.id);
+        }
+
+        const updateData: any = {
+          full_name: formData.full_name,
+          class: formData.class,
+          shift: formData.shift as 'morning' | 'afternoon' | 'evening',
+          guardian_name: formData.guardian_name,
+          guardian_phone: formData.guardian_phone,
+          status: formData.status,
+          student_id: studentId,
+          birth_date: format(birthDate, 'yyyy-MM-dd'),
+        };
+
+        if (photoUrl) {
+          updateData.photo_url = photoUrl;
+        }
+
         const { error } = await supabase
           .from('students')
-          .update({
-            ...formData,
-            student_id: studentId,
-            birth_date: format(birthDate, 'yyyy-MM-dd'),
-            shift: formData.shift as 'morning' | 'afternoon' | 'evening',
-          })
+          .update(updateData)
           .eq('id', editingStudent.id);
 
         if (error) throw error;
         toast.success('Aluno atualizado com sucesso');
       } else {
         const qrCode = generateQRCode();
-        const { error } = await supabase
+        
+        // First create the student to get the ID
+        const { data: newStudent, error: insertError } = await supabase
           .from('students')
           .insert({
-            ...formData,
+            full_name: formData.full_name,
+            class: formData.class,
+            shift: formData.shift as 'morning' | 'afternoon' | 'evening',
+            guardian_name: formData.guardian_name,
+            guardian_phone: formData.guardian_phone,
+            status: formData.status,
             student_id: studentId,
             birth_date: format(birthDate, 'yyyy-MM-dd'),
-            shift: formData.shift as 'morning' | 'afternoon' | 'evening',
             qr_code: qrCode,
-          });
+          })
+          .select()
+          .single();
 
-        if (error) throw error;
+        if (insertError) throw insertError;
+
+        // Upload photo if selected
+        if (photoFile && newStudent) {
+          photoUrl = await uploadPhoto(newStudent.id);
+          if (photoUrl) {
+            await supabase
+              .from('students')
+              .update({ photo_url: photoUrl })
+              .eq('id', newStudent.id);
+          }
+        }
+
         toast.success('Aluno cadastrado com sucesso');
       }
 
@@ -237,6 +319,8 @@ const Students = () => {
       } else {
         toast.error('Falha ao salvar aluno');
       }
+    } finally {
+      setIsUploadingPhoto(false);
     }
   };
 
@@ -290,7 +374,10 @@ const Students = () => {
       shift: student.shift,
       guardian_name: student.guardian_name,
       guardian_phone: student.guardian_phone,
+      status: student.status || 'active',
     });
+    setPhotoPreview(student.photo_url);
+    setPhotoFile(null);
     if (student.birth_date) {
       const parsed = parse(student.birth_date, 'yyyy-MM-dd', new Date());
       setBirthDay(String(parsed.getDate()).padStart(2, '0'));
@@ -330,10 +417,13 @@ const Students = () => {
       shift: 'morning',
       guardian_name: '',
       guardian_phone: '',
+      status: 'active',
     });
     setBirthDay('');
     setBirthMonth('');
     setBirthYear('');
+    setPhotoFile(null);
+    setPhotoPreview(null);
   };
 
   const downloadQRCode = (student: Student) => {
@@ -417,6 +507,77 @@ const Students = () => {
                 </DialogDescription>
               </DialogHeader>
               <form onSubmit={handleSubmit} className="space-y-4 mt-4">
+                {/* Photo Upload */}
+                <div className="space-y-2">
+                  <Label>Foto do Aluno</Label>
+                  <div className="flex items-center gap-4">
+                    <div 
+                      className="w-20 h-20 rounded-full bg-muted flex items-center justify-center overflow-hidden border-2 border-dashed border-border cursor-pointer hover:border-primary transition-colors"
+                      onClick={() => photoInputRef.current?.click()}
+                    >
+                      {photoPreview ? (
+                        <img
+                          src={photoPreview}
+                          alt="Preview"
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <Camera className="w-8 h-8 text-muted-foreground" />
+                      )}
+                    </div>
+                    <div className="flex-1">
+                      <input
+                        ref={photoInputRef}
+                        type="file"
+                        accept="image/*"
+                        onChange={handlePhotoSelect}
+                        className="hidden"
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => photoInputRef.current?.click()}
+                      >
+                        <Upload className="w-4 h-4 mr-2" />
+                        {photoPreview ? 'Alterar Foto' : 'Upload Foto'}
+                      </Button>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        JPG, PNG ou GIF. Máximo 5MB.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Status Toggle */}
+                <div className="space-y-2">
+                  <Label>Status do Aluno</Label>
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant={formData.status === 'active' ? 'default' : 'outline'}
+                      className={cn(
+                        "flex-1",
+                        formData.status === 'active' && "bg-green-600 hover:bg-green-700 text-white"
+                      )}
+                      onClick={() => setFormData({ ...formData, status: 'active' })}
+                    >
+                      Ativo
+                    </Button>
+                    <Button
+                      type="button"
+                      variant={formData.status === 'inactive' ? 'default' : 'outline'}
+                      className={cn(
+                        "flex-1",
+                        formData.status === 'inactive' && "bg-red-600 hover:bg-red-700 text-white"
+                      )}
+                      onClick={() => setFormData({ ...formData, status: 'inactive' })}
+                    >
+                      Desistente
+                    </Button>
+                  </div>
+                </div>
+
                 <div className="space-y-2">
                   <Label htmlFor="full_name">Nome Completo</Label>
                   <Input
@@ -534,8 +695,8 @@ const Students = () => {
                     required
                   />
                 </div>
-                <Button type="submit" className="w-full">
-                  {editingStudent ? 'Atualizar Aluno' : 'Cadastrar Aluno'}
+                <Button type="submit" className="w-full" disabled={isUploadingPhoto}>
+                  {isUploadingPhoto ? 'Salvando...' : editingStudent ? 'Atualizar Aluno' : 'Cadastrar Aluno'}
                 </Button>
               </form>
             </DialogContent>
@@ -588,21 +749,30 @@ const Students = () => {
             {filteredStudents.map((student, index) => (
               <Card
                 key={student.id}
-                className="card-hover animate-fade-in overflow-hidden"
+                className={cn(
+                  "card-hover animate-fade-in overflow-hidden",
+                  student.status === 'inactive' && "border-red-500/50"
+                )}
                 style={{ animationDelay: `${index * 30}ms` }}
               >
                 <CardContent className="p-5">
                   <div className="flex items-start justify-between mb-4">
                     <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
+                      <div className={cn(
+                        "w-14 h-14 rounded-full flex items-center justify-center overflow-hidden border-2",
+                        student.status === 'active' ? "border-green-500 bg-green-500/10" : "border-red-500 bg-red-500/10"
+                      )}>
                         {student.photo_url ? (
                           <img
                             src={student.photo_url}
                             alt={student.full_name}
-                            className="w-full h-full rounded-full object-cover"
+                            className="w-full h-full object-cover"
                           />
                         ) : (
-                          <User className="w-6 h-6 text-primary" />
+                          <User className={cn(
+                            "w-7 h-7",
+                            student.status === 'active' ? "text-green-600" : "text-red-600"
+                          )} />
                         )}
                       </div>
                       <div>
@@ -610,10 +780,13 @@ const Students = () => {
                         <p className="text-xs text-muted-foreground">{student.student_id}</p>
                       </div>
                     </div>
-                    <span className={`text-xs px-2 py-1 rounded-full ${
-                      student.status === 'active' ? 'bg-success/10 text-success' : 'bg-muted text-muted-foreground'
-                    }`}>
-                      {student.status === 'active' ? 'Ativo' : student.status}
+                    <span className={cn(
+                      "text-xs px-2 py-1 rounded-full font-medium",
+                      student.status === 'active' 
+                        ? 'bg-green-500/10 text-green-600' 
+                        : 'bg-red-500/10 text-red-600'
+                    )}>
+                      {student.status === 'active' ? 'Ativo' : 'Desistente'}
                     </span>
                   </div>
 
