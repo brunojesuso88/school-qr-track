@@ -120,6 +120,44 @@ export type Database = {
           },
         ]
       }
+      occurrences: {
+        Row: {
+          created_at: string | null
+          created_by: string | null
+          date: string
+          description: string | null
+          id: string
+          student_id: string
+          type: string
+        }
+        Insert: {
+          created_at?: string | null
+          created_by?: string | null
+          date?: string
+          description?: string | null
+          id?: string
+          student_id: string
+          type: string
+        }
+        Update: {
+          created_at?: string | null
+          created_by?: string | null
+          date?: string
+          description?: string | null
+          id?: string
+          student_id?: string
+          type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "occurrences_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           created_at: string | null
@@ -170,6 +208,7 @@ export type Database = {
       }
       students: {
         Row: {
+          birth_date: string | null
           class: string
           created_at: string | null
           created_by: string | null
@@ -185,6 +224,7 @@ export type Database = {
           updated_at: string | null
         }
         Insert: {
+          birth_date?: string | null
           class: string
           created_at?: string | null
           created_by?: string | null
@@ -200,6 +240,7 @@ export type Database = {
           updated_at?: string | null
         }
         Update: {
+          birth_date?: string | null
           class?: string
           created_at?: string | null
           created_by?: string | null
