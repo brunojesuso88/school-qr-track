@@ -11,7 +11,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { toast } from 'sonner';
-import { Plus, Search, QrCode, Edit2, Trash2, Download, User, CalendarIcon, FileText, CheckCircle, XCircle } from 'lucide-react';
+import { Plus, Search, QrCode, Edit2, Trash2, Download, User, CalendarIcon, FileText } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { format, parse } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -103,7 +103,6 @@ const Students = () => {
     shift: 'morning',
     guardian_name: '',
     guardian_phone: '',
-    status: 'active',
   });
 
   const [occurrenceForm, setOccurrenceForm] = useState({
@@ -287,7 +286,6 @@ const Students = () => {
       shift: student.shift,
       guardian_name: student.guardian_name,
       guardian_phone: student.guardian_phone,
-      status: student.status || 'active',
     });
     if (student.birth_date) {
       const parsed = parse(student.birth_date, 'yyyy-MM-dd', new Date());
@@ -328,7 +326,6 @@ const Students = () => {
       shift: 'morning',
       guardian_name: '',
       guardian_phone: '',
-      status: 'active',
     });
     setBirthDay('');
     setBirthMonth('');
@@ -532,31 +529,6 @@ const Students = () => {
                     placeholder="+55 11 99999-9999"
                     required
                   />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="status">Status do Aluno</Label>
-                  <Select
-                    value={formData.status}
-                    onValueChange={(value) => setFormData({ ...formData, status: value })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="active">
-                        <div className="flex items-center gap-2">
-                          <CheckCircle className="w-4 h-4 text-green-500" />
-                          Ativo
-                        </div>
-                      </SelectItem>
-                      <SelectItem value="dropout">
-                        <div className="flex items-center gap-2">
-                          <XCircle className="w-4 h-4 text-red-500" />
-                          Desistente
-                        </div>
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
                 </div>
                 <Button type="submit" className="w-full">
                   {editingStudent ? 'Atualizar Aluno' : 'Cadastrar Aluno'}
