@@ -215,6 +215,7 @@ export type Database = {
           full_name: string
           guardian_name: string
           guardian_phone: string
+          has_medical_report: boolean
           id: string
           photo_url: string | null
           qr_code: string | null
@@ -231,6 +232,7 @@ export type Database = {
           full_name: string
           guardian_name: string
           guardian_phone: string
+          has_medical_report?: boolean
           id?: string
           photo_url?: string | null
           qr_code?: string | null
@@ -247,6 +249,7 @@ export type Database = {
           full_name?: string
           guardian_name?: string
           guardian_phone?: string
+          has_medical_report?: boolean
           id?: string
           photo_url?: string | null
           qr_code?: string | null

@@ -31,6 +31,7 @@ interface Student {
   status: string;
   created_at: string;
   birth_date: string | null;
+  has_medical_report: boolean;
 }
 
 interface ClassItem {
@@ -109,6 +110,7 @@ const Students = () => {
     guardian_name: '',
     guardian_phone: '',
     status: 'active',
+    has_medical_report: false,
   });
 
   const [photoFile, setPhotoFile] = useState<File | null>(null);
@@ -260,6 +262,7 @@ const Students = () => {
           status: formData.status,
           student_id: studentId,
           birth_date: format(birthDate, 'yyyy-MM-dd'),
+          has_medical_report: formData.has_medical_report,
         };
 
         if (photoUrl) {
@@ -289,6 +292,7 @@ const Students = () => {
             student_id: studentId,
             birth_date: format(birthDate, 'yyyy-MM-dd'),
             qr_code: qrCode,
+            has_medical_report: formData.has_medical_report,
           })
           .select()
           .single();
@@ -376,6 +380,7 @@ const Students = () => {
       guardian_name: student.guardian_name,
       guardian_phone: student.guardian_phone,
       status: student.status || 'active',
+      has_medical_report: student.has_medical_report || false,
     });
     setPhotoPreview(student.photo_url);
     setPhotoFile(null);
@@ -419,6 +424,7 @@ const Students = () => {
       guardian_name: '',
       guardian_phone: '',
       status: 'active',
+      has_medical_report: false,
     });
     setBirthDay('');
     setBirthMonth('');
@@ -696,6 +702,35 @@ const Students = () => {
                     required
                   />
                 </div>
+                <div className="space-y-2">
+                  <Label>Aluno com Laudo</Label>
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant={!formData.has_medical_report ? "default" : "outline"}
+                      size="sm"
+                      className={cn(
+                        "flex-1",
+                        !formData.has_medical_report && "bg-muted-foreground hover:bg-muted-foreground/90"
+                      )}
+                      onClick={() => setFormData({ ...formData, has_medical_report: false })}
+                    >
+                      Não
+                    </Button>
+                    <Button
+                      type="button"
+                      variant={formData.has_medical_report ? "default" : "outline"}
+                      size="sm"
+                      className={cn(
+                        "flex-1",
+                        formData.has_medical_report && "bg-amber-500 hover:bg-amber-600"
+                      )}
+                      onClick={() => setFormData({ ...formData, has_medical_report: true })}
+                    >
+                      Sim
+                    </Button>
+                  </div>
+                </div>
                 <Button type="submit" className="w-full" disabled={isUploadingPhoto}>
                   {isUploadingPhoto ? 'Salvando...' : editingStudent ? 'Atualizar Aluno' : 'Cadastrar Aluno'}
                 </Button>
@@ -752,7 +787,8 @@ const Students = () => {
                 key={student.id}
                 className={cn(
                   "card-hover animate-fade-in overflow-hidden",
-                  student.status === 'inactive' && "border-red-500/50"
+                  student.status === 'inactive' && "border-red-500/50",
+                  student.has_medical_report && "border-2 border-amber-500 ring-2 ring-amber-500/20"
                 )}
                 style={{ animationDelay: `${index * 30}ms` }}
               >
@@ -784,14 +820,21 @@ const Students = () => {
                         <p className="text-xs text-muted-foreground">{student.student_id}</p>
                       </div>
                     </div>
-                    <span className={cn(
-                      "text-xs px-2 py-1 rounded-full font-medium",
-                      student.status === 'active' 
-                        ? 'bg-green-500/10 text-green-600' 
-                        : 'bg-red-500/10 text-red-600'
-                    )}>
-                      {student.status === 'active' ? 'Ativo' : 'Desistente'}
-                    </span>
+                    <div className="flex flex-col items-end gap-1">
+                      <span className={cn(
+                        "text-xs px-2 py-1 rounded-full font-medium",
+                        student.status === 'active' 
+                          ? 'bg-green-500/10 text-green-600' 
+                          : 'bg-red-500/10 text-red-600'
+                      )}>
+                        {student.status === 'active' ? 'Ativo' : 'Desistente'}
+                      </span>
+                      {student.has_medical_report && (
+                        <span className="text-xs px-2 py-1 rounded-full font-medium bg-amber-500/10 text-amber-600">
+                          Laudo
+                        </span>
+                      )}
+                    </div>
                   </div>
 
                   <div className="text-xs space-y-1 text-muted-foreground mb-4">

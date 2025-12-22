@@ -231,6 +231,22 @@ const Dashboard = () => {
             </CardContent>
           </Card>
         </div>
+
+        {/* Main Scan Button */}
+        <div className="flex justify-center pt-4 pb-8">
+          <a
+            href="/scan"
+            className="flex flex-col items-center gap-3 p-8 bg-gradient-to-br from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 rounded-2xl transition-all duration-300 shadow-lg hover:shadow-xl hover:scale-105 group"
+          >
+            <div className="p-5 rounded-full bg-primary-foreground/20">
+              <QrCodeIcon className="w-12 h-12 text-primary-foreground" />
+            </div>
+            <div className="text-center">
+              <p className="text-xl font-semibold text-primary-foreground">Escanear Alunos</p>
+              <p className="text-sm text-primary-foreground/80">Registrar presença via QR Code</p>
+            </div>
+          </a>
+        </div>
       </div>
     </DashboardLayout>
   );
