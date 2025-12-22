@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from '@/contexts/AuthContext';
 import DashboardLayout from '@/components/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -26,15 +25,21 @@ interface Student {
   created_at: string;
 }
 
+interface ClassItem {
+  id: string;
+  name: string;
+  shift: string;
+}
+
 const Students = () => {
   const [students, setStudents] = useState<Student[]>([]);
+  const [classes, setClasses] = useState<ClassItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterClass, setFilterClass] = useState('all');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
-  const { user } = useAuth();
 
   const [formData, setFormData] = useState({
     full_name: '',
@@ -47,7 +52,23 @@ const Students = () => {
 
   useEffect(() => {
     fetchStudents();
+    fetchClasses();
   }, []);
+
+  const fetchClasses = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('classes')
+        .select('id, name, shift')
+        .eq('status', 'active')
+        .order('name');
+
+      if (error) throw error;
+      setClasses(data || []);
+    } catch (error) {
+      console.error('Error fetching classes:', error);
+    }
+  };
 
   const fetchStudents = async () => {
     try {
@@ -93,11 +114,10 @@ const Students = () => {
             ...formData,
             shift: formData.shift as 'morning' | 'afternoon' | 'evening',
             qr_code: qrCode,
-            created_by: user?.id,
           });
 
         if (error) throw error;
-        toast.success('Student registered successfully');
+        toast.success('Aluno cadastrado com sucesso');
       }
 
       setIsDialogOpen(false);
@@ -194,7 +214,7 @@ const Students = () => {
     return matchesSearch && matchesClass;
   });
 
-  const classes = [...new Set(students.map((s) => s.class))];
+  const uniqueClasses = [...new Set(students.map((s) => s.class))];
 
   return (
     <DashboardLayout>
@@ -246,17 +266,30 @@ const Students = () => {
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="class">Class / Grade</Label>
-                    <Input
-                      id="class"
+                    <Label htmlFor="class">Turma</Label>
+                    <Select
                       value={formData.class}
-                      onChange={(e) => setFormData({ ...formData, class: e.target.value })}
-                      placeholder="e.g., 10-A"
-                      required
-                    />
+                      onValueChange={(value) => {
+                        const selectedClass = classes.find(c => c.name === value);
+                        setFormData({ 
+                          ...formData, 
+                          class: value,
+                          shift: selectedClass?.shift || formData.shift
+                        });
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione a turma" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {classes.map((c) => (
+                          <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="shift">Shift</Label>
+                    <Label htmlFor="shift">Turno</Label>
                     <Select
                       value={formData.shift}
                       onValueChange={(value) => setFormData({ ...formData, shift: value })}
@@ -265,9 +298,9 @@ const Students = () => {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="morning">Morning</SelectItem>
-                        <SelectItem value="afternoon">Afternoon</SelectItem>
-                        <SelectItem value="evening">Evening</SelectItem>
+                        <SelectItem value="morning">Manhã</SelectItem>
+                        <SelectItem value="afternoon">Tarde</SelectItem>
+                        <SelectItem value="evening">Noite</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -318,8 +351,8 @@ const Students = () => {
                   <SelectValue placeholder="All Classes" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Classes</SelectItem>
-                  {classes.map((c) => (
+                  <SelectItem value="all">Todas as Turmas</SelectItem>
+                  {uniqueClasses.map((c) => (
                     <SelectItem key={c} value={c}>{c}</SelectItem>
                   ))}
                 </SelectContent>
