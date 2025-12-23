@@ -217,6 +217,7 @@ export type Database = {
           guardian_phone: string
           has_medical_report: boolean
           id: string
+          medical_report_details: string | null
           photo_url: string | null
           qr_code: string | null
           shift: Database["public"]["Enums"]["student_shift"]
@@ -234,6 +235,7 @@ export type Database = {
           guardian_phone: string
           has_medical_report?: boolean
           id?: string
+          medical_report_details?: string | null
           photo_url?: string | null
           qr_code?: string | null
           shift?: Database["public"]["Enums"]["student_shift"]
@@ -251,6 +253,7 @@ export type Database = {
           guardian_phone?: string
           has_medical_report?: boolean
           id?: string
+          medical_report_details?: string | null
           photo_url?: string | null
           qr_code?: string | null
           shift?: Database["public"]["Enums"]["student_shift"]

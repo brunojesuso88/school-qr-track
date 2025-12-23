@@ -3,16 +3,18 @@ import { supabase } from '@/integrations/supabase/client';
 import DashboardLayout from '@/components/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay } from 'date-fns';
+import { format, startOfMonth, endOfMonth } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, User } from 'lucide-react';
+import { ChevronLeft, ChevronRight, FileDown, Users, UserCheck, UserX, Percent } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Badge } from '@/components/ui/badge';
 
 interface Student {
   id: string;
   full_name: string;
   class: string;
+  shift: string;
 }
 
 interface AttendanceRecord {
@@ -25,23 +27,27 @@ interface AttendanceRecord {
 const Attendance = () => {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedClass, setSelectedClass] = useState('all');
+  const [selectedShift, setSelectedShift] = useState('all');
   const [attendanceData, setAttendanceData] = useState<AttendanceRecord[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
   const [classes, setClasses] = useState<string[]>([]);
 
   useEffect(() => {
     fetchData();
-  }, [currentDate, selectedClass]);
+  }, [currentDate, selectedClass, selectedShift]);
 
   const fetchData = async () => {
     const start = format(startOfMonth(currentDate), 'yyyy-MM-dd');
     const end = format(endOfMonth(currentDate), 'yyyy-MM-dd');
 
-    let studentQuery = supabase.from('students').select('id, full_name, class').eq('status', 'active');
+    let studentQuery = supabase.from('students').select('id, full_name, class, shift').eq('status', 'active');
     if (selectedClass !== 'all') {
       studentQuery = studentQuery.eq('class', selectedClass);
     }
-    const { data: studentsData } = await studentQuery;
+    if (selectedShift !== 'all') {
+      studentQuery = studentQuery.eq('shift', selectedShift as 'morning' | 'afternoon' | 'evening');
+    }
+    const { data: studentsData } = await studentQuery.order('full_name');
     setStudents(studentsData || []);
 
     const studentIds = studentsData?.map(s => s.id) || [];
@@ -58,185 +64,363 @@ const Attendance = () => {
     }
 
     const { data: allStudents } = await supabase.from('students').select('class').eq('status', 'active');
-    const uniqueClasses = [...new Set(allStudents?.map(s => s.class) || [])];
+    const uniqueClasses = [...new Set(allStudents?.map(s => s.class) || [])].filter(c => c && c.trim() !== '');
     setClasses(uniqueClasses);
   };
 
-  const days = eachDayOfInterval({
-    start: startOfMonth(currentDate),
-    end: endOfMonth(currentDate),
-  });
-
-  const getAttendanceForDay = (day: Date) => {
-    const dateStr = format(day, 'yyyy-MM-dd');
-    return attendanceData.filter(a => a.date === dateStr);
-  };
-
-  const getDayStatus = (day: Date) => {
-    const dayAttendance = getAttendanceForDay(day);
-    if (dayAttendance.length === 0) return null;
-    const presentCount = dayAttendance.filter(a => a.status === 'present').length;
-    const rate = (presentCount / students.length) * 100;
-    if (rate >= 90) return 'high';
-    if (rate >= 70) return 'medium';
-    return 'low';
-  };
-
-  // Calculate individual student attendance rate for the month
-  const getStudentAttendanceRate = (studentId: string) => {
+  const getStudentStats = (studentId: string) => {
     const studentAttendance = attendanceData.filter(a => a.student_id === studentId);
-    if (studentAttendance.length === 0) return 0;
     const presentCount = studentAttendance.filter(a => a.status === 'present').length;
-    return (presentCount / studentAttendance.length) * 100;
+    const absentCount = studentAttendance.filter(a => a.status === 'absent').length;
+    const justifiedCount = studentAttendance.filter(a => a.status === 'justified').length;
+    const total = studentAttendance.length;
+    const rate = total > 0 ? (presentCount / total) * 100 : 0;
+    return { presentCount, absentCount, justifiedCount, total, rate };
   };
+
+  const getTotalStats = () => {
+    const totalPresent = attendanceData.filter(a => a.status === 'present').length;
+    const totalAbsent = attendanceData.filter(a => a.status === 'absent').length;
+    const totalJustified = attendanceData.filter(a => a.status === 'justified').length;
+    const total = attendanceData.length;
+    const overallRate = total > 0 ? (totalPresent / total) * 100 : 0;
+    return { totalPresent, totalAbsent, totalJustified, total, overallRate };
+  };
+
+  const getShiftLabel = (shift: string) => {
+    switch (shift) {
+      case 'morning': return 'Manhã';
+      case 'afternoon': return 'Tarde';
+      case 'evening': return 'Noite';
+      default: return shift;
+    }
+  };
+
+  const generatePDF = (type: 'student' | 'class' | 'shift', studentId?: string) => {
+    const stats = getTotalStats();
+    const monthYear = format(currentDate, 'MMMM yyyy', { locale: ptBR });
+    
+    let title = '';
+    let content = '';
+    let filteredStudents = students;
+
+    if (type === 'student' && studentId) {
+      const student = students.find(s => s.id === studentId);
+      if (!student) return;
+      title = `Relatório de Frequência - ${student.full_name}`;
+      filteredStudents = [student];
+    } else if (type === 'class' && selectedClass !== 'all') {
+      title = `Relatório de Frequência - Turma ${selectedClass}`;
+    } else if (type === 'shift' && selectedShift !== 'all') {
+      title = `Relatório de Frequência - Turno ${getShiftLabel(selectedShift)}`;
+    } else {
+      title = 'Relatório de Frequência Geral';
+    }
+
+    content = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>${title}</title>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; }
+    h1 { color: #333; border-bottom: 2px solid #4f46e5; padding-bottom: 10px; }
+    h2 { color: #555; margin-top: 20px; }
+    .info { margin: 15px 0; color: #666; }
+    table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+    th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
+    th { background: #f5f5f5; font-weight: bold; }
+    .good { color: #16a34a; }
+    .warning { color: #ea580c; }
+    .danger { color: #dc2626; }
+    .summary { background: #f8fafc; padding: 15px; border-radius: 8px; margin: 20px 0; }
+    .summary-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; }
+    .summary-item { text-align: center; }
+    .summary-value { font-size: 24px; font-weight: bold; }
+    .summary-label { color: #666; font-size: 14px; }
+    @media print { body { padding: 0; } }
+  </style>
+</head>
+<body>
+  <h1>${title}</h1>
+  <p class="info">Período: ${monthYear}</p>
+  
+  <div class="summary">
+    <div class="summary-grid">
+      <div class="summary-item">
+        <div class="summary-value">${filteredStudents.length}</div>
+        <div class="summary-label">Total de Alunos</div>
+      </div>
+      <div class="summary-item">
+        <div class="summary-value good">${stats.totalPresent}</div>
+        <div class="summary-label">Presenças</div>
+      </div>
+      <div class="summary-item">
+        <div class="summary-value danger">${stats.totalAbsent}</div>
+        <div class="summary-label">Faltas</div>
+      </div>
+      <div class="summary-item">
+        <div class="summary-value ${stats.overallRate >= 70 ? 'good' : 'danger'}">${stats.overallRate.toFixed(1)}%</div>
+        <div class="summary-label">Taxa Geral</div>
+      </div>
+    </div>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Aluno</th>
+        <th>Turma</th>
+        <th>Turno</th>
+        <th>Presenças</th>
+        <th>Faltas</th>
+        <th>Justificadas</th>
+        <th>Frequência</th>
+        <th>Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${filteredStudents.map(student => {
+        const studentStats = getStudentStats(student.id);
+        const statusClass = studentStats.rate >= 70 ? 'good' : 'danger';
+        const status = studentStats.rate >= 70 ? 'Regular' : 'Atenção';
+        return `
+          <tr>
+            <td>${student.full_name}</td>
+            <td>${student.class}</td>
+            <td>${getShiftLabel(student.shift)}</td>
+            <td class="good">${studentStats.presentCount}</td>
+            <td class="danger">${studentStats.absentCount}</td>
+            <td>${studentStats.justifiedCount}</td>
+            <td class="${statusClass}">${studentStats.total > 0 ? studentStats.rate.toFixed(1) + '%' : '-'}</td>
+            <td class="${statusClass}">${studentStats.total > 0 ? status : '-'}</td>
+          </tr>
+        `;
+      }).join('')}
+    </tbody>
+  </table>
+
+  <p class="info" style="margin-top: 30px;">Gerado em: ${format(new Date(), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}</p>
+</body>
+</html>
+    `;
+
+    const blob = new Blob([content], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    const win = window.open(url, '_blank');
+    if (win) {
+      win.onload = () => {
+        win.print();
+      };
+    }
+  };
+
+  const stats = getTotalStats();
 
   return (
     <DashboardLayout>
       <div className="space-y-6">
+        {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-semibold">Calendário de Frequência</h1>
-            <p className="text-muted-foreground">Visualize e acompanhe os padrões de frequência</p>
+            <h1 className="text-2xl font-semibold">Frequência</h1>
+            <p className="text-muted-foreground">Acompanhe a frequência dos alunos</p>
           </div>
-          <Select value={selectedClass} onValueChange={setSelectedClass}>
-            <SelectTrigger className="w-40">
-              <SelectValue placeholder="Todas as Turmas" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todas as Turmas</SelectItem>
-              {classes.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-            </SelectContent>
-          </Select>
         </div>
 
+        {/* Filters */}
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-lg flex items-center gap-2">
-              <CalendarIcon className="w-5 h-5 text-primary" />
-              {format(currentDate, 'MMMM yyyy', { locale: ptBR })}
-            </CardTitle>
-            <div className="flex gap-1">
-              <Button variant="ghost" size="icon" onClick={() => setCurrentDate(d => new Date(d.getFullYear(), d.getMonth() - 1))}>
-                <ChevronLeft className="w-4 h-4" />
-              </Button>
-              <Button variant="ghost" size="icon" onClick={() => setCurrentDate(d => new Date(d.getFullYear(), d.getMonth() + 1))}>
-                <ChevronRight className="w-4 h-4" />
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-7 gap-1 mb-2">
-              {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map(day => (
-                <div key={day} className="text-center text-xs font-medium text-muted-foreground py-2">{day}</div>
-              ))}
-            </div>
-            <div className="grid grid-cols-7 gap-1">
-              {Array(days[0].getDay()).fill(null).map((_, i) => <div key={`empty-${i}`} />)}
-              {days.map(day => {
-                const status = getDayStatus(day);
-                const isToday = isSameDay(day, new Date());
-                const attendance = getAttendanceForDay(day);
-                const presentCount = attendance.filter(a => a.status === 'present').length;
-
-                return (
-                  <div
-                    key={day.toISOString()}
-                    className={`aspect-square p-1 rounded-lg text-center flex flex-col items-center justify-center text-sm transition-colors ${
-                      isToday ? 'ring-2 ring-primary' : ''
-                    } ${
-                      status === 'high' ? 'bg-success/20 text-success' :
-                      status === 'medium' ? 'bg-warning/20 text-warning' :
-                      status === 'low' ? 'bg-destructive/20 text-destructive' :
-                      'hover:bg-muted'
-                    }`}
-                  >
-                    <span className="font-medium">{format(day, 'd')}</span>
-                    {attendance.length > 0 && (
-                      <span className="text-[10px]">{presentCount}/{students.length}</span>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-
-            <div className="flex items-center justify-center gap-6 mt-6 text-xs">
-              <div className="flex items-center gap-2"><div className="w-3 h-3 rounded bg-success/40" /> 90%+ Presente</div>
-              <div className="flex items-center gap-2"><div className="w-3 h-3 rounded bg-warning/40" /> 70-89%</div>
-              <div className="flex items-center gap-2"><div className="w-3 h-3 rounded bg-destructive/40" /> &lt;70%</div>
+          <CardContent className="p-4">
+            <div className="flex flex-col sm:flex-row items-center gap-4">
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="icon" onClick={() => setCurrentDate(d => new Date(d.getFullYear(), d.getMonth() - 1))}>
+                  <ChevronLeft className="w-4 h-4" />
+                </Button>
+                <span className="min-w-[140px] text-center font-medium">
+                  {format(currentDate, 'MMMM yyyy', { locale: ptBR })}
+                </span>
+                <Button variant="outline" size="icon" onClick={() => setCurrentDate(d => new Date(d.getFullYear(), d.getMonth() + 1))}>
+                  <ChevronRight className="w-4 h-4" />
+                </Button>
+              </div>
+              <Select value={selectedClass} onValueChange={setSelectedClass}>
+                <SelectTrigger className="w-full sm:w-40">
+                  <SelectValue placeholder="Todas as Turmas" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todas as Turmas</SelectItem>
+                  {classes.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              <Select value={selectedShift} onValueChange={setSelectedShift}>
+                <SelectTrigger className="w-full sm:w-36">
+                  <SelectValue placeholder="Todos os Turnos" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos os Turnos</SelectItem>
+                  <SelectItem value="morning">Manhã</SelectItem>
+                  <SelectItem value="afternoon">Tarde</SelectItem>
+                  <SelectItem value="evening">Noite</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </CardContent>
         </Card>
 
-        {/* Individual Student Attendance Report */}
+        {/* Summary Stats */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <Card>
+            <CardContent className="p-4 flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-primary/10">
+                <Users className="w-5 h-5 text-primary" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold">{students.length}</p>
+                <p className="text-xs text-muted-foreground">Alunos</p>
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-4 flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-green-500/10">
+                <UserCheck className="w-5 h-5 text-green-600" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-green-600">{stats.totalPresent}</p>
+                <p className="text-xs text-muted-foreground">Presenças</p>
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-4 flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-red-500/10">
+                <UserX className="w-5 h-5 text-red-600" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-red-600">{stats.totalAbsent}</p>
+                <p className="text-xs text-muted-foreground">Faltas</p>
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-4 flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-blue-500/10">
+                <Percent className="w-5 h-5 text-blue-600" />
+              </div>
+              <div>
+                <p className={`text-2xl font-bold ${stats.overallRate >= 70 ? 'text-green-600' : 'text-red-600'}`}>
+                  {stats.overallRate.toFixed(1)}%
+                </p>
+                <p className="text-xs text-muted-foreground">Frequência</p>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Export Buttons */}
         <Card>
-          <CardHeader>
-            <CardTitle className="text-lg flex items-center gap-2">
-              <User className="w-5 h-5 text-primary" />
-              Relatório Individual de Frequência
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <FileDown className="w-4 h-4" />
+              Gerar Relatório PDF
             </CardTitle>
           </CardHeader>
           <CardContent>
+            <div className="flex flex-wrap gap-2">
+              <Button variant="outline" size="sm" onClick={() => generatePDF('class')}>
+                <FileDown className="w-4 h-4 mr-2" />
+                {selectedClass !== 'all' ? `Turma ${selectedClass}` : 'Todas as Turmas'}
+              </Button>
+              {selectedShift !== 'all' && (
+                <Button variant="outline" size="sm" onClick={() => generatePDF('shift')}>
+                  <FileDown className="w-4 h-4 mr-2" />
+                  Turno {getShiftLabel(selectedShift)}
+                </Button>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Student Attendance Table */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Relatório de Frequência</CardTitle>
+          </CardHeader>
+          <CardContent>
             {students.length > 0 ? (
-              <>
-                <div className="flex items-center gap-4 mb-4 text-sm">
-                  <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded bg-success" />
-                    <span>≥ 70% Frequência</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded bg-destructive" />
-                    <span>&lt; 70% Frequência</span>
-                  </div>
-                </div>
+              <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
                       <TableHead>Aluno</TableHead>
-                      <TableHead>Turma</TableHead>
+                      <TableHead className="hidden sm:table-cell">Turma</TableHead>
+                      <TableHead className="hidden sm:table-cell">Turno</TableHead>
                       <TableHead className="text-center">Presenças</TableHead>
                       <TableHead className="text-center">Faltas</TableHead>
                       <TableHead className="text-center">Frequência</TableHead>
                       <TableHead className="text-center">Status</TableHead>
+                      <TableHead className="text-center">PDF</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {students.map(student => {
-                      const studentAttendance = attendanceData.filter(a => a.student_id === student.id);
-                      const presentCount = studentAttendance.filter(a => a.status === 'present').length;
-                      const absentCount = studentAttendance.filter(a => a.status === 'absent').length;
-                      const rate = getStudentAttendanceRate(student.id);
-                      const isGood = rate >= 70;
+                      const studentStats = getStudentStats(student.id);
+                      const isGood = studentStats.rate >= 70;
 
                       return (
                         <TableRow key={student.id}>
-                          <TableCell className="font-medium">{student.full_name}</TableCell>
-                          <TableCell>{student.class}</TableCell>
-                          <TableCell className="text-center">{presentCount}</TableCell>
-                          <TableCell className="text-center">{absentCount}</TableCell>
-                          <TableCell className="text-center font-medium">
-                            {studentAttendance.length > 0 ? `${rate.toFixed(1)}%` : '-'}
+                          <TableCell>
+                            <div>
+                              <p className="font-medium">{student.full_name}</p>
+                              <p className="text-xs text-muted-foreground sm:hidden">
+                                {student.class} • {getShiftLabel(student.shift)}
+                              </p>
+                            </div>
+                          </TableCell>
+                          <TableCell className="hidden sm:table-cell">{student.class}</TableCell>
+                          <TableCell className="hidden sm:table-cell">{getShiftLabel(student.shift)}</TableCell>
+                          <TableCell className="text-center">
+                            <span className="text-green-600 font-medium">{studentStats.presentCount}</span>
                           </TableCell>
                           <TableCell className="text-center">
-                            {studentAttendance.length > 0 && (
-                              <div className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                                isGood 
-                                  ? 'bg-success/20 text-success' 
-                                  : 'bg-destructive/20 text-destructive'
-                              }`}>
+                            <span className="text-red-600 font-medium">{studentStats.absentCount}</span>
+                          </TableCell>
+                          <TableCell className="text-center">
+                            <span className={`font-medium ${isGood ? 'text-green-600' : 'text-red-600'}`}>
+                              {studentStats.total > 0 ? `${studentStats.rate.toFixed(1)}%` : '-'}
+                            </span>
+                          </TableCell>
+                          <TableCell className="text-center">
+                            {studentStats.total > 0 ? (
+                              <Badge variant={isGood ? 'default' : 'destructive'} className={isGood ? 'bg-green-500' : ''}>
                                 {isGood ? 'Regular' : 'Atenção'}
-                              </div>
+                              </Badge>
+                            ) : (
+                              <span className="text-muted-foreground">-</span>
                             )}
+                          </TableCell>
+                          <TableCell className="text-center">
+                            <Button 
+                              variant="ghost" 
+                              size="sm"
+                              onClick={() => generatePDF('student', student.id)}
+                            >
+                              <FileDown className="w-4 h-4" />
+                            </Button>
                           </TableCell>
                         </TableRow>
                       );
                     })}
                   </TableBody>
                 </Table>
-              </>
+              </div>
             ) : (
-              <p className="text-muted-foreground text-center py-8">
-                Nenhum aluno encontrado para a turma selecionada.
-              </p>
+              <div className="text-center py-12 text-muted-foreground">
+                <Users className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                <p className="font-medium">Nenhum aluno encontrado</p>
+                <p className="text-sm">Ajuste os filtros ou adicione alunos</p>
+              </div>
             )}
           </CardContent>
         </Card>

@@ -32,6 +32,7 @@ interface Student {
   created_at: string;
   birth_date: string | null;
   has_medical_report: boolean;
+  medical_report_details: string | null;
 }
 
 interface ClassItem {
@@ -67,6 +68,7 @@ const Students = () => {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterClass, setFilterClass] = useState(classFromUrl || 'all');
+  const [filterShift, setFilterShift] = useState('all');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
@@ -111,6 +113,7 @@ const Students = () => {
     guardian_phone: '',
     status: 'active',
     has_medical_report: false,
+    medical_report_details: '',
   });
 
   const [photoFile, setPhotoFile] = useState<File | null>(null);
@@ -263,6 +266,7 @@ const Students = () => {
           student_id: studentId,
           birth_date: format(birthDate, 'yyyy-MM-dd'),
           has_medical_report: formData.has_medical_report,
+          medical_report_details: formData.has_medical_report ? formData.medical_report_details : null,
         };
 
         if (photoUrl) {
@@ -293,6 +297,7 @@ const Students = () => {
             birth_date: format(birthDate, 'yyyy-MM-dd'),
             qr_code: qrCode,
             has_medical_report: formData.has_medical_report,
+            medical_report_details: formData.has_medical_report ? formData.medical_report_details : null,
           })
           .select()
           .single();
@@ -381,6 +386,7 @@ const Students = () => {
       guardian_phone: student.guardian_phone,
       status: student.status || 'active',
       has_medical_report: student.has_medical_report || false,
+      medical_report_details: student.medical_report_details || '',
     });
     setPhotoPreview(student.photo_url);
     setPhotoFile(null);
@@ -425,6 +431,7 @@ const Students = () => {
       guardian_phone: '',
       status: 'active',
       has_medical_report: false,
+      medical_report_details: '',
     });
     setBirthDay('');
     setBirthMonth('');
@@ -472,7 +479,8 @@ const Students = () => {
       student.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       student.student_id.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesClass = filterClass === 'all' || student.class === filterClass;
-    return matchesSearch && matchesClass;
+    const matchesShift = filterShift === 'all' || student.shift === filterShift;
+    return matchesSearch && matchesClass && matchesShift;
   });
 
   const uniqueClasses = [...new Set(students.map((s) => s.class))];
@@ -692,14 +700,13 @@ const Students = () => {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="guardian_phone">Telefone do Responsável (WhatsApp)</Label>
+                  <Label htmlFor="guardian_phone">Telefone do Responsável (WhatsApp) - Opcional</Label>
                   <Input
                     id="guardian_phone"
                     type="tel"
                     value={formData.guardian_phone}
                     onChange={(e) => setFormData({ ...formData, guardian_phone: e.target.value })}
                     placeholder="+55 11 99999-9999"
-                    required
                   />
                 </div>
                 <div className="space-y-2">
@@ -713,7 +720,7 @@ const Students = () => {
                         "flex-1",
                         !formData.has_medical_report && "bg-muted-foreground hover:bg-muted-foreground/90"
                       )}
-                      onClick={() => setFormData({ ...formData, has_medical_report: false })}
+                      onClick={() => setFormData({ ...formData, has_medical_report: false, medical_report_details: '' })}
                     >
                       Não
                     </Button>
@@ -731,6 +738,18 @@ const Students = () => {
                     </Button>
                   </div>
                 </div>
+                {formData.has_medical_report && (
+                  <div className="space-y-2">
+                    <Label htmlFor="medical_report_details">Especificação do Laudo</Label>
+                    <Textarea
+                      id="medical_report_details"
+                      value={formData.medical_report_details}
+                      onChange={(e) => setFormData({ ...formData, medical_report_details: e.target.value })}
+                      placeholder="Descreva o tipo de laudo, condição ou necessidades especiais do aluno..."
+                      rows={3}
+                    />
+                  </div>
+                )}
                 <Button type="submit" className="w-full" disabled={isUploadingPhoto}>
                   {isUploadingPhoto ? 'Salvando...' : editingStudent ? 'Atualizar Aluno' : 'Cadastrar Aluno'}
                 </Button>
@@ -761,6 +780,17 @@ const Students = () => {
                   {uniqueClasses.filter((c) => c && c.trim() !== '').map((c) => (
                     <SelectItem key={c} value={c}>{c}</SelectItem>
                   ))}
+                </SelectContent>
+              </Select>
+              <Select value={filterShift} onValueChange={setFilterShift}>
+                <SelectTrigger className="w-full sm:w-36">
+                  <SelectValue placeholder="Todos os Turnos" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos os Turnos</SelectItem>
+                  <SelectItem value="morning">Manhã</SelectItem>
+                  <SelectItem value="afternoon">Tarde</SelectItem>
+                  <SelectItem value="evening">Noite</SelectItem>
                 </SelectContent>
               </Select>
             </div>
