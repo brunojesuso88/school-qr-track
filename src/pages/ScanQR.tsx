@@ -5,17 +5,49 @@ import DashboardLayout from '@/components/DashboardLayout';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
-import { QrCode, Camera, CheckCircle2, XCircle, Loader2 } from 'lucide-react';
+import { QrCode, Camera, CheckCircle2, XCircle, Loader2, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
-
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 const ScanQR = () => {
   const [scanResult, setScanResult] = useState<string>('');
   const [lastScanned, setLastScanned] = useState<any>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [scanMode, setScanMode] = useState<'usb' | 'camera'>('usb');
   const inputRef = useRef<HTMLInputElement>(null);
   const { user } = useAuth();
 
+  const deleteAttendance = async () => {
+    if (!lastScanned?.student || !lastScanned.attendanceId) return;
+    
+    setIsDeleting(true);
+    try {
+      const { error } = await supabase
+        .from('attendance')
+        .delete()
+        .eq('id', lastScanned.attendanceId);
+
+      if (error) throw error;
+
+      toast.success(`Frequência de ${lastScanned.student.full_name} excluída com sucesso`);
+      setLastScanned(null);
+    } catch (error) {
+      console.error('Error deleting attendance:', error);
+      toast.error('Erro ao excluir frequência');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
   // Focus input for USB scanner
   useEffect(() => {
     if (scanMode === 'usb' && inputRef.current) {
@@ -58,12 +90,12 @@ const ScanQR = () => {
 
       if (existing) {
         toast.info(`${student.full_name} already checked in today`);
-        setLastScanned({ student, alreadyCheckedIn: true, time: existing.time });
+        setLastScanned({ student, alreadyCheckedIn: true, time: existing.time, attendanceId: existing.id });
         return;
       }
 
       // Record attendance
-      const { error: attendanceError } = await supabase
+      const { data: newAttendance, error: attendanceError } = await supabase
         .from('attendance')
         .insert({
           student_id: student.id,
@@ -71,12 +103,14 @@ const ScanQR = () => {
           time: currentTime,
           status: 'present',
           recorded_by: user?.id,
-        });
+        })
+        .select('id')
+        .single();
 
       if (attendanceError) throw attendanceError;
 
       toast.success(`${student.full_name} checked in!`);
-      setLastScanned({ student, success: true, time: currentTime });
+      setLastScanned({ student, success: true, time: currentTime, attendanceId: newAttendance?.id });
 
     } catch (error) {
       console.error('Error processing QR:', error);
@@ -212,6 +246,28 @@ const ScanQR = () => {
                       {lastScanned.student.class} • Entrada às {lastScanned.time}
                     </p>
                   </div>
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button variant="destructive" size="sm" className="mt-4">
+                        <Trash2 className="w-4 h-4 mr-2" />
+                        Excluir Frequência
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Excluir Frequência</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          Tem certeza que deseja excluir a frequência de {lastScanned.student.full_name} de hoje? Esta ação não pode ser desfeita.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                        <AlertDialogAction onClick={deleteAttendance} disabled={isDeleting}>
+                          {isDeleting ? 'Excluindo...' : 'Excluir'}
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
                 </div>
               ) : (
                 // Error or already checked in states
@@ -241,6 +297,28 @@ const ScanQR = () => {
                         <p className="text-sm text-muted-foreground">
                           {lastScanned.student.class}
                         </p>
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button variant="destructive" size="sm" className="mt-2">
+                              <Trash2 className="w-4 h-4 mr-2" />
+                              Excluir
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Excluir Frequência</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                Tem certeza que deseja excluir a frequência de {lastScanned.student.full_name} de hoje? Esta ação não pode ser desfeita.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                              <AlertDialogAction onClick={deleteAttendance} disabled={isDeleting}>
+                                {isDeleting ? 'Excluindo...' : 'Excluir'}
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
                       </div>
                     </>
                   ) : (
