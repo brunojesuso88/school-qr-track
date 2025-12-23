@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { toast } from 'sonner';
-import { GraduationCap, Mail, Lock, User, Loader2, QrCode } from 'lucide-react';
+import { GraduationCap, Mail, Lock, User, Loader2 } from 'lucide-react';
 
 const Auth = () => {
   const [isLogin, setIsLogin] = useState(true);
@@ -32,34 +32,34 @@ const Auth = () => {
         const { error } = await signIn(email, password);
         if (error) {
           if (error.message.includes('Invalid login credentials')) {
-            toast.error('Invalid email or password');
+            toast.error('Email ou senha incorretos');
           } else {
             toast.error(error.message);
           }
         } else {
-          toast.success('Welcome back!');
+          toast.success('Bem-vindo de volta!');
           navigate('/dashboard');
         }
       } else {
         if (!fullName.trim()) {
-          toast.error('Please enter your full name');
+          toast.error('Por favor, insira seu nome completo');
           setIsLoading(false);
           return;
         }
         const { error } = await signUp(email, password, fullName);
         if (error) {
           if (error.message.includes('already registered')) {
-            toast.error('This email is already registered');
+            toast.error('Este email já está cadastrado');
           } else {
             toast.error(error.message);
           }
         } else {
-          toast.success('Account created successfully!');
+          toast.success('Conta criada com sucesso!');
           navigate('/dashboard');
         }
       }
     } catch (error) {
-      toast.error('An unexpected error occurred');
+      toast.error('Ocorreu um erro inesperado');
     } finally {
       setIsLoading(false);
     }
@@ -75,16 +75,16 @@ const Auth = () => {
       <Card className="w-full max-w-md relative animate-fade-in shadow-lg border-border/50">
         <CardHeader className="text-center space-y-4">
           <div className="mx-auto w-16 h-16 rounded-2xl gradient-primary flex items-center justify-center shadow-glow">
-            <QrCode className="w-8 h-8 text-primary-foreground" />
+            <GraduationCap className="w-8 h-8 text-primary-foreground" />
           </div>
           <div>
             <CardTitle className="text-2xl">
-              {isLogin ? 'Welcome Back' : 'Create Account'}
+              {isLogin ? 'Bem-vindo de Volta' : 'Criar Conta'}
             </CardTitle>
             <CardDescription className="mt-2">
               {isLogin
-                ? 'Sign in to manage attendance'
-                : 'Register as an administrator'}
+                ? 'Entre para gerenciar a frequência'
+                : 'Cadastre-se como administrador'}
             </CardDescription>
           </div>
         </CardHeader>
@@ -93,13 +93,13 @@ const Auth = () => {
           <form onSubmit={handleSubmit} className="space-y-4">
             {!isLogin && (
               <div className="space-y-2 animate-fade-in">
-                <Label htmlFor="fullName">Full Name</Label>
+                <Label htmlFor="fullName">Nome Completo</Label>
                 <div className="relative">
                   <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                   <Input
                     id="fullName"
                     type="text"
-                    placeholder="John Doe"
+                    placeholder="João da Silva"
                     value={fullName}
                     onChange={(e) => setFullName(e.target.value)}
                     className="pl-10"
@@ -116,7 +116,7 @@ const Auth = () => {
                 <Input
                   id="email"
                   type="email"
-                  placeholder="admin@school.edu"
+                  placeholder="admin@escola.edu.br"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="pl-10"
@@ -126,7 +126,7 @@ const Auth = () => {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
+              <Label htmlFor="password">Senha</Label>
               <div className="relative">
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input
@@ -146,10 +146,10 @@ const Auth = () => {
               {isLoading ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  {isLogin ? 'Signing in...' : 'Creating account...'}
+                  {isLogin ? 'Entrando...' : 'Criando conta...'}
                 </>
               ) : (
-                <>{isLogin ? 'Sign In' : 'Create Account'}</>
+                <>{isLogin ? 'Entrar' : 'Criar Conta'}</>
               )}
             </Button>
           </form>
@@ -161,8 +161,8 @@ const Auth = () => {
               className="text-sm text-muted-foreground hover:text-primary transition-colors"
             >
               {isLogin
-                ? "Don't have an account? Sign up"
-                : 'Already have an account? Sign in'}
+                ? 'Não tem uma conta? Cadastre-se'
+                : 'Já tem uma conta? Entre'}
             </button>
           </div>
         </CardContent>
