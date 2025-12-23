@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import DashboardLayout from '@/components/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { format, startOfMonth, endOfMonth, subMonths, subWeeks, subDays, startOfYear, startOfWeek, endOfWeek } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { ChevronLeft, ChevronRight, FileDown, Users, UserCheck, UserX, Percent, TrendingUp, Trash2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, FileDown, Users, UserCheck, UserX, Percent, TrendingUp, Trash2, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
@@ -38,10 +39,18 @@ type TrendPeriod = 'week' | 'month' | '6months' | 'year';
 
 const Attendance = () => {
   const { toast } = useToast();
+  const [searchParams, setSearchParams] = useSearchParams();
+  
+  // Read URL parameters
+  const urlStatus = searchParams.get('status');
+  const urlDate = searchParams.get('date');
+  const urlClass = searchParams.get('class');
+  
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [selectedClass, setSelectedClass] = useState('all');
+  const [selectedClass, setSelectedClass] = useState(urlClass || 'all');
   const [selectedShift, setSelectedShift] = useState('all');
   const [selectedStudent, setSelectedStudent] = useState('all');
+  const [selectedStatus, setSelectedStatus] = useState(urlStatus || 'all');
   const [trendPeriod, setTrendPeriod] = useState<TrendPeriod>('6months');
   const [attendanceData, setAttendanceData] = useState<AttendanceRecord[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
@@ -49,17 +58,39 @@ const Attendance = () => {
   const [classes, setClasses] = useState<string[]>([]);
   const [trendData, setTrendData] = useState<TrendData[]>([]);
   const [deletingAttendance, setDeletingAttendance] = useState<string | null>(null);
+  const [isFilteredByUrl, setIsFilteredByUrl] = useState(false);
+
+  // Apply URL filters on mount
+  useEffect(() => {
+    if (urlStatus || urlDate === 'today' || urlClass) {
+      setIsFilteredByUrl(true);
+      if (urlDate === 'today') {
+        setCurrentDate(new Date());
+      }
+    }
+  }, []);
+
   useEffect(() => {
     fetchData();
-  }, [currentDate, selectedClass, selectedShift, selectedStudent]);
+  }, [currentDate, selectedClass, selectedShift, selectedStudent, selectedStatus]);
 
   useEffect(() => {
     fetchTrendData();
   }, [currentDate, selectedClass, selectedShift, selectedStudent, trendPeriod]);
 
+  const clearUrlFilters = () => {
+    setSearchParams({});
+    setSelectedStatus('all');
+    setSelectedClass('all');
+    setIsFilteredByUrl(false);
+  };
+
   const fetchData = async () => {
-    const start = format(startOfMonth(currentDate), 'yyyy-MM-dd');
-    const end = format(endOfMonth(currentDate), 'yyyy-MM-dd');
+    // If filtering by "today", use today's date only
+    const isToday = urlDate === 'today' || isFilteredByUrl;
+    const today = format(new Date(), 'yyyy-MM-dd');
+    const start = isToday ? today : format(startOfMonth(currentDate), 'yyyy-MM-dd');
+    const end = isToday ? today : format(endOfMonth(currentDate), 'yyyy-MM-dd');
 
     // Fetch all students for the filter dropdown
     const { data: allStudentsData } = await supabase
@@ -87,12 +118,19 @@ const Attendance = () => {
 
     const studentIds = filteredStudents.map(s => s.id);
     if (studentIds.length > 0) {
-      const { data: attendance } = await supabase
+      let attendanceQuery = supabase
         .from('attendance')
         .select('*')
         .in('student_id', studentIds)
         .gte('date', start)
         .lte('date', end);
+      
+      // Apply status filter if set
+      if (selectedStatus !== 'all') {
+        attendanceQuery = attendanceQuery.eq('status', selectedStatus as 'present' | 'absent' | 'justified');
+      }
+      
+      const { data: attendance } = await attendanceQuery;
       setAttendanceData(attendance || []);
     } else {
       setAttendanceData([]);
@@ -422,10 +460,47 @@ const Attendance = () => {
           </div>
         </div>
 
+        {/* Active Filters Banner */}
+        {isFilteredByUrl && (
+          <Card className="border-primary/50 bg-primary/5">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-sm font-medium">Filtros ativos:</span>
+                  {urlStatus === 'present' && (
+                    <Badge variant="secondary" className="bg-success/20 text-success">
+                      Presentes
+                    </Badge>
+                  )}
+                  {urlStatus === 'absent' && (
+                    <Badge variant="secondary" className="bg-destructive/20 text-destructive">
+                      Ausentes
+                    </Badge>
+                  )}
+                  {urlDate === 'today' && (
+                    <Badge variant="secondary">
+                      Hoje ({format(new Date(), 'dd/MM/yyyy')})
+                    </Badge>
+                  )}
+                  {urlClass && (
+                    <Badge variant="secondary">
+                      Turma: {urlClass}
+                    </Badge>
+                  )}
+                </div>
+                <Button variant="ghost" size="sm" onClick={clearUrlFilters} className="gap-1">
+                  <X className="w-4 h-4" />
+                  Limpar filtros
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Filters */}
         <Card>
           <CardContent className="p-4">
-            <div className="flex flex-col sm:flex-row items-center gap-4">
+            <div className="flex flex-col sm:flex-row items-center gap-4 flex-wrap">
               <div className="flex items-center gap-2">
                 <Button variant="outline" size="icon" onClick={() => setCurrentDate(d => new Date(d.getFullYear(), d.getMonth() - 1))}>
                   <ChevronLeft className="w-4 h-4" />
@@ -455,6 +530,17 @@ const Attendance = () => {
                   <SelectItem value="morning">Manhã</SelectItem>
                   <SelectItem value="afternoon">Tarde</SelectItem>
                   <SelectItem value="evening">Noite</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={selectedStatus} onValueChange={setSelectedStatus}>
+                <SelectTrigger className="w-full sm:w-36">
+                  <SelectValue placeholder="Todos os Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos os Status</SelectItem>
+                  <SelectItem value="present">Presentes</SelectItem>
+                  <SelectItem value="absent">Ausentes</SelectItem>
+                  <SelectItem value="justified">Justificados</SelectItem>
                 </SelectContent>
               </Select>
               <Select value={selectedStudent} onValueChange={setSelectedStudent}>
