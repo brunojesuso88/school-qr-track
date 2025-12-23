@@ -3,12 +3,13 @@ import { supabase } from '@/integrations/supabase/client';
 import DashboardLayout from '@/components/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { format, startOfMonth, endOfMonth } from 'date-fns';
+import { format, startOfMonth, endOfMonth, subMonths } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { ChevronLeft, ChevronRight, FileDown, Users, UserCheck, UserX, Percent } from 'lucide-react';
+import { ChevronLeft, ChevronRight, FileDown, Users, UserCheck, UserX, Percent, TrendingUp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 interface Student {
   id: string;
@@ -24,6 +25,13 @@ interface AttendanceRecord {
   status: string;
 }
 
+interface MonthlyTrend {
+  month: string;
+  rate: number;
+  present: number;
+  absent: number;
+}
+
 const Attendance = () => {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedClass, setSelectedClass] = useState('all');
@@ -31,9 +39,11 @@ const Attendance = () => {
   const [attendanceData, setAttendanceData] = useState<AttendanceRecord[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
   const [classes, setClasses] = useState<string[]>([]);
+  const [monthlyTrend, setMonthlyTrend] = useState<MonthlyTrend[]>([]);
 
   useEffect(() => {
     fetchData();
+    fetchMonthlyTrend();
   }, [currentDate, selectedClass, selectedShift]);
 
   const fetchData = async () => {
@@ -66,6 +76,54 @@ const Attendance = () => {
     const { data: allStudents } = await supabase.from('students').select('class').eq('status', 'active');
     const uniqueClasses = [...new Set(allStudents?.map(s => s.class) || [])].filter(c => c && c.trim() !== '');
     setClasses(uniqueClasses);
+  };
+
+  const fetchMonthlyTrend = async () => {
+    const trends: MonthlyTrend[] = [];
+    
+    // Get students based on filters
+    let studentQuery = supabase.from('students').select('id').eq('status', 'active');
+    if (selectedClass !== 'all') {
+      studentQuery = studentQuery.eq('class', selectedClass);
+    }
+    if (selectedShift !== 'all') {
+      studentQuery = studentQuery.eq('shift', selectedShift as 'morning' | 'afternoon' | 'evening');
+    }
+    const { data: studentsData } = await studentQuery;
+    const studentIds = studentsData?.map(s => s.id) || [];
+
+    if (studentIds.length === 0) {
+      setMonthlyTrend([]);
+      return;
+    }
+
+    // Get last 6 months of data
+    for (let i = 5; i >= 0; i--) {
+      const monthDate = subMonths(currentDate, i);
+      const start = format(startOfMonth(monthDate), 'yyyy-MM-dd');
+      const end = format(endOfMonth(monthDate), 'yyyy-MM-dd');
+
+      const { data: attendance } = await supabase
+        .from('attendance')
+        .select('status')
+        .in('student_id', studentIds)
+        .gte('date', start)
+        .lte('date', end);
+
+      const present = attendance?.filter(a => a.status === 'present').length || 0;
+      const absent = attendance?.filter(a => a.status === 'absent').length || 0;
+      const total = attendance?.length || 0;
+      const rate = total > 0 ? (present / total) * 100 : 0;
+
+      trends.push({
+        month: format(monthDate, 'MMM', { locale: ptBR }),
+        rate: Math.round(rate * 10) / 10,
+        present,
+        absent
+      });
+    }
+
+    setMonthlyTrend(trends);
   };
 
   const getStudentStats = (studentId: string) => {
@@ -317,6 +375,78 @@ const Attendance = () => {
             </CardContent>
           </Card>
         </div>
+
+        {/* Trend Chart */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <TrendingUp className="w-4 h-4" />
+              Tendência de Frequência (Últimos 6 meses)
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {monthlyTrend.length > 0 ? (
+              <div className="h-[250px] w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={monthlyTrend} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="colorRate" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#4f46e5" stopOpacity={0.3}/>
+                        <stop offset="95%" stopColor="#4f46e5" stopOpacity={0}/>
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                    <XAxis 
+                      dataKey="month" 
+                      tick={{ fontSize: 12 }} 
+                      tickLine={false}
+                      axisLine={false}
+                      className="fill-muted-foreground"
+                    />
+                    <YAxis 
+                      domain={[0, 100]} 
+                      tick={{ fontSize: 12 }} 
+                      tickLine={false}
+                      axisLine={false}
+                      tickFormatter={(v) => `${v}%`}
+                      className="fill-muted-foreground"
+                    />
+                    <Tooltip 
+                      content={({ active, payload }) => {
+                        if (active && payload && payload.length) {
+                          const data = payload[0].payload as MonthlyTrend;
+                          return (
+                            <div className="bg-popover border rounded-lg shadow-lg p-3">
+                              <p className="font-medium capitalize">{data.month}</p>
+                              <p className={`text-sm ${data.rate >= 70 ? 'text-green-600' : 'text-red-600'}`}>
+                                Frequência: {data.rate}%
+                              </p>
+                              <p className="text-sm text-green-600">Presenças: {data.present}</p>
+                              <p className="text-sm text-red-600">Faltas: {data.absent}</p>
+                            </div>
+                          );
+                        }
+                        return null;
+                      }}
+                    />
+                    <Area 
+                      type="monotone" 
+                      dataKey="rate" 
+                      stroke="#4f46e5" 
+                      strokeWidth={2}
+                      fillOpacity={1} 
+                      fill="url(#colorRate)" 
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            ) : (
+              <div className="h-[200px] flex items-center justify-center text-muted-foreground">
+                <p>Nenhum dado disponível para exibir o gráfico</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
         {/* Export Buttons */}
         <Card>
