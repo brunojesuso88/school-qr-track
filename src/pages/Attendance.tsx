@@ -5,11 +5,13 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { format, startOfMonth, endOfMonth, subMonths, subWeeks, subDays, startOfYear, startOfWeek, endOfWeek } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { ChevronLeft, ChevronRight, FileDown, Users, UserCheck, UserX, Percent, TrendingUp } from 'lucide-react';
+import { ChevronLeft, ChevronRight, FileDown, Users, UserCheck, UserX, Percent, TrendingUp, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
+import { useToast } from '@/hooks/use-toast';
 
 interface Student {
   id: string;
@@ -35,6 +37,7 @@ interface TrendData {
 type TrendPeriod = 'week' | 'month' | '6months' | 'year';
 
 const Attendance = () => {
+  const { toast } = useToast();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedClass, setSelectedClass] = useState('all');
   const [selectedShift, setSelectedShift] = useState('all');
@@ -45,7 +48,7 @@ const Attendance = () => {
   const [allStudents, setAllStudents] = useState<Student[]>([]);
   const [classes, setClasses] = useState<string[]>([]);
   const [trendData, setTrendData] = useState<TrendData[]>([]);
-
+  const [deletingStudentId, setDeletingStudentId] = useState<string | null>(null);
   useEffect(() => {
     fetchData();
   }, [currentDate, selectedClass, selectedShift, selectedStudent]);
@@ -378,6 +381,37 @@ const Attendance = () => {
     }
   };
 
+  const deleteStudentAttendance = async (studentId: string) => {
+    const start = format(startOfMonth(currentDate), 'yyyy-MM-dd');
+    const end = format(endOfMonth(currentDate), 'yyyy-MM-dd');
+    
+    setDeletingStudentId(studentId);
+    
+    const { error } = await supabase
+      .from('attendance')
+      .delete()
+      .eq('student_id', studentId)
+      .gte('date', start)
+      .lte('date', end);
+    
+    setDeletingStudentId(null);
+    
+    if (error) {
+      toast({
+        title: 'Erro ao excluir',
+        description: 'Não foi possível excluir a frequência do aluno.',
+        variant: 'destructive',
+      });
+    } else {
+      toast({
+        title: 'Frequência excluída',
+        description: 'A frequência do aluno foi excluída com sucesso.',
+      });
+      fetchData();
+      fetchTrendData();
+    }
+  };
+
   const stats = getTotalStats();
 
   return (
@@ -617,6 +651,7 @@ const Attendance = () => {
                       <TableHead className="text-center">Frequência</TableHead>
                       <TableHead className="text-center">Status</TableHead>
                       <TableHead className="text-center">PDF</TableHead>
+                      <TableHead className="text-center">Ações</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -664,6 +699,39 @@ const Attendance = () => {
                             >
                               <FileDown className="w-4 h-4" />
                             </Button>
+                          </TableCell>
+                          <TableCell className="text-center">
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button 
+                                  variant="ghost" 
+                                  size="sm"
+                                  className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                                  disabled={studentStats.total === 0 || deletingStudentId === student.id}
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Excluir Frequência</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    Tem certeza que deseja excluir toda a frequência de <strong>{student.full_name}</strong> do mês de <strong>{format(currentDate, 'MMMM yyyy', { locale: ptBR })}</strong>?
+                                    <br /><br />
+                                    Esta ação não pode ser desfeita.
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                  <AlertDialogAction 
+                                    className="bg-red-600 hover:bg-red-700"
+                                    onClick={() => deleteStudentAttendance(student.id)}
+                                  >
+                                    Excluir
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
                           </TableCell>
                         </TableRow>
                       );
