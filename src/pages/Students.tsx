@@ -18,6 +18,7 @@ import { format, parse } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { StudentReportModal } from '@/components/StudentReportModal';
+import { studentSchema, occurrenceSchema, formatPhone } from '@/lib/validations';
 
 interface Student {
   id: string;
@@ -246,6 +247,25 @@ const Students = () => {
       return;
     }
 
+    // Validate form data with Zod
+    const validationData = {
+      full_name: formData.full_name.trim(),
+      guardian_name: formData.guardian_name.trim(),
+      guardian_phone: formatPhone(formData.guardian_phone),
+      class: formData.class,
+      shift: formData.shift as 'morning' | 'afternoon' | 'evening',
+      status: formData.status,
+      has_medical_report: formData.has_medical_report,
+      medical_report_details: formData.has_medical_report ? formData.medical_report_details : null,
+    };
+
+    const validation = studentSchema.safeParse(validationData);
+    if (!validation.success) {
+      const firstError = validation.error.errors[0];
+      toast.error(firstError.message);
+      return;
+    }
+
     const studentId = generateStudentId(formData.full_name, birthDate);
 
     try {
@@ -259,16 +279,16 @@ const Students = () => {
         }
 
         const updateData: any = {
-          full_name: formData.full_name,
-          class: formData.class,
-          shift: formData.shift as 'morning' | 'afternoon' | 'evening',
-          guardian_name: formData.guardian_name,
-          guardian_phone: formData.guardian_phone,
-          status: formData.status,
+          full_name: validationData.full_name,
+          class: validationData.class,
+          shift: validationData.shift,
+          guardian_name: validationData.guardian_name,
+          guardian_phone: validationData.guardian_phone,
+          status: validationData.status,
           student_id: studentId,
           birth_date: format(birthDate, 'yyyy-MM-dd'),
-          has_medical_report: formData.has_medical_report,
-          medical_report_details: formData.has_medical_report ? formData.medical_report_details : null,
+          has_medical_report: validationData.has_medical_report,
+          medical_report_details: validationData.medical_report_details,
         };
 
         if (photoUrl) {
@@ -289,17 +309,17 @@ const Students = () => {
         const { data: newStudent, error: insertError } = await supabase
           .from('students')
           .insert({
-            full_name: formData.full_name,
-            class: formData.class,
-            shift: formData.shift as 'morning' | 'afternoon' | 'evening',
-            guardian_name: formData.guardian_name,
-            guardian_phone: formData.guardian_phone,
-            status: formData.status,
+            full_name: validationData.full_name,
+            class: validationData.class,
+            shift: validationData.shift,
+            guardian_name: validationData.guardian_name,
+            guardian_phone: validationData.guardian_phone,
+            status: validationData.status,
             student_id: studentId,
             birth_date: format(birthDate, 'yyyy-MM-dd'),
             qr_code: qrCode,
-            has_medical_report: formData.has_medical_report,
-            medical_report_details: formData.has_medical_report ? formData.medical_report_details : null,
+            has_medical_report: validationData.has_medical_report,
+            medical_report_details: validationData.medical_report_details,
           })
           .select()
           .single();
@@ -341,13 +361,27 @@ const Students = () => {
 
     if (!occurrencesStudent) return;
 
+    // Validate occurrence form data
+    const occurrenceData = {
+      type: occurrenceForm.type,
+      description: occurrenceForm.description || null,
+      date: occurrenceForm.date,
+    };
+
+    const validation = occurrenceSchema.safeParse(occurrenceData);
+    if (!validation.success) {
+      const firstError = validation.error.errors[0];
+      toast.error(firstError.message);
+      return;
+    }
+
     try {
       const { error } = await supabase
         .from('occurrences')
         .insert({
           student_id: occurrencesStudent.id,
           type: occurrenceForm.type,
-          description: occurrenceForm.description || null,
+          description: occurrenceForm.description?.substring(0, 1000) || null,
           date: format(occurrenceForm.date, 'yyyy-MM-dd'),
         });
 

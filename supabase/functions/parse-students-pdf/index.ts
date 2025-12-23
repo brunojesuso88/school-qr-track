@@ -5,6 +5,10 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Size limits
+const MAX_PDF_SIZE_MB = 10;
+const MAX_PDF_SIZE_BYTES = MAX_PDF_SIZE_MB * 1024 * 1024;
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -13,9 +17,58 @@ serve(async (req) => {
   try {
     const { pdfBase64, className, shift } = await req.json();
 
+    // Validate required fields
     if (!pdfBase64 || !className) {
       return new Response(
         JSON.stringify({ success: false, error: 'PDF e nome da turma são obrigatórios' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Validate className length and format
+    if (typeof className !== 'string' || className.length < 1 || className.length > 100) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'Nome da turma inválido' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Validate shift if provided
+    const validShifts = ['morning', 'afternoon', 'evening'];
+    if (shift && !validShifts.includes(shift)) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'Turno inválido' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Calculate approximate decoded size (base64 is ~33% larger than original)
+    const estimatedSize = (pdfBase64.length * 3) / 4;
+    if (estimatedSize > MAX_PDF_SIZE_BYTES) {
+      console.error(`PDF too large: ${(estimatedSize / 1024 / 1024).toFixed(2)}MB`);
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          error: `PDF muito grande. Tamanho máximo: ${MAX_PDF_SIZE_MB}MB` 
+        }),
+        { status: 413, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Validate PDF format by checking header
+    try {
+      const pdfHeader = atob(pdfBase64.substring(0, 100));
+      if (!pdfHeader.startsWith('%PDF-')) {
+        console.error('Invalid PDF header');
+        return new Response(
+          JSON.stringify({ success: false, error: 'Arquivo inválido. Envie um PDF válido.' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    } catch (e) {
+      console.error('Error decoding PDF header:', e);
+      return new Response(
+        JSON.stringify({ success: false, error: 'Arquivo inválido. Envie um PDF válido.' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -29,7 +82,7 @@ serve(async (req) => {
       );
     }
 
-    console.log('Processing PDF for class:', className);
+    console.log('Processing PDF for class:', className, '| Size:', (estimatedSize / 1024 / 1024).toFixed(2), 'MB');
 
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
@@ -124,7 +177,7 @@ Retorne os dados no formato JSON.`
     }
 
     const data = await response.json();
-    console.log('AI response:', JSON.stringify(data, null, 2));
+    console.log('AI response received');
 
     let students: any[] = [];
     
@@ -152,14 +205,22 @@ Retorne os dados no formato JSON.`
 
     console.log('Extracted students:', students.length);
 
-    const formattedStudents = students.map((student: any) => ({
-      full_name: student.full_name || student.nome || student.name || '',
-      birth_date: student.birth_date || student.data_nascimento || null,
-      guardian_name: student.guardian_name || student.responsavel || student.nome_responsavel || 'Responsável',
-      guardian_phone: student.guardian_phone || student.telefone || student.telefone_responsavel || '00000000000',
-      class: className,
-      shift: shift || 'morning'
-    })).filter((s: any) => s.full_name.trim() !== '');
+    // Phone number validation regex
+    const phoneRegex = /^\d{10,11}$/;
+
+    const formattedStudents = students.map((student: any) => {
+      const rawPhone = (student.guardian_phone || student.telefone || student.telefone_responsavel || '').replace(/\D/g, '');
+      const guardianPhone = phoneRegex.test(rawPhone) ? rawPhone : '';
+      
+      return {
+        full_name: String(student.full_name || student.nome || student.name || '').substring(0, 100),
+        birth_date: student.birth_date || student.data_nascimento || null,
+        guardian_name: String(student.guardian_name || student.responsavel || student.nome_responsavel || 'Responsável').substring(0, 100),
+        guardian_phone: guardianPhone,
+        class: className.substring(0, 100),
+        shift: shift || 'morning'
+      };
+    }).filter((s: any) => s.full_name.trim() !== '' && s.full_name.length >= 2);
 
     return new Response(
       JSON.stringify({ 
@@ -173,7 +234,7 @@ Retorne os dados no formato JSON.`
   } catch (error) {
     console.error('Error processing PDF:', error);
     return new Response(
-      JSON.stringify({ success: false, error: error instanceof Error ? error.message : 'Erro desconhecido' }),
+      JSON.stringify({ success: false, error: 'Erro desconhecido ao processar PDF' }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }

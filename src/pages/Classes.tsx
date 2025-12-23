@@ -12,6 +12,9 @@ import { toast } from 'sonner';
 import { Plus, Edit2, Trash2, GraduationCap, Search, Users, Upload, FileText, Loader2 } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Checkbox } from '@/components/ui/checkbox';
+import { classSchema } from '@/lib/validations';
+
+const MAX_PDF_SIZE = 10 * 1024 * 1024; // 10MB
 
 interface ClassItem {
   id: string;
@@ -103,14 +106,28 @@ const Classes = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    // Validate form data with Zod
+    const validationData = {
+      name: formData.name.trim(),
+      description: formData.description?.trim() || null,
+      shift: formData.shift as 'morning' | 'afternoon' | 'evening',
+    };
+
+    const validation = classSchema.safeParse(validationData);
+    if (!validation.success) {
+      const firstError = validation.error.errors[0];
+      toast.error(firstError.message);
+      return;
+    }
+
     try {
       if (editingClass) {
         const { error } = await supabase
           .from('classes')
           .update({
-            name: formData.name,
-            shift: formData.shift,
-            description: formData.description || null,
+            name: validationData.name,
+            shift: validationData.shift,
+            description: validationData.description,
           })
           .eq('id', editingClass.id);
 
@@ -120,9 +137,9 @@ const Classes = () => {
         const { error } = await supabase
           .from('classes')
           .insert({
-            name: formData.name,
-            shift: formData.shift,
-            description: formData.description || null,
+            name: validationData.name,
+            shift: validationData.shift,
+            description: validationData.description,
           });
 
         if (error) throw error;
@@ -200,6 +217,12 @@ const Classes = () => {
 
     if (file.type !== 'application/pdf') {
       toast.error('Por favor, selecione um arquivo PDF');
+      return;
+    }
+
+    // Validate file size
+    if (file.size > MAX_PDF_SIZE) {
+      toast.error('PDF muito grande. Tamanho máximo: 10MB');
       return;
     }
 
