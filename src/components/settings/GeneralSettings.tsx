@@ -1,0 +1,156 @@
+import { useState, useEffect } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Button } from '@/components/ui/button';
+import { Clock, Loader2, Check } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
+
+interface CutoffTimes {
+  morning: string;
+  afternoon: string;
+  evening: string;
+}
+
+const GeneralSettings = () => {
+  const [cutoffTimes, setCutoffTimes] = useState<CutoffTimes>({
+    morning: '07:30',
+    afternoon: '13:00',
+    evening: '18:30'
+  });
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    fetchSettings();
+  }, []);
+
+  const fetchSettings = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('settings')
+        .select('key, value')
+        .in('key', ['cutoff_morning', 'cutoff_afternoon', 'cutoff_evening']);
+
+      if (error) throw error;
+
+      if (data) {
+        const times = { ...cutoffTimes };
+        data.forEach(setting => {
+          if (setting.key === 'cutoff_morning') times.morning = setting.value as string;
+          if (setting.key === 'cutoff_afternoon') times.afternoon = setting.value as string;
+          if (setting.key === 'cutoff_evening') times.evening = setting.value as string;
+        });
+        setCutoffTimes(times);
+      }
+    } catch (error) {
+      console.error('Error fetching settings:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const saveSetting = async (key: string, value: string) => {
+    const { error } = await supabase
+      .from('settings')
+      .upsert({ key, value: JSON.stringify(value) }, { onConflict: 'key' });
+    
+    if (error) throw error;
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await Promise.all([
+        saveSetting('cutoff_morning', cutoffTimes.morning),
+        saveSetting('cutoff_afternoon', cutoffTimes.afternoon),
+        saveSetting('cutoff_evening', cutoffTimes.evening)
+      ]);
+      toast.success('Configurações salvas com sucesso!');
+    } catch (error) {
+      console.error('Error saving settings:', error);
+      toast.error('Erro ao salvar configurações');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center p-8">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <Clock className="h-5 w-5 text-primary" />
+            Horário Limite por Turno
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Defina o horário máximo para entrada dos alunos em cada turno. 
+            Após este horário, a presença será registrada como atraso.
+          </p>
+          
+          <div className="grid gap-4 sm:grid-cols-3">
+            <div className="space-y-2">
+              <Label htmlFor="morning">Turno Manhã</Label>
+              <Input
+                id="morning"
+                type="time"
+                value={cutoffTimes.morning}
+                onChange={(e) => setCutoffTimes(prev => ({ ...prev, morning: e.target.value }))}
+              />
+              <p className="text-xs text-muted-foreground">Ex: 07:30</p>
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="afternoon">Turno Tarde</Label>
+              <Input
+                id="afternoon"
+                type="time"
+                value={cutoffTimes.afternoon}
+                onChange={(e) => setCutoffTimes(prev => ({ ...prev, afternoon: e.target.value }))}
+              />
+              <p className="text-xs text-muted-foreground">Ex: 13:00</p>
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="evening">Turno Noite</Label>
+              <Input
+                id="evening"
+                type="time"
+                value={cutoffTimes.evening}
+                onChange={(e) => setCutoffTimes(prev => ({ ...prev, evening: e.target.value }))}
+              />
+              <p className="text-xs text-muted-foreground">Ex: 18:30</p>
+            </div>
+          </div>
+          
+          <Button onClick={handleSave} disabled={saving} className="mt-4">
+            {saving ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Salvando...
+              </>
+            ) : (
+              <>
+                <Check className="mr-2 h-4 w-4" />
+                Salvar Horários
+              </>
+            )}
+          </Button>
+        </CardContent>
+      </Card>
+    </div>
+  );
+};
+
+export default GeneralSettings;
