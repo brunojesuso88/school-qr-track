@@ -1,17 +1,37 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
 import edunexusLogo from "@/assets/edunexus-logo.png";
 
 const SplashScreen = () => {
   const navigate = useNavigate();
+  const { user, loading, isAdmin, isMobileUser } = useAuth();
+  const [showSplash, setShowSplash] = useState(true);
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      navigate("/home");
-    }, 2500);
+      setShowSplash(false);
+    }, 2000);
 
     return () => clearTimeout(timer);
-  }, [navigate]);
+  }, []);
+
+  useEffect(() => {
+    if (!showSplash && !loading) {
+      if (user) {
+        if (isAdmin) {
+          navigate("/home");
+        } else if (isMobileUser) {
+          navigate("/mobile-home");
+        } else {
+          // Fallback: wait for role to load
+          navigate("/home");
+        }
+      } else {
+        navigate("/home");
+      }
+    }
+  }, [showSplash, loading, user, isAdmin, isMobileUser, navigate]);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary/10 via-background to-accent/10">

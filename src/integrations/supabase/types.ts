@@ -299,7 +299,7 @@ export type Database = {
       is_authenticated: { Args: never; Returns: boolean }
     }
     Enums: {
-      app_role: "admin" | "teacher" | "staff"
+      app_role: "admin" | "teacher" | "staff" | "user"
       attendance_status: "present" | "absent" | "justified"
       student_shift: "morning" | "afternoon" | "evening"
     }
@@ -429,7 +429,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ["admin", "teacher", "staff"],
+      app_role: ["admin", "teacher", "staff", "user"],
       attendance_status: ["present", "absent", "justified"],
       student_shift: ["morning", "afternoon", "evening"],
     },
