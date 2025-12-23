@@ -5,11 +5,13 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { format, startOfMonth, endOfMonth, subMonths, subWeeks, subDays, startOfYear, startOfWeek, endOfWeek } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { ChevronLeft, ChevronRight, FileDown, Users, UserCheck, UserX, Percent, TrendingUp } from 'lucide-react';
+import { ChevronLeft, ChevronRight, FileDown, Users, UserCheck, UserX, Percent, TrendingUp, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
+import { useToast } from '@/hooks/use-toast';
 
 interface Student {
   id: string;
@@ -35,6 +37,7 @@ interface TrendData {
 type TrendPeriod = 'week' | 'month' | '6months' | 'year';
 
 const Attendance = () => {
+  const { toast } = useToast();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedClass, setSelectedClass] = useState('all');
   const [selectedShift, setSelectedShift] = useState('all');
@@ -45,7 +48,7 @@ const Attendance = () => {
   const [allStudents, setAllStudents] = useState<Student[]>([]);
   const [classes, setClasses] = useState<string[]>([]);
   const [trendData, setTrendData] = useState<TrendData[]>([]);
-
+  const [deletingAttendance, setDeletingAttendance] = useState<string | null>(null);
   useEffect(() => {
     fetchData();
   }, [currentDate, selectedClass, selectedShift, selectedStudent]);
@@ -378,6 +381,34 @@ const Attendance = () => {
     }
   };
 
+  const handleDeleteAttendance = async (studentId: string) => {
+    const start = format(startOfMonth(currentDate), 'yyyy-MM-dd');
+    const end = format(endOfMonth(currentDate), 'yyyy-MM-dd');
+
+    const { error } = await supabase
+      .from('attendance')
+      .delete()
+      .eq('student_id', studentId)
+      .gte('date', start)
+      .lte('date', end);
+
+    if (error) {
+      toast({
+        title: 'Erro ao excluir',
+        description: 'Não foi possível excluir a frequência do aluno.',
+        variant: 'destructive',
+      });
+    } else {
+      toast({
+        title: 'Frequência excluída',
+        description: 'A frequência do mês foi excluída com sucesso.',
+      });
+      fetchData();
+      fetchTrendData();
+    }
+    setDeletingAttendance(null);
+  };
+
   const stats = getTotalStats();
 
   return (
@@ -616,7 +647,7 @@ const Attendance = () => {
                       <TableHead className="text-center">Faltas</TableHead>
                       <TableHead className="text-center">Frequência</TableHead>
                       <TableHead className="text-center">Status</TableHead>
-                      <TableHead className="text-center">PDF</TableHead>
+                      <TableHead className="text-center">Ações</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -657,13 +688,47 @@ const Attendance = () => {
                             )}
                           </TableCell>
                           <TableCell className="text-center">
-                            <Button 
-                              variant="ghost" 
-                              size="sm"
-                              onClick={() => generatePDF('student', student.id)}
-                            >
-                              <FileDown className="w-4 h-4" />
-                            </Button>
+                            <div className="flex items-center justify-center gap-1">
+                              <Button 
+                                variant="ghost" 
+                                size="sm"
+                                onClick={() => generatePDF('student', student.id)}
+                              >
+                                <FileDown className="w-4 h-4" />
+                              </Button>
+                              {studentStats.total > 0 && (
+                                <AlertDialog>
+                                  <AlertDialogTrigger asChild>
+                                    <Button 
+                                      variant="ghost" 
+                                      size="sm"
+                                      className="text-red-600 hover:text-red-700 hover:bg-red-100"
+                                    >
+                                      <Trash2 className="w-4 h-4" />
+                                    </Button>
+                                  </AlertDialogTrigger>
+                                  <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                      <AlertDialogTitle>Excluir Frequência</AlertDialogTitle>
+                                      <AlertDialogDescription>
+                                        Tem certeza que deseja excluir todos os registros de frequência de <strong>{student.full_name}</strong> do mês de <strong>{format(currentDate, 'MMMM yyyy', { locale: ptBR })}</strong>?
+                                        <br /><br />
+                                        Esta ação não pode ser desfeita.
+                                      </AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                      <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                      <AlertDialogAction 
+                                        onClick={() => handleDeleteAttendance(student.id)}
+                                        className="bg-red-600 hover:bg-red-700"
+                                      >
+                                        Excluir
+                                      </AlertDialogAction>
+                                    </AlertDialogFooter>
+                                  </AlertDialogContent>
+                                </AlertDialog>
+                              )}
+                            </div>
                           </TableCell>
                         </TableRow>
                       );
