@@ -17,6 +17,7 @@ import { QRCodeSVG } from 'qrcode.react';
 import { format, parse } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
+import { StudentReportModal } from '@/components/StudentReportModal';
 
 interface Student {
   id: string;
@@ -76,6 +77,7 @@ const Students = () => {
   const [occurrences, setOccurrences] = useState<Occurrence[]>([]);
   const [isOccurrenceDialogOpen, setIsOccurrenceDialogOpen] = useState(false);
   const [zoomPhotoStudent, setZoomPhotoStudent] = useState<Student | null>(null);
+  const [reportStudent, setReportStudent] = useState<Student | null>(null);
   const [birthDay, setBirthDay] = useState('');
   const [birthMonth, setBirthMonth] = useState('');
   const [birthYear, setBirthYear] = useState('');
@@ -846,7 +848,12 @@ const Students = () => {
                         )}
                       </div>
                       <div>
-                        <h3 className="font-medium text-sm">{student.full_name}</h3>
+                        <h3 
+                          className="font-medium text-sm cursor-pointer hover:text-primary hover:underline transition-colors"
+                          onClick={() => setReportStudent(student)}
+                        >
+                          {student.full_name}
+                        </h3>
                         <p className="text-xs text-muted-foreground">{student.student_id}</p>
                       </div>
                     </div>
@@ -1102,6 +1109,12 @@ const Students = () => {
             )}
           </DialogContent>
         </Dialog>
+
+        {/* Student Report Modal */}
+        <StudentReportModal 
+          student={reportStudent} 
+          onClose={() => setReportStudent(null)} 
+        />
       </div>
     </DashboardLayout>
   );
