@@ -3,7 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import DashboardLayout from '@/components/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { format, startOfMonth, endOfMonth, subMonths } from 'date-fns';
+import { format, startOfMonth, endOfMonth, subMonths, subWeeks, subDays, startOfYear, startOfWeek, endOfWeek } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { ChevronLeft, ChevronRight, FileDown, Users, UserCheck, UserX, Percent, TrendingUp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -25,30 +25,46 @@ interface AttendanceRecord {
   status: string;
 }
 
-interface MonthlyTrend {
-  month: string;
+interface TrendData {
+  label: string;
   rate: number;
   present: number;
   absent: number;
 }
 
+type TrendPeriod = 'week' | 'month' | '6months' | 'year';
+
 const Attendance = () => {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedClass, setSelectedClass] = useState('all');
   const [selectedShift, setSelectedShift] = useState('all');
+  const [selectedStudent, setSelectedStudent] = useState('all');
+  const [trendPeriod, setTrendPeriod] = useState<TrendPeriod>('6months');
   const [attendanceData, setAttendanceData] = useState<AttendanceRecord[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
+  const [allStudents, setAllStudents] = useState<Student[]>([]);
   const [classes, setClasses] = useState<string[]>([]);
-  const [monthlyTrend, setMonthlyTrend] = useState<MonthlyTrend[]>([]);
+  const [trendData, setTrendData] = useState<TrendData[]>([]);
 
   useEffect(() => {
     fetchData();
-    fetchMonthlyTrend();
-  }, [currentDate, selectedClass, selectedShift]);
+  }, [currentDate, selectedClass, selectedShift, selectedStudent]);
+
+  useEffect(() => {
+    fetchTrendData();
+  }, [currentDate, selectedClass, selectedShift, selectedStudent, trendPeriod]);
 
   const fetchData = async () => {
     const start = format(startOfMonth(currentDate), 'yyyy-MM-dd');
     const end = format(endOfMonth(currentDate), 'yyyy-MM-dd');
+
+    // Fetch all students for the filter dropdown
+    const { data: allStudentsData } = await supabase
+      .from('students')
+      .select('id, full_name, class, shift')
+      .eq('status', 'active')
+      .order('full_name');
+    setAllStudents(allStudentsData || []);
 
     let studentQuery = supabase.from('students').select('id, full_name, class, shift').eq('status', 'active');
     if (selectedClass !== 'all') {
@@ -58,9 +74,15 @@ const Attendance = () => {
       studentQuery = studentQuery.eq('shift', selectedShift as 'morning' | 'afternoon' | 'evening');
     }
     const { data: studentsData } = await studentQuery.order('full_name');
-    setStudents(studentsData || []);
+    
+    // Filter by student if selected
+    const filteredStudents = selectedStudent !== 'all' 
+      ? studentsData?.filter(s => s.id === selectedStudent) || []
+      : studentsData || [];
+    
+    setStudents(filteredStudents);
 
-    const studentIds = studentsData?.map(s => s.id) || [];
+    const studentIds = filteredStudents.map(s => s.id);
     if (studentIds.length > 0) {
       const { data: attendance } = await supabase
         .from('attendance')
@@ -73,13 +95,13 @@ const Attendance = () => {
       setAttendanceData([]);
     }
 
-    const { data: allStudents } = await supabase.from('students').select('class').eq('status', 'active');
-    const uniqueClasses = [...new Set(allStudents?.map(s => s.class) || [])].filter(c => c && c.trim() !== '');
+    const { data: classStudents } = await supabase.from('students').select('class').eq('status', 'active');
+    const uniqueClasses = [...new Set(classStudents?.map(s => s.class) || [])].filter(c => c && c.trim() !== '');
     setClasses(uniqueClasses);
   };
 
-  const fetchMonthlyTrend = async () => {
-    const trends: MonthlyTrend[] = [];
+  const fetchTrendData = async () => {
+    const trends: TrendData[] = [];
     
     // Get students based on filters
     let studentQuery = supabase.from('students').select('id').eq('status', 'active');
@@ -90,40 +112,122 @@ const Attendance = () => {
       studentQuery = studentQuery.eq('shift', selectedShift as 'morning' | 'afternoon' | 'evening');
     }
     const { data: studentsData } = await studentQuery;
-    const studentIds = studentsData?.map(s => s.id) || [];
+    
+    // Filter by student if selected
+    const studentIds = selectedStudent !== 'all'
+      ? [selectedStudent]
+      : studentsData?.map(s => s.id) || [];
 
     if (studentIds.length === 0) {
-      setMonthlyTrend([]);
+      setTrendData([]);
       return;
     }
 
-    // Get last 6 months of data
-    for (let i = 5; i >= 0; i--) {
-      const monthDate = subMonths(currentDate, i);
-      const start = format(startOfMonth(monthDate), 'yyyy-MM-dd');
-      const end = format(endOfMonth(monthDate), 'yyyy-MM-dd');
+    // Define periods based on selection
+    if (trendPeriod === 'week') {
+      // Last 7 days
+      for (let i = 6; i >= 0; i--) {
+        const date = subDays(currentDate, i);
+        const dateStr = format(date, 'yyyy-MM-dd');
 
-      const { data: attendance } = await supabase
-        .from('attendance')
-        .select('status')
-        .in('student_id', studentIds)
-        .gte('date', start)
-        .lte('date', end);
+        const { data: attendance } = await supabase
+          .from('attendance')
+          .select('status')
+          .in('student_id', studentIds)
+          .eq('date', dateStr);
 
-      const present = attendance?.filter(a => a.status === 'present').length || 0;
-      const absent = attendance?.filter(a => a.status === 'absent').length || 0;
-      const total = attendance?.length || 0;
-      const rate = total > 0 ? (present / total) * 100 : 0;
+        const present = attendance?.filter(a => a.status === 'present').length || 0;
+        const absent = attendance?.filter(a => a.status === 'absent').length || 0;
+        const total = attendance?.length || 0;
+        const rate = total > 0 ? (present / total) * 100 : 0;
 
-      trends.push({
-        month: format(monthDate, 'MMM', { locale: ptBR }),
-        rate: Math.round(rate * 10) / 10,
-        present,
-        absent
-      });
+        trends.push({
+          label: format(date, 'EEE', { locale: ptBR }),
+          rate: Math.round(rate * 10) / 10,
+          present,
+          absent
+        });
+      }
+    } else if (trendPeriod === 'month') {
+      // Last 4 weeks
+      for (let i = 3; i >= 0; i--) {
+        const weekStart = startOfWeek(subWeeks(currentDate, i), { weekStartsOn: 0 });
+        const weekEnd = endOfWeek(subWeeks(currentDate, i), { weekStartsOn: 0 });
+
+        const { data: attendance } = await supabase
+          .from('attendance')
+          .select('status')
+          .in('student_id', studentIds)
+          .gte('date', format(weekStart, 'yyyy-MM-dd'))
+          .lte('date', format(weekEnd, 'yyyy-MM-dd'));
+
+        const present = attendance?.filter(a => a.status === 'present').length || 0;
+        const absent = attendance?.filter(a => a.status === 'absent').length || 0;
+        const total = attendance?.length || 0;
+        const rate = total > 0 ? (present / total) * 100 : 0;
+
+        trends.push({
+          label: `Sem ${4 - i}`,
+          rate: Math.round(rate * 10) / 10,
+          present,
+          absent
+        });
+      }
+    } else if (trendPeriod === '6months') {
+      // Last 6 months
+      for (let i = 5; i >= 0; i--) {
+        const monthDate = subMonths(currentDate, i);
+        const start = format(startOfMonth(monthDate), 'yyyy-MM-dd');
+        const end = format(endOfMonth(monthDate), 'yyyy-MM-dd');
+
+        const { data: attendance } = await supabase
+          .from('attendance')
+          .select('status')
+          .in('student_id', studentIds)
+          .gte('date', start)
+          .lte('date', end);
+
+        const present = attendance?.filter(a => a.status === 'present').length || 0;
+        const absent = attendance?.filter(a => a.status === 'absent').length || 0;
+        const total = attendance?.length || 0;
+        const rate = total > 0 ? (present / total) * 100 : 0;
+
+        trends.push({
+          label: format(monthDate, 'MMM', { locale: ptBR }),
+          rate: Math.round(rate * 10) / 10,
+          present,
+          absent
+        });
+      }
+    } else if (trendPeriod === 'year') {
+      // Full year - 12 months
+      for (let i = 11; i >= 0; i--) {
+        const monthDate = subMonths(currentDate, i);
+        const start = format(startOfMonth(monthDate), 'yyyy-MM-dd');
+        const end = format(endOfMonth(monthDate), 'yyyy-MM-dd');
+
+        const { data: attendance } = await supabase
+          .from('attendance')
+          .select('status')
+          .in('student_id', studentIds)
+          .gte('date', start)
+          .lte('date', end);
+
+        const present = attendance?.filter(a => a.status === 'present').length || 0;
+        const absent = attendance?.filter(a => a.status === 'absent').length || 0;
+        const total = attendance?.length || 0;
+        const rate = total > 0 ? (present / total) * 100 : 0;
+
+        trends.push({
+          label: format(monthDate, 'MMM', { locale: ptBR }),
+          rate: Math.round(rate * 10) / 10,
+          present,
+          absent
+        });
+      }
     }
 
-    setMonthlyTrend(trends);
+    setTrendData(trends);
   };
 
   const getStudentStats = (studentId: string) => {
@@ -322,6 +426,15 @@ const Attendance = () => {
                   <SelectItem value="evening">Noite</SelectItem>
                 </SelectContent>
               </Select>
+              <Select value={selectedStudent} onValueChange={setSelectedStudent}>
+                <SelectTrigger className="w-full sm:w-48">
+                  <SelectValue placeholder="Todos os Alunos" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos os Alunos</SelectItem>
+                  {allStudents.map(s => <SelectItem key={s.id} value={s.id}>{s.full_name}</SelectItem>)}
+                </SelectContent>
+              </Select>
             </div>
           </CardContent>
         </Card>
@@ -379,16 +492,29 @@ const Attendance = () => {
         {/* Trend Chart */}
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2">
-              <TrendingUp className="w-4 h-4" />
-              Tendência de Frequência (Últimos 6 meses)
-            </CardTitle>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <TrendingUp className="w-4 h-4" />
+                Tendência de Frequência
+              </CardTitle>
+              <Select value={trendPeriod} onValueChange={(v) => setTrendPeriod(v as TrendPeriod)}>
+                <SelectTrigger className="w-full sm:w-40">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="week">Última Semana</SelectItem>
+                  <SelectItem value="month">Último Mês</SelectItem>
+                  <SelectItem value="6months">Últimos 6 Meses</SelectItem>
+                  <SelectItem value="year">Ano Inteiro</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </CardHeader>
           <CardContent>
-            {monthlyTrend.length > 0 ? (
+            {trendData.length > 0 ? (
               <div className="h-[250px] w-full">
                 <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={monthlyTrend} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
+                  <AreaChart data={trendData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
                     <defs>
                       <linearGradient id="colorRate" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="5%" stopColor="#4f46e5" stopOpacity={0.3}/>
@@ -397,7 +523,7 @@ const Attendance = () => {
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                     <XAxis 
-                      dataKey="month" 
+                      dataKey="label" 
                       tick={{ fontSize: 12 }} 
                       tickLine={false}
                       axisLine={false}
@@ -414,10 +540,10 @@ const Attendance = () => {
                     <Tooltip 
                       content={({ active, payload }) => {
                         if (active && payload && payload.length) {
-                          const data = payload[0].payload as MonthlyTrend;
+                          const data = payload[0].payload as TrendData;
                           return (
                             <div className="bg-popover border rounded-lg shadow-lg p-3">
-                              <p className="font-medium capitalize">{data.month}</p>
+                              <p className="font-medium capitalize">{data.label}</p>
                               <p className={`text-sm ${data.rate >= 70 ? 'text-green-600' : 'text-red-600'}`}>
                                 Frequência: {data.rate}%
                               </p>
