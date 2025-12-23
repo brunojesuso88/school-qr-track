@@ -182,35 +182,79 @@ const ScanQR = () => {
         {lastScanned && (
           <Card className={`animate-success-pop ${
             lastScanned.error ? 'border-destructive' : 
-            lastScanned.alreadyCheckedIn ? 'border-warning' : 'border-success'
+            lastScanned.alreadyCheckedIn ? 'border-warning' : 'border-success border-2'
           }`}>
             <CardContent className="p-6">
-              <div className="flex items-center gap-4">
-                <div className={`p-3 rounded-full ${
-                  lastScanned.error ? 'bg-destructive/10' :
-                  lastScanned.alreadyCheckedIn ? 'bg-warning/10' : 'bg-success/10'
-                }`}>
-                  {lastScanned.error ? (
-                    <XCircle className="w-8 h-8 text-destructive" />
-                  ) : (
-                    <CheckCircle2 className={`w-8 h-8 ${
-                      lastScanned.alreadyCheckedIn ? 'text-warning' : 'text-success'
-                    }`} />
-                  )}
+              {lastScanned.student && lastScanned.success ? (
+                // Success state - show prominent photo, name, and checkmark
+                <div className="flex flex-col items-center text-center space-y-4">
+                  <div className="relative">
+                    {lastScanned.student.photo_url ? (
+                      <img 
+                        src={lastScanned.student.photo_url} 
+                        alt={lastScanned.student.full_name}
+                        className="w-32 h-32 rounded-full object-cover border-4 border-success shadow-lg"
+                      />
+                    ) : (
+                      <div className="w-32 h-32 rounded-full bg-success/20 border-4 border-success flex items-center justify-center shadow-lg">
+                        <span className="text-4xl font-bold text-success">
+                          {lastScanned.student.full_name.charAt(0).toUpperCase()}
+                        </span>
+                      </div>
+                    )}
+                    <div className="absolute -bottom-2 -right-2 bg-success rounded-full p-2 shadow-lg">
+                      <CheckCircle2 className="w-8 h-8 text-white" />
+                    </div>
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-2xl text-success">{lastScanned.student.full_name}</h3>
+                    <p className="text-muted-foreground mt-1">
+                      {lastScanned.student.class} • Entrada às {lastScanned.time}
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  {lastScanned.student ? (
+              ) : (
+                // Error or already checked in states
+                <div className="flex items-center gap-4">
+                  {lastScanned.student && lastScanned.alreadyCheckedIn ? (
                     <>
-                      <h3 className="font-semibold text-lg">{lastScanned.student.full_name}</h3>
-                      <p className="text-sm text-muted-foreground">
-                        {lastScanned.student.class} • {lastScanned.alreadyCheckedIn ? 'Already checked in' : 'Checked in'} at {lastScanned.time}
-                      </p>
+                      <div className="relative">
+                        {lastScanned.student.photo_url ? (
+                          <img 
+                            src={lastScanned.student.photo_url} 
+                            alt={lastScanned.student.full_name}
+                            className="w-20 h-20 rounded-full object-cover border-2 border-warning"
+                          />
+                        ) : (
+                          <div className="w-20 h-20 rounded-full bg-warning/20 border-2 border-warning flex items-center justify-center">
+                            <span className="text-2xl font-bold text-warning">
+                              {lastScanned.student.full_name.charAt(0).toUpperCase()}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                      <div>
+                        <h3 className="font-semibold text-lg">{lastScanned.student.full_name}</h3>
+                        <p className="text-sm text-warning font-medium">
+                          Já registrado hoje às {lastScanned.time}
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                          {lastScanned.student.class}
+                        </p>
+                      </div>
                     </>
                   ) : (
-                    <h3 className="font-medium text-destructive">{lastScanned.message}</h3>
+                    <>
+                      <div className="p-3 rounded-full bg-destructive/10">
+                        <XCircle className="w-8 h-8 text-destructive" />
+                      </div>
+                      <div>
+                        <h3 className="font-medium text-destructive">{lastScanned.message}</h3>
+                      </div>
+                    </>
                   )}
                 </div>
-              </div>
+              )}
             </CardContent>
           </Card>
         )}
