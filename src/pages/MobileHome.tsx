@@ -1,18 +1,14 @@
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { QrCode, Search, LogOut, Download } from "lucide-react";
+import { Card, CardContent, CardDescription, CardTitle } from "@/components/ui/card";
+import { QrCode, Search } from "lucide-react";
 import edunexusLogo from "@/assets/edunexus-logo.png";
+import { MobileBottomNav } from "@/components/MobileBottomNav";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 const MobileHome = () => {
   const navigate = useNavigate();
-  const { user, signOut } = useAuth();
-
-  const handleSignOut = async () => {
-    await signOut();
-    navigate("/");
-  };
+  const { user } = useAuth();
 
   const menuOptions = [
     {
@@ -49,14 +45,7 @@ const MobileHome = () => {
               </p>
             </div>
           </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={handleSignOut}
-            className="text-muted-foreground"
-          >
-            <LogOut className="h-5 w-5" />
-          </Button>
+          <ThemeToggle />
         </div>
 
         {/* Welcome Card */}
@@ -80,7 +69,7 @@ const MobileHome = () => {
               <CardContent className="p-0">
                 <div className="flex items-center">
                   <div className={`bg-gradient-to-br ${option.gradient} p-5 flex items-center justify-center`}>
-                    <option.icon className="h-8 w-8 text-white" />
+                    <option.icon className="h-8 w-8 text-primary-foreground" />
                   </div>
                   <div className="flex-1 p-4">
                     <CardTitle className="text-base mb-1">{option.title}</CardTitle>
@@ -93,25 +82,9 @@ const MobileHome = () => {
             </Card>
           ))}
         </div>
-
-        {/* Install PWA Card */}
-        <Card 
-          className="mt-6 cursor-pointer card-hover border-dashed"
-          onClick={() => navigate("/install")}
-        >
-          <CardContent className="p-4 flex items-center gap-3">
-            <div className="bg-accent p-2 rounded-lg">
-              <Download className="h-5 w-5 text-accent-foreground" />
-            </div>
-            <div>
-              <p className="font-medium text-sm">Instalar aplicativo</p>
-              <p className="text-xs text-muted-foreground">
-                Adicione à tela inicial
-              </p>
-            </div>
-          </CardContent>
-        </Card>
       </div>
+
+      <MobileBottomNav />
     </div>
   );
 };
