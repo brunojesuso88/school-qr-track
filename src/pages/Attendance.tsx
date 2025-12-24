@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import DashboardLayout from '@/components/DashboardLayout';
+import ManualAttendanceModal from '@/components/ManualAttendanceModal';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { format, startOfMonth, endOfMonth, subMonths, subWeeks, subDays, startOfYear, startOfWeek, endOfWeek } from 'date-fns';
@@ -458,6 +459,7 @@ const Attendance = () => {
             <h1 className="text-2xl font-semibold">Frequência</h1>
             <p className="text-muted-foreground">Acompanhe a frequência dos alunos</p>
           </div>
+          <ManualAttendanceModal onSuccess={() => { fetchData(); fetchTrendData(); }} />
         </div>
 
         {/* Active Filters Banner */}

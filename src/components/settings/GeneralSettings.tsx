@@ -15,9 +15,9 @@ interface CutoffTimes {
 
 const GeneralSettings = () => {
   const [cutoffTimes, setCutoffTimes] = useState<CutoffTimes>({
-    morning: '07:30',
-    afternoon: '13:00',
-    evening: '18:30'
+    morning: '08:00',
+    afternoon: '14:00',
+    evening: '20:00'
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -108,7 +108,7 @@ const GeneralSettings = () => {
                 value={cutoffTimes.morning}
                 onChange={(e) => setCutoffTimes(prev => ({ ...prev, morning: e.target.value }))}
               />
-              <p className="text-xs text-muted-foreground">Ex: 07:30</p>
+              <p className="text-xs text-muted-foreground">Padrão: 08:00</p>
             </div>
             
             <div className="space-y-2">
@@ -119,7 +119,7 @@ const GeneralSettings = () => {
                 value={cutoffTimes.afternoon}
                 onChange={(e) => setCutoffTimes(prev => ({ ...prev, afternoon: e.target.value }))}
               />
-              <p className="text-xs text-muted-foreground">Ex: 13:00</p>
+              <p className="text-xs text-muted-foreground">Padrão: 14:00</p>
             </div>
             
             <div className="space-y-2">
@@ -130,7 +130,7 @@ const GeneralSettings = () => {
                 value={cutoffTimes.evening}
                 onChange={(e) => setCutoffTimes(prev => ({ ...prev, evening: e.target.value }))}
               />
-              <p className="text-xs text-muted-foreground">Ex: 18:30</p>
+              <p className="text-xs text-muted-foreground">Padrão: 20:00</p>
             </div>
           </div>
           

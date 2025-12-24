@@ -2,7 +2,7 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 
-type AppRole = 'admin' | 'teacher' | 'staff' | 'user';
+type AppRole = 'admin' | 'direction' | 'teacher' | 'staff' | 'user';
 
 interface AuthContextType {
   user: User | null;
@@ -11,6 +11,10 @@ interface AuthContextType {
   userRole: AppRole | null;
   isAdmin: boolean;
   isMobileUser: boolean;
+  canAccessSettings: boolean;
+  canManageUsers: boolean;
+  canAccessFullDashboard: boolean;
+  isStaffOnly: boolean;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signUp: (email: string, password: string, fullName: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
@@ -108,8 +112,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setUserRole(null);
   };
 
-  const isAdmin = userRole === 'admin' || userRole === 'teacher' || userRole === 'staff';
+  // Permissões granulares baseadas na role
+  const isAdmin = userRole === 'admin' || userRole === 'direction' || userRole === 'teacher' || userRole === 'staff';
   const isMobileUser = userRole === 'user';
+  
+  // Acesso às configurações: admin e direção
+  const canAccessSettings = userRole === 'admin' || userRole === 'direction';
+  
+  // Gestão de usuários: apenas admin
+  const canManageUsers = userRole === 'admin';
+  
+  // Acesso ao dashboard completo: admin, direção e professor
+  const canAccessFullDashboard = userRole === 'admin' || userRole === 'direction' || userRole === 'teacher';
+  
+  // Funcionário tem acesso limitado apenas a QR
+  const isStaffOnly = userRole === 'staff';
 
   return (
     <AuthContext.Provider value={{ 
@@ -119,6 +136,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       userRole, 
       isAdmin, 
       isMobileUser,
+      canAccessSettings,
+      canManageUsers,
+      canAccessFullDashboard,
+      isStaffOnly,
       signIn, 
       signUp, 
       signOut 

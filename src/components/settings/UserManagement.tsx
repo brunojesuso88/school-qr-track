@@ -35,6 +35,7 @@ interface UserWithRole {
 
 const roleLabels: Record<AppRole, string> = {
   admin: 'Administrador',
+  direction: 'Direção',
   teacher: 'Professor',
   staff: 'Funcionário',
   user: 'Usuário Mobile'
@@ -42,8 +43,9 @@ const roleLabels: Record<AppRole, string> = {
 
 const roleBadgeVariants: Record<AppRole, 'default' | 'secondary' | 'outline' | 'destructive'> = {
   admin: 'destructive',
-  teacher: 'default',
-  staff: 'secondary',
+  direction: 'default',
+  teacher: 'secondary',
+  staff: 'outline',
   user: 'outline'
 };
 
@@ -182,6 +184,7 @@ const UserManagement = () => {
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="admin">Administrador</SelectItem>
+                          <SelectItem value="direction">Direção</SelectItem>
                           <SelectItem value="teacher">Professor</SelectItem>
                           <SelectItem value="staff">Funcionário</SelectItem>
                           <SelectItem value="user">Usuário Mobile</SelectItem>
@@ -204,7 +207,7 @@ const UserManagement = () => {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <div className="p-4 rounded-lg bg-muted/50">
               <Badge variant="destructive" className="mb-2">Administrador</Badge>
               <p className="text-sm text-muted-foreground">
@@ -212,15 +215,21 @@ const UserManagement = () => {
               </p>
             </div>
             <div className="p-4 rounded-lg bg-muted/50">
-              <Badge variant="default" className="mb-2">Professor</Badge>
+              <Badge variant="default" className="mb-2">Direção</Badge>
               <p className="text-sm text-muted-foreground">
-                Pode registrar presença, ver alunos e turmas, mas sem acesso a configurações.
+                Acesso total ao sistema, exceto gestão de usuários.
               </p>
             </div>
             <div className="p-4 rounded-lg bg-muted/50">
-              <Badge variant="secondary" className="mb-2">Funcionário</Badge>
+              <Badge variant="secondary" className="mb-2">Professor</Badge>
               <p className="text-sm text-muted-foreground">
-                Acesso básico para registro de presença e visualização de dados.
+                Acesso a todas as funções, exceto configurações do sistema.
+              </p>
+            </div>
+            <div className="p-4 rounded-lg bg-muted/50">
+              <Badge variant="outline" className="mb-2">Funcionário</Badge>
+              <p className="text-sm text-muted-foreground">
+                Acesso apenas à função de leitura de QR Code na tela inicial.
               </p>
             </div>
             <div className="p-4 rounded-lg bg-muted/50">
