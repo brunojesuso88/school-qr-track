@@ -15,14 +15,14 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-const navigation = [
-  { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-  { name: 'Alunos', href: '/students', icon: Users },
-  { name: 'Turmas', href: '/classes', icon: BookOpen },
-  { name: 'Escanear QR', href: '/scan', icon: QrCode },
-  { name: 'Frequência', href: '/attendance', icon: Calendar },
-  { name: 'Notificações', href: '/notifications', icon: Bell },
-  { name: 'Configurações', href: '/settings', icon: Settings },
+const allNavigation = [
+  { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, roles: ['admin', 'direction', 'teacher'] },
+  { name: 'Alunos', href: '/students', icon: Users, roles: ['admin', 'direction', 'teacher'] },
+  { name: 'Turmas', href: '/classes', icon: BookOpen, roles: ['admin', 'direction', 'teacher'] },
+  { name: 'Escanear QR', href: '/scan', icon: QrCode, roles: ['admin', 'direction', 'teacher', 'staff'] },
+  { name: 'Frequência', href: '/attendance', icon: Calendar, roles: ['admin', 'direction', 'teacher'] },
+  { name: 'Notificações', href: '/notifications', icon: Bell, roles: ['admin', 'direction', 'teacher'] },
+  { name: 'Configurações', href: '/settings', icon: Settings, roles: ['admin', 'direction'] },
 ];
 
 interface DashboardLayoutProps {
@@ -32,8 +32,13 @@ interface DashboardLayoutProps {
 const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, signOut, userRole } = useAuth();
+  const { user, signOut, userRole, isStaffOnly } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // Filter navigation based on user role
+  const navigation = allNavigation.filter(item => 
+    item.roles.includes(userRole || 'user')
+  );
 
   const handleSignOut = async () => {
     await signOut();
@@ -47,6 +52,7 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
   const getRoleLabel = (role: string | null) => {
     const labels: Record<string, string> = {
       admin: 'Administrador',
+      direction: 'Direção',
       teacher: 'Professor',
       staff: 'Funcionário',
       user: 'Usuário',
@@ -55,7 +61,7 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
   };
 
   const getCurrentPageName = () => {
-    const currentNav = navigation.find(item => item.href === location.pathname);
+    const currentNav = allNavigation.find(item => item.href === location.pathname);
     return currentNav?.name || 'Dashboard';
   };
 

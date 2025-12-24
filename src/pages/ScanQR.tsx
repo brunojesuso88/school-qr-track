@@ -26,6 +26,18 @@ const ScanQR = () => {
   const processQRCode = useCallback(async (qrCode: string) => {
     if (isProcessing || !qrCode.trim()) return;
     
+    // Check if it's a weekend
+    const today = new Date();
+    const dayOfWeek = today.getDay();
+    if (dayOfWeek === 0 || dayOfWeek === 6) {
+      toast.error('A escola não funciona aos sábados e domingos');
+      setLastScanned({ 
+        error: true, 
+        message: 'Não é possível registrar presença nos finais de semana' 
+      });
+      return;
+    }
+    
     setIsProcessing(true);
     setScanResult('');
 

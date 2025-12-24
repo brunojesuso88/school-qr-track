@@ -7,6 +7,7 @@ import { ThemeProvider } from "@/components/ThemeProvider";
 import { AuthProvider } from "./contexts/AuthContext";
 import AdminRoute from "./components/AdminRoute";
 import MobileRoute from "./components/MobileRoute";
+import UpdatePrompt from "./components/UpdatePrompt";
 import SplashScreen from "./pages/SplashScreen";
 import Home from "./pages/Home";
 import Dashboard from "./pages/Dashboard";
@@ -34,6 +35,7 @@ const App = () => (
         <TooltipProvider>
           <Toaster />
           <Sonner />
+          <UpdatePrompt />
           <BrowserRouter>
             <Routes>
               {/* Public Routes */}
