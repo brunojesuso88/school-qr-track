@@ -26,7 +26,16 @@ interface AttendanceRecord {
   id: string;
   student_id: string;
   date: string;
+  time: string | null;
   status: string;
+}
+
+interface DetailedRecord {
+  id: string;
+  date: string;
+  time: string | null;
+  status: string;
+  student: Student;
 }
 
 interface TrendData {
@@ -60,6 +69,7 @@ const Attendance = () => {
   const [trendData, setTrendData] = useState<TrendData[]>([]);
   const [deletingAttendance, setDeletingAttendance] = useState<string | null>(null);
   const [isFilteredByUrl, setIsFilteredByUrl] = useState(false);
+  const [deletingIndividual, setDeletingIndividual] = useState<string | null>(null);
 
   // Apply URL filters on mount
   useEffect(() => {
@@ -121,10 +131,12 @@ const Attendance = () => {
     if (studentIds.length > 0) {
       let attendanceQuery = supabase
         .from('attendance')
-        .select('*')
+        .select('id, student_id, date, time, status')
         .in('student_id', studentIds)
         .gte('date', start)
-        .lte('date', end);
+        .lte('date', end)
+        .order('date', { ascending: false })
+        .order('time', { ascending: false });
       
       // Apply status filter if set
       if (selectedStatus !== 'all') {
@@ -448,7 +460,132 @@ const Attendance = () => {
     setDeletingAttendance(null);
   };
 
+  const handleDeleteIndividualAttendance = async (attendanceId: string) => {
+    setDeletingIndividual(attendanceId);
+    
+    const { error } = await supabase
+      .from('attendance')
+      .delete()
+      .eq('id', attendanceId);
+
+    if (error) {
+      toast({
+        title: 'Erro ao excluir',
+        description: 'Não foi possível excluir o registro.',
+        variant: 'destructive',
+      });
+    } else {
+      toast({
+        title: 'Registro excluído',
+        description: 'O registro foi excluído com sucesso.',
+      });
+      fetchData();
+      fetchTrendData();
+    }
+    setDeletingIndividual(null);
+  };
+
+  const getDetailedRecords = (): DetailedRecord[] => {
+    return attendanceData.map(record => {
+      const student = students.find(s => s.id === record.student_id);
+      return {
+        id: record.id,
+        date: record.date,
+        time: record.time,
+        status: record.status,
+        student: student || { id: '', full_name: 'Desconhecido', class: '', shift: '' }
+      };
+    }).filter(r => r.student.id !== '');
+  };
+
+  const getStatusLabel = (status: string) => {
+    switch (status) {
+      case 'present': return 'Presente';
+      case 'absent': return 'Ausente';
+      case 'justified': return 'Justificado';
+      default: return status;
+    }
+  };
+
+  const getStatusBadgeVariant = (status: string) => {
+    switch (status) {
+      case 'present': return 'default';
+      case 'absent': return 'destructive';
+      case 'justified': return 'secondary';
+      default: return 'outline';
+    }
+  };
+
+  const generateDetailedPDF = () => {
+    const detailedRecords = getDetailedRecords();
+    const monthYear = format(currentDate, 'MMMM yyyy', { locale: ptBR });
+    
+    const content = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Relatório Detalhado de Frequência</title>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; }
+    h1 { color: #333; border-bottom: 2px solid #4f46e5; padding-bottom: 10px; }
+    .info { margin: 15px 0; color: #666; }
+    table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+    th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
+    th { background: #f5f5f5; font-weight: bold; }
+    .present { background: #dcfce7; color: #16a34a; }
+    .absent { background: #fee2e2; color: #dc2626; }
+    .justified { background: #f3f4f6; color: #6b7280; }
+    @media print { body { padding: 0; } }
+  </style>
+</head>
+<body>
+  <h1>Relatório Detalhado de Frequência</h1>
+  <p class="info">Período: ${monthYear}</p>
+  <p class="info">Total de Registros: ${detailedRecords.length}</p>
+  
+  <table>
+    <thead>
+      <tr>
+        <th>Data</th>
+        <th>Horário</th>
+        <th>Aluno</th>
+        <th>Turma</th>
+        <th>Turno</th>
+        <th>Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${detailedRecords.map(record => `
+        <tr>
+          <td>${format(new Date(record.date), 'dd/MM/yyyy')}</td>
+          <td>${record.time || '-'}</td>
+          <td>${record.student.full_name}</td>
+          <td>${record.student.class}</td>
+          <td>${getShiftLabel(record.student.shift)}</td>
+          <td class="${record.status}">${getStatusLabel(record.status)}</td>
+        </tr>
+      `).join('')}
+    </tbody>
+  </table>
+
+  <p class="info" style="margin-top: 30px;">Gerado em: ${format(new Date(), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}</p>
+</body>
+</html>
+    `;
+
+    const blob = new Blob([content], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    const win = window.open(url, '_blank');
+    if (win) {
+      win.onload = () => {
+        win.print();
+      };
+    }
+  };
+
   const stats = getTotalStats();
+  const detailedRecords = getDetailedRecords();
 
   return (
     <DashboardLayout>
@@ -829,6 +966,108 @@ const Attendance = () => {
                 <Users className="w-12 h-12 mx-auto mb-3 opacity-50" />
                 <p className="font-medium">Nenhum aluno encontrado</p>
                 <p className="text-sm">Ajuste os filtros ou adicione alunos</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Detailed Individual Records */}
+        <Card>
+          <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <CardTitle className="text-lg">Registros Individuais</CardTitle>
+            <Button variant="outline" size="sm" onClick={generateDetailedPDF} disabled={detailedRecords.length === 0}>
+              <FileDown className="w-4 h-4 mr-2" />
+              Exportar Detalhado
+            </Button>
+          </CardHeader>
+          <CardContent>
+            {detailedRecords.length > 0 ? (
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Data</TableHead>
+                      <TableHead>Horário</TableHead>
+                      <TableHead>Aluno</TableHead>
+                      <TableHead className="hidden sm:table-cell">Turma</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="text-center">Ações</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {detailedRecords.map(record => (
+                      <TableRow key={record.id}>
+                        <TableCell>
+                          {format(new Date(record.date), 'dd/MM/yyyy')}
+                        </TableCell>
+                        <TableCell>
+                          {record.time || '-'}
+                        </TableCell>
+                        <TableCell>
+                          <div>
+                            <p className="font-medium">{record.student.full_name}</p>
+                            <p className="text-xs text-muted-foreground sm:hidden">
+                              {record.student.class}
+                            </p>
+                          </div>
+                        </TableCell>
+                        <TableCell className="hidden sm:table-cell">{record.student.class}</TableCell>
+                        <TableCell>
+                          <Badge 
+                            variant={getStatusBadgeVariant(record.status) as 'default' | 'destructive' | 'secondary' | 'outline'}
+                            className={record.status === 'present' ? 'bg-green-500' : ''}
+                          >
+                            {getStatusLabel(record.status)}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button 
+                                variant="ghost" 
+                                size="sm"
+                                className="text-red-600 hover:text-red-700 hover:bg-red-100"
+                                disabled={deletingIndividual === record.id}
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Excluir Registro</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  Tem certeza que deseja excluir este registro de frequência?
+                                  <br /><br />
+                                  <strong>Aluno:</strong> {record.student.full_name}<br />
+                                  <strong>Data:</strong> {format(new Date(record.date), 'dd/MM/yyyy')}<br />
+                                  <strong>Horário:</strong> {record.time || '-'}<br />
+                                  <strong>Status:</strong> {getStatusLabel(record.status)}
+                                  <br /><br />
+                                  Esta ação não pode ser desfeita.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                <AlertDialogAction 
+                                  onClick={() => handleDeleteIndividualAttendance(record.id)}
+                                  className="bg-red-600 hover:bg-red-700"
+                                >
+                                  Excluir
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            ) : (
+              <div className="text-center py-12 text-muted-foreground">
+                <Users className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                <p className="font-medium">Nenhum registro encontrado</p>
+                <p className="text-sm">Ajuste os filtros para ver os registros individuais</p>
               </div>
             )}
           </CardContent>
