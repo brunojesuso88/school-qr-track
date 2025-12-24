@@ -2,9 +2,11 @@ import { useNavigate } from "react-router-dom";
 import { QrCode, LayoutDashboard } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import edunexusLogo from "@/assets/edunexus-logo.png";
+import { useSchoolName } from "@/hooks/useSchoolName";
 
 const Home = () => {
   const navigate = useNavigate();
+  const { schoolName } = useSchoolName();
 
   const menuOptions = [
     {
@@ -30,14 +32,19 @@ const Home = () => {
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-6 bg-gradient-to-br from-primary/5 via-background to-accent/5">
       <div className="w-full max-w-md space-y-8 animate-fade-in">
-        {/* Logo */}
+        {/* Logo e Nome da Escola */}
         <div className="text-center">
           <img
             src={edunexusLogo}
             alt="Edunexus Logo"
-            className="w-32 h-32 object-contain mx-auto drop-shadow-lg"
+            className="w-48 h-48 object-contain mx-auto drop-shadow-lg"
           />
-          <p className="mt-4 text-muted-foreground text-sm">
+          {schoolName && (
+            <h1 className="mt-4 text-xl font-bold text-foreground leading-tight px-4">
+              {schoolName}
+            </h1>
+          )}
+          <p className="mt-2 text-muted-foreground text-sm">
             Sistema de Gestão de Presença
           </p>
         </div>
