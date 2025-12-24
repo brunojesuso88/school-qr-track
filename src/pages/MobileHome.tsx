@@ -5,10 +5,12 @@ import { QrCode, Search } from "lucide-react";
 import edunexusLogo from "@/assets/edunexus-logo.png";
 import { MobileBottomNav } from "@/components/MobileBottomNav";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { useSchoolName } from "@/hooks/useSchoolName";
 
 const MobileHome = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { schoolName } = useSchoolName();
 
   const menuOptions = [
     {
@@ -30,22 +32,24 @@ const MobileHome = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary/5 via-background to-accent/5 p-4 pb-24">
       <div className="max-w-md mx-auto">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-6 pt-2">
-          <div className="flex items-center gap-3">
-            <img
-              src={edunexusLogo}
-              alt="Edunexus"
-              className="w-10 h-10 object-contain"
-            />
-            <div>
-              <h1 className="text-lg font-bold text-foreground">Edunexus</h1>
-              <p className="text-xs text-muted-foreground truncate max-w-[150px]">
-                {user?.email}
-              </p>
-            </div>
+        {/* Header com Nome da Escola */}
+        <div className="text-center mb-6 pt-2">
+          <div className="flex justify-end mb-2">
+            <ThemeToggle />
           </div>
-          <ThemeToggle />
+          <img
+            src={edunexusLogo}
+            alt="Edunexus"
+            className="w-20 h-20 object-contain mx-auto"
+          />
+          {schoolName && (
+            <h1 className="mt-3 text-lg font-bold text-foreground leading-tight px-2">
+              {schoolName}
+            </h1>
+          )}
+          <p className="text-xs text-muted-foreground mt-1">
+            {user?.email}
+          </p>
         </div>
 
         {/* Welcome Card */}
