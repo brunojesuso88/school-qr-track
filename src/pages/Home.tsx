@@ -37,7 +37,7 @@ const Home = () => {
           <img
             src={edunexusLogo}
             alt="Edunexus Logo"
-            className="w-48 h-48 object-contain mx-auto drop-shadow-lg"
+            className="w-64 h-64 object-contain mx-auto drop-shadow-lg"
           />
           {schoolName && (
             <h1 className="mt-4 text-xl font-bold text-foreground leading-tight px-4">

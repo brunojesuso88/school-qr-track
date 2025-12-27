@@ -3,6 +3,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardDescription, CardTitle } from "@/components/ui/card";
 import { QrCode, Search } from "lucide-react";
 import edunexusLogo from "@/assets/edunexus-logo.png";
+import logoEscola from "@/assets/logo-escola.jpg";
 import { MobileBottomNav } from "@/components/MobileBottomNav";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { useSchoolName } from "@/hooks/useSchoolName";
@@ -37,16 +38,21 @@ const MobileHome = () => {
           <div className="flex justify-end mb-2">
             <ThemeToggle />
           </div>
-          <img
-            src={edunexusLogo}
-            alt="Edunexus"
-            className="w-20 h-20 object-contain mx-auto"
-          />
-          {schoolName && (
-            <h1 className="mt-3 text-lg font-bold text-foreground leading-tight px-2">
-              {schoolName}
-            </h1>
-          )}
+          <div className="flex items-center justify-center gap-3 mb-3">
+            <img
+              src={logoEscola}
+              alt="Logo CEPANS"
+              className="w-16 h-16 rounded-xl object-cover shadow-md"
+            />
+            <img
+              src={edunexusLogo}
+              alt="Edunexus"
+              className="w-16 h-16 object-contain"
+            />
+          </div>
+          <h1 className="text-base font-bold text-foreground leading-tight px-2">
+            CEPANS Prof. Antônio Nonato Sampaio
+          </h1>
           <p className="text-xs text-muted-foreground mt-1">
             {user?.email}
           </p>
