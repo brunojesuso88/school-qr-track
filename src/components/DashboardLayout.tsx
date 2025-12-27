@@ -1,6 +1,6 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
-import { LayoutDashboard, Users, QrCode, Calendar, Bell, Settings, Menu, X, GraduationCap, BookOpen, LogOut, ChevronRight } from 'lucide-react';
+import { LayoutDashboard, Users, QrCode, Calendar, Bell, Settings, Menu, X, BookOpen, LogOut, ChevronRight } from 'lucide-react';
 import { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -14,6 +14,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import logoEscola from "@/assets/logo-escola.jpg";
 
 const allNavigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, roles: ['admin', 'direction', 'teacher'] },
@@ -85,11 +86,13 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
         <div className="flex flex-col h-full">
           {/* Logo */}
           <div className="flex items-center gap-3 px-6 py-5 border-b border-sidebar-border">
-            <div className="w-10 h-10 rounded-xl gradient-primary flex items-center justify-center">
-              <GraduationCap className="w-5 h-5 text-primary-foreground" />
-            </div>
+            <img 
+              src={logoEscola} 
+              alt="Logo CEPANS" 
+              className="w-12 h-12 rounded-xl object-cover"
+            />
             <div>
-              <h1 className="font-semibold text-sidebar-foreground">EDUNEXUS</h1>
+              <h1 className="font-semibold text-sidebar-foreground text-sm leading-tight">CEPANS Prof. Antônio Nonato Sampaio</h1>
               <p className="text-xs text-sidebar-foreground/60">Sistema de Frequência</p>
             </div>
             <button
