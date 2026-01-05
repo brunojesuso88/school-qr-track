@@ -7,6 +7,7 @@ import { ThemeProvider } from "@/components/ThemeProvider";
 import { AuthProvider } from "./contexts/AuthContext";
 import AdminRoute from "./components/AdminRoute";
 import MobileRoute from "./components/MobileRoute";
+import StaffRoute from "./components/StaffRoute";
 import UpdatePrompt from "./components/UpdatePrompt";
 import SplashScreen from "./pages/SplashScreen";
 import Home from "./pages/Home";
@@ -14,6 +15,7 @@ import Dashboard from "./pages/Dashboard";
 import Students from "./pages/Students";
 import Classes from "./pages/Classes";
 import ScanQR from "./pages/ScanQR";
+import StaffScanQR from "./pages/StaffScanQR";
 import Attendance from "./pages/Attendance";
 import Notifications from "./pages/Notifications";
 import Settings from "./pages/Settings";
@@ -44,7 +46,7 @@ const App = () => (
               <Route path="/auth/mobile" element={<MobileAuth />} />
               <Route path="/install" element={<InstallPWA />} />
 
-              {/* Admin Routes (Web) */}
+              {/* Admin Routes (Web) - Admin, Direção, Professor */}
               <Route path="/home" element={<AdminRoute><Home /></AdminRoute>} />
               <Route path="/dashboard" element={<AdminRoute><Dashboard /></AdminRoute>} />
               <Route path="/students" element={<AdminRoute><Students /></AdminRoute>} />
@@ -53,6 +55,9 @@ const App = () => (
               <Route path="/attendance" element={<AdminRoute><Attendance /></AdminRoute>} />
               <Route path="/notifications" element={<AdminRoute><Notifications /></AdminRoute>} />
               <Route path="/settings" element={<AdminRoute><Settings /></AdminRoute>} />
+
+              {/* Staff Route - Funcionário (página simplificada) */}
+              <Route path="/staff/scan" element={<StaffRoute><StaffScanQR /></StaffRoute>} />
 
               {/* Mobile Routes (PWA) */}
               <Route path="/mobile-home" element={<MobileRoute><MobileHome /></MobileRoute>} />

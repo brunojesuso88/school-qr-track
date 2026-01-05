@@ -10,11 +10,12 @@ interface AuthContextType {
   loading: boolean;
   userRole: AppRole | null;
   isAdmin: boolean;
+  isDashboardUser: boolean;
+  isStaffOnly: boolean;
   isMobileUser: boolean;
   canAccessSettings: boolean;
   canManageUsers: boolean;
   canAccessFullDashboard: boolean;
-  isStaffOnly: boolean;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signUp: (email: string, password: string, fullName: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
@@ -113,10 +114,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   // Permissões granulares baseadas na role
+  // isDashboardUser: usuários com acesso ao dashboard completo (admin, direção, professor)
+  const isDashboardUser = userRole === 'admin' || userRole === 'direction' || userRole === 'teacher';
+  
+  // isAdmin: mantido para compatibilidade - acesso ao sistema web (exclui user mobile)
   const isAdmin = userRole === 'admin' || userRole === 'direction' || userRole === 'teacher' || userRole === 'staff';
+  
+  // Funcionário tem acesso limitado apenas a QR (página simplificada)
+  const isStaffOnly = userRole === 'staff';
+  
+  // Usuário mobile (app PWA)
   const isMobileUser = userRole === 'user';
   
-  // Acesso às configurações: admin e direção
+  // Acesso às configurações: admin e direção apenas
   const canAccessSettings = userRole === 'admin' || userRole === 'direction';
   
   // Gestão de usuários: apenas admin
@@ -124,9 +134,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   
   // Acesso ao dashboard completo: admin, direção e professor
   const canAccessFullDashboard = userRole === 'admin' || userRole === 'direction' || userRole === 'teacher';
-  
-  // Funcionário tem acesso limitado apenas a QR
-  const isStaffOnly = userRole === 'staff';
 
   return (
     <AuthContext.Provider value={{ 
@@ -134,12 +141,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       session, 
       loading, 
       userRole, 
-      isAdmin, 
+      isAdmin,
+      isDashboardUser,
+      isStaffOnly,
       isMobileUser,
       canAccessSettings,
       canManageUsers,
       canAccessFullDashboard,
-      isStaffOnly,
       signIn, 
       signUp, 
       signOut 

@@ -1,12 +1,12 @@
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 
-interface AdminRouteProps {
+interface StaffRouteProps {
   children: React.ReactNode;
 }
 
-const AdminRoute = ({ children }: AdminRouteProps) => {
-  const { user, loading, isDashboardUser, isStaffOnly, isMobileUser } = useAuth();
+const StaffRoute = ({ children }: StaffRouteProps) => {
+  const { user, loading, isStaffOnly } = useAuth();
 
   if (loading) {
     return (
@@ -24,22 +24,12 @@ const AdminRoute = ({ children }: AdminRouteProps) => {
     return <Navigate to="/auth" replace />;
   }
 
-  // Funcionário vai para página simplificada de QR
-  if (isStaffOnly) {
-    return <Navigate to="/staff/scan" replace />;
-  }
-
-  // Usuário mobile vai para app PWA
-  if (isMobileUser) {
-    return <Navigate to="/mobile-home" replace />;
-  }
-
-  // Apenas usuários do dashboard (admin, direção, professor) podem acessar
-  if (!isDashboardUser) {
-    return <Navigate to="/auth" replace />;
+  // Only staff users can access staff routes
+  if (!isStaffOnly) {
+    return <Navigate to="/dashboard" replace />;
   }
 
   return <>{children}</>;
 };
 
-export default AdminRoute;
+export default StaffRoute;
