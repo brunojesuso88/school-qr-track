@@ -4,18 +4,73 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
-import { QrCode, Camera, CheckCircle2, XCircle, Loader2, LogOut } from 'lucide-react';
+import { QrCode, Camera, CheckCircle2, XCircle, Loader2, LogOut, Users, UserCheck, Clock } from 'lucide-react';
 import { format } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import logoEscola from "@/assets/logo-escola.jpg";
+
+interface DailyStats {
+  totalPresent: number;
+  myRegistrations: number;
+  lastCheckInTime: string | null;
+}
 
 const StaffScanQR = () => {
   const [scanResult, setScanResult] = useState<string>('');
   const [lastScanned, setLastScanned] = useState<any>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [scanMode, setScanMode] = useState<'usb' | 'camera'>('usb');
+  const [dailyStats, setDailyStats] = useState<DailyStats>({
+    totalPresent: 0,
+    myRegistrations: 0,
+    lastCheckInTime: null
+  });
   const inputRef = useRef<HTMLInputElement>(null);
   const { user, signOut } = useAuth();
+
+  const fetchDailyStats = useCallback(async () => {
+    const today = format(new Date(), 'yyyy-MM-dd');
+    
+    try {
+      // Total attendances today
+      const { count: totalPresent } = await supabase
+        .from('attendance')
+        .select('*', { count: 'exact', head: true })
+        .eq('date', today)
+        .eq('status', 'present');
+      
+      // My registrations
+      const { count: myRegistrations } = await supabase
+        .from('attendance')
+        .select('*', { count: 'exact', head: true })
+        .eq('date', today)
+        .eq('recorded_by', user?.id);
+      
+      // Last check-in
+      const { data: lastRecord } = await supabase
+        .from('attendance')
+        .select('time')
+        .eq('date', today)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      
+      setDailyStats({
+        totalPresent: totalPresent || 0,
+        myRegistrations: myRegistrations || 0,
+        lastCheckInTime: lastRecord?.time ? lastRecord.time.substring(0, 5) : null
+      });
+    } catch (error) {
+      console.error('Error fetching daily stats:', error);
+    }
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (user?.id) {
+      fetchDailyStats();
+    }
+  }, [user?.id, fetchDailyStats]);
 
   // Focus input for USB scanner
   useEffect(() => {
@@ -90,6 +145,9 @@ const StaffScanQR = () => {
 
       toast.success(`${student.full_name} registrado!`);
       setLastScanned({ student, success: true, time: currentTime });
+      
+      // Update stats after successful scan
+      await fetchDailyStats();
 
     } catch (error) {
       console.error('Error processing QR:', error);
@@ -145,8 +203,35 @@ const StaffScanQR = () => {
         <div className="text-center">
           <h2 className="text-xl font-semibold">Registro de Presença</h2>
           <p className="text-muted-foreground text-sm mt-1">
-            {format(new Date(), "EEEE, d 'de' MMMM 'de' yyyy")}
+            {format(new Date(), "EEEE, d 'de' MMMM 'de' yyyy", { locale: ptBR })}
           </p>
+        </div>
+
+        {/* Daily Stats Cards */}
+        <div className="grid grid-cols-3 gap-3">
+          <Card className="bg-primary/5 border-primary/20">
+            <CardContent className="p-4 text-center">
+              <Users className="w-5 h-5 text-primary mx-auto mb-1" />
+              <p className="text-2xl font-bold text-primary">{dailyStats.totalPresent}</p>
+              <p className="text-xs text-muted-foreground">Presenças Hoje</p>
+            </CardContent>
+          </Card>
+          
+          <Card className="bg-chart-2/10 border-chart-2/20">
+            <CardContent className="p-4 text-center">
+              <UserCheck className="w-5 h-5 text-chart-2 mx-auto mb-1" />
+              <p className="text-2xl font-bold text-chart-2">{dailyStats.myRegistrations}</p>
+              <p className="text-xs text-muted-foreground">Registros Meus</p>
+            </CardContent>
+          </Card>
+          
+          <Card className="bg-muted/50">
+            <CardContent className="p-4 text-center">
+              <Clock className="w-5 h-5 text-muted-foreground mx-auto mb-1" />
+              <p className="text-2xl font-bold">{dailyStats.lastCheckInTime || '--:--'}</p>
+              <p className="text-xs text-muted-foreground">Último Check-in</p>
+            </CardContent>
+          </Card>
         </div>
 
         {/* Scan Mode Toggle */}
