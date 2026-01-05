@@ -26,8 +26,49 @@ const StaffScanQR = () => {
     myRegistrations: 0,
     lastCheckInTime: null
   });
+  const [isUpdating, setIsUpdating] = useState(false);
+  const [soundEnabled, setSoundEnabled] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const { user, signOut } = useAuth();
+
+  // Fetch sound preference
+  useEffect(() => {
+    const fetchSoundPreference = async () => {
+      const { data } = await supabase
+        .from('settings')
+        .select('value')
+        .eq('key', 'realtime_sound_enabled')
+        .maybeSingle();
+      
+      setSoundEnabled(data?.value === true || data?.value === 'true');
+    };
+    fetchSoundPreference();
+  }, []);
+
+  // Play notification sound using Web Audio API
+  const playNotificationSound = useCallback(() => {
+    if (!soundEnabled) return;
+    
+    try {
+      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const oscillator = audioContext.createOscillator();
+      const gainNode = audioContext.createGain();
+      
+      oscillator.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+      
+      oscillator.frequency.value = 800;
+      oscillator.type = 'sine';
+      
+      gainNode.gain.setValueAtTime(0.1, audioContext.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
+      
+      oscillator.start(audioContext.currentTime);
+      oscillator.stop(audioContext.currentTime + 0.3);
+    } catch (error) {
+      console.error('Error playing sound:', error);
+    }
+  }, [soundEnabled]);
 
   const fetchDailyStats = useCallback(async () => {
     const today = format(new Date(), 'yyyy-MM-dd');
@@ -87,7 +128,11 @@ const StaffScanQR = () => {
         },
         (payload) => {
           console.log('New attendance record detected:', payload);
-          fetchDailyStats();
+          setIsUpdating(true);
+          playNotificationSound();
+          fetchDailyStats().finally(() => {
+            setTimeout(() => setIsUpdating(false), 1000);
+          });
         }
       )
       .subscribe();
@@ -95,7 +140,7 @@ const StaffScanQR = () => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user?.id, fetchDailyStats]);
+  }, [user?.id, fetchDailyStats, playNotificationSound]);
 
   // Focus input for USB scanner
   useEffect(() => {
@@ -234,7 +279,17 @@ const StaffScanQR = () => {
 
         {/* Daily Stats Cards */}
         <div className="grid grid-cols-3 gap-3">
-          <Card className="bg-primary/5 border-primary/20">
+          <Card className={`bg-primary/5 border-primary/20 transition-all duration-300 relative ${
+            isUpdating ? 'ring-2 ring-primary ring-offset-2 ring-offset-background' : ''
+          }`}>
+            {isUpdating && (
+              <div className="absolute top-2 right-2">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+                </span>
+              </div>
+            )}
             <CardContent className="p-4 text-center">
               <Users className="w-5 h-5 text-primary mx-auto mb-1" />
               <p className="text-2xl font-bold text-primary">{dailyStats.totalPresent}</p>
@@ -242,7 +297,17 @@ const StaffScanQR = () => {
             </CardContent>
           </Card>
           
-          <Card className="bg-chart-2/10 border-chart-2/20">
+          <Card className={`bg-chart-2/10 border-chart-2/20 transition-all duration-300 relative ${
+            isUpdating ? 'ring-2 ring-primary ring-offset-2 ring-offset-background' : ''
+          }`}>
+            {isUpdating && (
+              <div className="absolute top-2 right-2">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+                </span>
+              </div>
+            )}
             <CardContent className="p-4 text-center">
               <UserCheck className="w-5 h-5 text-chart-2 mx-auto mb-1" />
               <p className="text-2xl font-bold text-chart-2">{dailyStats.myRegistrations}</p>
@@ -250,7 +315,17 @@ const StaffScanQR = () => {
             </CardContent>
           </Card>
           
-          <Card className="bg-muted/50">
+          <Card className={`bg-muted/50 transition-all duration-300 relative ${
+            isUpdating ? 'ring-2 ring-primary ring-offset-2 ring-offset-background' : ''
+          }`}>
+            {isUpdating && (
+              <div className="absolute top-2 right-2">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+                </span>
+              </div>
+            )}
             <CardContent className="p-4 text-center">
               <Clock className="w-5 h-5 text-muted-foreground mx-auto mb-1" />
               <p className="text-2xl font-bold">{dailyStats.lastCheckInTime || '--:--'}</p>

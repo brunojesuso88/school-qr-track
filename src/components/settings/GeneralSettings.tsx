@@ -3,7 +3,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
-import { Clock, Loader2, Check } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
+import { Clock, Loader2, Check, Volume2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
@@ -19,6 +20,7 @@ const GeneralSettings = () => {
     afternoon: '14:00',
     evening: '20:00'
   });
+  const [soundEnabled, setSoundEnabled] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -31,7 +33,7 @@ const GeneralSettings = () => {
       const { data, error } = await supabase
         .from('settings')
         .select('key, value')
-        .in('key', ['cutoff_morning', 'cutoff_afternoon', 'cutoff_evening']);
+        .in('key', ['cutoff_morning', 'cutoff_afternoon', 'cutoff_evening', 'realtime_sound_enabled']);
 
       if (error) throw error;
 
@@ -41,6 +43,9 @@ const GeneralSettings = () => {
           if (setting.key === 'cutoff_morning') times.morning = setting.value as string;
           if (setting.key === 'cutoff_afternoon') times.afternoon = setting.value as string;
           if (setting.key === 'cutoff_evening') times.evening = setting.value as string;
+          if (setting.key === 'realtime_sound_enabled') {
+            setSoundEnabled(setting.value === true || setting.value === 'true');
+          }
         });
         setCutoffTimes(times);
       }
@@ -51,10 +56,10 @@ const GeneralSettings = () => {
     }
   };
 
-  const saveSetting = async (key: string, value: string) => {
+  const saveSetting = async (key: string, value: string | boolean) => {
     const { error } = await supabase
       .from('settings')
-      .upsert({ key, value: JSON.stringify(value) }, { onConflict: 'key' });
+      .upsert({ key, value: typeof value === 'string' ? JSON.stringify(value) : value }, { onConflict: 'key' });
     
     if (error) throw error;
   };
@@ -73,6 +78,18 @@ const GeneralSettings = () => {
       toast.error('Erro ao salvar configurações');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleSoundToggle = async (checked: boolean) => {
+    setSoundEnabled(checked);
+    try {
+      await saveSetting('realtime_sound_enabled', checked);
+      toast.success(checked ? 'Som de notificação ativado' : 'Som de notificação desativado');
+    } catch (error) {
+      console.error('Error saving sound setting:', error);
+      toast.error('Erro ao salvar configuração');
+      setSoundEnabled(!checked); // Revert on error
     }
   };
 
@@ -147,6 +164,30 @@ const GeneralSettings = () => {
               </>
             )}
           </Button>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <Volume2 className="h-5 w-5 text-primary" />
+            Sons de Notificação
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <Label htmlFor="sound-toggle">Som ao detectar novo registro</Label>
+              <p className="text-sm text-muted-foreground">
+                Tocar um som sutil quando outro funcionário registrar presença via Realtime
+              </p>
+            </div>
+            <Switch 
+              id="sound-toggle"
+              checked={soundEnabled}
+              onCheckedChange={handleSoundToggle}
+            />
+          </div>
         </CardContent>
       </Card>
     </div>
