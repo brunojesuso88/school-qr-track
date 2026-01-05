@@ -72,15 +72,29 @@ const StaffScanQR = () => {
     }
   }, [user?.id, fetchDailyStats]);
 
-  // Auto-refresh stats every 30 seconds
+  // Realtime subscription for instant stats updates
   useEffect(() => {
     if (!user?.id) return;
-    
-    const interval = setInterval(() => {
-      fetchDailyStats();
-    }, 30000);
-    
-    return () => clearInterval(interval);
+
+    const channel = supabase
+      .channel('attendance-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'attendance'
+        },
+        (payload) => {
+          console.log('New attendance record detected:', payload);
+          fetchDailyStats();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [user?.id, fetchDailyStats]);
 
   // Focus input for USB scanner
