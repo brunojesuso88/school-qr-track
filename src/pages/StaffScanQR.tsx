@@ -72,6 +72,17 @@ const StaffScanQR = () => {
     }
   }, [user?.id, fetchDailyStats]);
 
+  // Auto-refresh stats every 30 seconds
+  useEffect(() => {
+    if (!user?.id) return;
+    
+    const interval = setInterval(() => {
+      fetchDailyStats();
+    }, 30000);
+    
+    return () => clearInterval(interval);
+  }, [user?.id, fetchDailyStats]);
+
   // Focus input for USB scanner
   useEffect(() => {
     if (scanMode === 'usb' && inputRef.current) {
