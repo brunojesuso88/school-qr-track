@@ -1,6 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import { QrCode, LayoutDashboard, Map } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
+import { motion } from "framer-motion";
 import edunexusLogo from "@/assets/edunexus-logo.png";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -42,13 +43,16 @@ const Home = () => {
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-6 bg-gradient-to-br from-primary/5 via-background to-accent/5">
-      <div className="w-full max-w-md space-y-8 animate-fade-in">
+      <div className="w-full max-w-md space-y-4 animate-fade-in">
         {/* Logo e Nome da Escola */}
         <div className="text-center">
-          <img
+          <motion.img
             src={edunexusLogo}
             alt="Edunexus Logo"
             className="w-[512px] h-[512px] object-contain mx-auto drop-shadow-lg"
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.6, ease: "easeOut" }}
           />
           <h1 className="mt-4 text-2xl font-bold text-primary leading-tight px-4">
             Sistema digital de secretaria escolar
@@ -96,9 +100,14 @@ const Home = () => {
         </div>
 
         {/* Footer */}
-        <p className="text-center text-xs text-muted-foreground/60 mt-8">
-          © {new Date().getFullYear()} Edunexus - Todos os direitos reservados
-        </p>
+        <div className="text-center mt-8">
+          <p className="text-xs text-muted-foreground/60">
+            © {new Date().getFullYear()} Edunexus - Todos os direitos reservados
+          </p>
+          <p className="text-xs text-muted-foreground/60 mt-1">
+            Criado e desenvolvido por Bruno Oliveira
+          </p>
+        </div>
       </div>
     </div>
   );
