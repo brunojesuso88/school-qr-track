@@ -82,6 +82,144 @@ export type Database = {
         }
         Relationships: []
       }
+      mapping_class_subjects: {
+        Row: {
+          class_id: string | null
+          created_at: string | null
+          id: string
+          subject_name: string
+          teacher_id: string | null
+          weekly_classes: number
+        }
+        Insert: {
+          class_id?: string | null
+          created_at?: string | null
+          id?: string
+          subject_name: string
+          teacher_id?: string | null
+          weekly_classes?: number
+        }
+        Update: {
+          class_id?: string | null
+          created_at?: string | null
+          id?: string
+          subject_name?: string
+          teacher_id?: string | null
+          weekly_classes?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mapping_class_subjects_class_id_fkey"
+            columns: ["class_id"]
+            isOneToOne: false
+            referencedRelation: "mapping_classes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mapping_class_subjects_teacher_id_fkey"
+            columns: ["teacher_id"]
+            isOneToOne: false
+            referencedRelation: "mapping_teachers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      mapping_classes: {
+        Row: {
+          created_at: string | null
+          id: string
+          name: string
+          shift: string
+          student_count: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          name: string
+          shift?: string
+          student_count?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          name?: string
+          shift?: string
+          student_count?: number | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      mapping_global_subjects: {
+        Row: {
+          created_at: string | null
+          default_weekly_classes: number
+          id: string
+          name: string
+          shift: string
+        }
+        Insert: {
+          created_at?: string | null
+          default_weekly_classes?: number
+          id?: string
+          name: string
+          shift?: string
+        }
+        Update: {
+          created_at?: string | null
+          default_weekly_classes?: number
+          id?: string
+          name?: string
+          shift?: string
+        }
+        Relationships: []
+      }
+      mapping_teachers: {
+        Row: {
+          availability: string[] | null
+          color: string
+          created_at: string | null
+          current_hours: number
+          email: string | null
+          id: string
+          max_weekly_hours: number
+          name: string
+          notes: string | null
+          phone: string | null
+          subjects: string[] | null
+          updated_at: string | null
+        }
+        Insert: {
+          availability?: string[] | null
+          color: string
+          created_at?: string | null
+          current_hours?: number
+          email?: string | null
+          id?: string
+          max_weekly_hours?: number
+          name: string
+          notes?: string | null
+          phone?: string | null
+          subjects?: string[] | null
+          updated_at?: string | null
+        }
+        Update: {
+          availability?: string[] | null
+          color?: string
+          created_at?: string | null
+          current_hours?: number
+          email?: string | null
+          id?: string
+          max_weekly_hours?: number
+          name?: string
+          notes?: string | null
+          phone?: string | null
+          subjects?: string[] | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       notification_logs: {
         Row: {
           created_at: string | null

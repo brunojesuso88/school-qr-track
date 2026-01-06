@@ -27,6 +27,11 @@ import StudentLookup from "./pages/StudentLookup";
 import MobileProfile from "./pages/MobileProfile";
 import InstallPWA from "./pages/InstallPWA";
 import NotFound from "./pages/NotFound";
+import SchoolMapping from "./pages/SchoolMapping";
+import MappingTeachers from "./pages/mapping/MappingTeachers";
+import MappingSubjects from "./pages/mapping/MappingSubjects";
+import MappingClasses from "./pages/mapping/MappingClasses";
+import MappingDistribution from "./pages/mapping/MappingDistribution";
 
 const queryClient = new QueryClient();
 
@@ -55,6 +60,13 @@ const App = () => (
               <Route path="/attendance" element={<AdminRoute><Attendance /></AdminRoute>} />
               <Route path="/notifications" element={<AdminRoute><Notifications /></AdminRoute>} />
               <Route path="/settings" element={<AdminRoute><Settings /></AdminRoute>} />
+              
+              {/* School Mapping Routes */}
+              <Route path="/school-mapping" element={<AdminRoute><SchoolMapping /></AdminRoute>} />
+              <Route path="/school-mapping/teachers" element={<AdminRoute><MappingTeachers /></AdminRoute>} />
+              <Route path="/school-mapping/subjects" element={<AdminRoute><MappingSubjects /></AdminRoute>} />
+              <Route path="/school-mapping/classes" element={<AdminRoute><MappingClasses /></AdminRoute>} />
+              <Route path="/school-mapping/distribution" element={<AdminRoute><MappingDistribution /></AdminRoute>} />
 
               {/* Staff Route - Funcionário (página simplificada) */}
               <Route path="/staff/scan" element={<StaffRoute><StaffScanQR /></StaffRoute>} />
