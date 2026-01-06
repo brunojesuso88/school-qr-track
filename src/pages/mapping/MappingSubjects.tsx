@@ -1,6 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Plus, Pencil, Trash2 } from "lucide-react";
+import { Plus, Pencil, Trash2, Sun, Sunset, Moon } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -10,15 +9,15 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import SubjectForm from "@/components/mapping/SubjectForm";
 import { useToast } from "@/hooks/use-toast";
+import SchoolMappingLayout from "@/components/mapping/SchoolMappingLayout";
 
-const SHIFT_LABELS: Record<string, string> = {
-  morning: "Manhã",
-  afternoon: "Tarde",
-  evening: "Noite"
+const SHIFT_CONFIG = {
+  morning: { label: "Manhã", icon: Sun, color: "text-amber-500" },
+  afternoon: { label: "Tarde", icon: Sunset, color: "text-orange-500" },
+  evening: { label: "Noite", icon: Moon, color: "text-indigo-500" }
 };
 
 const MappingSubjectsContent = () => {
-  const navigate = useNavigate();
   const { globalSubjects, deleteGlobalSubject, loading } = useSchoolMapping();
   const { toast } = useToast();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -47,32 +46,67 @@ const MappingSubjectsContent = () => {
     setEditingSubject(null);
   };
 
+  // Group subjects by shift
+  const morningSubjects = globalSubjects.filter(s => s.shift === 'morning');
+  const afternoonSubjects = globalSubjects.filter(s => s.shift === 'afternoon');
+  const eveningSubjects = globalSubjects.filter(s => s.shift === 'evening');
+
+  const shiftGroups = [
+    { key: 'morning', subjects: morningSubjects },
+    { key: 'afternoon', subjects: afternoonSubjects },
+    { key: 'evening', subjects: eveningSubjects }
+  ].filter(group => group.subjects.length > 0);
+
   if (loading) {
     return (
-      <div className="min-h-screen bg-background p-6">
-        <div className="max-w-4xl mx-auto space-y-6">
+      <SchoolMappingLayout>
+        <div className="space-y-6">
           <Skeleton className="h-10 w-64" />
           <div className="grid gap-4 md:grid-cols-2">
             {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-24" />)}
           </div>
         </div>
-      </div>
+      </SchoolMappingLayout>
     );
   }
 
+  const renderSubjectCard = (subject: MappingGlobalSubject) => (
+    <Card key={subject.id}>
+      <CardContent className="p-4">
+        <div className="flex items-start justify-between gap-4">
+          <div className="space-y-2">
+            <h3 className="font-semibold">{subject.name}</h3>
+            <Badge variant="secondary">
+              {subject.default_weekly_classes} aulas/semana
+            </Badge>
+          </div>
+
+          <div className="flex gap-2">
+            <Button variant="ghost" size="icon" onClick={() => handleEdit(subject)}>
+              <Pencil className="h-4 w-4" />
+            </Button>
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              className="text-destructive"
+              onClick={() => setDeletingSubject(subject)}
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+
   return (
-    <div className="min-h-screen bg-background p-6">
-      <div className="max-w-4xl mx-auto space-y-6">
+    <SchoolMappingLayout>
+      <div className="space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Button variant="ghost" size="icon" onClick={() => navigate("/school-mapping")}>
-              <ArrowLeft className="h-5 w-5" />
-            </Button>
-            <div>
-              <h1 className="text-2xl font-bold text-foreground">Disciplinas</h1>
-              <p className="text-muted-foreground">{globalSubjects.length} disciplinas cadastradas</p>
-            </div>
+          <div>
+            <h1 className="text-2xl font-bold text-foreground">Disciplinas</h1>
+            <p className="text-muted-foreground">{globalSubjects.length} disciplinas cadastradas</p>
           </div>
 
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
@@ -93,52 +127,35 @@ const MappingSubjectsContent = () => {
           </Dialog>
         </div>
 
-        {/* Subjects List */}
-        <div className="grid gap-4 md:grid-cols-2">
-          {globalSubjects.length === 0 ? (
-            <Card className="p-8 text-center md:col-span-2">
-              <p className="text-muted-foreground">Nenhuma disciplina cadastrada</p>
-              <Button className="mt-4" onClick={() => setIsDialogOpen(true)}>
-                <Plus className="h-4 w-4 mr-2" />
-                Adicionar primeira disciplina
-              </Button>
-            </Card>
-          ) : (
-            globalSubjects.map((subject) => (
-              <Card key={subject.id}>
-                <CardContent className="p-4">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="space-y-2">
-                      <h3 className="font-semibold">{subject.name}</h3>
-                      <div className="flex gap-2">
-                        <Badge variant="secondary">
-                          {subject.default_weekly_classes} aulas/semana
-                        </Badge>
-                        <Badge variant="outline">
-                          {SHIFT_LABELS[subject.shift] || subject.shift}
-                        </Badge>
-                      </div>
-                    </div>
+        {/* Empty State */}
+        {globalSubjects.length === 0 && (
+          <Card className="p-8 text-center">
+            <p className="text-muted-foreground">Nenhuma disciplina cadastrada</p>
+            <Button className="mt-4" onClick={() => setIsDialogOpen(true)}>
+              <Plus className="h-4 w-4 mr-2" />
+              Adicionar primeira disciplina
+            </Button>
+          </Card>
+        )}
 
-                    <div className="flex gap-2">
-                      <Button variant="ghost" size="icon" onClick={() => handleEdit(subject)}>
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      <Button 
-                        variant="ghost" 
-                        size="icon" 
-                        className="text-destructive"
-                        onClick={() => setDeletingSubject(subject)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))
-          )}
-        </div>
+        {/* Subjects grouped by shift */}
+        {shiftGroups.map(({ key, subjects }) => {
+          const config = SHIFT_CONFIG[key as keyof typeof SHIFT_CONFIG];
+          const ShiftIcon = config.icon;
+          
+          return (
+            <div key={key} className="space-y-4">
+              <div className="flex items-center gap-2">
+                <ShiftIcon className={`h-5 w-5 ${config.color}`} />
+                <h2 className="text-lg font-semibold">{config.label}</h2>
+                <Badge variant="outline">{subjects.length}</Badge>
+              </div>
+              <div className="grid gap-4 md:grid-cols-2">
+                {subjects.map(renderSubjectCard)}
+              </div>
+            </div>
+          );
+        })}
       </div>
 
       {/* Delete Confirmation */}
@@ -158,7 +175,7 @@ const MappingSubjectsContent = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+    </SchoolMappingLayout>
   );
 };
 
