@@ -25,8 +25,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import logoEscola from "@/assets/logo-escola.jpg";
-
 const navigation = [
   { name: 'Visão Geral', href: '/school-mapping', icon: LayoutDashboard },
   { name: 'Professores', href: '/school-mapping/teachers', icon: Users },
@@ -89,7 +87,7 @@ const SchoolMappingLayout: React.FC<SchoolMappingLayoutProps> = ({ children }) =
         )}
       >
         <div className="flex flex-col h-full">
-          {/* Header with Logo */}
+          {/* Header */}
           <div className="flex items-center gap-3 px-6 py-5 border-b border-sidebar-border">
             <button
               onClick={() => navigate('/home')}
@@ -97,13 +95,8 @@ const SchoolMappingLayout: React.FC<SchoolMappingLayoutProps> = ({ children }) =
             >
               <ArrowLeft className="w-5 h-5 text-sidebar-foreground" />
             </button>
-            <img 
-              src={logoEscola} 
-              alt="Logo CEPANS" 
-              className="w-10 h-10 rounded-lg object-cover"
-            />
             <div className="flex-1 min-w-0">
-              <h1 className="font-semibold text-sidebar-foreground text-sm leading-tight truncate">Mapeamento Escolar</h1>
+              <h1 className="font-semibold text-sidebar-foreground text-sm leading-tight">Mapeamento Escolar</h1>
               <p className="text-xs text-sidebar-foreground/60">Distribuição de Professores</p>
             </div>
             <button

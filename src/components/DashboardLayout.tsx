@@ -1,6 +1,6 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
-import { LayoutDashboard, Users, QrCode, Calendar, Bell, Settings, Menu, X, BookOpen, LogOut, ChevronRight } from 'lucide-react';
+import { LayoutDashboard, Users, QrCode, Calendar, Bell, Settings, Menu, X, BookOpen, LogOut, ChevronRight, ArrowLeft } from 'lucide-react';
 import { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -14,7 +14,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import logoEscola from "@/assets/logo-escola.jpg";
 
 const allNavigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, roles: ['admin', 'direction', 'teacher'] },
@@ -84,19 +83,20 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
         )}
       >
         <div className="flex flex-col h-full">
-          {/* Logo */}
+          {/* Header */}
           <div className="flex items-center gap-3 px-6 py-5 border-b border-sidebar-border">
-            <img 
-              src={logoEscola} 
-              alt="Logo CEPANS" 
-              className="w-12 h-12 rounded-xl object-cover"
-            />
-            <div>
-              <h1 className="font-semibold text-sidebar-foreground text-sm leading-tight">CEPANS Prof. Antônio Nonato Sampaio</h1>
-              <p className="text-xs text-sidebar-foreground/60">Sistema de Frequência</p>
+            <button
+              onClick={() => navigate('/home')}
+              className="p-2 -ml-2 rounded-lg hover:bg-sidebar-accent transition-colors"
+            >
+              <ArrowLeft className="w-5 h-5 text-sidebar-foreground" />
+            </button>
+            <div className="flex-1 min-w-0">
+              <h1 className="font-semibold text-sidebar-foreground text-sm leading-tight">Sistema de Frequência</h1>
+              <p className="text-xs text-sidebar-foreground/60">Gestão de Presença</p>
             </div>
             <button
-              className="ml-auto lg:hidden text-sidebar-foreground"
+              className="lg:hidden text-sidebar-foreground"
               onClick={() => setSidebarOpen(false)}
             >
               <X className="w-5 h-5" />

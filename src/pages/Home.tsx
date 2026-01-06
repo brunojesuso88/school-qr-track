@@ -43,7 +43,7 @@ const Home = () => {
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-6 bg-gradient-to-br from-primary/5 via-background to-accent/5">
-      <div className="w-full max-w-md space-y-4 animate-fade-in">
+      <div className="w-full max-w-md space-y-1 animate-fade-in">
         {/* Logo e Nome da Escola */}
         <div className="text-center">
           <motion.img
@@ -54,7 +54,7 @@ const Home = () => {
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.6, ease: "easeOut" }}
           />
-          <h1 className="mt-4 text-2xl font-bold text-primary leading-tight px-4">
+          <h1 className="mt-1 text-2xl font-bold text-primary leading-tight px-4">
             Sistema digital de secretaria escolar
           </h1>
         </div>
