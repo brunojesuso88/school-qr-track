@@ -132,6 +132,7 @@ export type Database = {
           shift: string
           student_count: number | null
           updated_at: string | null
+          weekly_hours: number
         }
         Insert: {
           created_at?: string | null
@@ -140,6 +141,7 @@ export type Database = {
           shift?: string
           student_count?: number | null
           updated_at?: string | null
+          weekly_hours?: number
         }
         Update: {
           created_at?: string | null
@@ -148,6 +150,7 @@ export type Database = {
           shift?: string
           student_count?: number | null
           updated_at?: string | null
+          weekly_hours?: number
         }
         Relationships: []
       }

@@ -30,10 +30,12 @@ const ClassForm = ({ classData, onClose }: ClassFormProps) => {
 
     setLoading(true);
     try {
+      const weeklyHours = shift === 'evening' ? 25 : 30;
       const data = {
         name: name.trim(),
         shift,
-        student_count: studentCount ? parseInt(studentCount) : undefined
+        student_count: studentCount ? parseInt(studentCount) : undefined,
+        weekly_hours: classData?.weekly_hours || weeklyHours
       };
 
       if (classData) {

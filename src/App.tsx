@@ -32,6 +32,7 @@ import MappingTeachers from "./pages/mapping/MappingTeachers";
 import MappingSubjects from "./pages/mapping/MappingSubjects";
 import MappingClasses from "./pages/mapping/MappingClasses";
 import MappingDistribution from "./pages/mapping/MappingDistribution";
+import MappingSummary from "./pages/mapping/MappingSummary";
 
 const queryClient = new QueryClient();
 
@@ -67,6 +68,7 @@ const App = () => (
               <Route path="/school-mapping/subjects" element={<AdminRoute><MappingSubjects /></AdminRoute>} />
               <Route path="/school-mapping/classes" element={<AdminRoute><MappingClasses /></AdminRoute>} />
               <Route path="/school-mapping/distribution" element={<AdminRoute><MappingDistribution /></AdminRoute>} />
+              <Route path="/school-mapping/summary" element={<AdminRoute><MappingSummary /></AdminRoute>} />
 
               {/* Staff Route - Funcionário (página simplificada) */}
               <Route path="/staff/scan" element={<StaffRoute><StaffScanQR /></StaffRoute>} />

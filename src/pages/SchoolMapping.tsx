@@ -1,10 +1,10 @@
 import { useNavigate } from "react-router-dom";
-import { Users, BookOpen, GraduationCap, Grid3X3, ArrowLeft } from "lucide-react";
+import { Users, BookOpen, GraduationCap, Grid3X3, FileText } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { SchoolMappingProvider, useSchoolMapping } from "@/contexts/SchoolMappingContext";
 import { Skeleton } from "@/components/ui/skeleton";
+import SchoolMappingLayout from "@/components/mapping/SchoolMappingLayout";
 
 const SchoolMappingContent = () => {
   const navigate = useNavigate();
@@ -56,12 +56,22 @@ const SchoolMappingContent = () => {
       borderColor: "border-purple-500/30",
       count: assignedSubjects
     },
+    {
+      title: "Resumo",
+      description: "Visão consolidada para direção",
+      icon: FileText,
+      path: "/school-mapping/summary",
+      gradient: "from-cyan-500/20 to-cyan-500/5",
+      iconColor: "text-cyan-500",
+      borderColor: "border-cyan-500/30",
+      count: null
+    },
   ];
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-background p-6">
-        <div className="max-w-4xl mx-auto space-y-6">
+      <SchoolMappingLayout>
+        <div className="space-y-6">
           <Skeleton className="h-10 w-64" />
           <div className="grid gap-4 md:grid-cols-2">
             {[1, 2, 3, 4].map(i => (
@@ -69,22 +79,16 @@ const SchoolMappingContent = () => {
             ))}
           </div>
         </div>
-      </div>
+      </SchoolMappingLayout>
     );
   }
 
   return (
-    <div className="min-h-screen bg-background p-6">
-      <div className="max-w-4xl mx-auto space-y-6">
-        {/* Header */}
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => navigate("/home")}>
-            <ArrowLeft className="h-5 w-5" />
-          </Button>
-          <div>
-            <h1 className="text-2xl font-bold text-foreground">Mapeamento Escolar</h1>
-            <p className="text-muted-foreground">Distribuição de professores e turmas</p>
-          </div>
+    <SchoolMappingLayout>
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">Mapeamento Escolar</h1>
+          <p className="text-muted-foreground">Distribuição de professores e turmas</p>
         </div>
 
         {/* Stats Cards */}
@@ -143,9 +147,11 @@ const SchoolMappingContent = () => {
                     <h2 className="text-xl font-semibold text-foreground">
                       {option.title}
                     </h2>
-                    <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-background/60">
-                      {option.count}
-                    </span>
+                    {option.count !== null && (
+                      <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-background/60">
+                        {option.count}
+                      </span>
+                    )}
                   </div>
                   <p className="text-sm text-muted-foreground">
                     {option.description}
@@ -171,7 +177,7 @@ const SchoolMappingContent = () => {
           ))}
         </div>
       </div>
-    </div>
+    </SchoolMappingLayout>
   );
 };
 

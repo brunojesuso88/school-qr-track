@@ -1,13 +1,13 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { ArrowLeft, User, X, AlertTriangle } from "lucide-react";
+import { User, X, AlertTriangle } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { SchoolMappingProvider, useSchoolMapping, MappingTeacher } from "@/contexts/SchoolMappingContext";
+import { SchoolMappingProvider, useSchoolMapping } from "@/contexts/SchoolMappingContext";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import SchoolMappingLayout from "@/components/mapping/SchoolMappingLayout";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
@@ -18,7 +18,6 @@ const SHIFT_LABELS: Record<string, string> = {
 };
 
 const MappingDistributionContent = () => {
-  const navigate = useNavigate();
   const { teachers, classes, classSubjects, globalSubjects, assignTeacher, unassignTeacher, loading } = useSchoolMapping();
   const { toast } = useToast();
   const [selectedSubjectId, setSelectedSubjectId] = useState<string | null>(null);
@@ -33,13 +32,14 @@ const MappingDistributionContent = () => {
 
   const getEligibleTeachers = (subjectName: string, classShift: string) => {
     const subject = globalSubjects.find(s => s.name === subjectName);
-    if (!subject) return [];
     
     return teachers.filter(teacher => {
-      const hasSubject = teacher.subjects.includes(subject.id);
       const hasShift = teacher.availability.includes(classShift);
-      return hasSubject && hasShift;
-    });
+      return hasShift;
+    }).map(teacher => ({
+      ...teacher,
+      hasSubject: subject ? teacher.subjects.includes(subject.id) : false
+    }));
   };
 
   const getOverloadThreshold = (maxHours: number) => maxHours === 20 ? 13 : 26;
@@ -72,37 +72,29 @@ const MappingDistributionContent = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-background p-6">
-        <div className="max-w-6xl mx-auto space-y-6">
+      <SchoolMappingLayout>
+        <div className="space-y-6">
           <Skeleton className="h-10 w-64" />
           <div className="grid gap-4 lg:grid-cols-2">
             {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-64" />)}
           </div>
         </div>
-      </div>
+      </SchoolMappingLayout>
     );
   }
 
   return (
-    <div className="min-h-screen bg-background p-6">
-      <div className="max-w-6xl mx-auto space-y-6">
+    <SchoolMappingLayout>
+      <div className="space-y-6">
         {/* Header */}
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => navigate("/school-mapping")}>
-            <ArrowLeft className="h-5 w-5" />
-          </Button>
-          <div>
-            <h1 className="text-2xl font-bold text-foreground">Distribuição</h1>
-            <p className="text-muted-foreground">Atribua professores às disciplinas de cada turma</p>
-          </div>
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">Distribuição</h1>
+          <p className="text-muted-foreground">Atribua professores às disciplinas de cada turma</p>
         </div>
 
         {classes.length === 0 ? (
           <Card className="p-8 text-center">
             <p className="text-muted-foreground">Nenhuma turma cadastrada</p>
-            <Button className="mt-4" onClick={() => navigate("/school-mapping/classes")}>
-              Gerenciar Turmas
-            </Button>
           </Card>
         ) : (
           <div className="grid gap-6 lg:grid-cols-2">
@@ -204,7 +196,7 @@ const MappingDistributionContent = () => {
               <div className="space-y-2">
                 {getEligibleTeachers(selectedClassSubject.subject_name, selectedClass.shift).length === 0 ? (
                   <p className="text-sm text-muted-foreground text-center py-4">
-                    Nenhum professor disponível para esta disciplina e turno
+                    Nenhum professor disponível para este turno
                   </p>
                 ) : (
                   getEligibleTeachers(selectedClassSubject.subject_name, selectedClass.shift).map((teacher) => {
@@ -219,7 +211,8 @@ const MappingDistributionContent = () => {
                           "w-full p-3 rounded-lg border text-left transition-colors",
                           wouldExceed 
                             ? "opacity-50 cursor-not-allowed" 
-                            : "hover:bg-muted/50 cursor-pointer"
+                            : "hover:bg-muted/50 cursor-pointer",
+                          teacher.hasSubject && "ring-2 ring-primary/20"
                         )}
                         onClick={() => !wouldExceed && handleAssign(teacher.id)}
                         disabled={wouldExceed || isAssigning}
@@ -230,8 +223,13 @@ const MappingDistributionContent = () => {
                             style={{ backgroundColor: teacher.color }}
                           />
                           <div className="flex-1">
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2 flex-wrap">
                               <span className="font-medium">{teacher.name}</span>
+                              {teacher.hasSubject && (
+                                <Badge variant="outline" className="text-xs">
+                                  Disciplina cadastrada
+                                </Badge>
+                              )}
                               {isOverloaded && (
                                 <AlertTriangle className="h-4 w-4 text-amber-500" />
                               )}
@@ -261,7 +259,7 @@ const MappingDistributionContent = () => {
           )}
         </DialogContent>
       </Dialog>
-    </div>
+    </SchoolMappingLayout>
   );
 };
 
