@@ -1,0 +1,223 @@
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { ArrowLeft, Plus, Pencil, Trash2, AlertTriangle } from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Progress } from "@/components/ui/progress";
+import { Badge } from "@/components/ui/badge";
+import { SchoolMappingProvider, useSchoolMapping, MappingTeacher } from "@/contexts/SchoolMappingContext";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import TeacherForm from "@/components/mapping/TeacherForm";
+import { useToast } from "@/hooks/use-toast";
+
+const SHIFT_LABELS: Record<string, string> = {
+  morning: "Manhã",
+  afternoon: "Tarde",
+  evening: "Noite"
+};
+
+const MappingTeachersContent = () => {
+  const navigate = useNavigate();
+  const { teachers, globalSubjects, deleteTeacher, loading } = useSchoolMapping();
+  const { toast } = useToast();
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [editingTeacher, setEditingTeacher] = useState<MappingTeacher | null>(null);
+  const [deletingTeacher, setDeletingTeacher] = useState<MappingTeacher | null>(null);
+
+  const getSubjectNames = (subjectIds: string[]) => {
+    return subjectIds
+      .map(id => globalSubjects.find(s => s.id === id)?.name)
+      .filter(Boolean) as string[];
+  };
+
+  const getOverloadThreshold = (maxHours: number) => {
+    return maxHours === 20 ? 13 : 26;
+  };
+
+  const handleDelete = async () => {
+    if (!deletingTeacher) return;
+    try {
+      await deleteTeacher(deletingTeacher.id);
+      toast({ title: "Professor excluído com sucesso" });
+    } catch (error: any) {
+      toast({ title: "Erro ao excluir", description: error.message, variant: "destructive" });
+    } finally {
+      setDeletingTeacher(null);
+    }
+  };
+
+  const handleEdit = (teacher: MappingTeacher) => {
+    setEditingTeacher(teacher);
+    setIsDialogOpen(true);
+  };
+
+  const handleCloseDialog = () => {
+    setIsDialogOpen(false);
+    setEditingTeacher(null);
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background p-6">
+        <div className="max-w-4xl mx-auto space-y-6">
+          <Skeleton className="h-10 w-64" />
+          <div className="grid gap-4">
+            {[1, 2, 3].map(i => <Skeleton key={i} className="h-32" />)}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-background p-6">
+      <div className="max-w-4xl mx-auto space-y-6">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <Button variant="ghost" size="icon" onClick={() => navigate("/school-mapping")}>
+              <ArrowLeft className="h-5 w-5" />
+            </Button>
+            <div>
+              <h1 className="text-2xl font-bold text-foreground">Professores</h1>
+              <p className="text-muted-foreground">{teachers.length} professores cadastrados</p>
+            </div>
+          </div>
+
+          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+            <DialogTrigger asChild>
+              <Button onClick={() => setEditingTeacher(null)}>
+                <Plus className="h-4 w-4 mr-2" />
+                Adicionar
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-lg">
+              <DialogHeader>
+                <DialogTitle>
+                  {editingTeacher ? "Editar Professor" : "Novo Professor"}
+                </DialogTitle>
+              </DialogHeader>
+              <TeacherForm teacher={editingTeacher} onClose={handleCloseDialog} />
+            </DialogContent>
+          </Dialog>
+        </div>
+
+        {/* Teachers List */}
+        <div className="grid gap-4">
+          {teachers.length === 0 ? (
+            <Card className="p-8 text-center">
+              <p className="text-muted-foreground">Nenhum professor cadastrado</p>
+              <Button className="mt-4" onClick={() => setIsDialogOpen(true)}>
+                <Plus className="h-4 w-4 mr-2" />
+                Adicionar primeiro professor
+              </Button>
+            </Card>
+          ) : (
+            teachers.map((teacher) => {
+              const isOverloaded = teacher.current_hours >= getOverloadThreshold(teacher.max_weekly_hours);
+              const progressPercent = (teacher.current_hours / teacher.max_weekly_hours) * 100;
+
+              return (
+                <Card key={teacher.id} className="overflow-hidden">
+                  <div 
+                    className="h-2" 
+                    style={{ backgroundColor: teacher.color }}
+                  />
+                  <CardContent className="p-4">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1 space-y-3">
+                        <div className="flex items-center gap-2">
+                          <h3 className="font-semibold text-lg">{teacher.name}</h3>
+                          {isOverloaded && (
+                            <AlertTriangle className="h-4 w-4 text-amber-500" />
+                          )}
+                        </div>
+                        
+                        {teacher.email && (
+                          <p className="text-sm text-muted-foreground">{teacher.email}</p>
+                        )}
+
+                        <div className="flex flex-wrap gap-1">
+                          {getSubjectNames(teacher.subjects).map(name => (
+                            <Badge key={name} variant="secondary" className="text-xs">
+                              {name}
+                            </Badge>
+                          ))}
+                        </div>
+
+                        <div className="flex flex-wrap gap-1">
+                          {teacher.availability.map(shift => (
+                            <Badge key={shift} variant="outline" className="text-xs">
+                              {SHIFT_LABELS[shift] || shift}
+                            </Badge>
+                          ))}
+                        </div>
+
+                        <div className="space-y-1">
+                          <div className="flex justify-between text-sm">
+                            <span>Carga horária</span>
+                            <span className={isOverloaded ? "text-amber-500 font-medium" : ""}>
+                              {teacher.current_hours}h / {teacher.max_weekly_hours}h
+                            </span>
+                          </div>
+                          <Progress 
+                            value={Math.min(progressPercent, 100)} 
+                            className={isOverloaded ? "[&>div]:bg-amber-500" : ""}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="flex gap-2">
+                        <Button variant="ghost" size="icon" onClick={() => handleEdit(teacher)}>
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="text-destructive"
+                          onClick={() => setDeletingTeacher(teacher)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })
+          )}
+        </div>
+      </div>
+
+      {/* Delete Confirmation */}
+      <AlertDialog open={!!deletingTeacher} onOpenChange={() => setDeletingTeacher(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir professor?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja excluir {deletingTeacher?.name}? Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground">
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+};
+
+const MappingTeachers = () => {
+  return (
+    <SchoolMappingProvider>
+      <MappingTeachersContent />
+    </SchoolMappingProvider>
+  );
+};
+
+export default MappingTeachers;

@@ -1,12 +1,16 @@
 import { useNavigate } from "react-router-dom";
-import { QrCode, LayoutDashboard } from "lucide-react";
+import { QrCode, LayoutDashboard, Map } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import edunexusLogo from "@/assets/edunexus-logo.png";
 import { useSchoolName } from "@/hooks/useSchoolName";
+import { useAuth } from "@/contexts/AuthContext";
 
 const Home = () => {
   const navigate = useNavigate();
   const { schoolName } = useSchoolName();
+  const { userRole } = useAuth();
+
+  const canAccessSchoolMapping = userRole === 'admin' || userRole === 'direction';
 
   const menuOptions = [
     {
@@ -27,6 +31,15 @@ const Home = () => {
       iconColor: "text-primary",
       borderColor: "border-primary/30",
     },
+    ...(canAccessSchoolMapping ? [{
+      title: "Mapeamento Escolar",
+      description: "Distribuição de professores e turmas",
+      icon: Map,
+      path: "/school-mapping",
+      gradient: "from-amber-500/20 to-amber-500/5",
+      iconColor: "text-amber-500",
+      borderColor: "border-amber-500/30",
+    }] : []),
   ];
 
   return (
