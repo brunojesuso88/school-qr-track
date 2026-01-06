@@ -43,18 +43,20 @@ const Home = () => {
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-6 bg-gradient-to-br from-primary/5 via-background to-accent/5">
-      <div className="w-full max-w-md space-y-1 animate-fade-in">
+      <div className="w-full max-w-md space-y-0 animate-fade-in">
         {/* Logo e Nome da Escola */}
-        <div className="text-center">
-          <motion.img
-            src={edunexusLogo}
-            alt="Edunexus Logo"
-            className="w-[512px] h-[512px] object-contain mx-auto drop-shadow-lg"
-            initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.6, ease: "easeOut" }}
-          />
-          <h1 className="mt-1 text-2xl font-bold text-primary leading-tight px-4">
+        <div className="text-center -mb-4">
+          <div className="w-72 h-72 mx-auto overflow-hidden">
+            <motion.img
+              src={edunexusLogo}
+              alt="Edunexus Logo"
+              className="w-full h-full object-cover scale-125 drop-shadow-lg"
+              initial={{ opacity: 0, scale: 1.1 }}
+              animate={{ opacity: 1, scale: 1.25 }}
+              transition={{ duration: 0.6, ease: "easeOut" }}
+            />
+          </div>
+          <h1 className="text-2xl font-bold text-primary leading-tight px-4">
             Sistema digital de secretaria escolar
           </h1>
         </div>
