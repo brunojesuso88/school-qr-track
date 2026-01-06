@@ -6,7 +6,6 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { AuthProvider } from "./contexts/AuthContext";
 import AdminRoute from "./components/AdminRoute";
-import MobileRoute from "./components/MobileRoute";
 import StaffRoute from "./components/StaffRoute";
 import UpdatePrompt from "./components/UpdatePrompt";
 import SplashScreen from "./pages/SplashScreen";
@@ -20,11 +19,6 @@ import Attendance from "./pages/Attendance";
 import Notifications from "./pages/Notifications";
 import Settings from "./pages/Settings";
 import Auth from "./pages/Auth";
-import MobileAuth from "./pages/MobileAuth";
-import MobileHome from "./pages/MobileHome";
-import MobileScanQR from "./pages/MobileScanQR";
-import StudentLookup from "./pages/StudentLookup";
-import MobileProfile from "./pages/MobileProfile";
 import InstallPWA from "./pages/InstallPWA";
 import NotFound from "./pages/NotFound";
 import SchoolMapping from "./pages/SchoolMapping";
@@ -49,7 +43,6 @@ const App = () => (
               {/* Public Routes */}
               <Route path="/" element={<SplashScreen />} />
               <Route path="/auth" element={<Auth />} />
-              <Route path="/auth/mobile" element={<MobileAuth />} />
               <Route path="/install" element={<InstallPWA />} />
 
               {/* Admin Routes (Web) - Admin, Direção, Professor */}
@@ -72,12 +65,6 @@ const App = () => (
 
               {/* Staff Route - Funcionário (página simplificada) */}
               <Route path="/staff/scan" element={<StaffRoute><StaffScanQR /></StaffRoute>} />
-
-              {/* Mobile Routes (PWA) */}
-              <Route path="/mobile-home" element={<MobileRoute><MobileHome /></MobileRoute>} />
-              <Route path="/mobile/scan" element={<MobileRoute><MobileScanQR /></MobileRoute>} />
-              <Route path="/mobile/student-lookup" element={<MobileRoute><StudentLookup /></MobileRoute>} />
-              <Route path="/mobile/profile" element={<MobileRoute><MobileProfile /></MobileRoute>} />
 
               <Route path="*" element={<NotFound />} />
             </Routes>

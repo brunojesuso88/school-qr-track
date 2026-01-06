@@ -5,7 +5,7 @@ import edunexusLogo from "@/assets/edunexus-logo.png";
 
 const SplashScreen = () => {
   const navigate = useNavigate();
-  const { user, loading, isAdmin, isMobileUser } = useAuth();
+  const { user, loading } = useAuth();
   const [showSplash, setShowSplash] = useState(true);
 
   useEffect(() => {
@@ -18,20 +18,9 @@ const SplashScreen = () => {
 
   useEffect(() => {
     if (!showSplash && !loading) {
-      if (user) {
-        if (isAdmin) {
-          navigate("/home");
-        } else if (isMobileUser) {
-          navigate("/mobile-home");
-        } else {
-          // Fallback: wait for role to load
-          navigate("/home");
-        }
-      } else {
-        navigate("/home");
-      }
+      navigate("/home");
     }
-  }, [showSplash, loading, user, isAdmin, isMobileUser, navigate]);
+  }, [showSplash, loading, user, navigate]);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary/10 via-background to-accent/10">

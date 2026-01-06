@@ -2,7 +2,7 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 
-type AppRole = 'admin' | 'direction' | 'teacher' | 'staff' | 'user';
+type AppRole = 'admin' | 'direction' | 'teacher' | 'staff';
 
 interface AuthContextType {
   user: User | null;
@@ -12,7 +12,6 @@ interface AuthContextType {
   isAdmin: boolean;
   isDashboardUser: boolean;
   isStaffOnly: boolean;
-  isMobileUser: boolean;
   canAccessSettings: boolean;
   canManageUsers: boolean;
   canAccessFullDashboard: boolean;
@@ -117,14 +116,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // isDashboardUser: usuários com acesso ao dashboard completo (admin, direção, professor)
   const isDashboardUser = userRole === 'admin' || userRole === 'direction' || userRole === 'teacher';
   
-  // isAdmin: mantido para compatibilidade - acesso ao sistema web (exclui user mobile)
+  // isAdmin: mantido para compatibilidade - acesso ao sistema web
   const isAdmin = userRole === 'admin' || userRole === 'direction' || userRole === 'teacher' || userRole === 'staff';
   
   // Funcionário tem acesso limitado apenas a QR (página simplificada)
   const isStaffOnly = userRole === 'staff';
-  
-  // Usuário mobile (app PWA)
-  const isMobileUser = userRole === 'user';
   
   // Acesso às configurações: admin e direção apenas
   const canAccessSettings = userRole === 'admin' || userRole === 'direction';
@@ -144,7 +140,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       isAdmin,
       isDashboardUser,
       isStaffOnly,
-      isMobileUser,
       canAccessSettings,
       canManageUsers,
       canAccessFullDashboard,

@@ -6,7 +6,7 @@ interface AdminRouteProps {
 }
 
 const AdminRoute = ({ children }: AdminRouteProps) => {
-  const { user, loading, isDashboardUser, isStaffOnly, isMobileUser } = useAuth();
+  const { user, loading, isDashboardUser, isStaffOnly } = useAuth();
 
   if (loading) {
     return (
@@ -27,11 +27,6 @@ const AdminRoute = ({ children }: AdminRouteProps) => {
   // Funcionário vai para página simplificada de QR
   if (isStaffOnly) {
     return <Navigate to="/staff/scan" replace />;
-  }
-
-  // Usuário mobile vai para app PWA
-  if (isMobileUser) {
-    return <Navigate to="/mobile-home" replace />;
   }
 
   // Apenas usuários do dashboard (admin, direção, professor) podem acessar
