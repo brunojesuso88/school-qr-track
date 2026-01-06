@@ -1,6 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Plus, Pencil, Trash2, AlertTriangle } from "lucide-react";
+import { Plus, Pencil, Trash2, AlertTriangle } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -10,6 +9,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import TeacherForm from "@/components/mapping/TeacherForm";
+import TeacherSummarySheet from "@/components/mapping/TeacherSummarySheet";
+import SchoolMappingLayout from "@/components/mapping/SchoolMappingLayout";
 import { useToast } from "@/hooks/use-toast";
 
 const SHIFT_LABELS: Record<string, string> = {
@@ -19,12 +20,12 @@ const SHIFT_LABELS: Record<string, string> = {
 };
 
 const MappingTeachersContent = () => {
-  const navigate = useNavigate();
-  const { teachers, globalSubjects, deleteTeacher, loading } = useSchoolMapping();
+  const { teachers, globalSubjects, classes, classSubjects, deleteTeacher, loading } = useSchoolMapping();
   const { toast } = useToast();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingTeacher, setEditingTeacher] = useState<MappingTeacher | null>(null);
   const [deletingTeacher, setDeletingTeacher] = useState<MappingTeacher | null>(null);
+  const [viewingTeacher, setViewingTeacher] = useState<MappingTeacher | null>(null);
 
   const getSubjectNames = (subjectIds: string[]) => {
     return subjectIds
@@ -48,9 +49,15 @@ const MappingTeachersContent = () => {
     }
   };
 
-  const handleEdit = (teacher: MappingTeacher) => {
+  const handleEdit = (e: React.MouseEvent, teacher: MappingTeacher) => {
+    e.stopPropagation();
     setEditingTeacher(teacher);
     setIsDialogOpen(true);
+  };
+
+  const handleDeleteClick = (e: React.MouseEvent, teacher: MappingTeacher) => {
+    e.stopPropagation();
+    setDeletingTeacher(teacher);
   };
 
   const handleCloseDialog = () => {
@@ -60,30 +67,25 @@ const MappingTeachersContent = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-background p-6">
-        <div className="max-w-4xl mx-auto space-y-6">
+      <SchoolMappingLayout>
+        <div className="space-y-6">
           <Skeleton className="h-10 w-64" />
           <div className="grid gap-4">
             {[1, 2, 3].map(i => <Skeleton key={i} className="h-32" />)}
           </div>
         </div>
-      </div>
+      </SchoolMappingLayout>
     );
   }
 
   return (
-    <div className="min-h-screen bg-background p-6">
-      <div className="max-w-4xl mx-auto space-y-6">
+    <SchoolMappingLayout>
+      <div className="space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Button variant="ghost" size="icon" onClick={() => navigate("/school-mapping")}>
-              <ArrowLeft className="h-5 w-5" />
-            </Button>
-            <div>
-              <h1 className="text-2xl font-bold text-foreground">Professores</h1>
-              <p className="text-muted-foreground">{teachers.length} professores cadastrados</p>
-            </div>
+          <div>
+            <h1 className="text-2xl font-bold text-foreground">Professores</h1>
+            <p className="text-muted-foreground">{teachers.length} professores cadastrados</p>
           </div>
 
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
@@ -120,7 +122,11 @@ const MappingTeachersContent = () => {
               const progressPercent = (teacher.current_hours / teacher.max_weekly_hours) * 100;
 
               return (
-                <Card key={teacher.id} className="overflow-hidden">
+                <Card 
+                  key={teacher.id} 
+                  className="overflow-hidden cursor-pointer hover:shadow-md transition-shadow"
+                  onClick={() => setViewingTeacher(teacher)}
+                >
                   <div 
                     className="h-2" 
                     style={{ backgroundColor: teacher.color }}
@@ -170,14 +176,14 @@ const MappingTeachersContent = () => {
                       </div>
 
                       <div className="flex gap-2">
-                        <Button variant="ghost" size="icon" onClick={() => handleEdit(teacher)}>
+                        <Button variant="ghost" size="icon" onClick={(e) => handleEdit(e, teacher)}>
                           <Pencil className="h-4 w-4" />
                         </Button>
                         <Button 
                           variant="ghost" 
                           size="icon" 
                           className="text-destructive"
-                          onClick={() => setDeletingTeacher(teacher)}
+                          onClick={(e) => handleDeleteClick(e, teacher)}
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>
@@ -190,6 +196,15 @@ const MappingTeachersContent = () => {
           )}
         </div>
       </div>
+
+      {/* Teacher Summary Sheet */}
+      <TeacherSummarySheet
+        teacher={viewingTeacher}
+        classes={classes}
+        classSubjects={classSubjects}
+        globalSubjects={globalSubjects}
+        onClose={() => setViewingTeacher(null)}
+      />
 
       {/* Delete Confirmation */}
       <AlertDialog open={!!deletingTeacher} onOpenChange={() => setDeletingTeacher(null)}>
@@ -208,7 +223,7 @@ const MappingTeachersContent = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+    </SchoolMappingLayout>
   );
 };
 

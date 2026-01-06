@@ -37,6 +37,7 @@ export interface MappingClass {
   name: string;
   shift: string;
   student_count?: number;
+  weekly_hours: number;
   created_at: string;
   updated_at: string;
 }
