@@ -78,9 +78,9 @@ const ClassSubjectsDialog = ({ classData, onClose }: ClassSubjectsDialogProps) =
                 </SelectTrigger>
                 <SelectContent>
                   {availableSubjects.length === 0 ? (
-                    <SelectItem value="" disabled>
+                    <div className="py-2 px-3 text-sm text-muted-foreground">
                       Todas as disciplinas já foram adicionadas
-                    </SelectItem>
+                    </div>
                   ) : (
                     availableSubjects.map(subject => (
                       <SelectItem key={subject.id} value={subject.name}>
