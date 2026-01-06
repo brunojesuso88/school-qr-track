@@ -21,9 +21,8 @@ import { Users, Loader2, Shield, UserCog } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
-import { Database } from '@/integrations/supabase/types';
-
-type AppRole = Database['public']['Enums']['app_role'];
+// Tipo local para roles usadas no sistema (exclui 'user' que foi removido)
+type AppRole = 'admin' | 'direction' | 'teacher' | 'staff';
 
 interface UserWithRole {
   id: string;
@@ -37,16 +36,14 @@ const roleLabels: Record<AppRole, string> = {
   admin: 'Administrador',
   direction: 'Direção',
   teacher: 'Professor',
-  staff: 'Funcionário',
-  user: 'Usuário Mobile'
+  staff: 'Funcionário'
 };
 
 const roleBadgeVariants: Record<AppRole, 'default' | 'secondary' | 'outline' | 'destructive'> = {
   admin: 'destructive',
   direction: 'default',
   teacher: 'secondary',
-  staff: 'outline',
-  user: 'outline'
+  staff: 'outline'
 };
 
 const UserManagement = () => {
@@ -80,7 +77,7 @@ const UserManagement = () => {
           id: profile.id,
           email: profile.email || '',
           fullName: profile.full_name || 'Sem nome',
-          role: (userRole?.role as AppRole) || 'user',
+          role: (userRole?.role as AppRole) || 'teacher',
           createdAt: profile.created_at || ''
         };
       });
@@ -187,7 +184,6 @@ const UserManagement = () => {
                           <SelectItem value="direction">Direção</SelectItem>
                           <SelectItem value="teacher">Professor</SelectItem>
                           <SelectItem value="staff">Funcionário</SelectItem>
-                          <SelectItem value="user">Usuário Mobile</SelectItem>
                         </SelectContent>
                       </Select>
                     </TableCell>
@@ -207,7 +203,7 @@ const UserManagement = () => {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-2">
             <div className="p-4 rounded-lg bg-muted/50">
               <Badge variant="destructive" className="mb-2">Administrador</Badge>
               <p className="text-sm text-muted-foreground">
@@ -230,12 +226,6 @@ const UserManagement = () => {
               <Badge variant="outline" className="mb-2">Funcionário</Badge>
               <p className="text-sm text-muted-foreground">
                 Acesso apenas à função de leitura de QR Code na tela inicial.
-              </p>
-            </div>
-            <div className="p-4 rounded-lg bg-muted/50">
-              <Badge variant="outline" className="mb-2">Usuário Mobile</Badge>
-              <p className="text-sm text-muted-foreground">
-                Acesso apenas ao aplicativo mobile para leitura de QR Code.
               </p>
             </div>
           </div>
