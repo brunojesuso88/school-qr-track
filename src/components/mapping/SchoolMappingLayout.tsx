@@ -10,10 +10,22 @@ import {
   Menu, 
   X, 
   ArrowLeft,
-  ChevronRight 
+  ChevronRight,
+  LogOut
 } from 'lucide-react';
 import { useState } from 'react';
 import { ThemeToggle } from '@/components/ThemeToggle';
+import { useAuth } from '@/contexts/AuthContext';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import logoEscola from "@/assets/logo-escola.jpg";
 
 const navigation = [
   { name: 'Visão Geral', href: '/school-mapping', icon: LayoutDashboard },
@@ -31,11 +43,32 @@ interface SchoolMappingLayoutProps {
 const SchoolMappingLayout: React.FC<SchoolMappingLayoutProps> = ({ children }) => {
   const location = useLocation();
   const navigate = useNavigate();
+  const { user, signOut, userRole } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const getCurrentPageName = () => {
     const currentNav = navigation.find(item => item.href === location.pathname);
     return currentNav?.name || 'Mapeamento Escolar';
+  };
+
+  const handleSignOut = async () => {
+    await signOut();
+    navigate('/');
+  };
+
+  const getInitials = (email: string) => {
+    return email.substring(0, 2).toUpperCase();
+  };
+
+  const getRoleLabel = (role: string | null) => {
+    const labels: Record<string, string> = {
+      admin: 'Administrador',
+      direction: 'Direção',
+      teacher: 'Professor',
+      staff: 'Funcionário',
+      user: 'Usuário',
+    };
+    return labels[role || 'user'] || 'Usuário';
   };
 
   return (
@@ -56,7 +89,7 @@ const SchoolMappingLayout: React.FC<SchoolMappingLayoutProps> = ({ children }) =
         )}
       >
         <div className="flex flex-col h-full">
-          {/* Header */}
+          {/* Header with Logo */}
           <div className="flex items-center gap-3 px-6 py-5 border-b border-sidebar-border">
             <button
               onClick={() => navigate('/home')}
@@ -64,8 +97,13 @@ const SchoolMappingLayout: React.FC<SchoolMappingLayoutProps> = ({ children }) =
             >
               <ArrowLeft className="w-5 h-5 text-sidebar-foreground" />
             </button>
-            <div className="flex-1">
-              <h1 className="font-semibold text-sidebar-foreground text-sm leading-tight">Mapeamento Escolar</h1>
+            <img 
+              src={logoEscola} 
+              alt="Logo CEPANS" 
+              className="w-10 h-10 rounded-lg object-cover"
+            />
+            <div className="flex-1 min-w-0">
+              <h1 className="font-semibold text-sidebar-foreground text-sm leading-tight truncate">Mapeamento Escolar</h1>
               <p className="text-xs text-sidebar-foreground/60">Distribuição de Professores</p>
             </div>
             <button
@@ -94,15 +132,40 @@ const SchoolMappingLayout: React.FC<SchoolMappingLayoutProps> = ({ children }) =
             })}
           </nav>
 
-          {/* Footer */}
+          {/* User Profile Section */}
           <div className="p-3 border-t border-sidebar-border">
-            <button
-              onClick={() => navigate('/home')}
-              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-sidebar-accent transition-colors text-sidebar-foreground"
-            >
-              <ArrowLeft className="w-5 h-5" />
-              <span className="text-sm">Voltar ao Menu</span>
-            </button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-sidebar-accent transition-colors">
+                  <Avatar className="h-9 w-9">
+                    <AvatarFallback className="bg-sidebar-primary text-sidebar-primary-foreground text-sm">
+                      {user?.email ? getInitials(user.email) : 'U'}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1 text-left min-w-0">
+                    <p className="text-sm font-medium text-sidebar-foreground truncate">
+                      {user?.email?.split('@')[0]}
+                    </p>
+                    <p className="text-xs text-sidebar-foreground/60">
+                      {getRoleLabel(userRole)}
+                    </p>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-sidebar-foreground/40" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuLabel>Minha Conta</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem className="text-muted-foreground">
+                  {user?.email}
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={handleSignOut} className="text-destructive">
+                  <LogOut className="w-4 h-4 mr-2" />
+                  Sair
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
       </aside>

@@ -1,17 +1,47 @@
 import { useNavigate } from "react-router-dom";
-import { Users, BookOpen, GraduationCap, Grid3X3, FileText } from "lucide-react";
+import { Users, BookOpen, GraduationCap, Grid3X3, FileText, Sun, Sunset, Moon } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { SchoolMappingProvider, useSchoolMapping } from "@/contexts/SchoolMappingContext";
 import { Skeleton } from "@/components/ui/skeleton";
 import SchoolMappingLayout from "@/components/mapping/SchoolMappingLayout";
 
+const SHIFT_CONFIG = {
+  morning: { label: "Manhã", icon: Sun, color: "text-amber-500", hours: 30 },
+  afternoon: { label: "Tarde", icon: Sunset, color: "text-orange-500", hours: 30 },
+  evening: { label: "Noite", icon: Moon, color: "text-indigo-500", hours: 25 }
+};
+
 const SchoolMappingContent = () => {
   const navigate = useNavigate();
   const { teachers, globalSubjects, classes, classSubjects, loading } = useSchoolMapping();
 
-  const totalWeeklyHours = teachers.reduce((acc, t) => acc + t.max_weekly_hours, 0);
-  const usedWeeklyHours = teachers.reduce((acc, t) => acc + t.current_hours, 0);
+  // Calculate hours by shift
+  const calculateShiftStats = (shift: string) => {
+    const shiftClasses = classes.filter(c => c.shift === shift);
+    const expectedHours = SHIFT_CONFIG[shift as keyof typeof SHIFT_CONFIG]?.hours || 30;
+    const totalExpected = shiftClasses.length * expectedHours;
+    
+    // Sum weekly_classes for class subjects with assigned teachers in this shift
+    const filledHours = classSubjects
+      .filter(cs => {
+        const classData = classes.find(c => c.id === cs.class_id);
+        return classData?.shift === shift && cs.teacher_id;
+      })
+      .reduce((acc, cs) => acc + cs.weekly_classes, 0);
+    
+    return { 
+      classCount: shiftClasses.length,
+      expected: totalExpected, 
+      filled: filledHours,
+      hoursPerClass: expectedHours
+    };
+  };
+
+  const morningStats = calculateShiftStats('morning');
+  const afternoonStats = calculateShiftStats('afternoon');
+  const eveningStats = calculateShiftStats('evening');
+
   const assignedSubjects = classSubjects.filter(cs => cs.teacher_id).length;
   const totalClassSubjects = classSubjects.length;
 
@@ -73,8 +103,8 @@ const SchoolMappingContent = () => {
       <SchoolMappingLayout>
         <div className="space-y-6">
           <Skeleton className="h-10 w-64" />
-          <div className="grid gap-4 md:grid-cols-2">
-            {[1, 2, 3, 4].map(i => (
+          <div className="grid gap-4 md:grid-cols-3">
+            {[1, 2, 3].map(i => (
               <Skeleton key={i} className="h-32" />
             ))}
           </div>
@@ -82,6 +112,12 @@ const SchoolMappingContent = () => {
       </SchoolMappingLayout>
     );
   }
+
+  const shiftCards = [
+    { key: 'morning', stats: morningStats, ...SHIFT_CONFIG.morning },
+    { key: 'afternoon', stats: afternoonStats, ...SHIFT_CONFIG.afternoon },
+    { key: 'evening', stats: eveningStats, ...SHIFT_CONFIG.evening }
+  ];
 
   return (
     <SchoolMappingLayout>
@@ -91,44 +127,53 @@ const SchoolMappingContent = () => {
           <p className="text-muted-foreground">Distribuição de professores e turmas</p>
         </div>
 
-        {/* Stats Cards */}
-        <div className="grid gap-4 md:grid-cols-2">
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Carga Horária Total
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-end justify-between">
-                <span className="text-2xl font-bold">{usedWeeklyHours}h</span>
-                <span className="text-muted-foreground">/ {totalWeeklyHours}h</span>
-              </div>
-              <Progress 
-                value={totalWeeklyHours > 0 ? (usedWeeklyHours / totalWeeklyHours) * 100 : 0} 
-                className="mt-2" 
-              />
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Disciplinas Atribuídas
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-end justify-between">
-                <span className="text-2xl font-bold">{assignedSubjects}</span>
-                <span className="text-muted-foreground">/ {totalClassSubjects}</span>
-              </div>
-              <Progress 
-                value={totalClassSubjects > 0 ? (assignedSubjects / totalClassSubjects) * 100 : 0} 
-                className="mt-2" 
-              />
-            </CardContent>
-          </Card>
+        {/* Shift Workload Cards */}
+        <div className="grid gap-4 md:grid-cols-3">
+          {shiftCards.map(({ key, label, icon: ShiftIcon, color, stats }) => (
+            <Card key={key}>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                  <ShiftIcon className={`h-4 w-4 ${color}`} />
+                  {label}
+                  {stats.classCount > 0 && (
+                    <span className="text-xs font-normal">
+                      ({stats.classCount} turma{stats.classCount > 1 ? 's' : ''} × {stats.hoursPerClass}h)
+                    </span>
+                  )}
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-end justify-between">
+                  <span className="text-2xl font-bold">{stats.filled}h</span>
+                  <span className="text-muted-foreground">/ {stats.expected}h</span>
+                </div>
+                <Progress 
+                  value={stats.expected > 0 ? (stats.filled / stats.expected) * 100 : 0} 
+                  className="mt-2" 
+                />
+              </CardContent>
+            </Card>
+          ))}
         </div>
+
+        {/* Assigned Subjects Card */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Disciplinas Atribuídas
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-end justify-between">
+              <span className="text-2xl font-bold">{assignedSubjects}</span>
+              <span className="text-muted-foreground">/ {totalClassSubjects}</span>
+            </div>
+            <Progress 
+              value={totalClassSubjects > 0 ? (assignedSubjects / totalClassSubjects) * 100 : 0} 
+              className="mt-2" 
+            />
+          </CardContent>
+        </Card>
 
         {/* Menu Options */}
         <div className="grid gap-4 md:grid-cols-2">
