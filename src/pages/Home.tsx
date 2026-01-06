@@ -2,7 +2,7 @@ import { useNavigate } from "react-router-dom";
 import { QrCode, LayoutDashboard, Map } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { motion } from "framer-motion";
-import edunexusLogo from "@/assets/edunexus-logo.png";
+import edunexusLogo from "@/assets/edunexus-logo2.png";
 import { useAuth } from "@/contexts/AuthContext";
 
 const Home = () => {
@@ -44,21 +44,16 @@ const Home = () => {
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-6 bg-gradient-to-br from-primary/5 via-background to-accent/5">
       <div className="w-full max-w-md space-y-0 animate-fade-in">
-        {/* Logo e Nome da Escola */}
-        <div className="text-center -mb-4">
-          <div className="w-72 h-72 mx-auto overflow-hidden">
-            <motion.img
-              src={edunexusLogo}
-              alt="Edunexus Logo"
-              className="w-full h-full object-cover scale-125 drop-shadow-lg"
-              initial={{ opacity: 0, scale: 1.1 }}
-              animate={{ opacity: 1, scale: 1.25 }}
-              transition={{ duration: 0.6, ease: "easeOut" }}
-            />
-          </div>
-          <h1 className="text-2xl font-bold text-primary leading-tight px-4">
-            Sistema digital de secretaria escolar
-          </h1>
+        {/* Logo */}
+        <div className="text-center mb-4">
+          <motion.img
+            src={edunexusLogo}
+            alt="Edunexus - Sistema Digital de Secretaria Escolar"
+            className="w-full max-w-md mx-auto drop-shadow-lg"
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, ease: "easeOut" }}
+          />
         </div>
 
         {/* Menu Options */}
