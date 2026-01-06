@@ -2,12 +2,10 @@ import { useNavigate } from "react-router-dom";
 import { QrCode, LayoutDashboard, Map } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import edunexusLogo from "@/assets/edunexus-logo.png";
-import { useSchoolName } from "@/hooks/useSchoolName";
 import { useAuth } from "@/contexts/AuthContext";
 
 const Home = () => {
   const navigate = useNavigate();
-  const { schoolName } = useSchoolName();
   const { userRole } = useAuth();
 
   const canAccessSchoolMapping = userRole === 'admin' || userRole === 'direction';
@@ -23,7 +21,7 @@ const Home = () => {
       borderColor: "border-success/30",
     },
     {
-      title: "Dashboard",
+      title: "Sistema de gestão de presença",
       description: "Painel de controle completo",
       icon: LayoutDashboard,
       path: "/dashboard",
@@ -50,16 +48,11 @@ const Home = () => {
           <img
             src={edunexusLogo}
             alt="Edunexus Logo"
-            className="w-64 h-64 object-contain mx-auto drop-shadow-lg"
+            className="w-[512px] h-[512px] object-contain mx-auto drop-shadow-lg"
           />
-          {schoolName && (
-            <h1 className="mt-4 text-xl font-bold text-foreground leading-tight px-4">
-              {schoolName}
-            </h1>
-          )}
-          <p className="mt-2 text-muted-foreground text-sm">
-            Sistema de Gestão de Presença
-          </p>
+          <h1 className="mt-4 text-2xl font-bold text-primary leading-tight px-4">
+            Sistema digital de secretaria escolar
+          </h1>
         </div>
 
         {/* Menu Options */}
