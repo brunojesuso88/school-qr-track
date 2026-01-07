@@ -13,8 +13,11 @@ import {
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
+import { useAuth } from '@/contexts/AuthContext';
 
 const DataExport = () => {
+  const { userRole } = useAuth();
+  const canViewGuardianPhone = userRole === 'admin' || userRole === 'direction';
   const [exportingStudents, setExportingStudents] = useState(false);
   const [exportingAttendance, setExportingAttendance] = useState(false);
   const [dateRange, setDateRange] = useState({
@@ -45,22 +48,34 @@ const DataExport = () => {
         return;
       }
 
-      const headers = ['Matrícula', 'Nome Completo', 'Turma', 'Turno', 'Responsável', 'Telefone', 'Status'];
+      const headers = canViewGuardianPhone 
+        ? ['Matrícula', 'Nome Completo', 'Turma', 'Turno', 'Responsável', 'Telefone', 'Status']
+        : ['Matrícula', 'Nome Completo', 'Turma', 'Turno', 'Responsável', 'Status'];
       const shiftLabels: Record<string, string> = {
         morning: 'Manhã',
         afternoon: 'Tarde',
         evening: 'Noite'
       };
 
-      const rows = data.map(s => [
-        s.student_id,
-        s.full_name,
-        s.class,
-        shiftLabels[s.shift] || s.shift,
-        s.guardian_name,
-        s.guardian_phone,
-        s.status === 'active' ? 'Ativo' : 'Inativo'
-      ]);
+      const rows = data.map(s => canViewGuardianPhone 
+        ? [
+            s.student_id,
+            s.full_name,
+            s.class,
+            shiftLabels[s.shift] || s.shift,
+            s.guardian_name,
+            s.guardian_phone,
+            s.status === 'active' ? 'Ativo' : 'Inativo'
+          ]
+        : [
+            s.student_id,
+            s.full_name,
+            s.class,
+            shiftLabels[s.shift] || s.shift,
+            s.guardian_name,
+            s.status === 'active' ? 'Ativo' : 'Inativo'
+          ]
+      );
 
       const csv = [headers, ...rows].map(row => row.join(';')).join('\n');
       downloadCSV(csv, `alunos_${format(new Date(), 'yyyy-MM-dd')}.csv`);

@@ -19,6 +19,7 @@ import { ptBR } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { StudentReportModal } from '@/components/StudentReportModal';
 import { studentSchema, occurrenceSchema, formatPhone } from '@/lib/validations';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface Student {
   id: string;
@@ -64,6 +65,8 @@ const OCCURRENCE_TYPES = [
 const Students = () => {
   const [searchParams] = useSearchParams();
   const classFromUrl = searchParams.get('class');
+  const { userRole } = useAuth();
+  const canViewGuardianPhone = userRole === 'admin' || userRole === 'direction';
   
   const [students, setStudents] = useState<Student[]>([]);
   const [classes, setClasses] = useState<ClassItem[]>([]);
@@ -735,16 +738,18 @@ const Students = () => {
                     required
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="guardian_phone">Telefone do Responsável (WhatsApp) - Opcional</Label>
-                  <Input
-                    id="guardian_phone"
-                    type="tel"
-                    value={formData.guardian_phone}
-                    onChange={(e) => setFormData({ ...formData, guardian_phone: e.target.value })}
-                    placeholder="+55 11 99999-9999"
-                  />
-                </div>
+                {canViewGuardianPhone && (
+                  <div className="space-y-2">
+                    <Label htmlFor="guardian_phone">Telefone do Responsável (WhatsApp) - Opcional</Label>
+                    <Input
+                      id="guardian_phone"
+                      type="tel"
+                      value={formData.guardian_phone}
+                      onChange={(e) => setFormData({ ...formData, guardian_phone: e.target.value })}
+                      placeholder="+55 11 99999-9999"
+                    />
+                  </div>
+                )}
                 <div className="space-y-2">
                   <Label>Aluno com Laudo</Label>
                   <div className="flex gap-2">
