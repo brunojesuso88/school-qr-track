@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { QrCode, LayoutDashboard, Map, Settings, RefreshCw, Sun, Moon, Monitor, User, Lock, LogOut, Trash2 } from "lucide-react";
+import { QrCode, LayoutDashboard, Map, Settings, RefreshCw, Sun, Moon, Monitor, User, Lock, LogOut, Trash2, Clock } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
@@ -58,6 +58,15 @@ const Home = () => {
       gradient: "from-amber-500/20 to-amber-500/5",
       iconColor: "text-amber-500",
       borderColor: "border-amber-500/30",
+    }] : []),
+    ...(canAccessSchoolMapping ? [{
+      title: "Criação do Horário",
+      description: "Geração automática com IA",
+      icon: Clock,
+      path: "/timetable",
+      gradient: "from-violet-500/20 to-violet-500/5",
+      iconColor: "text-violet-500",
+      borderColor: "border-violet-500/30",
     }] : []),
   ];
 

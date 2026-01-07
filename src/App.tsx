@@ -27,6 +27,11 @@ import MappingSubjects from "./pages/mapping/MappingSubjects";
 import MappingClasses from "./pages/mapping/MappingClasses";
 import MappingDistribution from "./pages/mapping/MappingDistribution";
 import MappingSummary from "./pages/mapping/MappingSummary";
+import Timetable from "./pages/Timetable";
+import TimetableSettings from "./pages/timetable/TimetableSettings";
+import TimetableRules from "./pages/timetable/TimetableRules";
+import TimetableGenerate from "./pages/timetable/TimetableGenerate";
+import TimetableExport from "./pages/timetable/TimetableExport";
 
 const queryClient = new QueryClient();
 
@@ -62,6 +67,13 @@ const App = () => (
               <Route path="/school-mapping/classes" element={<AdminRoute><MappingClasses /></AdminRoute>} />
               <Route path="/school-mapping/distribution" element={<AdminRoute><MappingDistribution /></AdminRoute>} />
               <Route path="/school-mapping/summary" element={<AdminRoute><MappingSummary /></AdminRoute>} />
+              
+              {/* Timetable Routes */}
+              <Route path="/timetable" element={<AdminRoute><Timetable /></AdminRoute>} />
+              <Route path="/timetable/settings" element={<AdminRoute><TimetableSettings /></AdminRoute>} />
+              <Route path="/timetable/rules" element={<AdminRoute><TimetableRules /></AdminRoute>} />
+              <Route path="/timetable/generate" element={<AdminRoute><TimetableGenerate /></AdminRoute>} />
+              <Route path="/timetable/export" element={<AdminRoute><TimetableExport /></AdminRoute>} />
 
               {/* Staff Route - Funcionário (página simplificada) */}
               <Route path="/staff/scan" element={<StaffRoute><StaffScanQR /></StaffRoute>} />

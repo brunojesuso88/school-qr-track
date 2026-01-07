@@ -404,6 +404,197 @@ export type Database = {
         }
         Relationships: []
       }
+      teacher_availability: {
+        Row: {
+          available: boolean
+          created_at: string
+          day_of_week: number
+          id: string
+          period_number: number
+          teacher_id: string
+        }
+        Insert: {
+          available?: boolean
+          created_at?: string
+          day_of_week: number
+          id?: string
+          period_number: number
+          teacher_id: string
+        }
+        Update: {
+          available?: boolean
+          created_at?: string
+          day_of_week?: number
+          id?: string
+          period_number?: number
+          teacher_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "teacher_availability_teacher_id_fkey"
+            columns: ["teacher_id"]
+            isOneToOne: false
+            referencedRelation: "mapping_teachers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      timetable_entries: {
+        Row: {
+          class_id: string
+          created_at: string
+          day_of_week: number
+          id: string
+          is_locked: boolean
+          period_number: number
+          subject_name: string
+          teacher_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          class_id: string
+          created_at?: string
+          day_of_week: number
+          id?: string
+          is_locked?: boolean
+          period_number: number
+          subject_name: string
+          teacher_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          class_id?: string
+          created_at?: string
+          day_of_week?: number
+          id?: string
+          is_locked?: boolean
+          period_number?: number
+          subject_name?: string
+          teacher_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "timetable_entries_class_id_fkey"
+            columns: ["class_id"]
+            isOneToOne: false
+            referencedRelation: "mapping_classes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "timetable_entries_teacher_id_fkey"
+            columns: ["teacher_id"]
+            isOneToOne: false
+            referencedRelation: "mapping_teachers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      timetable_generation_history: {
+        Row: {
+          conflicts_count: number | null
+          created_at: string
+          explanation: string | null
+          generated_at: string
+          generated_by: string | null
+          id: string
+          quality_score: number | null
+          snapshot: Json | null
+          status: string
+        }
+        Insert: {
+          conflicts_count?: number | null
+          created_at?: string
+          explanation?: string | null
+          generated_at?: string
+          generated_by?: string | null
+          id?: string
+          quality_score?: number | null
+          snapshot?: Json | null
+          status?: string
+        }
+        Update: {
+          conflicts_count?: number | null
+          created_at?: string
+          explanation?: string | null
+          generated_at?: string
+          generated_by?: string | null
+          id?: string
+          quality_score?: number | null
+          snapshot?: Json | null
+          status?: string
+        }
+        Relationships: []
+      }
+      timetable_rules: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          is_active: boolean
+          parameters: Json | null
+          priority: number
+          rule_name: string
+          rule_type: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          parameters?: Json | null
+          priority?: number
+          rule_name: string
+          rule_type: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          parameters?: Json | null
+          priority?: number
+          rule_name?: string
+          rule_type?: string
+        }
+        Relationships: []
+      }
+      timetable_settings: {
+        Row: {
+          break_after_period: number[] | null
+          break_duration_minutes: number
+          created_at: string
+          days_per_week: number
+          id: string
+          period_duration_minutes: number
+          periods_per_day: number
+          school_year: string
+          updated_at: string
+        }
+        Insert: {
+          break_after_period?: number[] | null
+          break_duration_minutes?: number
+          created_at?: string
+          days_per_week?: number
+          id?: string
+          period_duration_minutes?: number
+          periods_per_day?: number
+          school_year?: string
+          updated_at?: string
+        }
+        Update: {
+          break_after_period?: number[] | null
+          break_duration_minutes?: number
+          created_at?: string
+          days_per_week?: number
+          id?: string
+          period_duration_minutes?: number
+          periods_per_day?: number
+          school_year?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           created_at: string | null
