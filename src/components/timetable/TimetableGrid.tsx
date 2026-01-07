@@ -1,10 +1,9 @@
-import { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { DndContext, DragEndEvent, DragOverlay, DragStartEvent } from '@dnd-kit/core';
-import { useState } from 'react';
 import TimetableCard from './TimetableCard';
 import TimetableSlot from './TimetableSlot';
 import { TimetableEntry, useTimetable } from '@/contexts/TimetableContext';
-import { useSchoolMapping, MappingTeacher, MappingClass } from '@/contexts/SchoolMappingContext';
+import { useSchoolMapping, MappingTeacher } from '@/contexts/SchoolMappingContext';
 import { cn } from '@/lib/utils';
 
 const DAYS = [
@@ -99,9 +98,9 @@ const TimetableGrid = ({ classId, className }: TimetableGridProps) => {
             </tr>
           </thead>
           <tbody>
-            {periods.map((period, index) => (
-              <>
-                <tr key={period.id}>
+            {periods.map((period) => (
+              <React.Fragment key={period.id}>
+                <tr>
                   <td className="p-2 text-xs font-medium text-center border border-border bg-muted/30">
                     {period.label} Horário
                   </td>
@@ -130,13 +129,13 @@ const TimetableGrid = ({ classId, className }: TimetableGridProps) => {
                   })}
                 </tr>
                 {period.isBreak && (
-                  <tr key={`break-${period.id}`}>
+                  <tr>
                     <td className="p-1 text-xs text-center border border-border bg-muted/50" colSpan={6}>
                       <span className="text-muted-foreground">☕ Intervalo</span>
                     </td>
                   </tr>
                 )}
-              </>
+              </React.Fragment>
             ))}
           </tbody>
         </table>
