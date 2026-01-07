@@ -4,10 +4,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
-import { User, Calendar, FileText, AlertCircle, CheckCircle, XCircle, Clock } from 'lucide-react';
+import { Calendar, FileText, AlertCircle, CheckCircle, XCircle, Clock } from 'lucide-react';
 import { format, parse, startOfMonth, endOfMonth, startOfYear, endOfYear } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
+import { StudentPhoto } from '@/components/StudentPhoto';
 
 interface Student {
   id: string;
@@ -133,8 +134,8 @@ export const StudentReportModal = ({ student, onClose }: StudentReportModalProps
         .order('date', { ascending: false });
 
       setOccurrences(occData || []);
-    } catch (error) {
-      console.error('Error fetching student data:', error);
+    } catch {
+      // Error loading data - user will see empty state
     } finally {
       setLoading(false);
     }
@@ -163,23 +164,12 @@ export const StudentReportModal = ({ student, onClose }: StudentReportModalProps
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <div className="flex items-center gap-4">
-            <div className={cn(
-              "w-16 h-16 rounded-full flex items-center justify-center overflow-hidden border-2",
-              student.status === 'active' ? "border-green-500 bg-green-500/10" : "border-red-500 bg-red-500/10"
-            )}>
-              {student.photo_url ? (
-                <img
-                  src={student.photo_url}
-                  alt={student.full_name}
-                  className="w-full h-full object-cover"
-                />
-              ) : (
-                <User className={cn(
-                  "w-8 h-8",
-                  student.status === 'active' ? "text-green-600" : "text-red-600"
-                )} />
-              )}
-            </div>
+            <StudentPhoto
+              photoUrl={student.photo_url}
+              fullName={student.full_name}
+              status={student.status}
+              size="lg"
+            />
             <div>
               <DialogTitle className="text-xl">{student.full_name}</DialogTitle>
               <DialogDescription className="flex items-center gap-2 mt-1">
