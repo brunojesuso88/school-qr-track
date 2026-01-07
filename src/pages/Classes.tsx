@@ -13,6 +13,7 @@ import { Plus, Edit2, Trash2, GraduationCap, Search, Users, Upload, FileText, Lo
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Checkbox } from '@/components/ui/checkbox';
 import { classSchema } from '@/lib/validations';
+import { useAuth } from '@/contexts/AuthContext';
 
 const MAX_PDF_SIZE = 10 * 1024 * 1024; // 10MB
 
@@ -38,6 +39,8 @@ interface ExtractedStudent {
 const Classes = () => {
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { userRole } = useAuth();
+  const canViewGuardianPhone = userRole === 'admin' || userRole === 'direction';
   const [classes, setClasses] = useState<ClassItem[]>([]);
   const [studentCounts, setStudentCounts] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
@@ -586,7 +589,7 @@ const Classes = () => {
                           <TableHead>Nome</TableHead>
                           <TableHead>Data Nasc.</TableHead>
                           <TableHead>Responsável</TableHead>
-                          <TableHead>Telefone</TableHead>
+                          {canViewGuardianPhone && <TableHead>Telefone</TableHead>}
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -601,7 +604,7 @@ const Classes = () => {
                             <TableCell className="font-medium">{student.full_name}</TableCell>
                             <TableCell>{student.birth_date || '-'}</TableCell>
                             <TableCell>{student.guardian_name || '-'}</TableCell>
-                            <TableCell>{student.guardian_phone || '-'}</TableCell>
+                            {canViewGuardianPhone && <TableCell>{student.guardian_phone || '-'}</TableCell>}
                           </TableRow>
                         ))}
                       </TableBody>

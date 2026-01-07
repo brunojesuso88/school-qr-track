@@ -6,7 +6,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { toast } from 'sonner';
-import { GraduationCap, Mail, Lock, User, Loader2 } from 'lucide-react';
+import { Mail, Lock, User, Loader2 } from 'lucide-react';
+import edunexusLogo from '@/assets/edunexus-login-logo.png';
 
 const Auth = () => {
   const [isLogin, setIsLogin] = useState(true);
@@ -19,7 +20,7 @@ const Auth = () => {
 
   useEffect(() => {
     if (user) {
-      navigate('/dashboard');
+      navigate('/home');
     }
   }, [user, navigate]);
 
@@ -38,7 +39,7 @@ const Auth = () => {
           }
         } else {
           toast.success('Bem-vindo de volta!');
-          navigate('/dashboard');
+          navigate('/home');
         }
       } else {
         if (!fullName.trim()) {
@@ -55,7 +56,7 @@ const Auth = () => {
           }
         } else {
           toast.success('Conta criada com sucesso!');
-          navigate('/dashboard');
+          navigate('/home');
         }
       }
     } catch (error) {
@@ -74,16 +75,20 @@ const Auth = () => {
 
       <Card className="w-full max-w-md relative animate-fade-in shadow-lg border-border/50">
         <CardHeader className="text-center space-y-4">
-          <div className="mx-auto w-16 h-16 rounded-2xl gradient-primary flex items-center justify-center shadow-glow">
-            <GraduationCap className="w-8 h-8 text-primary-foreground" />
+          <div className="mx-auto">
+            <img 
+              src={edunexusLogo} 
+              alt="Edunexus" 
+              className="h-20 w-auto mx-auto"
+            />
           </div>
           <div>
             <CardTitle className="text-2xl">
-              {isLogin ? 'Bem-vindo de Volta' : 'Criar Conta'}
+              {isLogin ? 'Log in' : 'Criar Conta'}
             </CardTitle>
             <CardDescription className="mt-2">
               {isLogin
-                ? 'Entre para gerenciar a frequência'
+                ? 'Sistema digital de secretaria escolar'
                 : 'Cadastre-se como administrador'}
             </CardDescription>
           </div>
