@@ -66,22 +66,6 @@ const SubjectForm = ({ subject, onClose }: SubjectFormProps) => {
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="weeklyClasses">Aulas por Semana *</Label>
-        <Select value={defaultWeeklyClasses} onValueChange={setDefaultWeeklyClasses}>
-          <SelectTrigger>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {[1, 2, 3, 4, 5, 6, 7, 8].map(n => (
-              <SelectItem key={n} value={n.toString()}>
-                {n} {n === 1 ? "aula" : "aulas"}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
-      <div className="space-y-2">
         <Label htmlFor="shift">Turno Padrão *</Label>
         <Select value={shift} onValueChange={setShift}>
           <SelectTrigger>

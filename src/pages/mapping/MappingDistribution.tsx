@@ -7,6 +7,7 @@ import { Progress } from "@/components/ui/progress";
 import { SchoolMappingProvider, useSchoolMapping } from "@/contexts/SchoolMappingContext";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import SchoolMappingLayout from "@/components/mapping/SchoolMappingLayout";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -193,68 +194,70 @@ const MappingDistributionContent = () => {
                 </p>
               </div>
 
-              <div className="space-y-2">
-                {getEligibleTeachers(selectedClassSubject.subject_name, selectedClass.shift).length === 0 ? (
-                  <p className="text-sm text-muted-foreground text-center py-4">
-                    Nenhum professor disponível para este turno
-                  </p>
-                ) : (
-                  getEligibleTeachers(selectedClassSubject.subject_name, selectedClass.shift).map((teacher) => {
-                    const wouldExceed = teacher.current_hours + selectedClassSubject.weekly_classes > teacher.max_weekly_hours;
-                    const isOverloaded = teacher.current_hours >= getOverloadThreshold(teacher.max_weekly_hours);
-                    const progressPercent = (teacher.current_hours / teacher.max_weekly_hours) * 100;
+              <ScrollArea className="max-h-[300px]">
+                <div className="space-y-2 pr-2">
+                  {getEligibleTeachers(selectedClassSubject.subject_name, selectedClass.shift).length === 0 ? (
+                    <p className="text-sm text-muted-foreground text-center py-4">
+                      Nenhum professor disponível para este turno
+                    </p>
+                  ) : (
+                    getEligibleTeachers(selectedClassSubject.subject_name, selectedClass.shift).map((teacher) => {
+                      const wouldExceed = teacher.current_hours + selectedClassSubject.weekly_classes > teacher.max_weekly_hours;
+                      const isOverloaded = teacher.current_hours >= getOverloadThreshold(teacher.max_weekly_hours);
+                      const progressPercent = (teacher.current_hours / teacher.max_weekly_hours) * 100;
 
-                    return (
-                      <button
-                        key={teacher.id}
-                        className={cn(
-                          "w-full p-3 rounded-lg border text-left transition-colors",
-                          wouldExceed 
-                            ? "opacity-50 cursor-not-allowed" 
-                            : "hover:bg-muted/50 cursor-pointer",
-                          teacher.hasSubject && "ring-2 ring-primary/20"
-                        )}
-                        onClick={() => !wouldExceed && handleAssign(teacher.id)}
-                        disabled={wouldExceed || isAssigning}
-                      >
-                        <div className="flex items-center gap-3">
-                          <div 
-                            className="w-4 h-4 rounded-full"
-                            style={{ backgroundColor: teacher.color }}
-                          />
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <span className="font-medium">{teacher.name}</span>
-                              {teacher.hasSubject && (
-                                <Badge variant="outline" className="text-xs">
-                                  Disciplina cadastrada
-                                </Badge>
-                              )}
-                              {isOverloaded && (
-                                <AlertTriangle className="h-4 w-4 text-amber-500" />
-                              )}
-                            </div>
-                            <div className="flex items-center gap-2 mt-1">
-                              <Progress 
-                                value={progressPercent} 
-                                className="h-1.5 flex-1" 
-                              />
-                              <span className="text-xs text-muted-foreground">
-                                {teacher.current_hours}h/{teacher.max_weekly_hours}h
-                              </span>
+                      return (
+                        <button
+                          key={teacher.id}
+                          className={cn(
+                            "w-full p-3 rounded-lg border text-left transition-colors",
+                            wouldExceed 
+                              ? "opacity-50 cursor-not-allowed" 
+                              : "hover:bg-muted/50 cursor-pointer",
+                            teacher.hasSubject && "ring-2 ring-primary/20"
+                          )}
+                          onClick={() => !wouldExceed && handleAssign(teacher.id)}
+                          disabled={wouldExceed || isAssigning}
+                        >
+                          <div className="flex items-center gap-3">
+                            <div 
+                              className="w-4 h-4 rounded-full"
+                              style={{ backgroundColor: teacher.color }}
+                            />
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="font-medium">{teacher.name}</span>
+                                {teacher.hasSubject && (
+                                  <Badge variant="outline" className="text-xs">
+                                    Disciplina cadastrada
+                                  </Badge>
+                                )}
+                                {isOverloaded && (
+                                  <AlertTriangle className="h-4 w-4 text-amber-500" />
+                                )}
+                              </div>
+                              <div className="flex items-center gap-2 mt-1">
+                                <Progress 
+                                  value={progressPercent} 
+                                  className="h-1.5 flex-1" 
+                                />
+                                <span className="text-xs text-muted-foreground">
+                                  {teacher.current_hours}h/{teacher.max_weekly_hours}h
+                                </span>
+                              </div>
                             </div>
                           </div>
-                        </div>
-                        {wouldExceed && (
-                          <p className="text-xs text-destructive mt-2">
-                            Excederia carga horária máxima
-                          </p>
-                        )}
-                      </button>
-                    );
-                  })
-                )}
-              </div>
+                          {wouldExceed && (
+                            <p className="text-xs text-destructive mt-2">
+                              Excederia carga horária máxima
+                            </p>
+                          )}
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+              </ScrollArea>
             </div>
           )}
         </DialogContent>

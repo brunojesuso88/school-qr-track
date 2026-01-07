@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { TimetableProvider, useTimetable } from '@/contexts/TimetableContext';
+import { TimetableProvider, useTimetable, Conflict } from '@/contexts/TimetableContext';
 import { SchoolMappingProvider, useSchoolMapping } from '@/contexts/SchoolMappingContext';
 import TimetableLayout from '@/components/timetable/TimetableLayout';
 import TimetableGrid from '@/components/timetable/TimetableGrid';
@@ -11,7 +11,25 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Users, GraduationCap, BookOpen, Clock } from 'lucide-react';
+
+const SHIFT_LABELS: Record<string, string> = {
+  morning: 'Manhã',
+  afternoon: 'Tarde',
+  evening: 'Noite',
+};
+
+const DAY_LABELS: Record<number, string> = {
+  1: 'Segunda',
+  2: 'Terça',
+  3: 'Quarta',
+  4: 'Quinta',
+  5: 'Sexta',
+};
+
+type DetailDialogType = 'entries' | 'classes' | 'teachers' | 'conflicts' | null;
 
 const TimetableContent = () => {
   const { entries, conflicts, loading: timetableLoading } = useTimetable();
@@ -21,6 +39,7 @@ const TimetableContent = () => {
   const [selectedShift, setSelectedShift] = useState<string>('all');
   const [selectedClassId, setSelectedClassId] = useState<string>('');
   const [selectedTeacherId, setSelectedTeacherId] = useState<string>('');
+  const [detailDialog, setDetailDialog] = useState<DetailDialogType>(null);
 
   const loading = timetableLoading || mappingLoading;
 
@@ -50,6 +69,31 @@ const TimetableContent = () => {
     return workloads;
   }, [entries]);
 
+  // Class completeness
+  const classCompleteness = useMemo(() => {
+    return classes.map(cls => {
+      const classEntries = entries.filter(e => e.class_id === cls.id).length;
+      const totalSubjectHours = classSubjects
+        .filter(cs => cs.class_id === cls.id)
+        .reduce((sum, cs) => sum + cs.weekly_classes, 0);
+      return {
+        ...cls,
+        entriesCount: classEntries,
+        totalHours: totalSubjectHours || cls.weekly_hours,
+        percentage: totalSubjectHours > 0 ? Math.round((classEntries / totalSubjectHours) * 100) : 0
+      };
+    });
+  }, [classes, entries, classSubjects]);
+
+  // Get class name by ID
+  const getClassName = (classId: string) => classes.find(c => c.id === classId)?.name || classId;
+  
+  // Get teacher name by ID
+  const getTeacherName = (teacherId: string | null) => {
+    if (!teacherId) return '-';
+    return teachers.find(t => t.id === teacherId)?.name || '-';
+  };
+
   if (loading) {
     return (
       <TimetableLayout title="Criação do Horário" description="Visualize e edite o horário escolar">
@@ -68,9 +112,12 @@ const TimetableContent = () => {
   return (
     <TimetableLayout title="Criação do Horário" description="Visualize e edite o horário escolar">
       <div className="space-y-6">
-        {/* Stats Cards */}
+        {/* Stats Cards - Clickable */}
         <div className="grid gap-4 md:grid-cols-4">
-          <Card>
+          <Card 
+            className="cursor-pointer hover:bg-muted/50 transition-colors"
+            onClick={() => setDetailDialog('entries')}
+          >
             <CardContent className="pt-4">
               <div className="flex items-center gap-3">
                 <div className="p-2 rounded-lg bg-primary/10">
@@ -84,7 +131,10 @@ const TimetableContent = () => {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card 
+            className="cursor-pointer hover:bg-muted/50 transition-colors"
+            onClick={() => setDetailDialog('classes')}
+          >
             <CardContent className="pt-4">
               <div className="flex items-center gap-3">
                 <div className="p-2 rounded-lg bg-success/10">
@@ -98,7 +148,10 @@ const TimetableContent = () => {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card 
+            className="cursor-pointer hover:bg-muted/50 transition-colors"
+            onClick={() => setDetailDialog('teachers')}
+          >
             <CardContent className="pt-4">
               <div className="flex items-center gap-3">
                 <div className="p-2 rounded-lg bg-warning/10">
@@ -112,7 +165,10 @@ const TimetableContent = () => {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card 
+            className="cursor-pointer hover:bg-muted/50 transition-colors"
+            onClick={() => setDetailDialog('conflicts')}
+          >
             <CardContent className="pt-4">
               <div className="flex items-center gap-3">
                 <div className={`p-2 rounded-lg ${totalConflicts > 0 ? 'bg-destructive/10' : 'bg-success/10'}`}>
@@ -286,6 +342,163 @@ const TimetableContent = () => {
           </TabsContent>
         </Tabs>
       </div>
+
+      {/* Detail Dialogs */}
+      <Dialog open={detailDialog === 'entries'} onOpenChange={() => setDetailDialog(null)}>
+        <DialogContent className="max-w-4xl max-h-[80vh]">
+          <DialogHeader>
+            <DialogTitle>Aulas Alocadas ({totalEntries})</DialogTitle>
+          </DialogHeader>
+          <ScrollArea className="h-[60vh]">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Turma</TableHead>
+                  <TableHead>Disciplina</TableHead>
+                  <TableHead>Professor</TableHead>
+                  <TableHead>Dia</TableHead>
+                  <TableHead>Período</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {entries.map(entry => (
+                  <TableRow key={entry.id}>
+                    <TableCell className="font-medium">{getClassName(entry.class_id)}</TableCell>
+                    <TableCell>{entry.subject_name}</TableCell>
+                    <TableCell>{getTeacherName(entry.teacher_id)}</TableCell>
+                    <TableCell>{DAY_LABELS[entry.day_of_week] || entry.day_of_week}</TableCell>
+                    <TableCell>{entry.period_number}º</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </ScrollArea>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={detailDialog === 'classes'} onOpenChange={() => setDetailDialog(null)}>
+        <DialogContent className="max-w-2xl max-h-[80vh]">
+          <DialogHeader>
+            <DialogTitle>Turmas com Horário</DialogTitle>
+          </DialogHeader>
+          <ScrollArea className="h-[60vh]">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Turma</TableHead>
+                  <TableHead>Turno</TableHead>
+                  <TableHead>Aulas Alocadas</TableHead>
+                  <TableHead>Progresso</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {classCompleteness.map(cls => (
+                  <TableRow key={cls.id}>
+                    <TableCell className="font-medium">{cls.name}</TableCell>
+                    <TableCell>{SHIFT_LABELS[cls.shift] || cls.shift}</TableCell>
+                    <TableCell>{cls.entriesCount}/{cls.totalHours}</TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <div className="w-24 h-2 bg-muted rounded-full overflow-hidden">
+                          <div 
+                            className="h-full bg-primary rounded-full"
+                            style={{ width: `${Math.min(100, cls.percentage)}%` }}
+                          />
+                        </div>
+                        <span className="text-xs text-muted-foreground">{cls.percentage}%</span>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </ScrollArea>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={detailDialog === 'teachers'} onOpenChange={() => setDetailDialog(null)}>
+        <DialogContent className="max-w-2xl max-h-[80vh]">
+          <DialogHeader>
+            <DialogTitle>Carga Horária dos Professores</DialogTitle>
+          </DialogHeader>
+          <ScrollArea className="h-[60vh]">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Professor</TableHead>
+                  <TableHead>Aulas Alocadas</TableHead>
+                  <TableHead>Máximo</TableHead>
+                  <TableHead>Status</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {teachers.map(teacher => {
+                  const workload = teacherWorkloads.get(teacher.id) || 0;
+                  const percentage = (workload / teacher.max_weekly_hours) * 100;
+                  const isOverloaded = workload > teacher.max_weekly_hours;
+                  
+                  return (
+                    <TableRow key={teacher.id}>
+                      <TableCell className="font-medium">
+                        <div className="flex items-center gap-2">
+                          <div 
+                            className="w-3 h-3 rounded-full"
+                            style={{ backgroundColor: teacher.color }}
+                          />
+                          {teacher.name}
+                        </div>
+                      </TableCell>
+                      <TableCell>{workload}h</TableCell>
+                      <TableCell>{teacher.max_weekly_hours}h</TableCell>
+                      <TableCell>
+                        <Badge variant={isOverloaded ? 'destructive' : percentage > 80 ? 'secondary' : 'outline'}>
+                          {isOverloaded ? 'Excedido' : percentage > 80 ? 'Quase cheio' : 'OK'}
+                        </Badge>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </ScrollArea>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={detailDialog === 'conflicts'} onOpenChange={() => setDetailDialog(null)}>
+        <DialogContent className="max-w-2xl max-h-[80vh]">
+          <DialogHeader>
+            <DialogTitle>Conflitos ({conflicts.length})</DialogTitle>
+          </DialogHeader>
+          <ScrollArea className="h-[60vh]">
+            {conflicts.length === 0 ? (
+              <div className="flex items-center justify-center py-8 text-muted-foreground">
+                Nenhum conflito encontrado
+              </div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Tipo</TableHead>
+                    <TableHead>Descrição</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {conflicts.map((conflict, index) => (
+                    <TableRow key={index}>
+                      <TableCell>
+                        <Badge variant={conflict.severity === 'error' ? 'destructive' : 'secondary'}>
+                          {conflict.severity === 'error' ? 'Erro' : 'Aviso'}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>{conflict.message}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </ScrollArea>
+        </DialogContent>
+      </Dialog>
     </TimetableLayout>
   );
 };

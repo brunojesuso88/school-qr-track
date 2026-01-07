@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { TimetableProvider, useTimetable } from '@/contexts/TimetableContext';
 import { SchoolMappingProvider } from '@/contexts/SchoolMappingContext';
 import TimetableLayout from '@/components/timetable/TimetableLayout';
@@ -20,6 +21,7 @@ const RULE_ICONS: Record<string, typeof Scale> = {
 
 const RulesContent = () => {
   const { rules, loading, toggleRule, updateRulePriority } = useTimetable();
+  const [localPriorities, setLocalPriorities] = useState<Record<string, number>>({});
 
   const handleToggle = async (ruleId: string, active: boolean) => {
     try {
@@ -30,9 +32,14 @@ const RulesContent = () => {
     }
   };
 
-  const handlePriorityChange = async (ruleId: string, priority: number) => {
+  const handlePriorityChange = (ruleId: string, priority: number) => {
+    setLocalPriorities(prev => ({ ...prev, [ruleId]: priority }));
+  };
+
+  const handlePriorityCommit = async (ruleId: string, priority: number) => {
     try {
       await updateRulePriority(ruleId, priority);
+      toast.success('Prioridade atualizada');
     } catch (error) {
       toast.error('Erro ao atualizar prioridade');
     }
@@ -101,15 +108,16 @@ const RulesContent = () => {
                     </Label>
                     <div className="flex-1 flex items-center gap-4">
                       <Slider
-                        value={[rule.priority]}
+                        value={[localPriorities[rule.id] ?? rule.priority]}
                         min={1}
                         max={10}
                         step={1}
-                        onValueCommit={(value) => handlePriorityChange(rule.id, value[0])}
+                        onValueChange={(value) => handlePriorityChange(rule.id, value[0])}
+                        onValueCommit={(value) => handlePriorityCommit(rule.id, value[0])}
                         className="flex-1"
                       />
                       <span className="text-sm font-medium w-6 text-right">
-                        {rule.priority}
+                        {localPriorities[rule.id] ?? rule.priority}
                       </span>
                     </div>
                   </div>

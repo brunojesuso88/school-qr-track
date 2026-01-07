@@ -53,6 +53,12 @@ interface MappingTeacher {
   subjects: string[] | null;
 }
 
+interface ConflictInput {
+  type: string;
+  message: string;
+  severity: string;
+}
+
 serve(async (req) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
@@ -60,17 +66,96 @@ serve(async (req) => {
   }
 
   try {
-    const { classIds } = await req.json();
-    
-    if (!classIds || classIds.length === 0) {
-      throw new Error('Nenhuma turma selecionada');
-    }
+    const body = await req.json();
+    const { action, classIds, conflicts: inputConflicts } = body;
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const lovableApiKey = Deno.env.get('LOVABLE_API_KEY');
     
     const supabase = createClient(supabaseUrl, supabaseKey);
+
+    // Handle suggest_fixes action
+    if (action === 'suggest_fixes') {
+      console.log('Generating suggestions for conflicts...');
+      
+      if (!inputConflicts || inputConflicts.length === 0) {
+        return new Response(JSON.stringify({
+          suggestions: ['Nenhum conflito encontrado para analisar.']
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      const conflictList = (inputConflicts as ConflictInput[]).map((c, i) => 
+        `${i + 1}. [${c.severity.toUpperCase()}] ${c.message}`
+      ).join('\n');
+
+      const suggestPrompt = `Você é um especialista em criação de horários escolares. Analise os seguintes conflitos e forneça sugestões práticas para resolvê-los.
+
+CONFLITOS ENCONTRADOS:
+${conflictList}
+
+Forneça de 3 a 5 sugestões práticas e específicas para resolver esses conflitos. Seja direto e objetivo.
+Responda APENAS com um JSON array de strings, cada string sendo uma sugestão. Exemplo:
+["Sugestão 1", "Sugestão 2", "Sugestão 3"]`;
+
+      const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${lovableApiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'google/gemini-2.5-flash',
+          messages: [
+            { role: 'user', content: suggestPrompt }
+          ],
+          temperature: 0.5,
+          max_tokens: 2000
+        }),
+      });
+
+      if (!aiResponse.ok) {
+        console.error('AI Gateway error:', aiResponse.status);
+        return new Response(JSON.stringify({
+          suggestions: [
+            'Revise a disponibilidade dos professores envolvidos nos conflitos.',
+            'Considere redistribuir as aulas ao longo de dias diferentes.',
+            'Verifique se há professores sobrecarregados que precisam de ajuste na carga horária.',
+            'Tente agendar manualmente as aulas conflitantes em horários alternativos.'
+          ]
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      const aiData = await aiResponse.json();
+      const content = aiData.choices?.[0]?.message?.content || '';
+
+      let suggestions: string[] = [];
+      try {
+        const jsonMatch = content.match(/\[[\s\S]*\]/);
+        if (jsonMatch) {
+          suggestions = JSON.parse(jsonMatch[0]);
+        }
+      } catch {
+        suggestions = [
+          'Revise a disponibilidade dos professores envolvidos nos conflitos.',
+          'Considere redistribuir as aulas ao longo de dias diferentes.',
+          'Verifique se há professores sobrecarregados que precisam de ajuste na carga horária.'
+        ];
+      }
+
+      return new Response(JSON.stringify({ suggestions }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Original timetable generation logic
+    if (!classIds || classIds.length === 0) {
+      throw new Error('Nenhuma turma selecionada');
+    }
 
     // Fetch all necessary data
     const [
