@@ -334,12 +334,15 @@ const Home = () => {
         <div className="text-center mb-4">
           <motion.img
             src={edunexusLogo}
-            alt="Edunexus - Sistema Digital de Secretaria Escolar"
+            alt="Edunexus"
             className="w-full max-w-md mx-auto drop-shadow-lg"
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, ease: "easeOut" }}
           />
+          <p className="text-foreground text-sm font-medium -mt-2">
+            Sistema Digital de Secretaria Escolar
+          </p>
         </div>
 
         {/* Menu Options */}

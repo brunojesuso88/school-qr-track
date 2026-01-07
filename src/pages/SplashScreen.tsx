@@ -33,6 +33,9 @@ const SplashScreen = () => {
             className="relative w-64 h-64 object-contain mx-auto drop-shadow-2xl"
           />
         </div>
+        <p className="text-foreground text-lg font-medium mt-4">
+          Sistema Digital de Secretaria Escolar
+        </p>
         <div className="mt-8 space-y-2">
           <div className="flex items-center justify-center gap-2">
             <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />

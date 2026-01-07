@@ -37,9 +37,10 @@ const Auth = () => {
           } else {
             toast.error(error.message);
           }
+          setIsLoading(false);
         } else {
           toast.success('Bem-vindo de volta!');
-          navigate('/home');
+          // Navigation will be handled by useEffect when user state updates
         }
       } else {
         if (!fullName.trim()) {
@@ -54,14 +55,14 @@ const Auth = () => {
           } else {
             toast.error(error.message);
           }
+          setIsLoading(false);
         } else {
           toast.success('Conta criada com sucesso!');
-          navigate('/home');
+          // Navigation will be handled by useEffect when user state updates
         }
       }
     } catch (error) {
       toast.error('Ocorreu um erro inesperado');
-    } finally {
       setIsLoading(false);
     }
   };

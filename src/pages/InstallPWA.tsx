@@ -34,8 +34,8 @@ const InstallPWA = () => {
               className="w-20 h-20 object-contain mx-auto mb-4"
             />
             <h2 className="text-xl font-bold text-foreground">Edunexus</h2>
-            <p className="text-sm text-muted-foreground mt-1">
-              Sistema de Gestão Escolar
+            <p className="text-foreground text-sm mt-1">
+              Sistema Digital de Secretaria Escolar
             </p>
           </CardContent>
         </Card>
