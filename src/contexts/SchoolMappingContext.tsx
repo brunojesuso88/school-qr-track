@@ -59,7 +59,7 @@ interface SchoolMappingContextType {
   loading: boolean;
   
   // Teacher functions
-  addTeacher: (teacher: Omit<MappingTeacher, 'id' | 'created_at' | 'updated_at' | 'color' | 'current_hours'>) => Promise<void>;
+  addTeacher: (teacher: Omit<MappingTeacher, 'id' | 'created_at' | 'updated_at' | 'color' | 'current_hours'>) => Promise<{ id: string } | undefined>;
   updateTeacher: (id: string, teacher: Partial<MappingTeacher>) => Promise<void>;
   deleteTeacher: (id: string) => Promise<void>;
   
@@ -139,14 +139,15 @@ export const SchoolMappingProvider: React.FC<{ children: React.ReactNode }> = ({
   };
 
   // Teacher functions
-  const addTeacher = async (teacher: Omit<MappingTeacher, 'id' | 'created_at' | 'updated_at' | 'color' | 'current_hours'>) => {
-    const { error } = await supabase.from('mapping_teachers').insert({
+  const addTeacher = async (teacher: Omit<MappingTeacher, 'id' | 'created_at' | 'updated_at' | 'color' | 'current_hours'>): Promise<{ id: string } | undefined> => {
+    const { data, error } = await supabase.from('mapping_teachers').insert({
       ...teacher,
       color: getNextColor(),
       current_hours: 0
-    });
+    }).select('id').single();
     if (error) throw error;
     await fetchData();
+    return data;
   };
 
   const updateTeacher = async (id: string, teacher: Partial<MappingTeacher>) => {
