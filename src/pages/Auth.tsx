@@ -6,8 +6,33 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { toast } from 'sonner';
-import { Mail, Lock, User, Loader2 } from 'lucide-react';
+import { Mail, Lock, User, Loader2, RefreshCw } from 'lucide-react';
 import edunexusLogo from '@/assets/edunexus-login-logo.png';
+
+const forceUpdateApp = async () => {
+  try {
+    // Unregister all service workers
+    if ('serviceWorker' in navigator) {
+      const registrations = await navigator.serviceWorker.getRegistrations();
+      for (const registration of registrations) {
+        await registration.unregister();
+      }
+    }
+    
+    // Clear all caches
+    if ('caches' in window) {
+      const cacheNames = await caches.keys();
+      for (const cacheName of cacheNames) {
+        await caches.delete(cacheName);
+      }
+    }
+    
+    // Force reload from server
+    window.location.reload();
+  } catch (error) {
+    window.location.reload();
+  }
+};
 
 const Auth = () => {
   const [isLogin, setIsLogin] = useState(true);
@@ -68,7 +93,18 @@ const Auth = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 gradient-hero">
+    <div className="min-h-screen flex items-center justify-center p-4 gradient-hero relative">
+      {/* Force Update Button */}
+      <Button
+        variant="ghost"
+        size="icon"
+        className="absolute top-4 right-4 z-10"
+        onClick={forceUpdateApp}
+        title="Forçar atualização do aplicativo"
+      >
+        <RefreshCw className="h-5 w-5" />
+      </Button>
+
       <div className="absolute inset-0 overflow-hidden">
         <div className="absolute top-1/4 -left-20 w-72 h-72 bg-primary/5 rounded-full blur-3xl" />
         <div className="absolute bottom-1/4 -right-20 w-96 h-96 bg-accent/20 rounded-full blur-3xl" />
