@@ -20,6 +20,8 @@ import { cn } from '@/lib/utils';
 import { StudentReportModal } from '@/components/StudentReportModal';
 import { studentSchema, occurrenceSchema, formatPhone } from '@/lib/validations';
 import { useAuth } from '@/contexts/AuthContext';
+import { StudentPhoto } from '@/components/StudentPhoto';
+import { useSignedPhotoUrl, clearPhotoUrlCache } from '@/hooks/useSignedPhotoUrl';
 
 interface Student {
   id: string;
@@ -225,20 +227,20 @@ const Students = () => {
     const fileExt = photoFile.name.split('.').pop();
     const fileName = `${studentId}-${Date.now()}.${fileExt}`;
 
-    const { data, error } = await supabase.storage
+    const { error } = await supabase.storage
       .from('student-photos')
       .upload(fileName, photoFile, { upsert: true });
 
     if (error) {
-      console.error('Error uploading photo:', error);
+      toast.error('Erro ao fazer upload da foto');
       throw error;
     }
 
-    const { data: urlData } = supabase.storage
-      .from('student-photos')
-      .getPublicUrl(fileName);
+    // Clear cache to force refresh of signed URLs
+    clearPhotoUrlCache();
 
-    return urlData.publicUrl;
+    // Return just the filename - we'll use signed URLs to access it
+    return fileName;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -866,26 +868,13 @@ const Students = () => {
                 <CardContent className="p-5">
                   <div className="flex items-start justify-between mb-4">
                     <div className="flex items-center gap-3">
-                      <div 
-                        className={cn(
-                          "w-14 h-14 rounded-full flex items-center justify-center overflow-hidden border-2 cursor-pointer transition-transform hover:scale-105",
-                          student.status === 'active' ? "border-green-500 bg-green-500/10" : "border-red-500 bg-red-500/10"
-                        )}
+                      <StudentPhoto
+                        photoUrl={student.photo_url}
+                        fullName={student.full_name}
+                        status={student.status}
+                        size="md"
                         onClick={() => student.photo_url && setZoomPhotoStudent(student)}
-                      >
-                        {student.photo_url ? (
-                          <img
-                            src={student.photo_url}
-                            alt={student.full_name}
-                            className="w-full h-full object-cover"
-                          />
-                        ) : (
-                          <User className={cn(
-                            "w-7 h-7",
-                            student.status === 'active' ? "text-green-600" : "text-red-600"
-                          )} />
-                        )}
-                      </div>
+                      />
                       <div>
                         <h3 
                           className="font-medium text-sm cursor-pointer hover:text-primary hover:underline transition-colors"
@@ -1126,16 +1115,13 @@ const Students = () => {
             </DialogHeader>
             {zoomPhotoStudent?.photo_url && (
               <div className="flex flex-col items-center gap-4 py-4">
-                <div className={cn(
-                  "w-64 h-64 rounded-full overflow-hidden border-4",
-                  zoomPhotoStudent.status === 'active' ? "border-green-500" : "border-red-500"
-                )}>
-                  <img
-                    src={zoomPhotoStudent.photo_url}
-                    alt={zoomPhotoStudent.full_name}
-                    className="w-full h-full object-cover"
-                  />
-                </div>
+                <StudentPhoto
+                  photoUrl={zoomPhotoStudent.photo_url}
+                  fullName={zoomPhotoStudent.full_name}
+                  status={zoomPhotoStudent.status}
+                  size="xl"
+                  className="border-4"
+                />
                 <span className={cn(
                   "text-sm px-3 py-1.5 rounded-full font-medium",
                   zoomPhotoStudent.status === 'active' 
