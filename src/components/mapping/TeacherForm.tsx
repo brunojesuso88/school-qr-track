@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -7,6 +7,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useSchoolMapping, MappingTeacher } from "@/contexts/SchoolMappingContext";
 import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
+import TeacherAvailabilitySection from "./TeacherAvailabilitySection";
 
 interface TeacherFormProps {
   teacher?: MappingTeacher | null;
@@ -31,6 +33,11 @@ const TeacherForm = ({ teacher, onClose }: TeacherFormProps) => {
   const [availability, setAvailability] = useState<string[]>(teacher?.availability || []);
   const [notes, setNotes] = useState(teacher?.notes || "");
   const [loading, setLoading] = useState(false);
+  const [detailedAvailability, setDetailedAvailability] = useState<{ day: number; period: number; available: boolean }[]>([]);
+
+  const handleAvailabilityChange = useCallback((avail: { day: number; period: number; available: boolean }[]) => {
+    setDetailedAvailability(avail);
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -57,13 +64,32 @@ const TeacherForm = ({ teacher, onClose }: TeacherFormProps) => {
         notes: notes.trim() || undefined
       };
 
+      let teacherId = teacher?.id;
+      
       if (teacher) {
         await updateTeacher(teacher.id, data);
-        toast({ title: "Professor atualizado com sucesso" });
       } else {
-        await addTeacher(data);
-        toast({ title: "Professor cadastrado com sucesso" });
+        const result = await addTeacher(data);
+        teacherId = result?.id;
       }
+
+      // Save detailed availability if we have a teacher ID
+      if (teacherId && detailedAvailability.length > 0) {
+        // Delete existing availability
+        await supabase.from('teacher_availability').delete().eq('teacher_id', teacherId);
+        
+        // Insert new availability
+        const inserts = detailedAvailability.map(a => ({
+          teacher_id: teacherId,
+          day_of_week: a.day,
+          period_number: a.period,
+          available: a.available
+        }));
+        
+        await supabase.from('teacher_availability').insert(inserts);
+      }
+
+      toast({ title: teacher ? "Professor atualizado com sucesso" : "Professor cadastrado com sucesso" });
       onClose();
     } catch (error: any) {
       toast({ title: "Erro ao salvar", description: error.message, variant: "destructive" });
@@ -179,6 +205,11 @@ const TeacherForm = ({ teacher, onClose }: TeacherFormProps) => {
           </div>
         )}
       </div>
+
+      <TeacherAvailabilitySection 
+        teacherId={teacher?.id} 
+        onChange={handleAvailabilityChange} 
+      />
 
       <div className="space-y-2">
         <Label htmlFor="notes">Observações</Label>

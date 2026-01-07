@@ -2,3 +2,6 @@ project_id = "firhmtfjxagrmyltsypd"
 
 [functions.parse-students-pdf]
 verify_jwt = false
+
+[functions.generate-timetable]
+verify_jwt = false
