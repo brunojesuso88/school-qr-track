@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { TimetableProvider, useTimetable } from '@/contexts/TimetableContext';
 import { SchoolMappingProvider, useSchoolMapping } from '@/contexts/SchoolMappingContext';
 import TimetableLayout from '@/components/timetable/TimetableLayout';
@@ -15,11 +15,17 @@ import { Wand2, Loader2, History, CheckCircle2, AlertCircle, Info } from 'lucide
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
+const SHIFTS = [
+  { id: 'morning', label: 'Manhã' },
+  { id: 'afternoon', label: 'Tarde' },
+  { id: 'evening', label: 'Noite' },
+];
+
 const GenerateContent = () => {
   const { rules, history, loading: timetableLoading, generateTimetable, clearEntries } = useTimetable();
   const { classes, teachers, classSubjects, loading: mappingLoading } = useSchoolMapping();
   
-  const [selectedClasses, setSelectedClasses] = useState<string[]>([]);
+  const [selectedShifts, setSelectedShifts] = useState<string[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [lastResult, setLastResult] = useState<{ success: boolean; message: string } | null>(null);
 
@@ -28,25 +34,37 @@ const GenerateContent = () => {
   const activeRules = rules.filter(r => r.is_active);
   const teachersWithAvailability = teachers.filter(t => t.availability && t.availability.length > 0);
 
-  const toggleClass = (classId: string) => {
-    setSelectedClasses(prev => 
-      prev.includes(classId)
-        ? prev.filter(id => id !== classId)
-        : [...prev, classId]
+  // Get classes for selected shifts
+  const classesForGeneration = useMemo(() => {
+    if (selectedShifts.length === 0) return [];
+    return classes.filter(c => selectedShifts.includes(c.shift));
+  }, [classes, selectedShifts]);
+
+  // Available shifts (only those with classes)
+  const availableShifts = useMemo(() => {
+    const shiftsWithClasses = new Set(classes.map(c => c.shift));
+    return SHIFTS.filter(s => shiftsWithClasses.has(s.id));
+  }, [classes]);
+
+  const toggleShift = (shiftId: string) => {
+    setSelectedShifts(prev => 
+      prev.includes(shiftId)
+        ? prev.filter(id => id !== shiftId)
+        : [...prev, shiftId]
     );
   };
 
-  const selectAllClasses = () => {
-    if (selectedClasses.length === classes.length) {
-      setSelectedClasses([]);
+  const selectAllShifts = () => {
+    if (selectedShifts.length === availableShifts.length) {
+      setSelectedShifts([]);
     } else {
-      setSelectedClasses(classes.map(c => c.id));
+      setSelectedShifts(availableShifts.map(s => s.id));
     }
   };
 
   const handleGenerate = async () => {
-    if (selectedClasses.length === 0) {
-      toast.error('Selecione ao menos uma turma');
+    if (classesForGeneration.length === 0) {
+      toast.error('Selecione ao menos um turno com turmas');
       return;
     }
 
@@ -54,12 +72,14 @@ const GenerateContent = () => {
     setLastResult(null);
 
     try {
+      const classIds = classesForGeneration.map(c => c.id);
+      
       // Clear existing entries for selected classes
-      for (const classId of selectedClasses) {
+      for (const classId of classIds) {
         await clearEntries(classId);
       }
 
-      const result = await generateTimetable(selectedClasses);
+      const result = await generateTimetable(classIds);
       setLastResult(result);
       
       if (result.success) {
@@ -83,7 +103,7 @@ const GenerateContent = () => {
     );
   }
 
-  const canGenerate = selectedClasses.length > 0 && teachersWithAvailability.length > 0 && classSubjects.length > 0;
+  const canGenerate = classesForGeneration.length > 0 && teachersWithAvailability.length > 0 && classSubjects.length > 0;
 
   return (
     <TimetableLayout title="Gerar Horário" description="Geração automática com IA">
@@ -150,42 +170,63 @@ const GenerateContent = () => {
             </CardContent>
           </Card>
 
-          {/* Class Selection */}
+          {/* Shift Selection */}
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
-                <CardTitle>Selecionar Turmas</CardTitle>
-                <Button variant="outline" size="sm" onClick={selectAllClasses}>
-                  {selectedClasses.length === classes.length ? 'Desmarcar Todas' : 'Selecionar Todas'}
+                <CardTitle>Selecionar Turnos</CardTitle>
+                <Button variant="outline" size="sm" onClick={selectAllShifts}>
+                  {selectedShifts.length === availableShifts.length ? 'Desmarcar Todos' : 'Selecionar Todos'}
                 </Button>
               </div>
               <CardDescription>
-                Escolha as turmas para gerar o horário
+                Escolha os turnos para gerar o horário
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <ScrollArea className="h-[200px]">
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                  {classes.map(cls => (
-                    <div
-                      key={cls.id}
-                      className="flex items-center space-x-2 p-2 rounded-md hover:bg-muted"
-                    >
-                      <Checkbox
-                        id={`class-${cls.id}`}
-                        checked={selectedClasses.includes(cls.id)}
-                        onCheckedChange={() => toggleClass(cls.id)}
-                      />
-                      <Label htmlFor={`class-${cls.id}`} className="font-normal cursor-pointer flex-1">
-                        <span className="font-medium">{cls.name}</span>
-                        <span className="text-xs text-muted-foreground ml-1">
-                          ({cls.shift === 'morning' ? 'M' : cls.shift === 'afternoon' ? 'T' : 'N'})
-                        </span>
-                      </Label>
-                    </div>
-                  ))}
+              <div className="space-y-4">
+                <div className="flex flex-wrap gap-4">
+                  {availableShifts.map(shift => {
+                    const shiftClasses = classes.filter(c => c.shift === shift.id);
+                    return (
+                      <div
+                        key={shift.id}
+                        className="flex items-center space-x-3 p-3 rounded-lg border hover:bg-muted transition-colors"
+                      >
+                        <Checkbox
+                          id={`shift-${shift.id}`}
+                          checked={selectedShifts.includes(shift.id)}
+                          onCheckedChange={() => toggleShift(shift.id)}
+                        />
+                        <Label htmlFor={`shift-${shift.id}`} className="font-normal cursor-pointer">
+                          <span className="font-medium">{shift.label}</span>
+                          <span className="text-xs text-muted-foreground ml-2">
+                            ({shiftClasses.length} turmas)
+                          </span>
+                        </Label>
+                      </div>
+                    );
+                  })}
                 </div>
-              </ScrollArea>
+
+                {selectedShifts.length > 0 && (
+                  <div className="pt-2 border-t">
+                    <p className="text-sm text-muted-foreground mb-2">
+                      Turmas selecionadas ({classesForGeneration.length}):
+                    </p>
+                    <div className="flex flex-wrap gap-1">
+                      {classesForGeneration.map(cls => (
+                        <span 
+                          key={cls.id}
+                          className="px-2 py-1 text-xs rounded-md bg-muted"
+                        >
+                          {cls.name}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
             </CardContent>
           </Card>
 

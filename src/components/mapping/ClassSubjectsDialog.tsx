@@ -19,7 +19,7 @@ const ClassSubjectsDialog = ({ classData, onClose }: ClassSubjectsDialogProps) =
   const { toast } = useToast();
   
   const [selectedSubject, setSelectedSubject] = useState("");
-  const [weeklyClasses, setWeeklyClasses] = useState("4");
+  const [weeklyClasses, setWeeklyClasses] = useState("2");
   const [loading, setLoading] = useState(false);
 
   const classSubjectsList = classSubjects.filter(cs => cs.class_id === classData.id);
@@ -42,7 +42,7 @@ const ClassSubjectsDialog = ({ classData, onClose }: ClassSubjectsDialogProps) =
         weekly_classes: parseInt(weeklyClasses)
       });
       setSelectedSubject("");
-      setWeeklyClasses("4");
+      setWeeklyClasses("2");
       toast({ title: "Disciplina adicionada" });
     } catch (error: any) {
       toast({ title: "Erro ao adicionar", description: error.message, variant: "destructive" });
