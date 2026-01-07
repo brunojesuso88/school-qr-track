@@ -24,10 +24,10 @@ const UpdatePrompt = () => {
           }
         });
 
-        // Check for updates periodically
+        // Check for updates periodically - every 5 minutes
         setInterval(() => {
           registration.update();
-        }, 60 * 60 * 1000); // Check every hour
+        }, 5 * 60 * 1000); // Check every 5 minutes
       });
 
       // Listen for controller change (when new SW takes over)
