@@ -17,9 +17,10 @@ const DAYS = [
 interface TimetableGridProps {
   classId: string;
   className?: string;
+  highlightTeacherId?: string;
 }
 
-const TimetableGrid = ({ classId, className }: TimetableGridProps) => {
+const TimetableGrid = ({ classId, className, highlightTeacherId }: TimetableGridProps) => {
   const { settings, entries, conflicts, moveEntry } = useTimetable();
   const { teachers } = useSchoolMapping();
   const [activeEntry, setActiveEntry] = useState<TimetableEntry | null>(null);
@@ -122,6 +123,8 @@ const TimetableGrid = ({ classId, className }: TimetableGridProps) => {
                             teacherColor={teacher?.color}
                             hasConflict={hasConflict(entry.id)}
                             isDragging={activeEntry?.id === entry.id}
+                            isHighlighted={highlightTeacherId ? entry.teacher_id === highlightTeacherId : false}
+                            isDimmed={highlightTeacherId ? entry.teacher_id !== highlightTeacherId : false}
                           />
                         )}
                       </TimetableSlot>

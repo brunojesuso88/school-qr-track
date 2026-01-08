@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { QrCode, LayoutDashboard, Map, Settings, RefreshCw, Sun, Moon, Monitor, User, Lock, LogOut, Trash2, Clock } from "lucide-react";
+import { QrCode, LayoutDashboard, Map, Settings, RefreshCw, Sun, Moon, Monitor, User, Lock, LogOut, Trash2, Clock, Download } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
@@ -183,9 +183,9 @@ const Home = () => {
           </SheetHeader>
 
           <div className="mt-6 space-y-6">
-            {/* Force Update */}
+            {/* Force Update & Install */}
             <div className="space-y-2">
-              <h4 className="text-sm font-medium">Atualização</h4>
+              <h4 className="text-sm font-medium">Aplicativo</h4>
               <Button
                 variant="outline"
                 className="w-full justify-start"
@@ -193,6 +193,14 @@ const Home = () => {
               >
                 <RefreshCw className="mr-2 h-4 w-4" />
                 Forçar Atualização
+              </Button>
+              <Button
+                variant="outline"
+                className="w-full justify-start"
+                onClick={() => navigate('/install')}
+              >
+                <Download className="mr-2 h-4 w-4" />
+                Instalar Aplicativo
               </Button>
             </div>
 
