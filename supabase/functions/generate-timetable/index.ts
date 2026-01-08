@@ -75,9 +75,9 @@ serve(async (req) => {
     
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Handle suggest_fixes action
+    // Handle suggest_fixes action with deep analysis
     if (action === 'suggest_fixes') {
-      console.log('Generating suggestions for conflicts...');
+      console.log('Generating deep analysis for conflicts...');
       
       if (!inputConflicts || inputConflicts.length === 0) {
         return new Response(JSON.stringify({
@@ -87,18 +87,81 @@ serve(async (req) => {
         });
       }
 
+      // Fetch additional context for deep analysis
+      const [
+        { data: teachersData },
+        { data: availabilityData },
+        { data: entriesData },
+        { data: classesData }
+      ] = await Promise.all([
+        supabase.from('mapping_teachers').select('*'),
+        supabase.from('teacher_availability').select('*'),
+        supabase.from('timetable_entries').select('*'),
+        supabase.from('mapping_classes').select('*')
+      ]);
+
+      const teachers = teachersData || [];
+      const availability = availabilityData || [];
+      const entries = entriesData || [];
+      const classes = classesData || [];
+
+      // Build teacher workload map
+      const teacherWorkload = new Map<string, number>();
+      entries.forEach((e: TimetableEntry) => {
+        if (e.teacher_id) {
+          teacherWorkload.set(e.teacher_id, (teacherWorkload.get(e.teacher_id) || 0) + 1);
+        }
+      });
+
+      // Build availability summary per teacher
+      const teacherAvailabilitySummary = teachers.map((t: MappingTeacher) => {
+        const teacherAvail = availability.filter((a: TeacherAvailability) => a.teacher_id === t.id);
+        const availableSlots = teacherAvail.filter((a: TeacherAvailability) => a.available).length;
+        const totalSlots = teacherAvail.length;
+        const workload = teacherWorkload.get(t.id) || 0;
+        
+        return {
+          id: t.id,
+          name: t.name,
+          maxHours: t.max_weekly_hours,
+          currentWorkload: workload,
+          availableSlots,
+          totalSlots,
+          utilizationRate: t.max_weekly_hours > 0 ? Math.round((workload / t.max_weekly_hours) * 100) : 0
+        };
+      });
+
       const conflictList = (inputConflicts as ConflictInput[]).map((c, i) => 
         `${i + 1}. [${c.severity.toUpperCase()}] ${c.message}`
       ).join('\n');
 
-      const suggestPrompt = `Você é um especialista em criação de horários escolares. Analise os seguintes conflitos e forneça sugestões práticas para resolvê-los.
+      const suggestPrompt = `Você é um especialista em criação de horários escolares. Faça uma análise PROFUNDA dos conflitos e proponha soluções concretas.
 
 CONFLITOS ENCONTRADOS:
 ${conflictList}
 
-Forneça de 3 a 5 sugestões práticas e específicas para resolver esses conflitos. Seja direto e objetivo.
-Responda APENAS com um JSON array de strings, cada string sendo uma sugestão. Exemplo:
-["Sugestão 1", "Sugestão 2", "Sugestão 3"]`;
+DADOS DOS PROFESSORES:
+${JSON.stringify(teacherAvailabilitySummary, null, 2)}
+
+TURMAS CADASTRADAS:
+${classes.map((c: MappingClass) => `- ${c.name} (${c.shift})`).join('\n')}
+
+INSTRUÇÕES:
+1. Analise cada conflito em detalhes
+2. Identifique os professores envolvidos
+3. Proponha MÚLTIPLAS opções de solução para cada conflito, incluindo:
+   - Mudanças na disponibilidade dos professores (especificar DIA e HORÁRIO)
+   - Redistribuição de aulas entre professores
+   - Ajustes na carga horária
+4. Para cada sugestão, explique o IMPACTO (quantos conflitos resolve, consequências)
+
+Forneça 5-7 sugestões práticas e específicas. Seja objetivo e inclua detalhes concretos como:
+- "Professor X poderia adicionar disponibilidade na Segunda-feira, 3º horário"
+- "Mover aula de Matemática da turma Y para Quarta-feira liberaria o conflito com..."
+- "Redistribuir 2 aulas do Professor Z para o Professor W que tem capacidade disponível"
+
+Responda APENAS com um JSON array de strings, cada string sendo uma sugestão detalhada. Exemplo:
+["Sugestão 1 com detalhes...", "Sugestão 2 com detalhes..."]`;
 
       const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
         method: 'POST',
@@ -112,19 +175,23 @@ Responda APENAS com um JSON array de strings, cada string sendo uma sugestão. E
             { role: 'user', content: suggestPrompt }
           ],
           temperature: 0.5,
-          max_tokens: 2000
+          max_tokens: 3000
         }),
       });
 
       if (!aiResponse.ok) {
         console.error('AI Gateway error:', aiResponse.status);
+        // Fallback suggestions based on available data
+        const fallbackSuggestions = [
+          'Revise a disponibilidade dos professores envolvidos nos conflitos - verifique se há horários bloqueados desnecessariamente.',
+          'Considere redistribuir as aulas ao longo de dias diferentes para evitar sobreposições.',
+          'Verifique professores com baixa taxa de utilização que poderiam assumir mais aulas.',
+          'Analise se há professores sobrecarregados que precisam de ajuste na carga horária.',
+          'Tente agendar manualmente as aulas conflitantes em horários alternativos disponíveis.'
+        ];
+        
         return new Response(JSON.stringify({
-          suggestions: [
-            'Revise a disponibilidade dos professores envolvidos nos conflitos.',
-            'Considere redistribuir as aulas ao longo de dias diferentes.',
-            'Verifique se há professores sobrecarregados que precisam de ajuste na carga horária.',
-            'Tente agendar manualmente as aulas conflitantes em horários alternativos.'
-          ]
+          suggestions: fallbackSuggestions
         }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
@@ -143,7 +210,9 @@ Responda APENAS com um JSON array de strings, cada string sendo uma sugestão. E
         suggestions = [
           'Revise a disponibilidade dos professores envolvidos nos conflitos.',
           'Considere redistribuir as aulas ao longo de dias diferentes.',
-          'Verifique se há professores sobrecarregados que precisam de ajuste na carga horária.'
+          'Verifique se há professores sobrecarregados que precisam de ajuste na carga horária.',
+          'Analise professores com capacidade disponível que poderiam assumir mais aulas.',
+          'Tente agendar manualmente as aulas conflitantes em horários alternativos.'
         ];
       }
 
@@ -375,7 +444,7 @@ Gere APENAS o JSON array com as aulas. Nenhum texto adicional.`;
     }
 
     // Calculate quality score
-    let conflicts = 0;
+    let conflictsCount = 0;
     const teacherSlots = new Map<string, number>();
     const classSlots = new Map<string, number>();
     
@@ -388,30 +457,30 @@ Gere APENAS o JSON array com as aulas. Nenhum texto adicional.`;
       classSlots.set(classKey, (classSlots.get(classKey) || 0) + 1);
     });
 
-    teacherSlots.forEach(count => { if (count > 1) conflicts++; });
-    classSlots.forEach(count => { if (count > 1) conflicts++; });
+    teacherSlots.forEach(count => { if (count > 1) conflictsCount++; });
+    classSlots.forEach(count => { if (count > 1) conflictsCount++; });
 
-    const qualityScore = Math.max(0, 100 - (conflicts * 10));
+    const qualityScore = Math.max(0, 100 - (conflictsCount * 10));
 
     // Save to history
     await supabase.from('timetable_generation_history').insert({
       quality_score: qualityScore,
-      conflicts_count: conflicts,
-      status: conflicts === 0 ? 'success' : 'warning',
-      explanation: `Horário gerado com ${validEntries.length} aulas. ${conflicts} conflitos encontrados.`,
+      conflicts_count: conflictsCount,
+      status: conflictsCount === 0 ? 'success' : 'warning',
+      explanation: `Horário gerado com ${validEntries.length} aulas. ${conflictsCount} conflitos encontrados.`,
       snapshot: { entries: validEntries, lockedEntries }
     });
 
-    console.log(`Timetable generated: ${validEntries.length} entries, ${conflicts} conflicts, score: ${qualityScore}`);
+    console.log(`Timetable generated: ${validEntries.length} entries, ${conflictsCount} conflicts, score: ${qualityScore}`);
 
     return new Response(JSON.stringify({
       success: true,
       entriesCount: validEntries.length,
-      conflictsCount: conflicts,
+      conflictsCount: conflictsCount,
       qualityScore,
-      explanation: conflicts === 0 
+      explanation: conflictsCount === 0 
         ? `Horário gerado com sucesso! ${validEntries.length} aulas alocadas sem conflitos.`
-        : `Horário gerado com ${validEntries.length} aulas. ${conflicts} conflitos precisam de revisão manual.`
+        : `Horário gerado com ${validEntries.length} aulas. ${conflictsCount} conflitos precisam de revisão manual.`
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });

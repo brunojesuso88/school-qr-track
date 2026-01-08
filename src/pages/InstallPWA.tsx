@@ -2,7 +2,7 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ArrowLeft, Download, Share, PlusSquare, MoreVertical } from "lucide-react";
-import edunexusLogo from "@/assets/edunexus-logo.png";
+import edunexusLogo from "@/assets/edunexus-new-logo.png";
 
 const InstallPWA = () => {
   const navigate = useNavigate();

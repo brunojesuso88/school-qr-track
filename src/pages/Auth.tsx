@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { toast } from 'sonner';
 import { Mail, Lock, User, Loader2, RefreshCw } from 'lucide-react';
-import edunexusLogo from '@/assets/edunexus-login-logo.png';
+import edunexusLogo from '@/assets/edunexus-new-logo.png';
 
 const forceUpdateApp = async () => {
   try {

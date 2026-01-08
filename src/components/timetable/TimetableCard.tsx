@@ -10,9 +10,11 @@ interface TimetableCardProps {
   teacherColor?: string;
   hasConflict?: boolean;
   isDragging?: boolean;
+  isHighlighted?: boolean;
+  isDimmed?: boolean;
 }
 
-const TimetableCard = ({ entry, teacherName, teacherColor, hasConflict, isDragging }: TimetableCardProps) => {
+const TimetableCard = ({ entry, teacherName, teacherColor, hasConflict, isDragging, isHighlighted, isDimmed }: TimetableCardProps) => {
   const { attributes, listeners, setNodeRef, transform } = useDraggable({
     id: entry.id,
     disabled: entry.is_locked,
@@ -35,7 +37,9 @@ const TimetableCard = ({ entry, teacherName, teacherColor, hasConflict, isDraggi
         entry.is_locked && "opacity-70",
         hasConflict && "border-destructive bg-destructive/10 animate-pulse",
         isDragging && "opacity-50 shadow-lg z-50",
-        !entry.is_locked && "cursor-grab active:cursor-grabbing"
+        !entry.is_locked && "cursor-grab active:cursor-grabbing",
+        isHighlighted && "ring-2 ring-primary ring-offset-1",
+        isDimmed && "opacity-30"
       )}
       {...attributes}
       {...listeners}

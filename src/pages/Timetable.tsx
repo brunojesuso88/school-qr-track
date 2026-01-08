@@ -311,26 +311,54 @@ const TimetableContent = () => {
                 </CardContent>
               </Card>
 
-              {/* Teacher's Classes */}
+              {/* Teacher's Schedule Grid */}
               <Card className="lg:col-span-3">
                 <CardContent className="p-4">
                   {selectedTeacherId ? (
-                    <div className="space-y-4">
-                      {classes.map(cls => {
-                        const teacherEntriesInClass = entries.filter(
-                          e => e.class_id === cls.id && e.teacher_id === selectedTeacherId
-                        );
-                        
-                        if (teacherEntriesInClass.length === 0) return null;
-                        
+                    (() => {
+                      const selectedTeacher = teachers.find(t => t.id === selectedTeacherId);
+                      const teacherEntries = entries.filter(e => e.teacher_id === selectedTeacherId);
+                      
+                      if (teacherEntries.length === 0) {
                         return (
-                          <div key={cls.id}>
-                            <h4 className="font-medium text-sm mb-2">{cls.name}</h4>
-                            <TimetableGrid classId={cls.id} />
+                          <div className="flex items-center justify-center h-[400px] text-muted-foreground">
+                            Este professor não possui aulas atribuídas
                           </div>
                         );
-                      })}
-                    </div>
+                      }
+
+                      // Get unique classes for this teacher
+                      const teacherClassIds = [...new Set(teacherEntries.map(e => e.class_id))];
+                      const teacherClasses = classes.filter(c => teacherClassIds.includes(c.id));
+
+                      return (
+                        <div className="space-y-6">
+                          <div className="text-center pb-4 border-b">
+                            <h3 className="text-lg font-semibold">{selectedTeacher?.name}</h3>
+                            <p className="text-sm text-muted-foreground">
+                              {teacherEntries.length} aulas em {teacherClasses.length} turma(s)
+                            </p>
+                          </div>
+                          {teacherClasses.map(cls => {
+                            const classEntriesForTeacher = entries.filter(
+                              e => e.class_id === cls.id && e.teacher_id === selectedTeacherId
+                            );
+                            
+                            return (
+                              <div key={cls.id}>
+                                <h4 className="font-medium text-sm mb-2 flex items-center gap-2">
+                                  {cls.name}
+                                  <Badge variant="outline" className="text-xs">
+                                    {classEntriesForTeacher.length} aulas
+                                  </Badge>
+                                </h4>
+                                <TimetableGrid classId={cls.id} highlightTeacherId={selectedTeacherId} />
+                              </div>
+                            );
+                          })}
+                        </div>
+                      );
+                    })()
                   ) : (
                     <div className="flex items-center justify-center h-[400px] text-muted-foreground">
                       Selecione um professor para visualizar suas aulas
