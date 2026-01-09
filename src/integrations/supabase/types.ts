@@ -52,6 +52,39 @@ export type Database = {
           },
         ]
       }
+      audit_logs: {
+        Row: {
+          action: string
+          created_at: string | null
+          id: string
+          new_data: Json | null
+          old_data: Json | null
+          record_id: string | null
+          table_name: string
+          user_id: string | null
+        }
+        Insert: {
+          action: string
+          created_at?: string | null
+          id?: string
+          new_data?: Json | null
+          old_data?: Json | null
+          record_id?: string | null
+          table_name: string
+          user_id?: string | null
+        }
+        Update: {
+          action?: string
+          created_at?: string | null
+          id?: string
+          new_data?: Json | null
+          old_data?: Json | null
+          record_id?: string | null
+          table_name?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       classes: {
         Row: {
           created_at: string | null
@@ -311,7 +344,6 @@ export type Database = {
           email: string | null
           full_name: string | null
           id: string
-          role: string | null
           updated_at: string | null
         }
         Insert: {
@@ -319,7 +351,6 @@ export type Database = {
           email?: string | null
           full_name?: string | null
           id: string
-          role?: string | null
           updated_at?: string | null
         }
         Update: {
@@ -327,7 +358,6 @@ export type Database = {
           email?: string | null
           full_name?: string | null
           id?: string
-          role?: string | null
           updated_at?: string | null
         }
         Relationships: []
