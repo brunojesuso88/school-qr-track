@@ -267,8 +267,10 @@ export type Database = {
           created_by: string | null
           date: string
           description: string | null
+          end_date: string | null
           id: string
           student_id: string
+          teacher_name: string | null
           type: string
         }
         Insert: {
@@ -276,8 +278,10 @@ export type Database = {
           created_by?: string | null
           date?: string
           description?: string | null
+          end_date?: string | null
           id?: string
           student_id: string
+          teacher_name?: string | null
           type: string
         }
         Update: {
@@ -285,8 +289,10 @@ export type Database = {
           created_by?: string | null
           date?: string
           description?: string | null
+          end_date?: string | null
           id?: string
           student_id?: string
+          teacher_name?: string | null
           type?: string
         }
         Relationships: [

@@ -32,6 +32,8 @@ interface Occurrence {
   type: string;
   description: string | null;
   date: string;
+  end_date: string | null;
+  teacher_name: string | null;
   created_at: string;
 }
 
@@ -329,20 +331,36 @@ export const StudentReportModal = ({ student, onClose }: StudentReportModalProps
             ) : occurrences.length > 0 ? (
               <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2">
                 {occurrences.map((occurrence) => (
-                  <Card key={occurrence.id}>
+                  <Card key={occurrence.id} className={cn(
+                    occurrence.type === 'medical_certificate' && "border-purple-500/50 bg-purple-500/5"
+                  )}>
                     <CardContent className="p-4">
                       <div className="flex items-start justify-between">
                         <div className="space-y-1">
-                          <div className="flex items-center gap-2">
-                            <Badge variant="secondary" className="bg-primary/10 text-primary">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <Badge variant="secondary" className={cn(
+                              "bg-primary/10 text-primary",
+                              occurrence.type === 'medical_certificate' && "bg-purple-500/20 text-purple-600"
+                            )}>
                               {getOccurrenceTypeLabel(occurrence.type)}
                             </Badge>
-                            <span className="text-xs text-muted-foreground">
+                            <span className={cn(
+                              "text-xs text-muted-foreground",
+                              occurrence.type === 'medical_certificate' && "text-purple-600 font-medium"
+                            )}>
                               {format(parse(occurrence.date, 'yyyy-MM-dd', new Date()), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}
+                              {occurrence.end_date && (
+                                <> até {format(parse(occurrence.end_date, 'yyyy-MM-dd', new Date()), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}</>
+                              )}
                             </span>
                           </div>
                           {occurrence.description && (
                             <p className="text-sm text-muted-foreground mt-2">{occurrence.description}</p>
+                          )}
+                          {occurrence.teacher_name && (
+                            <p className="text-xs text-muted-foreground/70 mt-1">
+                              Registrado por: {occurrence.teacher_name}
+                            </p>
                           )}
                         </div>
                       </div>

@@ -52,6 +52,8 @@ interface Occurrence {
   type: string;
   description: string | null;
   date: string;
+  end_date: string | null;
+  teacher_name: string | null;
   created_at: string;
 }
 
@@ -133,12 +135,31 @@ const Students = () => {
     type: '',
     description: '',
     date: new Date(),
+    endDate: null as Date | null,
   });
+  const [currentUserName, setCurrentUserName] = useState<string | null>(null);
 
   useEffect(() => {
     fetchStudents();
     fetchClasses();
+    fetchCurrentUserName();
   }, []);
+
+  const fetchCurrentUserName = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data } = await supabase
+          .from('profiles')
+          .select('full_name')
+          .eq('id', user.id)
+          .single();
+        setCurrentUserName(data?.full_name || user.email || null);
+      }
+    } catch (error) {
+      console.error('Error fetching current user name:', error);
+    }
+  };
 
   const fetchClasses = async () => {
     try {
@@ -380,20 +401,36 @@ const Students = () => {
       return;
     }
 
+    // For medical certificate, validate end date
+    if (occurrenceForm.type === 'medical_certificate' && occurrenceForm.endDate) {
+      if (occurrenceForm.endDate < occurrenceForm.date) {
+        toast.error('A data final deve ser posterior à data inicial');
+        return;
+      }
+    }
+
     try {
+      const insertData: any = {
+        student_id: occurrencesStudent.id,
+        type: occurrenceForm.type,
+        description: occurrenceForm.description?.substring(0, 1000) || null,
+        date: format(occurrenceForm.date, 'yyyy-MM-dd'),
+        teacher_name: currentUserName,
+      };
+
+      // Add end_date for medical certificate
+      if (occurrenceForm.type === 'medical_certificate' && occurrenceForm.endDate) {
+        insertData.end_date = format(occurrenceForm.endDate, 'yyyy-MM-dd');
+      }
+
       const { error } = await supabase
         .from('occurrences')
-        .insert({
-          student_id: occurrencesStudent.id,
-          type: occurrenceForm.type,
-          description: occurrenceForm.description?.substring(0, 1000) || null,
-          date: format(occurrenceForm.date, 'yyyy-MM-dd'),
-        });
+        .insert(insertData);
 
       if (error) throw error;
       toast.success('Ocorrência registrada com sucesso');
       setIsOccurrenceDialogOpen(false);
-      setOccurrenceForm({ type: '', description: '', date: new Date() });
+      setOccurrenceForm({ type: '', description: '', date: new Date(), endDate: null });
       fetchOccurrences(occurrencesStudent.id);
     } catch (error) {
       console.error('Error adding occurrence:', error);
@@ -1001,20 +1038,40 @@ const Students = () => {
               {occurrences.length > 0 ? (
                 <div className="space-y-3">
                   {occurrences.map((occurrence) => (
-                    <Card key={occurrence.id}>
+                    <Card key={occurrence.id} className={cn(
+                      occurrence.type === 'medical_certificate' && "border-purple-500/50 bg-purple-500/5"
+                    )}>
                       <CardContent className="p-4">
                         <div className="flex items-start justify-between">
                           <div className="space-y-1">
-                            <div className="flex items-center gap-2">
-                              <span className="text-xs px-2 py-1 rounded-full bg-primary/10 text-primary font-medium">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className={cn(
+                                "text-xs px-2 py-1 rounded-full font-medium",
+                                occurrence.type === 'medical_certificate' 
+                                  ? "bg-purple-500/20 text-purple-600" 
+                                  : "bg-primary/10 text-primary"
+                              )}>
                                 {getOccurrenceTypeLabel(occurrence.type)}
                               </span>
-                              <span className="text-xs text-muted-foreground">
+                              <span className={cn(
+                                "text-xs",
+                                occurrence.type === 'medical_certificate' 
+                                  ? "text-purple-600 font-medium" 
+                                  : "text-muted-foreground"
+                              )}>
                                 {format(parse(occurrence.date, 'yyyy-MM-dd', new Date()), 'dd/MM/yyyy')}
+                                {occurrence.end_date && (
+                                  <> a {format(parse(occurrence.end_date, 'yyyy-MM-dd', new Date()), 'dd/MM/yyyy')}</>
+                                )}
                               </span>
                             </div>
                             {occurrence.description && (
                               <p className="text-sm text-muted-foreground">{occurrence.description}</p>
+                            )}
+                            {occurrence.teacher_name && (
+                              <p className="text-xs text-muted-foreground/70">
+                                Por: {occurrence.teacher_name}
+                              </p>
                             )}
                           </div>
                           <Button
@@ -1049,11 +1106,18 @@ const Students = () => {
               </DialogDescription>
             </DialogHeader>
             <form onSubmit={handleAddOccurrence} className="space-y-4 mt-4">
+              {/* Teacher Name Display */}
+              {currentUserName && (
+                <div className="flex items-center gap-2 p-3 rounded-md bg-muted/50">
+                  <User className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm">Registrado por: <strong>{currentUserName}</strong></span>
+                </div>
+              )}
               <div className="space-y-2">
                 <Label>Tipo de Ocorrência</Label>
                 <Select
                   value={occurrenceForm.type}
-                  onValueChange={(value) => setOccurrenceForm({ ...occurrenceForm, type: value })}
+                  onValueChange={(value) => setOccurrenceForm({ ...occurrenceForm, type: value, endDate: value === 'medical_certificate' ? occurrenceForm.endDate : null })}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Selecione o tipo" />
@@ -1068,7 +1132,7 @@ const Students = () => {
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label>Data</Label>
+                <Label>{occurrenceForm.type === 'medical_certificate' ? 'Data Inicial' : 'Data'}</Label>
                 <Popover>
                   <PopoverTrigger asChild>
                     <Button
@@ -1090,6 +1154,36 @@ const Students = () => {
                   </PopoverContent>
                 </Popover>
               </div>
+              {/* End Date for Medical Certificate */}
+              {occurrenceForm.type === 'medical_certificate' && (
+                <div className="space-y-2">
+                  <Label>Data Final do Atestado</Label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className="w-full justify-start text-left font-normal"
+                      >
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {occurrenceForm.endDate 
+                          ? format(occurrenceForm.endDate, "PPP", { locale: ptBR })
+                          : <span className="text-muted-foreground">Selecione a data final</span>
+                        }
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar
+                        mode="single"
+                        selected={occurrenceForm.endDate || undefined}
+                        onSelect={(date) => date && setOccurrenceForm({ ...occurrenceForm, endDate: date })}
+                        initialFocus
+                        disabled={(date) => date < occurrenceForm.date}
+                        className={cn("p-3 pointer-events-auto")}
+                      />
+                    </PopoverContent>
+                  </Popover>
+                </div>
+              )}
               <div className="space-y-2">
                 <Label>Descrição (opcional)</Label>
                 <Textarea
@@ -1099,7 +1193,7 @@ const Students = () => {
                   rows={3}
                 />
               </div>
-              <Button type="submit" className="w-full" disabled={!occurrenceForm.type}>
+              <Button type="submit" className="w-full" disabled={!occurrenceForm.type || (occurrenceForm.type === 'medical_certificate' && !occurrenceForm.endDate)}>
                 Registrar Ocorrência
               </Button>
             </form>

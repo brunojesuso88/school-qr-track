@@ -4,7 +4,7 @@ import { QrCode, LayoutDashboard, Map, Settings, RefreshCw, Sun, Moon, Monitor, 
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
-import edunexusLogo from "@/assets/edunexus-logo2.png";
+import edunexusLogo from "@/assets/edunexus-home-logo.png";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/components/ThemeProvider";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
@@ -346,20 +346,25 @@ const Home = () => {
         </DialogContent>
       </Dialog>
 
-      <div className="w-full max-w-md space-y-0 animate-fade-in">
+      <div className="w-full max-w-lg space-y-0 animate-fade-in">
         {/* Logo */}
-        <div className="text-center mb-4">
+        <div className="text-center mb-8">
           <motion.img
             src={edunexusLogo}
             alt="Edunexus"
-            className="w-full max-w-md mx-auto drop-shadow-lg"
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
+            className="w-full max-w-lg mx-auto drop-shadow-xl"
+            initial={{ opacity: 0, y: -20, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
             transition={{ duration: 0.6, ease: "easeOut" }}
           />
-          <p className="text-foreground text-sm font-medium -mt-2">
+          <motion.p 
+            className="text-foreground text-base font-semibold mt-2"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.3, duration: 0.5 }}
+          >
             Sistema Digital de Secretaria Escolar
-          </p>
+          </motion.p>
         </div>
 
         {/* Menu Options */}
