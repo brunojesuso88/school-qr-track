@@ -27,11 +27,20 @@ const ManualAttendanceModal = ({ onSuccess }: ManualAttendanceModalProps) => {
   const { user } = useAuth();
   const [open, setOpen] = useState(false);
   const [students, setStudents] = useState<Student[]>([]);
+  const [selectedClass, setSelectedClass] = useState<string>('all');
   const [selectedStudent, setSelectedStudent] = useState<string>('');
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [selectedStatus, setSelectedStatus] = useState<'present' | 'absent' | 'justified'>('present');
   const [loading, setLoading] = useState(false);
   const [calendarOpen, setCalendarOpen] = useState(false);
+
+  // Extract unique classes from students
+  const uniqueClasses = [...new Set(students.map(s => s.class))].sort();
+  
+  // Filter students by selected class
+  const filteredStudents = selectedClass === 'all' 
+    ? students 
+    : students.filter(s => s.class === selectedClass);
 
   useEffect(() => {
     if (open) {
@@ -139,6 +148,30 @@ const ManualAttendanceModal = ({ onSuccess }: ManualAttendanceModalProps) => {
         </DialogHeader>
         
         <div className="space-y-4 py-4">
+          {/* Class Filter */}
+          <div className="space-y-2">
+            <Label>Turma</Label>
+            <Select 
+              value={selectedClass} 
+              onValueChange={(value) => {
+                setSelectedClass(value);
+                setSelectedStudent(''); // Reset student when class changes
+              }}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Todas as turmas" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas as turmas</SelectItem>
+                {uniqueClasses.map((className) => (
+                  <SelectItem key={className} value={className}>
+                    {className}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
           {/* Student Selection */}
           <div className="space-y-2">
             <Label>Aluno</Label>
@@ -147,7 +180,7 @@ const ManualAttendanceModal = ({ onSuccess }: ManualAttendanceModalProps) => {
                 <SelectValue placeholder="Selecione um aluno" />
               </SelectTrigger>
               <SelectContent className="max-h-60">
-                {students.map((student) => (
+                {filteredStudents.map((student) => (
                   <SelectItem key={student.id} value={student.id}>
                     {student.full_name} - {student.class}
                   </SelectItem>

@@ -28,7 +28,7 @@ const timezones = [
 const SchoolSettings = () => {
   const [settings, setSettings] = useState({
     schoolName: '',
-    timezone: 'America/Sao_Paulo'
+    timezone: 'America/Fortaleza'
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -49,9 +49,14 @@ const SchoolSettings = () => {
       if (data) {
         const newSettings = { ...settings };
         data.forEach(setting => {
-          const value = setting.value as string;
-          if (setting.key === 'school_name') newSettings.schoolName = value;
-          if (setting.key === 'timezone') newSettings.timezone = value;
+          // Handle both string and JSON values (for backward compatibility)
+          let value = setting.value;
+          if (typeof value === 'string') {
+            // Remove extra quotes if present from double stringify
+            value = value.replace(/^"|"$/g, '');
+          }
+          if (setting.key === 'school_name') newSettings.schoolName = value as string;
+          if (setting.key === 'timezone') newSettings.timezone = value as string;
         });
         setSettings(newSettings);
       }
@@ -65,9 +70,10 @@ const SchoolSettings = () => {
   const handleSave = async () => {
     setSaving(true);
     try {
+      // Save values directly without JSON.stringify - the jsonb column handles it
       const updates = [
-        { key: 'school_name', value: JSON.stringify(settings.schoolName) },
-        { key: 'timezone', value: JSON.stringify(settings.timezone) }
+        { key: 'school_name', value: settings.schoolName },
+        { key: 'timezone', value: settings.timezone }
       ];
 
       for (const update of updates) {
