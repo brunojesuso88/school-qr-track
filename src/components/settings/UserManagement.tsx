@@ -17,7 +17,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Users, Loader2, Shield, UserCog } from 'lucide-react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
+import { Users, Loader2, Shield, UserCog, Trash2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
@@ -47,10 +58,11 @@ const roleBadgeVariants: Record<AppRole, 'default' | 'secondary' | 'outline' | '
 };
 
 const UserManagement = () => {
-  const { userRole } = useAuth();
+  const { userRole, user } = useAuth();
   const [users, setUsers] = useState<UserWithRole[]>([]);
   const [loading, setLoading] = useState(true);
   const [updatingUserId, setUpdatingUserId] = useState<string | null>(null);
+  const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchUsers();
@@ -113,6 +125,35 @@ const UserManagement = () => {
     }
   };
 
+  const handleDeleteUser = async (userId: string) => {
+    setDeletingUserId(userId);
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData?.session?.access_token;
+
+      if (!token) {
+        toast.error('Sessão expirada. Faça login novamente.');
+        return;
+      }
+
+      const response = await supabase.functions.invoke('delete-user', {
+        body: { userId }
+      });
+
+      if (response.error) {
+        throw new Error(response.error.message || 'Erro ao excluir usuário');
+      }
+
+      setUsers(prev => prev.filter(u => u.id !== userId));
+      toast.success('Usuário excluído com sucesso!');
+    } catch (error: any) {
+      console.error('Error deleting user:', error);
+      toast.error(error.message || 'Erro ao excluir usuário');
+    } finally {
+      setDeletingUserId(null);
+    }
+  };
+
   if (userRole !== 'admin') {
     return (
       <Card>
@@ -153,27 +194,28 @@ const UserManagement = () => {
                   <TableHead>Nome</TableHead>
                   <TableHead>Email</TableHead>
                   <TableHead>Função Atual</TableHead>
-                  <TableHead className="text-right">Alterar Função</TableHead>
+                  <TableHead>Alterar Função</TableHead>
+                  <TableHead className="text-right">Ações</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {users.map((user) => (
-                  <TableRow key={user.id}>
-                    <TableCell className="font-medium">{user.fullName}</TableCell>
-                    <TableCell className="text-muted-foreground">{user.email}</TableCell>
+                {users.map((userItem) => (
+                  <TableRow key={userItem.id}>
+                    <TableCell className="font-medium">{userItem.fullName}</TableCell>
+                    <TableCell className="text-muted-foreground">{userItem.email}</TableCell>
                     <TableCell>
-                      <Badge variant={roleBadgeVariants[user.role]}>
-                        {roleLabels[user.role]}
+                      <Badge variant={roleBadgeVariants[userItem.role]}>
+                        {roleLabels[userItem.role]}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-right">
+                    <TableCell>
                       <Select
-                        value={user.role}
-                        onValueChange={(value) => handleRoleChange(user.id, value as AppRole)}
-                        disabled={updatingUserId === user.id}
+                        value={userItem.role}
+                        onValueChange={(value) => handleRoleChange(userItem.id, value as AppRole)}
+                        disabled={updatingUserId === userItem.id || userItem.id === user?.id}
                       >
-                        <SelectTrigger className="w-[160px] ml-auto">
-                          {updatingUserId === user.id ? (
+                        <SelectTrigger className="w-[160px]">
+                          {updatingUserId === userItem.id ? (
                             <Loader2 className="h-4 w-4 animate-spin" />
                           ) : (
                             <SelectValue />
@@ -186,6 +228,44 @@ const UserManagement = () => {
                           <SelectItem value="staff">Funcionário</SelectItem>
                         </SelectContent>
                       </Select>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {userItem.id !== user?.id && (
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                              disabled={deletingUserId === userItem.id}
+                            >
+                              {deletingUserId === userItem.id ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <Trash2 className="h-4 w-4" />
+                              )}
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                Tem certeza que deseja excluir o usuário <strong>{userItem.fullName}</strong>?
+                                Esta ação não pode ser desfeita e todos os dados associados serão perdidos.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                              <AlertDialogAction
+                                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                onClick={() => handleDeleteUser(userItem.id)}
+                              >
+                                Excluir
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}
