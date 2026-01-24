@@ -21,6 +21,7 @@ import Settings from "./pages/Settings";
 import Auth from "./pages/Auth";
 import InstallPWA from "./pages/InstallPWA";
 import NotFound from "./pages/NotFound";
+import AEE from "./pages/AEE";
 import SchoolMapping from "./pages/SchoolMapping";
 import MappingTeachers from "./pages/mapping/MappingTeachers";
 import MappingSubjects from "./pages/mapping/MappingSubjects";
@@ -54,6 +55,7 @@ const App = () => (
               <Route path="/home" element={<AdminRoute><Home /></AdminRoute>} />
               <Route path="/dashboard" element={<AdminRoute><Dashboard /></AdminRoute>} />
               <Route path="/students" element={<AdminRoute><Students /></AdminRoute>} />
+              <Route path="/aee" element={<AdminRoute><AEE /></AdminRoute>} />
               <Route path="/classes" element={<AdminRoute><Classes /></AdminRoute>} />
               <Route path="/scan" element={<AdminRoute><ScanQR /></AdminRoute>} />
               <Route path="/attendance" element={<AdminRoute><Attendance /></AdminRoute>} />

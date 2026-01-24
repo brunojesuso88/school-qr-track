@@ -818,18 +818,6 @@ const Students = () => {
                     </Button>
                   </div>
                 </div>
-                {formData.has_medical_report && (
-                  <div className="space-y-2">
-                    <Label htmlFor="medical_report_details">Especificação do Laudo</Label>
-                    <Textarea
-                      id="medical_report_details"
-                      value={formData.medical_report_details}
-                      onChange={(e) => setFormData({ ...formData, medical_report_details: e.target.value })}
-                      placeholder="Descreva o tipo de laudo, condição ou necessidades especiais do aluno..."
-                      rows={3}
-                    />
-                  </div>
-                )}
                 <Button type="submit" className="w-full" disabled={isUploadingPhoto}>
                   {isUploadingPhoto ? 'Salvando...' : editingStudent ? 'Atualizar Aluno' : 'Cadastrar Aluno'}
                 </Button>
