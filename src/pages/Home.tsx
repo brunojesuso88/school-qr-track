@@ -42,7 +42,7 @@ const Home = () => {
       borderColor: "border-success/30",
     },
     {
-      title: "Sistema de gestão de presença",
+      title: "Sistema de gestão de alunos",
       description: "Painel de controle completo",
       icon: LayoutDashboard,
       path: "/dashboard",

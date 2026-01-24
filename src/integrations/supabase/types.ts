@@ -385,6 +385,12 @@ export type Database = {
       }
       students: {
         Row: {
+          aee_adapted_activities: boolean | null
+          aee_cid_code: string | null
+          aee_cid_description: string | null
+          aee_literacy_status: string | null
+          aee_medication_name: string | null
+          aee_uses_medication: boolean | null
           birth_date: string | null
           class: string
           created_at: string | null
@@ -403,6 +409,12 @@ export type Database = {
           updated_at: string | null
         }
         Insert: {
+          aee_adapted_activities?: boolean | null
+          aee_cid_code?: string | null
+          aee_cid_description?: string | null
+          aee_literacy_status?: string | null
+          aee_medication_name?: string | null
+          aee_uses_medication?: boolean | null
           birth_date?: string | null
           class: string
           created_at?: string | null
@@ -421,6 +433,12 @@ export type Database = {
           updated_at?: string | null
         }
         Update: {
+          aee_adapted_activities?: boolean | null
+          aee_cid_code?: string | null
+          aee_cid_description?: string | null
+          aee_literacy_status?: string | null
+          aee_medication_name?: string | null
+          aee_uses_medication?: boolean | null
           birth_date?: string | null
           class?: string
           created_at?: string | null

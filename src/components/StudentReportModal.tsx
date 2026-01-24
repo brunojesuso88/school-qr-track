@@ -4,8 +4,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
+import { Label } from '@/components/ui/label';
 import { Calendar, FileText, AlertCircle, CheckCircle, XCircle, Clock } from 'lucide-react';
-import { format, parse, startOfMonth, endOfMonth, startOfYear, endOfYear } from 'date-fns';
+import { format, parse, startOfMonth, endOfMonth, startOfYear, endOfYear, differenceInYears } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { StudentPhoto } from '@/components/StudentPhoto';
@@ -25,6 +26,12 @@ interface Student {
   birth_date: string | null;
   has_medical_report: boolean;
   medical_report_details: string | null;
+  aee_cid_code?: string | null;
+  aee_cid_description?: string | null;
+  aee_uses_medication?: boolean;
+  aee_medication_name?: string | null;
+  aee_literacy_status?: string | null;
+  aee_adapted_activities?: boolean;
 }
 
 interface Occurrence {
@@ -382,19 +389,56 @@ export const StudentReportModal = ({ student, onClose }: StudentReportModalProps
                 <CardHeader>
                   <CardTitle className="text-base flex items-center gap-2">
                     <AlertCircle className="w-4 h-4 text-amber-600" />
-                    Informações do Laudo Médico
+                    Informações do Laudo
                   </CardTitle>
                 </CardHeader>
-                <CardContent>
-                  {student.medical_report_details ? (
-                    <div className="prose prose-sm max-w-none">
-                      <p className="text-foreground whitespace-pre-wrap">{student.medical_report_details}</p>
-                    </div>
-                  ) : (
-                    <p className="text-muted-foreground text-sm">
-                      Aluno possui laudo médico, mas não há descrição detalhada registrada.
+                <CardContent className="space-y-4">
+                  {/* Age */}
+                  <div>
+                    <Label className="text-muted-foreground text-sm">Idade</Label>
+                    <p className="font-medium">
+                      {student.birth_date 
+                        ? `${differenceInYears(new Date(), parse(student.birth_date, 'yyyy-MM-dd', new Date()))} anos`
+                        : 'Não informada'}
                     </p>
-                  )}
+                  </div>
+
+                  {/* CID */}
+                  <div>
+                    <Label className="text-muted-foreground text-sm">CID</Label>
+                    <p className="font-medium">
+                      {student.aee_cid_code 
+                        ? `${student.aee_cid_code}${student.aee_cid_description ? ` - ${student.aee_cid_description}` : ''}`
+                        : 'Não informado'}
+                    </p>
+                  </div>
+
+                  {/* Medication */}
+                  <div>
+                    <Label className="text-muted-foreground text-sm">Uso de Medicação</Label>
+                    <p className="font-medium">
+                      {student.aee_uses_medication 
+                        ? `Sim${student.aee_medication_name ? ` - ${student.aee_medication_name}` : ''}`
+                        : 'Não'}
+                    </p>
+                  </div>
+
+                  {/* Literacy */}
+                  <div>
+                    <Label className="text-muted-foreground text-sm">Alfabetização</Label>
+                    <p className="font-medium">
+                      {student.aee_literacy_status === 'yes' ? 'Sim' : 
+                       student.aee_literacy_status === 'in_process' ? 'Em processo' : 'Não'}
+                    </p>
+                  </div>
+
+                  {/* Adapted Activities */}
+                  <div>
+                    <Label className="text-muted-foreground text-sm">Atividades Adaptadas</Label>
+                    <p className="font-medium">
+                      {student.aee_adapted_activities ? 'Sim' : 'Não'}
+                    </p>
+                  </div>
                 </CardContent>
               </Card>
             ) : (
