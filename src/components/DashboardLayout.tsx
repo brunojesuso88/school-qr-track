@@ -93,8 +93,8 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
               <ArrowLeft className="w-5 h-5 text-sidebar-foreground" />
             </button>
             <div className="flex-1 min-w-0">
-              <h1 className="font-semibold text-sidebar-foreground text-sm leading-tight">Sistema de Frequência</h1>
-              <p className="text-xs text-sidebar-foreground/60">Gestão de Presença</p>
+              <h1 className="font-semibold text-sidebar-foreground text-sm leading-tight">Sistema de Gestão de Alunos</h1>
+              <p className="text-xs text-sidebar-foreground/60">Gestão Escolar</p>
             </div>
             <button
               className="lg:hidden text-sidebar-foreground"
