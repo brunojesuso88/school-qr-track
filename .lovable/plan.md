@@ -1,270 +1,358 @@
 
-## Plano de Implementação: Sistema AEE e Melhorias
+## Plano de Implementação: Melhorias no Sistema AEE
 
 ### Resumo das Alterações Solicitadas
 
-1. **Tela Inicial**: Trocar "Sistema de gestão de presença" por "Sistema de gestão de alunos"
-2. **Editar Aluno**: Remover campo "Especificação do Laudo"
-3. **Nova Página**: Criar "Sistema AEE" no sidebar
-4. **Sistema AEE**: Exibir alunos com laudo e formulário estruturado de informações
+1. **DashboardLayout**: Trocar "Sistema de Frequência / Gestão de Presença" por "Sistema de Gestão de Alunos"
+2. **Sistema AEE - Modal Detalhado**: Ao clicar no card do aluno, exibir informações completas + lista de professores
+3. **Laudo**: Adicionar opção de anexar/tirar foto do documento do laudo
+4. **Laudo**: Adicionar campo "Sugestões de adaptações"
+5. **Foto do Aluno**: Adicionar zoom ao clicar na foto (como na aba Alunos)
+6. **Exportação PDF**: Botão para exportar relatório AEE do aluno
 
 ---
 
-### Fase 1: Alteração na Tela Inicial
+### Fase 1: Alterar Nome no DashboardLayout
 
-**Arquivo**: `src/pages/Home.tsx`
+**Arquivo**: `src/components/DashboardLayout.tsx`
 
-Alteração simples no título do menu:
-- Linha 45: Trocar `"Sistema de gestão de presença"` por `"Sistema de gestão de alunos"`
-
----
-
-### Fase 2: Remover "Especificação do Laudo" do Formulário de Edição
-
-**Arquivo**: `src/pages/Students.tsx`
-
-Remover o bloco de código das linhas 821-832 que exibe o campo `Textarea` para "Especificação do Laudo":
-
+Linhas 96-97 - Alterar:
 ```typescript
-// REMOVER este bloco:
-{formData.has_medical_report && (
-  <div className="space-y-2">
-    <Label htmlFor="medical_report_details">Especificação do Laudo</Label>
-    <Textarea
-      id="medical_report_details"
-      value={formData.medical_report_details}
-      onChange={(e) => setFormData({ ...formData, medical_report_details: e.target.value })}
-      placeholder="Descreva o tipo de laudo, condição ou necessidades especiais do aluno..."
-      rows={3}
-    />
-  </div>
-)}
+// DE:
+<h1>Sistema de Frequência</h1>
+<p>Gestão de Presença</p>
+
+// PARA:
+<h1>Sistema de Gestão de Alunos</h1>
+<p>Gestão Escolar</p>
 ```
 
-O campo `has_medical_report` (Sim/Não) continuará existindo para marcar o aluno como tendo laudo.
-
 ---
 
-### Fase 3: Atualizar Banco de Dados para Sistema AEE
+### Fase 2: Atualizar Banco de Dados
 
-Será necessário adicionar novos campos estruturados à tabela `students` para armazenar as informações do laudo AEE:
+Adicionar novos campos à tabela `students` para:
+- Anexo do documento do laudo (URL do arquivo)
+- Sugestões de adaptações (texto livre)
 
 ```sql
--- Novos campos para Sistema AEE
 ALTER TABLE public.students
-ADD COLUMN aee_cid_code TEXT,              -- Código CID
-ADD COLUMN aee_cid_description TEXT,        -- Descrição do CID
-ADD COLUMN aee_uses_medication BOOLEAN DEFAULT FALSE,  -- Usa medicação?
-ADD COLUMN aee_medication_name TEXT,        -- Qual medicação?
-ADD COLUMN aee_literacy_status TEXT DEFAULT 'no',  -- Alfabetizado: no, yes, in_process
-ADD COLUMN aee_adapted_activities BOOLEAN DEFAULT FALSE;  -- Atividades adaptadas?
+ADD COLUMN aee_laudo_attachment_url TEXT,  -- URL do arquivo anexado
+ADD COLUMN aee_adaptation_suggestions TEXT; -- Sugestões de adaptações
+```
 
--- Adicionar constraint para literacy_status
-ALTER TABLE public.students
-ADD CONSTRAINT students_aee_literacy_status_check 
-CHECK (aee_literacy_status IN ('no', 'yes', 'in_process'));
+Criar bucket de storage para os documentos de laudo:
+```sql
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('aee-documents', 'aee-documents', false);
+
+-- RLS para o bucket
+CREATE POLICY "Admin/Direction/Teachers can upload AEE documents"
+ON storage.objects FOR INSERT
+TO authenticated
+WITH CHECK (
+  bucket_id = 'aee-documents' 
+  AND user_has_any_role(ARRAY['admin', 'direction', 'teacher'])
+);
+
+CREATE POLICY "Staff can view AEE documents"
+ON storage.objects FOR SELECT
+TO authenticated
+USING (
+  bucket_id = 'aee-documents' 
+  AND user_has_any_role(ARRAY['admin', 'direction', 'teacher', 'staff'])
+);
+
+CREATE POLICY "Admin/Direction/Teachers can delete AEE documents"
+ON storage.objects FOR DELETE
+TO authenticated
+USING (
+  bucket_id = 'aee-documents' 
+  AND user_has_any_role(ARRAY['admin', 'direction', 'teacher'])
+);
 ```
 
 ---
 
-### Fase 4: Criar Página do Sistema AEE
+### Fase 3: Expandir Modal do AEE com Informações Completas
 
-#### 4.1 Novo Arquivo: `src/pages/AEE.tsx`
+**Arquivo**: `src/pages/AEE.tsx`
 
-Criar nova página com as seguintes funcionalidades:
+Reorganizar para que ao clicar no card, o modal exiba:
 
-**Estrutura da página:**
-- Layout similar ao `Students.tsx` usando `DashboardLayout`
-- Header com título "Sistema AEE - Atendimento Educacional Especializado"
-- Filtros por turma e turno (igual a Students)
-- Grid de cards dos alunos com laudo
-- Modal de "Informações do Laudo" ao clicar no card
+**Aba 1 - Informações do Aluno:**
+- Foto grande (clicável para zoom)
+- Nome, ID, Turma, Turno, Idade
+- Status (Ativo/Inativo)
 
-**Card do Aluno (simplificado):**
-- Foto do aluno
-- Nome e ID
-- Turma e Turno
-- Badge "Laudo"
-- **Único botão**: "Informações do Laudo"
+**Aba 2 - Professores:**
+- Lista dos professores do aluno baseado na turma
+- Buscar em `mapping_classes` → `mapping_class_subjects` com o `class` do aluno
+- Exibir: Nome do Professor | Disciplina
 
-**Modal "Informações do Laudo":**
-Campos estruturados conforme solicitado:
+**Aba 3 - Informações do Laudo:**
+- Campos existentes (CID, medicação, alfabetização, atividades adaptadas)
+- Novo campo: Sugestões de adaptações (textarea)
+- Novo: Upload/Tirar foto do documento do laudo
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│            INFORMAÇÕES DO LAUDO - [Nome do Aluno]           │
-├─────────────────────────────────────────────────────────────┤
-│ Idade: [calculado automaticamente da data de nascimento]   │
-│                                                              │
-│ CID                                                          │
-│ ├─ Código: [________________]                               │
-│ └─ Descrição: [____________________________________]        │
-│                                                              │
-│ Faz uso de medicação:                                        │
-│ ○ Não                                                        │
-│ ○ Sim. Qual?: [________________]                            │
-│                                                              │
-│ É alfabetizado:                                              │
-│ ○ Não                                                        │
-│ ○ Sim                                                        │
-│ ○ Em processo                                                │
-│                                                              │
-│ Atividades e provas adaptadas:                              │
-│ ○ Não                                                        │
-│ ○ Sim                                                        │
-│                                                              │
-│                              [Salvar]  [Cancelar]            │
-└─────────────────────────────────────────────────────────────┘
-```
+---
 
-#### 4.2 Lógica de Filtragem
+### Fase 4: Implementar Seção de Professores
 
-A página AEE exibe **apenas** alunos onde `has_medical_report = true`:
+Lógica para buscar professores do aluno:
+1. Pegar o `class` do aluno (ex: "MM100")
+2. Buscar `mapping_classes` onde `name` = classe do aluno
+3. Buscar `mapping_class_subjects` onde `class_id` = id da turma
+4. Para cada `class_subject`, buscar o professor em `mapping_teachers`
 
 ```typescript
-const aeeStudents = students.filter(s => s.has_medical_report);
+// Buscar professores do aluno
+const fetchStudentTeachers = async (studentClass: string) => {
+  // 1. Buscar mapping_class pelo nome
+  const { data: mappingClass } = await supabase
+    .from('mapping_classes')
+    .select('id')
+    .eq('name', studentClass)
+    .maybeSingle();
+  
+  if (!mappingClass) return [];
+  
+  // 2. Buscar disciplinas e professores
+  const { data: classSubjects } = await supabase
+    .from('mapping_class_subjects')
+    .select(`
+      subject_name,
+      teacher_id,
+      mapping_teachers (
+        id,
+        name,
+        color
+      )
+    `)
+    .eq('class_id', mappingClass.id)
+    .not('teacher_id', 'is', null);
+  
+  return classSubjects;
+};
+```
+
+**Exibição:**
+```
+┌─────────────────────────────────────────────────┐
+│ Professores da Turma MM100                      │
+├─────────────────────────────────────────────────┤
+│ 🔵 Ana Luísa         │ Educação Digital        │
+│ 🟢 Antônio Castro    │ Filosofia, Eletiva Base │
+│ 🟡 Camila Renata     │ Biologia                │
+│ ...                                              │
+└─────────────────────────────────────────────────┘
 ```
 
 ---
 
-### Fase 5: Adicionar Rota e Navegação
+### Fase 5: Implementar Upload/Foto do Laudo
 
-#### 5.1 Arquivo: `src/App.tsx`
-
-Adicionar nova rota:
-```typescript
-import AEE from "./pages/AEE";
-
-// Na seção de Admin Routes:
-<Route path="/aee" element={<AdminRoute><AEE /></AdminRoute>} />
-```
-
-#### 5.2 Arquivo: `src/components/DashboardLayout.tsx`
-
-Adicionar item no sidebar (allNavigation array):
-```typescript
-{ name: 'Sistema AEE', href: '/aee', icon: Heart, roles: ['admin', 'direction', 'teacher'] },
-```
-
-Usar o ícone `Heart` do Lucide (ou `UserCheck`, `Accessibility` se disponível).
-
----
-
-### Fase 6: Atualizar Aba "Laudo" na Página de Alunos
-
-**Arquivo**: `src/components/StudentReportModal.tsx`
-
-Atualizar a aba "Laudo" para exibir as informações estruturadas ao invés do texto livre:
+Componente de upload similar ao de foto do aluno:
+- Botão "Anexar Documento" que abre file picker (aceita PDF, JPG, PNG)
+- Botão "Tirar Foto" que usa a câmera (em dispositivos móveis)
+- Preview do documento anexado
+- Armazenar no bucket `aee-documents`
+- Salvar URL em `aee_laudo_attachment_url`
 
 ```typescript
-<TabsContent value="medical">
-  {student.has_medical_report ? (
-    <Card>
-      <CardHeader>
-        <CardTitle>Informações do Laudo</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div>
-          <Label className="text-muted-foreground">Idade</Label>
-          <p className="font-medium">{calcularIdade(student.birth_date)} anos</p>
-        </div>
-        <div>
-          <Label className="text-muted-foreground">CID</Label>
-          <p className="font-medium">
-            {student.aee_cid_code ? `${student.aee_cid_code} - ${student.aee_cid_description}` : 'Não informado'}
-          </p>
-        </div>
-        <div>
-          <Label className="text-muted-foreground">Uso de Medicação</Label>
-          <p className="font-medium">
-            {student.aee_uses_medication 
-              ? `Sim - ${student.aee_medication_name}` 
-              : 'Não'}
-          </p>
-        </div>
-        <div>
-          <Label className="text-muted-foreground">Alfabetização</Label>
-          <p className="font-medium">
-            {student.aee_literacy_status === 'yes' ? 'Sim' : 
-             student.aee_literacy_status === 'in_process' ? 'Em processo' : 'Não'}
-          </p>
-        </div>
-        <div>
-          <Label className="text-muted-foreground">Atividades Adaptadas</Label>
-          <p className="font-medium">
-            {student.aee_adapted_activities ? 'Sim' : 'Não'}
-          </p>
-        </div>
-      </CardContent>
-    </Card>
-  ) : (
-    // ...fallback para aluno sem laudo
-  )}
-</TabsContent>
+// Upload do documento
+const uploadLaudoDocument = async (file: File, studentId: string) => {
+  const fileExt = file.name.split('.').pop();
+  const fileName = `${studentId}-laudo-${Date.now()}.${fileExt}`;
+  
+  const { error: uploadError } = await supabase.storage
+    .from('aee-documents')
+    .upload(fileName, file);
+  
+  if (uploadError) throw uploadError;
+  
+  // Atualizar URL no estudante
+  await supabase.from('students').update({
+    aee_laudo_attachment_url: fileName
+  }).eq('id', studentId);
+};
 ```
 
 ---
 
-### Resumo de Arquivos
+### Fase 6: Implementar Zoom na Foto do Aluno
+
+Reutilizar o padrão da página de Alunos:
+- Adicionar estado `zoomPhotoStudent`
+- Ao clicar na foto, abrir modal com `StudentPhoto` size="xl"
+- Exibir nome e status do aluno
+
+```typescript
+// Estado
+const [zoomPhotoStudent, setZoomPhotoStudent] = useState<Student | null>(null);
+
+// No StudentPhoto do card
+<StudentPhoto
+  photoUrl={student.photo_url}
+  fullName={student.full_name}
+  status={student.status}
+  size="md"
+  onClick={() => setZoomPhotoStudent(student)}  // <- Adicionar onClick
+/>
+
+// Modal de zoom
+<Dialog open={!!zoomPhotoStudent} onOpenChange={() => setZoomPhotoStudent(null)}>
+  <DialogContent className="max-w-md">
+    <DialogHeader>
+      <DialogTitle>{zoomPhotoStudent?.full_name}</DialogTitle>
+      <DialogDescription>{zoomPhotoStudent?.student_id}</DialogDescription>
+    </DialogHeader>
+    <div className="flex flex-col items-center gap-4 py-4">
+      <StudentPhoto
+        photoUrl={zoomPhotoStudent.photo_url}
+        fullName={zoomPhotoStudent.full_name}
+        status={zoomPhotoStudent.status}
+        size="xl"
+        className="border-4"
+      />
+    </div>
+  </DialogContent>
+</Dialog>
+```
+
+---
+
+### Fase 7: Exportação PDF do Relatório AEE
+
+Adicionar botão no card do aluno que gera PDF com:
+- Dados pessoais (nome, turma, idade, foto)
+- Informações do CID
+- Medicação
+- Status de alfabetização
+- Atividades adaptadas
+- Sugestões de adaptações
+- Lista de professores
+- Data do relatório
+
+```typescript
+const exportAEEReport = (student: Student, teachers: TeacherInfo[]) => {
+  const printWindow = window.open('', '_blank');
+  const html = `
+    <html>
+    <head>
+      <title>Relatório AEE - ${student.full_name}</title>
+      <style>
+        body { font-family: Arial; padding: 40px; }
+        .header { text-align: center; margin-bottom: 30px; }
+        .section { margin-bottom: 20px; }
+        .section h3 { border-bottom: 1px solid #ccc; padding-bottom: 5px; }
+        table { width: 100%; border-collapse: collapse; }
+        td, th { border: 1px solid #ddd; padding: 8px; text-align: left; }
+      </style>
+    </head>
+    <body>
+      <div class="header">
+        <h1>Relatório AEE</h1>
+        <h2>${student.full_name}</h2>
+        <p>Turma: ${student.class} | Turno: ${getShiftLabel(student.shift)}</p>
+      </div>
+      
+      <div class="section">
+        <h3>Informações do Laudo</h3>
+        <p><strong>Idade:</strong> ${calculateAge(student.birth_date)} anos</p>
+        <p><strong>CID:</strong> ${student.aee_cid_code || 'Não informado'} - ${student.aee_cid_description || ''}</p>
+        <p><strong>Medicação:</strong> ${student.aee_uses_medication ? 'Sim - ' + student.aee_medication_name : 'Não'}</p>
+        <p><strong>Alfabetizado:</strong> ${getLiteracyLabel(student.aee_literacy_status)}</p>
+        <p><strong>Atividades Adaptadas:</strong> ${student.aee_adapted_activities ? 'Sim' : 'Não'}</p>
+      </div>
+      
+      <div class="section">
+        <h3>Sugestões de Adaptações</h3>
+        <p>${student.aee_adaptation_suggestions || 'Nenhuma sugestão registrada'}</p>
+      </div>
+      
+      <div class="section">
+        <h3>Professores</h3>
+        <table>
+          <tr><th>Professor</th><th>Disciplina</th></tr>
+          ${teachers.map(t => `<tr><td>${t.name}</td><td>${t.subject}</td></tr>`).join('')}
+        </table>
+      </div>
+      
+      <p class="footer">Gerado em: ${new Date().toLocaleDateString('pt-BR')}</p>
+    </body>
+    </html>
+  `;
+  printWindow.document.write(html);
+  printWindow.document.close();
+  printWindow.print();
+};
+```
+
+---
+
+### Resumo de Arquivos a Alterar
 
 | Arquivo | Tipo | Alteração |
 |---------|------|-----------|
-| `src/pages/Home.tsx` | Editar | Trocar título do menu |
-| `src/pages/Students.tsx` | Editar | Remover campo "Especificação do Laudo" |
-| `supabase/migrations/xxx.sql` | Criar | Novos campos AEE na tabela students |
-| `src/pages/AEE.tsx` | Criar | Nova página do Sistema AEE |
-| `src/App.tsx` | Editar | Adicionar rota `/aee` |
-| `src/components/DashboardLayout.tsx` | Editar | Adicionar link no sidebar |
-| `src/components/StudentReportModal.tsx` | Editar | Atualizar aba Laudo com dados estruturados |
-| `src/integrations/supabase/types.ts` | Auto | Será atualizado automaticamente |
+| `src/components/DashboardLayout.tsx` | Editar | Trocar título do sidebar |
+| `supabase/migrations/xxx.sql` | Criar | Novos campos + bucket storage |
+| `src/pages/AEE.tsx` | Editar | Modal expandido com abas, zoom foto, professores, PDF |
 
 ---
 
-### Diagrama de Fluxo do Sistema AEE
+### Estrutura do Modal Expandido
 
 ```text
-┌──────────────────────────────────────────────────────────────────┐
-│                         SISTEMA AEE                              │
-├──────────────────────────────────────────────────────────────────┤
-│                                                                  │
-│  ┌─────────────┐    ┌─────────────────────────────────────────┐ │
-│  │  Sidebar    │    │            Página AEE                   │ │
-│  │             │    │  ┌────────────────────────────────────┐ │ │
-│  │  Dashboard  │    │  │ Header: Sistema AEE                │ │ │
-│  │  Alunos     │    │  └────────────────────────────────────┘ │ │
-│  │  Turmas     │    │  ┌────────────────────────────────────┐ │ │
-│  │  QR Code    │    │  │ Filtros: Turma | Turno             │ │ │
-│  │  Frequência │    │  └────────────────────────────────────┘ │ │
-│  │ ►Sistema AEE│    │                                         │ │
-│  │  Notificação│    │  ┌───────┐ ┌───────┐ ┌───────┐         │ │
-│  │  Config.    │    │  │ Card  │ │ Card  │ │ Card  │         │ │
-│  │             │    │  │Aluno 1│ │Aluno 2│ │Aluno 3│         │ │
-│  └─────────────┘    │  │       │ │       │ │       │         │ │
-│                     │  │[Info] │ │[Info] │ │[Info] │         │ │
-│                     │  └───────┘ └───────┘ └───────┘         │ │
-│                     └─────────────────────────────────────────┘ │
-│                                                                  │
-│  ┌───────────────────────────────────────────────────────────┐  │
-│  │                   Modal "Informações do Laudo"            │  │
-│  │  ┌─────────────────────────────────────────────────────┐  │  │
-│  │  │ Idade: [XX anos]                                    │  │  │
-│  │  │ CID: [Código] - [Descrição]                         │  │  │
-│  │  │ Medicação: ( ) Não  ( ) Sim → [Qual]                │  │  │
-│  │  │ Alfabetizado: ( ) Não  ( ) Sim  ( ) Em processo     │  │  │
-│  │  │ Atividades Adaptadas: ( ) Não  ( ) Sim              │  │  │
-│  │  └─────────────────────────────────────────────────────┘  │  │
-│  │                              [Salvar]  [Cancelar]         │  │
-│  └───────────────────────────────────────────────────────────┘  │
-│                                                                  │
-└──────────────────────────────────────────────────────────────────┘
+┌───────────────────────────────────────────────────────────────────┐
+│ [X] Fechar                                                        │
+│                                                                   │
+│ ┌─────────────────────────────────────────────────────────────┐   │
+│ │  [Foto]  Nome do Aluno                                      │   │
+│ │          ID: XXX | Turma: MM100 | Manhã | 11 anos           │   │
+│ └─────────────────────────────────────────────────────────────┘   │
+│                                                                   │
+│ ┌────────────┐ ┌──────────────┐ ┌──────────────┐                  │
+│ │ Professores│ │ Info. Laudo  │ │ Exportar PDF │                  │
+│ └────────────┘ └──────────────┘ └──────────────┘                  │
+│                                                                   │
+│ ═══════════════════════════════════════════════════════════════   │
+│                                                                   │
+│ [Aba Professores]                                                 │
+│ ┌─────────────────────────────────────────────────────────────┐   │
+│ │ 🔵 Ana Luísa          Educação Digital                      │   │
+│ │ 🟢 Antônio Castro     Filosofia, Eletiva de Base            │   │
+│ │ 🟡 Camila Renata      Biologia                              │   │
+│ │ 🔴 Carlos Eduardo     Educação Física                       │   │
+│ └─────────────────────────────────────────────────────────────┘   │
+│                                                                   │
+│ [Aba Informações do Laudo]                                        │
+│ ┌─────────────────────────────────────────────────────────────┐   │
+│ │ CID: [código] [descrição]                                   │   │
+│ │ Medicação: ( ) Não  (•) Sim → [Ritalina]                    │   │
+│ │ Alfabetizado: ( ) Não  (•) Sim  ( ) Em processo             │   │
+│ │ Atividades Adaptadas: ( ) Não  (•) Sim                      │   │
+│ │                                                             │   │
+│ │ Sugestões de Adaptações:                                    │   │
+│ │ ┌───────────────────────────────────────────────────────┐   │   │
+│ │ │ Texto livre para sugestões de adaptação...           │   │   │
+│ │ └───────────────────────────────────────────────────────┘   │   │
+│ │                                                             │   │
+│ │ Documento do Laudo:                                         │   │
+│ │ [📷 Tirar Foto] [📎 Anexar Arquivo]                         │   │
+│ │ [Preview do documento se existir]                           │   │
+│ └─────────────────────────────────────────────────────────────┘   │
+│                                                                   │
+│                                        [Cancelar] [Salvar]        │
+└───────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
 ### Considerações Técnicas
 
-1. **Idade do Aluno**: Calculada automaticamente a partir do campo `birth_date` existente
-2. **Permissões**: Acesso restrito aos roles `admin`, `direction` e `teacher`
-3. **Validação**: Campos opcionais, exceto quando "Sim" for selecionado para medicação
-4. **RLS**: As políticas existentes já cobrem os novos campos (mesma tabela students)
-5. **Migração de Dados**: Os alunos existentes com `has_medical_report = true` terão os novos campos em branco inicialmente, podendo ser preenchidos através do Sistema AEE
+1. **Busca de Professores**: Relacionamento indireto via `students.class` → `mapping_classes.name` → `mapping_class_subjects` → `mapping_teachers`
+2. **Storage**: Novo bucket `aee-documents` com RLS adequado
+3. **Campos novos**: `aee_laudo_attachment_url` e `aee_adaptation_suggestions`
+4. **Componente de câmera**: Reutilizar lógica de captura de foto já existente no sistema
+5. **PDF**: Usar `window.print()` para exportação simples e compatível
