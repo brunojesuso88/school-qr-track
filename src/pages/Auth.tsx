@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -83,6 +84,20 @@ const Auth = () => {
           setIsLoading(false);
         } else {
           toast.success('Conta criada com sucesso!');
+          
+          // Notify admins about new user registration
+          try {
+            await supabase.functions.invoke('notify-new-user', {
+              body: { 
+                newUserEmail: email,
+                newUserName: fullName 
+              }
+            });
+          } catch (notifyError) {
+            console.log('Could not notify admins:', notifyError);
+            // Don't block signup if notification fails
+          }
+          
           // Navigation will be handled by useEffect when user state updates
         }
       }

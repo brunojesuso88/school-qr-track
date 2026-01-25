@@ -9,8 +9,13 @@ import { MessageSquare, Bell, Loader2, Check, AlertCircle } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
+import { PushNotificationToggle } from '@/components/PushNotificationToggle';
+import { useAuth } from '@/contexts/AuthContext';
 
 const NotificationSettings = () => {
+  const { userRole } = useAuth();
+  const isAdmin = userRole === 'admin';
+  
   const [settings, setSettings] = useState({
     whatsappEnabled: false,
     whatsappPhone: '',
@@ -87,6 +92,9 @@ const NotificationSettings = () => {
 
   return (
     <div className="space-y-6">
+      {/* Push Notifications for Admins */}
+      {isAdmin && <PushNotificationToggle />}
+      
       <Card>
         <CardHeader>
           <CardTitle className="text-lg flex items-center gap-2">
