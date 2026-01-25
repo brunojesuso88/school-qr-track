@@ -1,293 +1,323 @@
 
-## Plano de Implementação: Melhorias no Sistema AEE
+## Plano de Implementação: Melhorias no Sistema de Alunos e AEE + Notificações Push
 
 ### Resumo das Alterações Solicitadas
 
-1. **DashboardLayout**: Trocar "Sistema de Frequência / Gestão de Presença" por "Sistema de Gestão de Alunos"
-2. **Sistema AEE - Modal Detalhado**: Ao clicar no card do aluno, exibir informações completas + lista de professores
-3. **Laudo**: Adicionar opção de anexar/tirar foto do documento do laudo
-4. **Laudo**: Adicionar campo "Sugestões de adaptações"
-5. **Foto do Aluno**: Adicionar zoom ao clicar na foto (como na aba Alunos)
-6. **Exportação PDF**: Botão para exportar relatório AEE do aluno
+1. **Notificações Push para Admin**: Quando um novo usuário se cadastrar, administradores recebem notificação via push
+2. **Página Alunos - Click no Card**: Abrir caixa de informações ao clicar em qualquer lugar do card (não apenas no nome)
+3. **Página Alunos - Aba "Laudo"**: Incluir todas as informações do laudo do Sistema AEE
+4. **Sistema AEE - Modal Somente Leitura**: Ao clicar no card, apresentar informações sem edição
+5. **Sistema AEE - Botão "Editar"**: Trocar "Detalhes" por "Editar" e habilitar edição apenas nessa opção
 
 ---
 
-### Fase 1: Alterar Nome no DashboardLayout
+### Fase 1: Abrir Modal ao Clicar no Card do Aluno (Students.tsx)
 
-**Arquivo**: `src/components/DashboardLayout.tsx`
+**Arquivo**: `src/pages/Students.tsx`
 
-Linhas 96-97 - Alterar:
+**Problema Atual**: O modal de informações só abre ao clicar no NOME do aluno (linha 904-908)
+
+**Solução**: Adicionar `onClick` no `Card` inteiro para abrir o `StudentReportModal`
+
+Linhas 884-892 - Adicionar onClick ao Card:
 ```typescript
-// DE:
-<h1>Sistema de Frequência</h1>
-<p>Gestão de Presença</p>
-
-// PARA:
-<h1>Sistema de Gestão de Alunos</h1>
-<p>Gestão Escolar</p>
+<Card
+  key={student.id}
+  className={cn(
+    "card-hover animate-fade-in overflow-hidden cursor-pointer",  // Adicionar cursor-pointer
+    student.status === 'inactive' && "border-red-500/50",
+    student.has_medical_report && "border-2 border-amber-500 ring-2 ring-amber-500/20"
+  )}
+  style={{ animationDelay: `${index * 30}ms` }}
+  onClick={() => setReportStudent(student)}  // Adicionar onClick
+>
 ```
 
----
-
-### Fase 2: Atualizar Banco de Dados
-
-Adicionar novos campos à tabela `students` para:
-- Anexo do documento do laudo (URL do arquivo)
-- Sugestões de adaptações (texto livre)
-
-```sql
-ALTER TABLE public.students
-ADD COLUMN aee_laudo_attachment_url TEXT,  -- URL do arquivo anexado
-ADD COLUMN aee_adaptation_suggestions TEXT; -- Sugestões de adaptações
-```
-
-Criar bucket de storage para os documentos de laudo:
-```sql
-INSERT INTO storage.buckets (id, name, public)
-VALUES ('aee-documents', 'aee-documents', false);
-
--- RLS para o bucket
-CREATE POLICY "Admin/Direction/Teachers can upload AEE documents"
-ON storage.objects FOR INSERT
-TO authenticated
-WITH CHECK (
-  bucket_id = 'aee-documents' 
-  AND user_has_any_role(ARRAY['admin', 'direction', 'teacher'])
-);
-
-CREATE POLICY "Staff can view AEE documents"
-ON storage.objects FOR SELECT
-TO authenticated
-USING (
-  bucket_id = 'aee-documents' 
-  AND user_has_any_role(ARRAY['admin', 'direction', 'teacher', 'staff'])
-);
-
-CREATE POLICY "Admin/Direction/Teachers can delete AEE documents"
-ON storage.objects FOR DELETE
-TO authenticated
-USING (
-  bucket_id = 'aee-documents' 
-  AND user_has_any_role(ARRAY['admin', 'direction', 'teacher'])
-);
-```
-
----
-
-### Fase 3: Expandir Modal do AEE com Informações Completas
-
-**Arquivo**: `src/pages/AEE.tsx`
-
-Reorganizar para que ao clicar no card, o modal exiba:
-
-**Aba 1 - Informações do Aluno:**
-- Foto grande (clicável para zoom)
-- Nome, ID, Turma, Turno, Idade
-- Status (Ativo/Inativo)
-
-**Aba 2 - Professores:**
-- Lista dos professores do aluno baseado na turma
-- Buscar em `mapping_classes` → `mapping_class_subjects` com o `class` do aluno
-- Exibir: Nome do Professor | Disciplina
-
-**Aba 3 - Informações do Laudo:**
-- Campos existentes (CID, medicação, alfabetização, atividades adaptadas)
-- Novo campo: Sugestões de adaptações (textarea)
-- Novo: Upload/Tirar foto do documento do laudo
-
----
-
-### Fase 4: Implementar Seção de Professores
-
-Lógica para buscar professores do aluno:
-1. Pegar o `class` do aluno (ex: "MM100")
-2. Buscar `mapping_classes` onde `name` = classe do aluno
-3. Buscar `mapping_class_subjects` onde `class_id` = id da turma
-4. Para cada `class_subject`, buscar o professor em `mapping_teachers`
-
+Linhas 904-908 - Remover onClick do nome (evitar duplo click):
 ```typescript
-// Buscar professores do aluno
-const fetchStudentTeachers = async (studentClass: string) => {
-  // 1. Buscar mapping_class pelo nome
-  const { data: mappingClass } = await supabase
-    .from('mapping_classes')
-    .select('id')
-    .eq('name', studentClass)
-    .maybeSingle();
-  
-  if (!mappingClass) return [];
-  
-  // 2. Buscar disciplinas e professores
-  const { data: classSubjects } = await supabase
-    .from('mapping_class_subjects')
-    .select(`
-      subject_name,
-      teacher_id,
-      mapping_teachers (
-        id,
-        name,
-        color
-      )
-    `)
-    .eq('class_id', mappingClass.id)
-    .not('teacher_id', 'is', null);
-  
-  return classSubjects;
-};
+<h3 className="font-medium text-sm">
+  {student.full_name}
+</h3>
 ```
 
-**Exibição:**
-```
-┌─────────────────────────────────────────────────┐
-│ Professores da Turma MM100                      │
-├─────────────────────────────────────────────────┤
-│ 🔵 Ana Luísa         │ Educação Digital        │
-│ 🟢 Antônio Castro    │ Filosofia, Eletiva Base │
-│ 🟡 Camila Renata     │ Biologia                │
-│ ...                                              │
-└─────────────────────────────────────────────────┘
-```
-
----
-
-### Fase 5: Implementar Upload/Foto do Laudo
-
-Componente de upload similar ao de foto do aluno:
-- Botão "Anexar Documento" que abre file picker (aceita PDF, JPG, PNG)
-- Botão "Tirar Foto" que usa a câmera (em dispositivos móveis)
-- Preview do documento anexado
-- Armazenar no bucket `aee-documents`
-- Salvar URL em `aee_laudo_attachment_url`
-
+Linhas 896-902 - Adicionar stopPropagation na foto:
 ```typescript
-// Upload do documento
-const uploadLaudoDocument = async (file: File, studentId: string) => {
-  const fileExt = file.name.split('.').pop();
-  const fileName = `${studentId}-laudo-${Date.now()}.${fileExt}`;
-  
-  const { error: uploadError } = await supabase.storage
-    .from('aee-documents')
-    .upload(fileName, file);
-  
-  if (uploadError) throw uploadError;
-  
-  // Atualizar URL no estudante
-  await supabase.from('students').update({
-    aee_laudo_attachment_url: fileName
-  }).eq('id', studentId);
-};
-```
-
----
-
-### Fase 6: Implementar Zoom na Foto do Aluno
-
-Reutilizar o padrão da página de Alunos:
-- Adicionar estado `zoomPhotoStudent`
-- Ao clicar na foto, abrir modal com `StudentPhoto` size="xl"
-- Exibir nome e status do aluno
-
-```typescript
-// Estado
-const [zoomPhotoStudent, setZoomPhotoStudent] = useState<Student | null>(null);
-
-// No StudentPhoto do card
 <StudentPhoto
   photoUrl={student.photo_url}
   fullName={student.full_name}
   status={student.status}
   size="md"
-  onClick={() => setZoomPhotoStudent(student)}  // <- Adicionar onClick
+  onClick={(e) => { 
+    e.stopPropagation();
+    student.photo_url && setZoomPhotoStudent(student);
+  }}
 />
-
-// Modal de zoom
-<Dialog open={!!zoomPhotoStudent} onOpenChange={() => setZoomPhotoStudent(null)}>
-  <DialogContent className="max-w-md">
-    <DialogHeader>
-      <DialogTitle>{zoomPhotoStudent?.full_name}</DialogTitle>
-      <DialogDescription>{zoomPhotoStudent?.student_id}</DialogDescription>
-    </DialogHeader>
-    <div className="flex flex-col items-center gap-4 py-4">
-      <StudentPhoto
-        photoUrl={zoomPhotoStudent.photo_url}
-        fullName={zoomPhotoStudent.full_name}
-        status={zoomPhotoStudent.status}
-        size="xl"
-        className="border-4"
-      />
-    </div>
-  </DialogContent>
-</Dialog>
 ```
 
 ---
 
-### Fase 7: Exportação PDF do Relatório AEE
+### Fase 2: Expandir Aba "Laudo" no StudentReportModal
 
-Adicionar botão no card do aluno que gera PDF com:
-- Dados pessoais (nome, turma, idade, foto)
-- Informações do CID
-- Medicação
-- Status de alfabetização
-- Atividades adaptadas
-- Sugestões de adaptações
-- Lista de professores
-- Data do relatório
+**Arquivo**: `src/components/StudentReportModal.tsx`
 
+**Problema Atual**: A aba "Laudo" mostra apenas CID, Medicação, Alfabetização e Atividades Adaptadas. Faltam:
+- Sugestões de Adaptações
+- Documento do Laudo (anexo)
+
+**Solução**: Atualizar interface e adicionar campos:
+
+1. Adicionar novos campos à interface Student (linha 14-35):
 ```typescript
-const exportAEEReport = (student: Student, teachers: TeacherInfo[]) => {
-  const printWindow = window.open('', '_blank');
-  const html = `
-    <html>
-    <head>
-      <title>Relatório AEE - ${student.full_name}</title>
-      <style>
-        body { font-family: Arial; padding: 40px; }
-        .header { text-align: center; margin-bottom: 30px; }
-        .section { margin-bottom: 20px; }
-        .section h3 { border-bottom: 1px solid #ccc; padding-bottom: 5px; }
-        table { width: 100%; border-collapse: collapse; }
-        td, th { border: 1px solid #ddd; padding: 8px; text-align: left; }
-      </style>
-    </head>
-    <body>
-      <div class="header">
-        <h1>Relatório AEE</h1>
-        <h2>${student.full_name}</h2>
-        <p>Turma: ${student.class} | Turno: ${getShiftLabel(student.shift)}</p>
-      </div>
-      
-      <div class="section">
-        <h3>Informações do Laudo</h3>
-        <p><strong>Idade:</strong> ${calculateAge(student.birth_date)} anos</p>
-        <p><strong>CID:</strong> ${student.aee_cid_code || 'Não informado'} - ${student.aee_cid_description || ''}</p>
-        <p><strong>Medicação:</strong> ${student.aee_uses_medication ? 'Sim - ' + student.aee_medication_name : 'Não'}</p>
-        <p><strong>Alfabetizado:</strong> ${getLiteracyLabel(student.aee_literacy_status)}</p>
-        <p><strong>Atividades Adaptadas:</strong> ${student.aee_adapted_activities ? 'Sim' : 'Não'}</p>
-      </div>
-      
-      <div class="section">
-        <h3>Sugestões de Adaptações</h3>
-        <p>${student.aee_adaptation_suggestions || 'Nenhuma sugestão registrada'}</p>
-      </div>
-      
-      <div class="section">
-        <h3>Professores</h3>
-        <table>
-          <tr><th>Professor</th><th>Disciplina</th></tr>
-          ${teachers.map(t => `<tr><td>${t.name}</td><td>${t.subject}</td></tr>`).join('')}
-        </table>
-      </div>
-      
-      <p class="footer">Gerado em: ${new Date().toLocaleDateString('pt-BR')}</p>
-    </body>
-    </html>
-  `;
-  printWindow.document.write(html);
-  printWindow.document.close();
-  printWindow.print();
+interface Student {
+  // ... campos existentes
+  aee_adaptation_suggestions?: string | null;
+  aee_laudo_attachment_url?: string | null;
+}
+```
+
+2. Adicionar estado para URL assinada do documento (linha 70-73):
+```typescript
+const [laudoSignedUrl, setLaudoSignedUrl] = useState<string | null>(null);
+```
+
+3. Adicionar função para buscar URL assinada:
+```typescript
+const fetchLaudoSignedUrl = async (fileName: string) => {
+  try {
+    const { data, error } = await supabase.storage
+      .from('aee-documents')
+      .createSignedUrl(fileName, 3600);
+    if (!error && data) setLaudoSignedUrl(data.signedUrl);
+  } catch (error) {
+    console.error('Error getting signed URL:', error);
+  }
 };
 ```
+
+4. Chamar no useEffect quando student tiver laudo:
+```typescript
+useEffect(() => {
+  if (student?.aee_laudo_attachment_url) {
+    fetchLaudoSignedUrl(student.aee_laudo_attachment_url);
+  } else {
+    setLaudoSignedUrl(null);
+  }
+}, [student]);
+```
+
+5. Expandir aba "Laudo" (linha 386-450) com:
+```typescript
+{/* Sugestões de Adaptações */}
+{student.aee_adaptation_suggestions && (
+  <div>
+    <Label className="text-muted-foreground text-sm">Sugestões de Adaptações</Label>
+    <div className="mt-1 p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg border border-amber-200 dark:border-amber-800">
+      <p className="text-sm whitespace-pre-wrap">{student.aee_adaptation_suggestions}</p>
+    </div>
+  </div>
+)}
+
+{/* Documento do Laudo */}
+{student.aee_laudo_attachment_url && (
+  <div>
+    <Label className="text-muted-foreground text-sm">Documento do Laudo</Label>
+    <div className="mt-1 flex items-center gap-2">
+      <Button variant="outline" size="sm" onClick={() => window.open(laudoSignedUrl, '_blank')}>
+        <FileText className="w-4 h-4 mr-2" />
+        Visualizar Documento
+      </Button>
+    </div>
+  </div>
+)}
+```
+
+---
+
+### Fase 3: Modal do AEE - Modo Somente Leitura
+
+**Arquivo**: `src/pages/AEE.tsx`
+
+**Problema Atual**: O modal abre em modo de edição direta
+
+**Solução**: Criar dois modos: visualização e edição
+
+1. Adicionar estado para controlar modo (linha 55-60):
+```typescript
+const [isEditMode, setIsEditMode] = useState(false);
+```
+
+2. Modificar função `openStudentDialog` para abrir em modo visualização:
+```typescript
+const openStudentDialog = (student: Student) => {
+  setSelectedStudent(student);
+  setIsEditMode(false);  // Sempre abre em modo visualização
+  // ... resto do código
+};
+```
+
+3. Criar nova função para abrir em modo edição:
+```typescript
+const openEditMode = (student: Student) => {
+  setSelectedStudent(student);
+  setIsEditMode(true);
+  setFormData({
+    aee_cid_code: student.aee_cid_code || '',
+    // ... resto dos campos
+  });
+  // ... buscar professores e laudo
+};
+```
+
+4. Modificar a aba "Informações do Laudo" para exibir modo diferente:
+
+**Modo Visualização (isEditMode = false)**:
+```typescript
+<TabsContent value="laudo">
+  {!isEditMode ? (
+    <div className="space-y-4">
+      {/* Exibição somente leitura - similar ao StudentReportModal */}
+      <div>
+        <Label className="text-muted-foreground text-sm">CID</Label>
+        <p className="font-medium">
+          {selectedStudent.aee_cid_code 
+            ? `${selectedStudent.aee_cid_code}${selectedStudent.aee_cid_description ? ` - ${selectedStudent.aee_cid_description}` : ''}`
+            : 'Não informado'}
+        </p>
+      </div>
+      {/* Medicação, Alfabetização, Atividades, Sugestões, Documento... */}
+    </div>
+  ) : (
+    <div className="space-y-6">
+      {/* Formulário de edição existente */}
+    </div>
+  )}
+</TabsContent>
+```
+
+5. Alterar botões do footer:
+```typescript
+<DialogFooter>
+  {!isEditMode ? (
+    <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
+      Fechar
+    </Button>
+  ) : (
+    <>
+      <Button variant="outline" onClick={() => setIsEditMode(false)}>
+        Cancelar
+      </Button>
+      <Button onClick={handleSave} disabled={isSaving || isUploadingLaudo}>
+        {isSaving || isUploadingLaudo ? 'Salvando...' : 'Salvar'}
+      </Button>
+    </>
+  )}
+</DialogFooter>
+```
+
+---
+
+### Fase 4: Trocar Botão "Detalhes" por "Editar"
+
+**Arquivo**: `src/pages/AEE.tsx`
+
+**Linhas 622-630** - Alterar o botão no card:
+
+```typescript
+// DE:
+<Button
+  variant="outline"
+  className="flex-1"
+  onClick={(e) => { e.stopPropagation(); openStudentDialog(student); }}
+>
+  <FileText className="w-4 h-4 mr-2" />
+  Detalhes
+</Button>
+
+// PARA:
+<Button
+  variant="outline"
+  className="flex-1"
+  onClick={(e) => { 
+    e.stopPropagation(); 
+    openEditMode(student);  // Abre diretamente em modo edição
+  }}
+>
+  <Edit2 className="w-4 h-4 mr-2" />
+  Editar
+</Button>
+```
+
+Adicionar import do ícone Edit2:
+```typescript
+import { Search, FileText, Users, Camera, Paperclip, FileDown, Trash2, Eye, Edit2 } from 'lucide-react';
+```
+
+---
+
+### Fase 5: Notificações Push para Administradores
+
+**IMPORTANTE**: Esta funcionalidade requer configuração mais complexa envolvendo:
+
+1. **Serviço de Push Notifications**: Firebase Cloud Messaging (FCM) ou similar
+2. **Service Worker Customizado**: Para receber e exibir notificações
+3. **Edge Function**: Para enviar notificações quando novo usuário se cadastrar
+4. **Tabela de Tokens**: Para armazenar tokens de dispositivos dos admins
+
+**Estrutura Proposta**:
+
+1. **Nova tabela no banco de dados**:
+```sql
+CREATE TABLE public.push_subscriptions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
+  endpoint TEXT NOT NULL,
+  p256dh TEXT NOT NULL,
+  auth TEXT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  UNIQUE(user_id, endpoint)
+);
+```
+
+2. **Componente de Permissão de Notificação** (Admin Dashboard):
+```typescript
+// Solicitar permissão e salvar subscription
+const requestNotificationPermission = async () => {
+  const permission = await Notification.requestPermission();
+  if (permission === 'granted') {
+    const registration = await navigator.serviceWorker.ready;
+    const subscription = await registration.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: VAPID_PUBLIC_KEY
+    });
+    // Salvar subscription no banco
+  }
+};
+```
+
+3. **Edge Function para enviar notificação**:
+```typescript
+// supabase/functions/notify-new-user/index.ts
+// Chamada por trigger quando novo usuário é criado
+// Busca admins com push_subscriptions e envia notificação
+```
+
+4. **Trigger no banco de dados**:
+```sql
+CREATE OR REPLACE FUNCTION notify_admins_new_user()
+RETURNS TRIGGER AS $$
+BEGIN
+  -- Chamar edge function para notificar admins
+  PERFORM net.http_post(...);
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER on_new_user_created
+AFTER INSERT ON auth.users
+FOR EACH ROW EXECUTE FUNCTION notify_admins_new_user();
+```
+
+**Nota**: Esta funcionalidade requer configuração de VAPID keys e integração com serviço de push. Sugiro implementar as outras alterações primeiro e tratar as notificações push como uma fase separada.
 
 ---
 
@@ -295,64 +325,91 @@ const exportAEEReport = (student: Student, teachers: TeacherInfo[]) => {
 
 | Arquivo | Tipo | Alteração |
 |---------|------|-----------|
-| `src/components/DashboardLayout.tsx` | Editar | Trocar título do sidebar |
-| `supabase/migrations/xxx.sql` | Criar | Novos campos + bucket storage |
-| `src/pages/AEE.tsx` | Editar | Modal expandido com abas, zoom foto, professores, PDF |
+| `src/pages/Students.tsx` | Editar | onClick no Card inteiro + stopPropagation nos botões |
+| `src/components/StudentReportModal.tsx` | Editar | Expandir aba Laudo com todos os campos AEE |
+| `src/pages/AEE.tsx` | Editar | Modo visualização/edição + trocar "Detalhes" por "Editar" |
+| `supabase/migrations/xxx.sql` | Criar | Tabela push_subscriptions (para notificações) |
+| `supabase/functions/notify-new-user/` | Criar | Edge function para notificações |
 
 ---
 
-### Estrutura do Modal Expandido
+### Fluxo Visual Proposto
 
-```text
-┌───────────────────────────────────────────────────────────────────┐
-│ [X] Fechar                                                        │
-│                                                                   │
-│ ┌─────────────────────────────────────────────────────────────┐   │
-│ │  [Foto]  Nome do Aluno                                      │   │
-│ │          ID: XXX | Turma: MM100 | Manhã | 11 anos           │   │
-│ └─────────────────────────────────────────────────────────────┘   │
-│                                                                   │
-│ ┌────────────┐ ┌──────────────┐ ┌──────────────┐                  │
-│ │ Professores│ │ Info. Laudo  │ │ Exportar PDF │                  │
-│ └────────────┘ └──────────────┘ └──────────────┘                  │
-│                                                                   │
-│ ═══════════════════════════════════════════════════════════════   │
-│                                                                   │
-│ [Aba Professores]                                                 │
-│ ┌─────────────────────────────────────────────────────────────┐   │
-│ │ 🔵 Ana Luísa          Educação Digital                      │   │
-│ │ 🟢 Antônio Castro     Filosofia, Eletiva de Base            │   │
-│ │ 🟡 Camila Renata      Biologia                              │   │
-│ │ 🔴 Carlos Eduardo     Educação Física                       │   │
-│ └─────────────────────────────────────────────────────────────┘   │
-│                                                                   │
-│ [Aba Informações do Laudo]                                        │
-│ ┌─────────────────────────────────────────────────────────────┐   │
-│ │ CID: [código] [descrição]                                   │   │
-│ │ Medicação: ( ) Não  (•) Sim → [Ritalina]                    │   │
-│ │ Alfabetizado: ( ) Não  (•) Sim  ( ) Em processo             │   │
-│ │ Atividades Adaptadas: ( ) Não  (•) Sim                      │   │
-│ │                                                             │   │
-│ │ Sugestões de Adaptações:                                    │   │
-│ │ ┌───────────────────────────────────────────────────────┐   │   │
-│ │ │ Texto livre para sugestões de adaptação...           │   │   │
-│ │ └───────────────────────────────────────────────────────┘   │   │
-│ │                                                             │   │
-│ │ Documento do Laudo:                                         │   │
-│ │ [📷 Tirar Foto] [📎 Anexar Arquivo]                         │   │
-│ │ [Preview do documento se existir]                           │   │
-│ └─────────────────────────────────────────────────────────────┘   │
-│                                                                   │
-│                                        [Cancelar] [Salvar]        │
-└───────────────────────────────────────────────────────────────────┘
+**Página Alunos - Click no Card**:
+```
+┌──────────────────────────────────────┐
+│ Card do Aluno                        │  ← Click em qualquer lugar
+│ ┌─────┐                              │
+│ │Foto │  Nome do Aluno               │
+│ └─────┘  ID: XXX                     │
+│                                      │
+│ Turma: MM100 | Turno: Manhã          │
+│                                      │
+│ [QR] [Ocorr.] [Edit] [Del]           │  ← Botões mantêm funcionamento
+└──────────────────────────────────────┘
+           │
+           ▼
+┌──────────────────────────────────────┐
+│ Modal StudentReportModal             │
+│ ┌──────┐ Nome                        │
+│ │ Foto │ ID • Turma                  │
+│ └──────┘                             │
+│                                      │
+│ [Frequência] [Ocorrências] [Laudo]   │
+│                                      │
+│ === Laudo (expandido) ===            │
+│ CID: F84.0 - Autismo                 │
+│ Medicação: Sim - Ritalina            │
+│ Alfabetizado: Em processo            │
+│ Atividades Adaptadas: Sim            │
+│ Sugestões de Adaptações:             │
+│ ┌─────────────────────────────────┐  │
+│ │ Texto das sugestões...         │  │
+│ └─────────────────────────────────┘  │
+│ [📄 Visualizar Documento do Laudo]   │
+└──────────────────────────────────────┘
+```
+
+**Sistema AEE - Modos**:
+```
+Modo VISUALIZAÇÃO (click no card):
+┌──────────────────────────────────────┐
+│ Modal AEE - Visualização             │
+│ ┌──────┐ Nome | Turma | Turno        │
+│ │ Foto │                             │
+│ └──────┘                             │
+│                                      │
+│ [Professores] [Info. Laudo]          │
+│                                      │
+│ CID: F84.0 - Autismo                 │  ← Somente leitura
+│ Medicação: Sim - Ritalina            │
+│ Alfabetizado: Em processo            │
+│                                      │
+│                           [Fechar]   │
+└──────────────────────────────────────┘
+
+Modo EDIÇÃO (click no botão "Editar"):
+┌──────────────────────────────────────┐
+│ Modal AEE - Edição                   │
+│ ┌──────┐ Nome | Turma | Turno        │
+│ │ Foto │                             │
+│ └──────┘                             │
+│                                      │
+│ [Professores] [Info. Laudo]          │
+│                                      │
+│ CID: [_______] [_______________]     │  ← Campos editáveis
+│ Medicação: ( ) Não  (•) Sim          │
+│ ...                                  │
+│                                      │
+│                  [Cancelar] [Salvar] │
+└──────────────────────────────────────┘
 ```
 
 ---
 
 ### Considerações Técnicas
 
-1. **Busca de Professores**: Relacionamento indireto via `students.class` → `mapping_classes.name` → `mapping_class_subjects` → `mapping_teachers`
-2. **Storage**: Novo bucket `aee-documents` com RLS adequado
-3. **Campos novos**: `aee_laudo_attachment_url` e `aee_adaptation_suggestions`
-4. **Componente de câmera**: Reutilizar lógica de captura de foto já existente no sistema
-5. **PDF**: Usar `window.print()` para exportação simples e compatível
+1. **stopPropagation**: Necessário nos botões e foto dentro do card para evitar abrir o modal ao clicar neles
+2. **Interface Student**: Atualizar em StudentReportModal para incluir novos campos AEE
+3. **Signed URLs**: Necessário para acessar documentos no bucket privado `aee-documents`
+4. **Push Notifications**: Requer VAPID keys e configuração de Service Worker customizado - implementação mais complexa que pode ser feita em fase posterior
