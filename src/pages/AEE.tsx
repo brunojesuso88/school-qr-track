@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
-import { Search, FileText, Users, Camera, Paperclip, FileDown, Trash2, Eye } from 'lucide-react';
+import { Search, FileText, Users, Camera, Paperclip, FileDown, Trash2, Eye, Edit2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { StudentPhoto } from '@/components/StudentPhoto';
 import { Badge } from '@/components/ui/badge';
@@ -53,6 +53,7 @@ const AEE = () => {
   const [filterShift, setFilterShift] = useState('all');
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [activeTab, setActiveTab] = useState('teachers');
   const [teachers, setTeachers] = useState<TeacherInfo[]>([]);
@@ -210,6 +211,25 @@ const AEE = () => {
 
   const openStudentDialog = (student: Student) => {
     setSelectedStudent(student);
+    setIsEditMode(false); // Always open in view mode
+    setTeachers([]);
+    setLaudoFile(null);
+    setLaudoSignedUrl(null);
+    setActiveTab('teachers');
+    setIsDialogOpen(true);
+    
+    // Fetch teachers for this student's class
+    fetchStudentTeachers(student.class);
+    
+    // Fetch laudo signed URL if exists
+    if (student.aee_laudo_attachment_url) {
+      fetchLaudoSignedUrl(student.aee_laudo_attachment_url);
+    }
+  };
+
+  const openEditMode = (student: Student) => {
+    setSelectedStudent(student);
+    setIsEditMode(true); // Open in edit mode
     setFormData({
       aee_cid_code: student.aee_cid_code || '',
       aee_cid_description: student.aee_cid_description || '',
@@ -222,7 +242,7 @@ const AEE = () => {
     setTeachers([]);
     setLaudoFile(null);
     setLaudoSignedUrl(null);
-    setActiveTab('teachers');
+    setActiveTab('laudo');
     setIsDialogOpen(true);
     
     // Fetch teachers for this student's class
@@ -623,10 +643,10 @@ const AEE = () => {
                     <Button
                       variant="outline"
                       className="flex-1"
-                      onClick={(e) => { e.stopPropagation(); openStudentDialog(student); }}
+                      onClick={(e) => { e.stopPropagation(); openEditMode(student); }}
                     >
-                      <FileText className="w-4 h-4 mr-2" />
-                      Detalhes
+                      <Edit2 className="w-4 h-4 mr-2" />
+                      Editar
                     </Button>
                     <Button
                       variant="outline"
@@ -757,218 +777,292 @@ const AEE = () => {
 
                 {/* Laudo Tab */}
                 <TabsContent value="laudo" className="mt-4">
-                  <div className="space-y-6">
-                    {/* CID */}
+                  {!isEditMode ? (
+                    /* View Mode - Read Only */
                     <div className="space-y-4">
-                      <Label className="text-base font-medium">CID</Label>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div className="space-y-2">
-                          <Label htmlFor="cid_code" className="text-sm text-muted-foreground">Código</Label>
-                          <Input
-                            id="cid_code"
-                            placeholder="Ex: F84.0"
-                            value={formData.aee_cid_code}
-                            onChange={(e) => setFormData({ ...formData, aee_cid_code: e.target.value })}
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="cid_description" className="text-sm text-muted-foreground">Descrição</Label>
-                          <Input
-                            id="cid_description"
-                            placeholder="Ex: Autismo Infantil"
-                            value={formData.aee_cid_description}
-                            onChange={(e) => setFormData({ ...formData, aee_cid_description: e.target.value })}
-                          />
-                        </div>
+                      {/* CID */}
+                      <div>
+                        <Label className="text-muted-foreground text-sm">CID</Label>
+                        <p className="font-medium">
+                          {selectedStudent.aee_cid_code 
+                            ? `${selectedStudent.aee_cid_code}${selectedStudent.aee_cid_description ? ` - ${selectedStudent.aee_cid_description}` : ''}`
+                            : 'Não informado'}
+                        </p>
                       </div>
-                    </div>
 
-                    {/* Medication */}
-                    <div className="space-y-3">
-                      <Label className="text-base font-medium">Faz uso de medicação</Label>
-                      <RadioGroup
-                        value={formData.aee_uses_medication ? 'yes' : 'no'}
-                        onValueChange={(value) => setFormData({ 
-                          ...formData, 
-                          aee_uses_medication: value === 'yes',
-                          aee_medication_name: value === 'no' ? '' : formData.aee_medication_name
-                        })}
-                      >
-                        <div className="flex items-center space-x-2">
-                          <RadioGroupItem value="no" id="med_no" />
-                          <Label htmlFor="med_no" className="font-normal cursor-pointer">Não</Label>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          <RadioGroupItem value="yes" id="med_yes" />
-                          <Label htmlFor="med_yes" className="font-normal cursor-pointer">Sim</Label>
-                        </div>
-                      </RadioGroup>
-                      {formData.aee_uses_medication && (
-                        <div className="ml-6 space-y-2">
-                          <Label htmlFor="medication_name" className="text-sm text-muted-foreground">Qual?</Label>
-                          <Input
-                            id="medication_name"
-                            placeholder="Nome da medicação"
-                            value={formData.aee_medication_name}
-                            onChange={(e) => setFormData({ ...formData, aee_medication_name: e.target.value })}
-                          />
+                      {/* Medication */}
+                      <div>
+                        <Label className="text-muted-foreground text-sm">Uso de Medicação</Label>
+                        <p className="font-medium">
+                          {selectedStudent.aee_uses_medication 
+                            ? `Sim${selectedStudent.aee_medication_name ? ` - ${selectedStudent.aee_medication_name}` : ''}`
+                            : 'Não'}
+                        </p>
+                      </div>
+
+                      {/* Literacy */}
+                      <div>
+                        <Label className="text-muted-foreground text-sm">Alfabetização</Label>
+                        <p className="font-medium">{getLiteracyLabel(selectedStudent.aee_literacy_status)}</p>
+                      </div>
+
+                      {/* Adapted Activities */}
+                      <div>
+                        <Label className="text-muted-foreground text-sm">Atividades Adaptadas</Label>
+                        <p className="font-medium">{selectedStudent.aee_adapted_activities ? 'Sim' : 'Não'}</p>
+                      </div>
+
+                      {/* Adaptation Suggestions */}
+                      {selectedStudent.aee_adaptation_suggestions && (
+                        <div>
+                          <Label className="text-muted-foreground text-sm">Sugestões de Adaptações</Label>
+                          <div className="mt-1 p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg border border-amber-200 dark:border-amber-800">
+                            <p className="text-sm whitespace-pre-wrap">{selectedStudent.aee_adaptation_suggestions}</p>
+                          </div>
                         </div>
                       )}
-                    </div>
 
-                    {/* Literacy */}
-                    <div className="space-y-3">
-                      <Label className="text-base font-medium">É alfabetizado</Label>
-                      <RadioGroup
-                        value={formData.aee_literacy_status}
-                        onValueChange={(value) => setFormData({ ...formData, aee_literacy_status: value })}
-                      >
-                        <div className="flex items-center space-x-2">
-                          <RadioGroupItem value="no" id="lit_no" />
-                          <Label htmlFor="lit_no" className="font-normal cursor-pointer">Não</Label>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          <RadioGroupItem value="yes" id="lit_yes" />
-                          <Label htmlFor="lit_yes" className="font-normal cursor-pointer">Sim</Label>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          <RadioGroupItem value="in_process" id="lit_process" />
-                          <Label htmlFor="lit_process" className="font-normal cursor-pointer">Em processo</Label>
-                        </div>
-                      </RadioGroup>
-                    </div>
-
-                    {/* Adapted Activities */}
-                    <div className="space-y-3">
-                      <Label className="text-base font-medium">Atividades e provas adaptadas</Label>
-                      <RadioGroup
-                        value={formData.aee_adapted_activities ? 'yes' : 'no'}
-                        onValueChange={(value) => setFormData({ ...formData, aee_adapted_activities: value === 'yes' })}
-                      >
-                        <div className="flex items-center space-x-2">
-                          <RadioGroupItem value="no" id="adapt_no" />
-                          <Label htmlFor="adapt_no" className="font-normal cursor-pointer">Não</Label>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          <RadioGroupItem value="yes" id="adapt_yes" />
-                          <Label htmlFor="adapt_yes" className="font-normal cursor-pointer">Sim</Label>
-                        </div>
-                      </RadioGroup>
-                    </div>
-
-                    {/* Adaptation Suggestions */}
-                    <div className="space-y-2">
-                      <Label htmlFor="adaptation_suggestions" className="text-base font-medium">
-                        Sugestões de Adaptações
-                      </Label>
-                      <Textarea
-                        id="adaptation_suggestions"
-                        placeholder="Descreva sugestões de adaptações para este aluno..."
-                        value={formData.aee_adaptation_suggestions}
-                        onChange={(e) => setFormData({ ...formData, aee_adaptation_suggestions: e.target.value })}
-                        rows={4}
-                        className="resize-none"
-                      />
-                    </div>
-
-                    {/* Laudo Document Upload */}
-                    <div className="space-y-3">
-                      <Label className="text-base font-medium">Documento do Laudo</Label>
-                      
-                      {/* Existing document preview */}
-                      {(selectedStudent.aee_laudo_attachment_url || laudoFile) && (
-                        <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg border">
-                          <FileText className="w-8 h-8 text-amber-600" />
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium truncate">
-                              {laudoFile?.name || selectedStudent.aee_laudo_attachment_url?.split('/').pop()}
-                            </p>
-                            <p className="text-xs text-muted-foreground">
-                              {laudoFile ? 'Novo arquivo selecionado' : 'Documento anexado'}
-                            </p>
-                          </div>
-                          <div className="flex gap-1">
-                            {laudoSignedUrl && !laudoFile && (
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => window.open(laudoSignedUrl, '_blank')}
-                                title="Visualizar"
-                              >
-                                <Eye className="w-4 h-4" />
-                              </Button>
-                            )}
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => {
-                                if (laudoFile) {
-                                  setLaudoFile(null);
-                                } else {
-                                  handleDeleteLaudo();
-                                }
-                              }}
-                              title="Remover"
+                      {/* Laudo Document */}
+                      {selectedStudent.aee_laudo_attachment_url && (
+                        <div>
+                          <Label className="text-muted-foreground text-sm">Documento do Laudo</Label>
+                          <div className="mt-1">
+                            <Button 
+                              variant="outline" 
+                              size="sm" 
+                              onClick={() => laudoSignedUrl && window.open(laudoSignedUrl, '_blank')}
+                              disabled={!laudoSignedUrl}
                             >
-                              <Trash2 className="w-4 h-4 text-destructive" />
+                              <Eye className="w-4 h-4 mr-2" />
+                              Visualizar Documento
                             </Button>
                           </div>
                         </div>
                       )}
-
-                      {/* Upload buttons */}
-                      <div className="flex gap-2">
-                        <input
-                          ref={fileInputRef}
-                          type="file"
-                          accept="image/*,.pdf"
-                          onChange={handleFileChange}
-                          className="hidden"
-                        />
-                        <input
-                          ref={cameraInputRef}
-                          type="file"
-                          accept="image/*"
-                          capture="environment"
-                          onChange={handleFileChange}
-                          className="hidden"
-                        />
-                        <Button
-                          type="button"
-                          variant="outline"
-                          onClick={() => cameraInputRef.current?.click()}
-                          className="flex-1"
-                        >
-                          <Camera className="w-4 h-4 mr-2" />
-                          Tirar Foto
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          onClick={() => fileInputRef.current?.click()}
-                          className="flex-1"
-                        >
-                          <Paperclip className="w-4 h-4 mr-2" />
-                          Anexar Arquivo
-                        </Button>
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        Formatos aceitos: JPG, PNG, WEBP, PDF (máx. 10MB)
-                      </p>
                     </div>
-                  </div>
+                  ) : (
+                    /* Edit Mode */
+                    <div className="space-y-6">
+                      {/* CID */}
+                      <div className="space-y-4">
+                        <Label className="text-base font-medium">CID</Label>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div className="space-y-2">
+                            <Label htmlFor="cid_code" className="text-sm text-muted-foreground">Código</Label>
+                            <Input
+                              id="cid_code"
+                              placeholder="Ex: F84.0"
+                              value={formData.aee_cid_code}
+                              onChange={(e) => setFormData({ ...formData, aee_cid_code: e.target.value })}
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="cid_description" className="text-sm text-muted-foreground">Descrição</Label>
+                            <Input
+                              id="cid_description"
+                              placeholder="Ex: Autismo Infantil"
+                              value={formData.aee_cid_description}
+                              onChange={(e) => setFormData({ ...formData, aee_cid_description: e.target.value })}
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Medication */}
+                      <div className="space-y-3">
+                        <Label className="text-base font-medium">Faz uso de medicação</Label>
+                        <RadioGroup
+                          value={formData.aee_uses_medication ? 'yes' : 'no'}
+                          onValueChange={(value) => setFormData({ 
+                            ...formData, 
+                            aee_uses_medication: value === 'yes',
+                            aee_medication_name: value === 'no' ? '' : formData.aee_medication_name
+                          })}
+                        >
+                          <div className="flex items-center space-x-2">
+                            <RadioGroupItem value="no" id="med_no" />
+                            <Label htmlFor="med_no" className="font-normal cursor-pointer">Não</Label>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <RadioGroupItem value="yes" id="med_yes" />
+                            <Label htmlFor="med_yes" className="font-normal cursor-pointer">Sim</Label>
+                          </div>
+                        </RadioGroup>
+                        {formData.aee_uses_medication && (
+                          <div className="ml-6 space-y-2">
+                            <Label htmlFor="medication_name" className="text-sm text-muted-foreground">Qual?</Label>
+                            <Input
+                              id="medication_name"
+                              placeholder="Nome da medicação"
+                              value={formData.aee_medication_name}
+                              onChange={(e) => setFormData({ ...formData, aee_medication_name: e.target.value })}
+                            />
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Literacy */}
+                      <div className="space-y-3">
+                        <Label className="text-base font-medium">É alfabetizado</Label>
+                        <RadioGroup
+                          value={formData.aee_literacy_status}
+                          onValueChange={(value) => setFormData({ ...formData, aee_literacy_status: value })}
+                        >
+                          <div className="flex items-center space-x-2">
+                            <RadioGroupItem value="no" id="lit_no" />
+                            <Label htmlFor="lit_no" className="font-normal cursor-pointer">Não</Label>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <RadioGroupItem value="yes" id="lit_yes" />
+                            <Label htmlFor="lit_yes" className="font-normal cursor-pointer">Sim</Label>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <RadioGroupItem value="in_process" id="lit_process" />
+                            <Label htmlFor="lit_process" className="font-normal cursor-pointer">Em processo</Label>
+                          </div>
+                        </RadioGroup>
+                      </div>
+
+                      {/* Adapted Activities */}
+                      <div className="space-y-3">
+                        <Label className="text-base font-medium">Atividades e provas adaptadas</Label>
+                        <RadioGroup
+                          value={formData.aee_adapted_activities ? 'yes' : 'no'}
+                          onValueChange={(value) => setFormData({ ...formData, aee_adapted_activities: value === 'yes' })}
+                        >
+                          <div className="flex items-center space-x-2">
+                            <RadioGroupItem value="no" id="adapt_no" />
+                            <Label htmlFor="adapt_no" className="font-normal cursor-pointer">Não</Label>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <RadioGroupItem value="yes" id="adapt_yes" />
+                            <Label htmlFor="adapt_yes" className="font-normal cursor-pointer">Sim</Label>
+                          </div>
+                        </RadioGroup>
+                      </div>
+
+                      {/* Adaptation Suggestions */}
+                      <div className="space-y-2">
+                        <Label htmlFor="adaptation_suggestions" className="text-base font-medium">
+                          Sugestões de Adaptações
+                        </Label>
+                        <Textarea
+                          id="adaptation_suggestions"
+                          placeholder="Descreva sugestões de adaptações para este aluno..."
+                          value={formData.aee_adaptation_suggestions}
+                          onChange={(e) => setFormData({ ...formData, aee_adaptation_suggestions: e.target.value })}
+                          rows={4}
+                          className="resize-none"
+                        />
+                      </div>
+
+                      {/* Laudo Document Upload */}
+                      <div className="space-y-3">
+                        <Label className="text-base font-medium">Documento do Laudo</Label>
+                        
+                        {/* Existing document preview */}
+                        {(selectedStudent.aee_laudo_attachment_url || laudoFile) && (
+                          <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg border">
+                            <FileText className="w-8 h-8 text-amber-600" />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium truncate">
+                                {laudoFile?.name || selectedStudent.aee_laudo_attachment_url?.split('/').pop()}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                {laudoFile ? 'Novo arquivo selecionado' : 'Documento anexado'}
+                              </p>
+                            </div>
+                            <div className="flex gap-1">
+                              {laudoSignedUrl && !laudoFile && (
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => window.open(laudoSignedUrl, '_blank')}
+                                  title="Visualizar"
+                                >
+                                  <Eye className="w-4 h-4" />
+                                </Button>
+                              )}
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => {
+                                  if (laudoFile) {
+                                    setLaudoFile(null);
+                                  } else {
+                                    handleDeleteLaudo();
+                                  }
+                                }}
+                                title="Remover"
+                              >
+                                <Trash2 className="w-4 h-4 text-destructive" />
+                              </Button>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Upload buttons */}
+                        <div className="flex gap-2">
+                          <input
+                            ref={fileInputRef}
+                            type="file"
+                            accept="image/*,.pdf"
+                            onChange={handleFileChange}
+                            className="hidden"
+                          />
+                          <input
+                            ref={cameraInputRef}
+                            type="file"
+                            accept="image/*"
+                            capture="environment"
+                            onChange={handleFileChange}
+                            className="hidden"
+                          />
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => cameraInputRef.current?.click()}
+                            className="flex-1"
+                          >
+                            <Camera className="w-4 h-4 mr-2" />
+                            Tirar Foto
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => fileInputRef.current?.click()}
+                            className="flex-1"
+                          >
+                            <Paperclip className="w-4 h-4 mr-2" />
+                            Anexar Arquivo
+                          </Button>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Formatos aceitos: JPG, PNG, WEBP, PDF (máx. 10MB)
+                        </p>
+                      </div>
+                    </div>
+                  )}
                 </TabsContent>
               </Tabs>
 
               <DialogFooter className="mt-6">
-                <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
-                  Cancelar
-                </Button>
-                <Button onClick={handleSave} disabled={isSaving || isUploadingLaudo}>
-                  {isSaving || isUploadingLaudo ? 'Salvando...' : 'Salvar'}
-                </Button>
+                {!isEditMode ? (
+                  <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
+                    Fechar
+                  </Button>
+                ) : (
+                  <>
+                    <Button variant="outline" onClick={() => setIsEditMode(false)}>
+                      Cancelar
+                    </Button>
+                    <Button onClick={handleSave} disabled={isSaving || isUploadingLaudo}>
+                      {isSaving || isUploadingLaudo ? 'Salvando...' : 'Salvar'}
+                    </Button>
+                  </>
+                )}
               </DialogFooter>
             </>
           )}

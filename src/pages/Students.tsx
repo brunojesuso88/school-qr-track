@@ -884,27 +884,27 @@ const Students = () => {
               <Card
                 key={student.id}
                 className={cn(
-                  "card-hover animate-fade-in overflow-hidden",
+                  "card-hover animate-fade-in overflow-hidden cursor-pointer",
                   student.status === 'inactive' && "border-red-500/50",
                   student.has_medical_report && "border-2 border-amber-500 ring-2 ring-amber-500/20"
                 )}
                 style={{ animationDelay: `${index * 30}ms` }}
+                onClick={() => setReportStudent(student)}
               >
                 <CardContent className="p-5">
                   <div className="flex items-start justify-between mb-4">
                     <div className="flex items-center gap-3">
-                      <StudentPhoto
-                        photoUrl={student.photo_url}
-                        fullName={student.full_name}
-                        status={student.status}
-                        size="md"
-                        onClick={() => student.photo_url && setZoomPhotoStudent(student)}
-                      />
+                      <div onClick={(e) => { e.stopPropagation(); student.photo_url && setZoomPhotoStudent(student); }}>
+                        <StudentPhoto
+                          photoUrl={student.photo_url}
+                          fullName={student.full_name}
+                          status={student.status}
+                          size="md"
+                          className={student.photo_url ? "cursor-zoom-in" : ""}
+                        />
+                      </div>
                       <div>
-                        <h3 
-                          className="font-medium text-sm cursor-pointer hover:text-primary hover:underline transition-colors"
-                          onClick={() => setReportStudent(student)}
-                        >
+                        <h3 className="font-medium text-sm">
                           {student.full_name}
                         </h3>
                         <p className="text-xs text-muted-foreground">{student.student_id}</p>
@@ -936,7 +936,7 @@ const Students = () => {
                     )}
                   </div>
 
-                  <div className="flex gap-2 flex-wrap">
+                  <div className="flex gap-2 flex-wrap" onClick={(e) => e.stopPropagation()}>
                     <Button
                       variant="outline"
                       size="sm"
