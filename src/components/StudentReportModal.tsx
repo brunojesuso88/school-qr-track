@@ -5,7 +5,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
-import { Calendar, FileText, AlertCircle, CheckCircle, XCircle, Clock } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Calendar, FileText, AlertCircle, CheckCircle, XCircle, Clock, Eye } from 'lucide-react';
 import { format, parse, startOfMonth, endOfMonth, startOfYear, endOfYear, differenceInYears } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
@@ -32,6 +33,8 @@ interface Student {
   aee_medication_name?: string | null;
   aee_literacy_status?: string | null;
   aee_adapted_activities?: boolean;
+  aee_adaptation_suggestions?: string | null;
+  aee_laudo_attachment_url?: string | null;
 }
 
 interface Occurrence {
@@ -71,10 +74,27 @@ export const StudentReportModal = ({ student, onClose }: StudentReportModalProps
   const [monthlyAttendance, setMonthlyAttendance] = useState<AttendanceSummary | null>(null);
   const [yearlyAttendance, setYearlyAttendance] = useState<AttendanceSummary | null>(null);
   const [occurrences, setOccurrences] = useState<Occurrence[]>([]);
+  const [laudoSignedUrl, setLaudoSignedUrl] = useState<string | null>(null);
+
+  const fetchLaudoSignedUrl = async (fileName: string) => {
+    try {
+      const { data, error } = await supabase.storage
+        .from('aee-documents')
+        .createSignedUrl(fileName, 3600);
+      if (!error && data) setLaudoSignedUrl(data.signedUrl);
+    } catch (error) {
+      console.error('Error getting signed URL:', error);
+    }
+  };
 
   useEffect(() => {
     if (student) {
       fetchStudentData();
+      if (student.aee_laudo_attachment_url) {
+        fetchLaudoSignedUrl(student.aee_laudo_attachment_url);
+      } else {
+        setLaudoSignedUrl(null);
+      }
     }
   }, [student]);
 
@@ -439,6 +459,34 @@ export const StudentReportModal = ({ student, onClose }: StudentReportModalProps
                       {student.aee_adapted_activities ? 'Sim' : 'Não'}
                     </p>
                   </div>
+
+                  {/* Adaptation Suggestions */}
+                  {student.aee_adaptation_suggestions && (
+                    <div>
+                      <Label className="text-muted-foreground text-sm">Sugestões de Adaptações</Label>
+                      <div className="mt-1 p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg border border-amber-200 dark:border-amber-800">
+                        <p className="text-sm whitespace-pre-wrap">{student.aee_adaptation_suggestions}</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Laudo Document */}
+                  {student.aee_laudo_attachment_url && (
+                    <div>
+                      <Label className="text-muted-foreground text-sm">Documento do Laudo</Label>
+                      <div className="mt-1">
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          onClick={() => laudoSignedUrl && window.open(laudoSignedUrl, '_blank')}
+                          disabled={!laudoSignedUrl}
+                        >
+                          <Eye className="w-4 h-4 mr-2" />
+                          Visualizar Documento
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             ) : (
