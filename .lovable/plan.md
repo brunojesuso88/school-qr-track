@@ -1,415 +1,562 @@
 
-## Plano de Implementação: Melhorias no Sistema de Alunos e AEE + Notificações Push
+# Plano de Implementação: Melhorias no Sistema EDUNEXUS
 
-### Resumo das Alterações Solicitadas
+## Resumo das Alterações
 
-1. **Notificações Push para Admin**: Quando um novo usuário se cadastrar, administradores recebem notificação via push
-2. **Página Alunos - Click no Card**: Abrir caixa de informações ao clicar em qualquer lugar do card (não apenas no nome)
-3. **Página Alunos - Aba "Laudo"**: Incluir todas as informações do laudo do Sistema AEE
-4. **Sistema AEE - Modal Somente Leitura**: Ao clicar no card, apresentar informações sem edição
-5. **Sistema AEE - Botão "Editar"**: Trocar "Detalhes" por "Editar" e habilitar edição apenas nessa opção
+1. **Tela Home**: Aumentar tamanho do botão de configurações
+2. **QR Codes**: Criar aba de alunos, exportar por turma em PDF, ajustar tamanho/formato
+3. **Notificações Push**: Diagnóstico e correção do sistema
+4. **Declarações**: Nova aba para Bolsa Família (disponível para Admin/Direção)
 
 ---
 
-### Fase 1: Abrir Modal ao Clicar no Card do Aluno (Students.tsx)
+## Fase 1: Aumentar Botão de Configurações na Home
 
-**Arquivo**: `src/pages/Students.tsx`
+**Arquivo**: `src/pages/Home.tsx`
 
-**Problema Atual**: O modal de informações só abre ao clicar no NOME do aluno (linha 904-908)
+**Alteração**: Linhas 168-176
 
-**Solução**: Adicionar `onClick` no `Card` inteiro para abrir o `StudentReportModal`
-
-Linhas 884-892 - Adicionar onClick ao Card:
+**Atual**:
 ```typescript
-<Card
-  key={student.id}
-  className={cn(
-    "card-hover animate-fade-in overflow-hidden cursor-pointer",  // Adicionar cursor-pointer
-    student.status === 'inactive' && "border-red-500/50",
-    student.has_medical_report && "border-2 border-amber-500 ring-2 ring-amber-500/20"
-  )}
-  style={{ animationDelay: `${index * 30}ms` }}
-  onClick={() => setReportStudent(student)}  // Adicionar onClick
+<Button
+  variant="ghost"
+  size="icon"
+  className="absolute top-4 right-4 rounded-full"
 >
+  <Settings className="h-5 w-5" />
+</Button>
 ```
 
-Linhas 904-908 - Remover onClick do nome (evitar duplo click):
+**Novo**:
 ```typescript
-<h3 className="font-medium text-sm">
-  {student.full_name}
-</h3>
-```
-
-Linhas 896-902 - Adicionar stopPropagation na foto:
-```typescript
-<StudentPhoto
-  photoUrl={student.photo_url}
-  fullName={student.full_name}
-  status={student.status}
-  size="md"
-  onClick={(e) => { 
-    e.stopPropagation();
-    student.photo_url && setZoomPhotoStudent(student);
-  }}
-/>
+<Button
+  variant="outline"
+  size="lg"
+  className="absolute top-4 right-4 rounded-full h-12 w-12 shadow-md hover:shadow-lg"
+>
+  <Settings className="h-6 w-6" />
+</Button>
 ```
 
 ---
 
-### Fase 2: Expandir Aba "Laudo" no StudentReportModal
+## Fase 2: Sistema de QR Codes Expandido
 
-**Arquivo**: `src/components/StudentReportModal.tsx`
+### 2.1 Criar Nova Página de Gerenciamento de QR Codes
 
-**Problema Atual**: A aba "Laudo" mostra apenas CID, Medicação, Alfabetização e Atividades Adaptadas. Faltam:
-- Sugestões de Adaptações
-- Documento do Laudo (anexo)
+**Arquivo**: `src/pages/QRCodes.tsx` (novo)
 
-**Solução**: Atualizar interface e adicionar campos:
+**Funcionalidades**:
+- **Aba 1 - Escanear**: Funcionalidade atual do ScanQR
+- **Aba 2 - Alunos**: Lista de alunos com opção de gerar QR Code individual
+- **Aba 3 - Por Turma**: Gerar e exportar QR codes de todos os alunos de uma turma em PDF
 
-1. Adicionar novos campos à interface Student (linha 14-35):
+**Estrutura**:
 ```typescript
-interface Student {
-  // ... campos existentes
-  aee_adaptation_suggestions?: string | null;
-  aee_laudo_attachment_url?: string | null;
-}
+// Tabs: Escanear | Alunos | Por Turma
+<Tabs defaultValue="scan">
+  <TabsList>
+    <TabsTrigger value="scan">Escanear</TabsTrigger>
+    <TabsTrigger value="students">Alunos</TabsTrigger>
+    <TabsTrigger value="byClass">Por Turma</TabsTrigger>
+  </TabsList>
+  
+  <TabsContent value="scan">
+    {/* Funcionalidade atual do ScanQR */}
+  </TabsContent>
+  
+  <TabsContent value="students">
+    {/* Lista de alunos com busca e filtro por turma */}
+    {/* Cada aluno tem botão para gerar/baixar QR individual */}
+  </TabsContent>
+  
+  <TabsContent value="byClass">
+    {/* Seleção de turma */}
+    {/* Botão "Gerar PDF com QR Codes" */}
+    {/* Preview dos QR codes da turma */}
+  </TabsContent>
+</Tabs>
 ```
 
-2. Adicionar estado para URL assinada do documento (linha 70-73):
-```typescript
-const [laudoSignedUrl, setLaudoSignedUrl] = useState<string | null>(null);
-```
+### 2.2 Ajustar Tamanho e Formato do QR Code
 
-3. Adicionar função para buscar URL assinada:
+**Arquivo**: `src/pages/Students.tsx` (função `downloadQRCode`)
+
+**Alterações**:
+- Aumentar tamanho do canvas de 300x350 para 400x500
+- Aumentar tamanho do QR de 200x200 para 300x300
+- Melhorar espaçamento e fonte
+
+**Novo código**:
 ```typescript
-const fetchLaudoSignedUrl = async (fileName: string) => {
-  try {
-    const { data, error } = await supabase.storage
-      .from('aee-documents')
-      .createSignedUrl(fileName, 3600);
-    if (!error && data) setLaudoSignedUrl(data.signedUrl);
-  } catch (error) {
-    console.error('Error getting signed URL:', error);
-  }
+const downloadQRCode = (student: Student) => {
+  const svg = document.getElementById(`qr-${student.id}`);
+  if (!svg) return;
+
+  const svgData = new XMLSerializer().serializeToString(svg);
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+  const img = new Image();
+  
+  img.onload = () => {
+    canvas.width = 400;
+    canvas.height = 500;
+    if (ctx) {
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      
+      // QR Code maior e centralizado
+      ctx.drawImage(img, 50, 30, 300, 300);
+      
+      // Textos maiores e mais legíveis
+      ctx.fillStyle = '#000000';
+      ctx.font = 'bold 18px Arial';
+      ctx.textAlign = 'center';
+      ctx.fillText(student.full_name, 200, 370);
+      
+      ctx.font = '14px Arial';
+      ctx.fillStyle = '#555555';
+      ctx.fillText(`ID: ${student.student_id}`, 200, 400);
+      ctx.fillText(`Turma: ${student.class}`, 200, 425);
+    }
+    
+    const pngFile = canvas.toDataURL('image/png');
+    const downloadLink = document.createElement('a');
+    downloadLink.download = `qr-${student.student_id}.png`;
+    downloadLink.href = pngFile;
+    downloadLink.click();
+  };
+
+  img.src = 'data:image/svg+xml;base64,' + btoa(svgData);
 };
 ```
 
-4. Chamar no useEffect quando student tiver laudo:
+### 2.3 Exportação em PDF por Turma
+
+**Nova função** em `src/pages/QRCodes.tsx`:
+
 ```typescript
-useEffect(() => {
-  if (student?.aee_laudo_attachment_url) {
-    fetchLaudoSignedUrl(student.aee_laudo_attachment_url);
-  } else {
-    setLaudoSignedUrl(null);
-  }
-}, [student]);
-```
-
-5. Expandir aba "Laudo" (linha 386-450) com:
-```typescript
-{/* Sugestões de Adaptações */}
-{student.aee_adaptation_suggestions && (
-  <div>
-    <Label className="text-muted-foreground text-sm">Sugestões de Adaptações</Label>
-    <div className="mt-1 p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg border border-amber-200 dark:border-amber-800">
-      <p className="text-sm whitespace-pre-wrap">{student.aee_adaptation_suggestions}</p>
-    </div>
-  </div>
-)}
-
-{/* Documento do Laudo */}
-{student.aee_laudo_attachment_url && (
-  <div>
-    <Label className="text-muted-foreground text-sm">Documento do Laudo</Label>
-    <div className="mt-1 flex items-center gap-2">
-      <Button variant="outline" size="sm" onClick={() => window.open(laudoSignedUrl, '_blank')}>
-        <FileText className="w-4 h-4 mr-2" />
-        Visualizar Documento
-      </Button>
-    </div>
-  </div>
-)}
-```
-
----
-
-### Fase 3: Modal do AEE - Modo Somente Leitura
-
-**Arquivo**: `src/pages/AEE.tsx`
-
-**Problema Atual**: O modal abre em modo de edição direta
-
-**Solução**: Criar dois modos: visualização e edição
-
-1. Adicionar estado para controlar modo (linha 55-60):
-```typescript
-const [isEditMode, setIsEditMode] = useState(false);
-```
-
-2. Modificar função `openStudentDialog` para abrir em modo visualização:
-```typescript
-const openStudentDialog = (student: Student) => {
-  setSelectedStudent(student);
-  setIsEditMode(false);  // Sempre abre em modo visualização
-  // ... resto do código
-};
-```
-
-3. Criar nova função para abrir em modo edição:
-```typescript
-const openEditMode = (student: Student) => {
-  setSelectedStudent(student);
-  setIsEditMode(true);
-  setFormData({
-    aee_cid_code: student.aee_cid_code || '',
-    // ... resto dos campos
-  });
-  // ... buscar professores e laudo
-};
-```
-
-4. Modificar a aba "Informações do Laudo" para exibir modo diferente:
-
-**Modo Visualização (isEditMode = false)**:
-```typescript
-<TabsContent value="laudo">
-  {!isEditMode ? (
-    <div className="space-y-4">
-      {/* Exibição somente leitura - similar ao StudentReportModal */}
-      <div>
-        <Label className="text-muted-foreground text-sm">CID</Label>
-        <p className="font-medium">
-          {selectedStudent.aee_cid_code 
-            ? `${selectedStudent.aee_cid_code}${selectedStudent.aee_cid_description ? ` - ${selectedStudent.aee_cid_description}` : ''}`
-            : 'Não informado'}
-        </p>
+const generateClassQRCodesPDF = async (className: string) => {
+  const classStudents = students.filter(s => s.class === className);
+  
+  // Gerar HTML com grid de QR codes (4 por página)
+  const content = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <style>
+        @page { size: A4; margin: 15mm; }
+        body { font-family: Arial, sans-serif; }
+        .header { text-align: center; margin-bottom: 20px; }
+        .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; }
+        .qr-card { 
+          border: 1px solid #ddd; 
+          padding: 15px; 
+          text-align: center;
+          page-break-inside: avoid;
+        }
+        .qr-card img { width: 150px; height: 150px; }
+        .student-name { font-weight: bold; margin-top: 10px; }
+        .student-info { font-size: 12px; color: #666; }
+      </style>
+    </head>
+    <body>
+      <div class="header">
+        <h1>QR Codes - Turma ${className}</h1>
+        <p>Total: ${classStudents.length} alunos</p>
       </div>
-      {/* Medicação, Alfabetização, Atividades, Sugestões, Documento... */}
-    </div>
-  ) : (
-    <div className="space-y-6">
-      {/* Formulário de edição existente */}
-    </div>
-  )}
-</TabsContent>
+      <div class="grid">
+        ${classStudents.map(student => `
+          <div class="qr-card">
+            <!-- QR Code SVG inline -->
+            <div class="student-name">${student.full_name}</div>
+            <div class="student-info">ID: ${student.student_id}</div>
+          </div>
+        `).join('')}
+      </div>
+    </body>
+    </html>
+  `;
+  
+  // Abrir em nova janela e imprimir como PDF
+  const win = window.open('', '_blank');
+  win?.document.write(content);
+  win?.print();
+};
 ```
 
-5. Alterar botões do footer:
+### 2.4 Atualizar Rota
+
+**Arquivo**: `src/App.tsx`
+
 ```typescript
-<DialogFooter>
-  {!isEditMode ? (
-    <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
-      Fechar
-    </Button>
-  ) : (
-    <>
-      <Button variant="outline" onClick={() => setIsEditMode(false)}>
-        Cancelar
-      </Button>
-      <Button onClick={handleSave} disabled={isSaving || isUploadingLaudo}>
-        {isSaving || isUploadingLaudo ? 'Salvando...' : 'Salvar'}
-      </Button>
-    </>
-  )}
-</DialogFooter>
+// Alterar rota /scan para usar nova página QRCodes
+<Route path="/scan" element={<QRCodes />} />
 ```
 
 ---
 
-### Fase 4: Trocar Botão "Detalhes" por "Editar"
+## Fase 3: Correção das Notificações Push
 
-**Arquivo**: `src/pages/AEE.tsx`
+### Problema Identificado
 
-**Linhas 622-630** - Alterar o botão no card:
+O sistema de push notifications não funciona porque:
 
-```typescript
-// DE:
-<Button
-  variant="outline"
-  className="flex-1"
-  onClick={(e) => { e.stopPropagation(); openStudentDialog(student); }}
->
-  <FileText className="w-4 h-4 mr-2" />
-  Detalhes
-</Button>
+1. **Service Worker sem suporte a push**: O VitePWA gera um service worker que não tem handlers para eventos `push` e `notificationclick`
+2. **Edge Function incompleta**: A função `notify-new-user` apenas faz log, não envia notificações reais via Web Push API
 
-// PARA:
-<Button
-  variant="outline"
-  className="flex-1"
-  onClick={(e) => { 
-    e.stopPropagation(); 
-    openEditMode(student);  // Abre diretamente em modo edição
-  }}
->
-  <Edit2 className="w-4 h-4 mr-2" />
-  Editar
-</Button>
+### Solução
+
+#### 3.1 Criar Service Worker Customizado
+
+**Arquivo**: `public/sw-custom.js` (novo)
+
+```javascript
+// Custom Service Worker for Push Notifications
+self.addEventListener('push', function(event) {
+  if (!event.data) return;
+  
+  const data = event.data.json();
+  
+  const options = {
+    body: data.body || 'Nova notificação',
+    icon: data.icon || '/pwa-192x192.png',
+    badge: data.badge || '/pwa-192x192.png',
+    data: data.data || {},
+    vibrate: [100, 50, 100],
+    requireInteraction: true
+  };
+  
+  event.waitUntil(
+    self.registration.showNotification(data.title || 'EDUNEXUS', options)
+  );
+});
+
+self.addEventListener('notificationclick', function(event) {
+  event.notification.close();
+  
+  const urlToOpen = event.notification.data?.url || '/';
+  
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true })
+      .then(windowClients => {
+        for (const client of windowClients) {
+          if (client.url.includes(urlToOpen) && 'focus' in client) {
+            return client.focus();
+          }
+        }
+        return clients.openWindow(urlToOpen);
+      })
+  );
+});
 ```
 
-Adicionar import do ícone Edit2:
+#### 3.2 Atualizar vite.config.ts
+
 ```typescript
-import { Search, FileText, Users, Camera, Paperclip, FileDown, Trash2, Eye, Edit2 } from 'lucide-react';
+VitePWA({
+  registerType: 'autoUpdate',
+  // Adicionar injectManifest para usar SW customizado
+  strategies: 'injectManifest',
+  srcDir: 'public',
+  filename: 'sw-custom.js',
+  // ... resto da config
+})
+```
+
+#### 3.3 Atualizar Edge Function para Enviar Push Real
+
+**Arquivo**: `supabase/functions/notify-new-user/index.ts`
+
+A edge function precisa usar a Web Push API com criptografia VAPID. Isso requer:
+
+1. Importar biblioteca de criptografia
+2. Gerar JWT com VAPID
+3. Criptografar payload
+4. Enviar para endpoint
+
+```typescript
+// Implementação simplificada usando fetch para Push API
+const sendPushNotification = async (
+  subscription: PushSubscription,
+  payload: string,
+  vapidPublicKey: string,
+  vapidPrivateKey: string
+) => {
+  // Web Push requer:
+  // 1. ECDSA signature (VAPID)
+  // 2. Payload encryption (ECDH + AES-GCM)
+  
+  // Para Deno, usar crypto API nativa
+  // Implementação completa requer ~100 linhas
+};
 ```
 
 ---
 
-### Fase 5: Notificações Push para Administradores
+## Fase 4: Aba de Declarações (Bolsa Família)
 
-**IMPORTANTE**: Esta funcionalidade requer configuração mais complexa envolvendo:
+### 4.1 Estrutura do Banco de Dados (opcional)
 
-1. **Serviço de Push Notifications**: Firebase Cloud Messaging (FCM) ou similar
-2. **Service Worker Customizado**: Para receber e exibir notificações
-3. **Edge Function**: Para enviar notificações quando novo usuário se cadastrar
-4. **Tabela de Tokens**: Para armazenar tokens de dispositivos dos admins
+Se quiser salvar histórico de declarações geradas:
 
-**Estrutura Proposta**:
-
-1. **Nova tabela no banco de dados**:
 ```sql
-CREATE TABLE public.push_subscriptions (
+CREATE TABLE declarations (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
-  endpoint TEXT NOT NULL,
-  p256dh TEXT NOT NULL,
-  auth TEXT NOT NULL,
-  created_at TIMESTAMPTZ DEFAULT now(),
-  UNIQUE(user_id, endpoint)
+  student_id UUID REFERENCES students(id) ON DELETE CASCADE,
+  type TEXT NOT NULL DEFAULT 'bolsa_familia',
+  generated_by UUID REFERENCES auth.users(id),
+  generated_at TIMESTAMPTZ DEFAULT now(),
+  data JSONB NOT NULL
 );
 ```
 
-2. **Componente de Permissão de Notificação** (Admin Dashboard):
+### 4.2 Nova Página de Declarações
+
+**Arquivo**: `src/pages/Declarations.tsx` (novo)
+
+**Campos do Formulário** (baseado no modelo anexado):
+
+**Dados do Responsável**:
+- Nome do Responsável
+- RG do Responsável
+- CPF do Responsável
+- Endereço Completo
+
+**Dados do Aluno** (preenchidos automaticamente):
+- Nome do Aluno (select com busca)
+- Data de Nascimento
+- Turma/Série
+
+**Dados da Escola** (preenchidos automaticamente via settings):
+- Nome da Escola
+- Endereço da Escola
+
+**Dados da Declaração**:
+- Ano Letivo
+- Local
+- Data
+- Nome do Responsável pela Assinatura
+- Telefone para Contato
+
+### 4.3 Interface do Formulário
+
 ```typescript
-// Solicitar permissão e salvar subscription
-const requestNotificationPermission = async () => {
-  const permission = await Notification.requestPermission();
-  if (permission === 'granted') {
-    const registration = await navigator.serviceWorker.ready;
-    const subscription = await registration.pushManager.subscribe({
-      userVisibleOnly: true,
-      applicationServerKey: VAPID_PUBLIC_KEY
-    });
-    // Salvar subscription no banco
-  }
-};
+interface DeclarationForm {
+  // Dados do responsável (guardião)
+  guardianName: string;
+  guardianRG: string;
+  guardianCPF: string;
+  guardianAddress: string;
+  
+  // Dados do aluno (preenchidos ao selecionar)
+  studentId: string;
+  studentName: string;
+  studentBirthDate: string;
+  studentClass: string;
+  
+  // Dados da escola (das configurações)
+  schoolName: string;
+  schoolAddress: string;
+  
+  // Dados da declaração
+  schoolYear: string;
+  location: string;
+  declarationDate: Date;
+  signerName: string;
+  signerPhone: string;
+}
 ```
 
-3. **Edge Function para enviar notificação**:
+### 4.4 Fluxo da Página
+
+```
+1. Seleção do Aluno (dropdown com busca)
+   ↓
+   [Preenche automaticamente: Nome, Nascimento, Turma, Nome do Responsável, Telefone]
+   
+2. Complemento de Dados
+   - RG e CPF do Responsável (manual)
+   - Endereço do Responsável (manual)
+   - Dados da Escola (das configurações)
+   
+3. Revisão dos Dados
+   - Tela de conferência com todos os campos
+   - Possibilidade de editar antes de gerar
+   
+4. Geração do PDF
+   - Botão "Gerar Declaração"
+   - Abre nova janela com documento formatado
+   - Botão de impressão/salvar como PDF
+```
+
+### 4.5 Template do PDF
+
+```html
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { 
+      font-family: Arial, sans-serif; 
+      padding: 40px 60px;
+      line-height: 1.8;
+    }
+    h1 { 
+      text-align: center; 
+      font-size: 24px;
+      margin-bottom: 30px;
+    }
+    .content { 
+      text-align: justify; 
+      margin: 20px 0;
+    }
+    .signature { 
+      margin-top: 60px;
+      text-align: center;
+    }
+    .signature-line {
+      border-top: 1px solid #000;
+      width: 300px;
+      margin: 40px auto 10px;
+    }
+  </style>
+</head>
+<body>
+  <h1>DECLARAÇÃO ESCOLAR</h1>
+  
+  <p class="content">
+    Eu, <strong>${guardianName}</strong>, portador(a) do RG nº 
+    <strong>${guardianRG}</strong> e CPF nº <strong>${guardianCPF}</strong>, 
+    residente à <strong>${guardianAddress}</strong>, declaro que sou 
+    responsável pela educação do(a) aluno(a) <strong>${studentName}</strong>, 
+    nascido(a) em <strong>${studentBirthDate}</strong>, matriculado(a) na 
+    <strong>${schoolName}</strong> situada à <strong>${schoolAddress}</strong>.
+  </p>
+  
+  <p class="content">
+    O(A) aluno(a) encontra-se regularmente matriculado(a) no 
+    <strong>${studentClass}</strong> e frequenta as aulas conforme o 
+    calendário escolar.
+  </p>
+  
+  <p class="content">
+    Esta declaração é emitida para fins de cadastro e/ou atualização no 
+    programa Bolsa Família do Governo Federal, conforme solicitado.
+  </p>
+  
+  <p class="content">
+    Atesto que, conforme os dados disponíveis, <strong>${studentName}</strong> 
+    tem um bom desempenho escolar e frequência compatível com as exigências 
+    do referido programa.
+  </p>
+  
+  <p class="content">
+    Esta declaração é válida para o ano letivo de <strong>${schoolYear}</strong> 
+    e pode ser utilizada para os fins a que se destina.
+  </p>
+  
+  <p class="content">
+    Por ser verdade, firmo a presente declaração.
+  </p>
+  
+  <p style="margin-top: 40px;">
+    <strong>${location}</strong>, <strong>${declarationDate}</strong>
+  </p>
+  
+  <div class="signature">
+    <div class="signature-line"></div>
+    <p><strong>${signerName}</strong></p>
+    <p>[Assinatura]</p>
+    <p>Telefone: ${signerPhone}</p>
+  </div>
+</body>
+</html>
+```
+
+### 4.6 Adicionar à Navegação
+
+**Arquivo**: `src/components/DashboardLayout.tsx`
+
 ```typescript
-// supabase/functions/notify-new-user/index.ts
-// Chamada por trigger quando novo usuário é criado
-// Busca admins com push_subscriptions e envia notificação
+import { FileSignature } from 'lucide-react'; // ou outro ícone apropriado
+
+const allNavigation = [
+  // ... itens existentes
+  { name: 'Declarações', href: '/declarations', icon: FileSignature, roles: ['admin', 'direction'] },
+];
 ```
 
-4. **Trigger no banco de dados**:
-```sql
-CREATE OR REPLACE FUNCTION notify_admins_new_user()
-RETURNS TRIGGER AS $$
-BEGIN
-  -- Chamar edge function para notificar admins
-  PERFORM net.http_post(...);
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
+### 4.7 Adicionar Rota
 
-CREATE TRIGGER on_new_user_created
-AFTER INSERT ON auth.users
-FOR EACH ROW EXECUTE FUNCTION notify_admins_new_user();
+**Arquivo**: `src/App.tsx`
+
+```typescript
+<Route path="/declarations" element={
+  <AdminRoute allowedRoles={['admin', 'direction']}>
+    <Declarations />
+  </AdminRoute>
+} />
 ```
-
-**Nota**: Esta funcionalidade requer configuração de VAPID keys e integração com serviço de push. Sugiro implementar as outras alterações primeiro e tratar as notificações push como uma fase separada.
 
 ---
 
-### Resumo de Arquivos a Alterar
+## Resumo de Arquivos
 
-| Arquivo | Tipo | Alteração |
+| Arquivo | Ação | Descrição |
 |---------|------|-----------|
-| `src/pages/Students.tsx` | Editar | onClick no Card inteiro + stopPropagation nos botões |
-| `src/components/StudentReportModal.tsx` | Editar | Expandir aba Laudo com todos os campos AEE |
-| `src/pages/AEE.tsx` | Editar | Modo visualização/edição + trocar "Detalhes" por "Editar" |
-| `supabase/migrations/xxx.sql` | Criar | Tabela push_subscriptions (para notificações) |
-| `supabase/functions/notify-new-user/` | Criar | Edge function para notificações |
+| `src/pages/Home.tsx` | Editar | Aumentar botão de configurações |
+| `src/pages/QRCodes.tsx` | Criar | Nova página com abas para QR codes |
+| `src/pages/ScanQR.tsx` | Remover/Refatorar | Mover lógica para QRCodes.tsx |
+| `src/pages/Students.tsx` | Editar | Melhorar função downloadQRCode |
+| `src/pages/Declarations.tsx` | Criar | Formulário e geração de declaração |
+| `public/sw-custom.js` | Criar | Service worker para push notifications |
+| `vite.config.ts` | Editar | Configurar injectManifest para SW |
+| `supabase/functions/notify-new-user/index.ts` | Editar | Implementar envio real de push |
+| `src/components/DashboardLayout.tsx` | Editar | Adicionar link "Declarações" |
+| `src/App.tsx` | Editar | Adicionar rota /declarations |
 
 ---
 
-### Fluxo Visual Proposto
+## Ordem de Implementação Sugerida
 
-**Página Alunos - Click no Card**:
-```
-┌──────────────────────────────────────┐
-│ Card do Aluno                        │  ← Click em qualquer lugar
-│ ┌─────┐                              │
-│ │Foto │  Nome do Aluno               │
-│ └─────┘  ID: XXX                     │
-│                                      │
-│ Turma: MM100 | Turno: Manhã          │
-│                                      │
-│ [QR] [Ocorr.] [Edit] [Del]           │  ← Botões mantêm funcionamento
-└──────────────────────────────────────┘
-           │
-           ▼
-┌──────────────────────────────────────┐
-│ Modal StudentReportModal             │
-│ ┌──────┐ Nome                        │
-│ │ Foto │ ID • Turma                  │
-│ └──────┘                             │
-│                                      │
-│ [Frequência] [Ocorrências] [Laudo]   │
-│                                      │
-│ === Laudo (expandido) ===            │
-│ CID: F84.0 - Autismo                 │
-│ Medicação: Sim - Ritalina            │
-│ Alfabetizado: Em processo            │
-│ Atividades Adaptadas: Sim            │
-│ Sugestões de Adaptações:             │
-│ ┌─────────────────────────────────┐  │
-│ │ Texto das sugestões...         │  │
-│ └─────────────────────────────────┘  │
-│ [📄 Visualizar Documento do Laudo]   │
-└──────────────────────────────────────┘
-```
-
-**Sistema AEE - Modos**:
-```
-Modo VISUALIZAÇÃO (click no card):
-┌──────────────────────────────────────┐
-│ Modal AEE - Visualização             │
-│ ┌──────┐ Nome | Turma | Turno        │
-│ │ Foto │                             │
-│ └──────┘                             │
-│                                      │
-│ [Professores] [Info. Laudo]          │
-│                                      │
-│ CID: F84.0 - Autismo                 │  ← Somente leitura
-│ Medicação: Sim - Ritalina            │
-│ Alfabetizado: Em processo            │
-│                                      │
-│                           [Fechar]   │
-└──────────────────────────────────────┘
-
-Modo EDIÇÃO (click no botão "Editar"):
-┌──────────────────────────────────────┐
-│ Modal AEE - Edição                   │
-│ ┌──────┐ Nome | Turma | Turno        │
-│ │ Foto │                             │
-│ └──────┘                             │
-│                                      │
-│ [Professores] [Info. Laudo]          │
-│                                      │
-│ CID: [_______] [_______________]     │  ← Campos editáveis
-│ Medicação: ( ) Não  (•) Sim          │
-│ ...                                  │
-│                                      │
-│                  [Cancelar] [Salvar] │
-└──────────────────────────────────────┘
-```
+1. **Home - Botão de configurações** (5 min)
+2. **QR Codes - Tamanho e formato** (10 min)
+3. **QR Codes - Nova página com abas** (30 min)
+4. **Declarações - Página completa** (45 min)
+5. **Push Notifications - Service Worker e Edge Function** (30 min)
 
 ---
 
-### Considerações Técnicas
+## Seção Técnica
 
-1. **stopPropagation**: Necessário nos botões e foto dentro do card para evitar abrir o modal ao clicar neles
-2. **Interface Student**: Atualizar em StudentReportModal para incluir novos campos AEE
-3. **Signed URLs**: Necessário para acessar documentos no bucket privado `aee-documents`
-4. **Push Notifications**: Requer VAPID keys e configuração de Service Worker customizado - implementação mais complexa que pode ser feita em fase posterior
+### Dependências Necessárias
+
+Nenhuma nova dependência é necessária. O sistema usa:
+- `qrcode.react` para gerar QR codes (já instalado)
+- `date-fns` para formatação de datas (já instalado)
+- Web APIs nativas para geração de PDF via window.print()
+
+### Considerações de Segurança
+
+1. **Declarações**: Disponível apenas para `admin` e `direction` via AdminRoute
+2. **Push Notifications**: Requer autenticação e role de admin para ativar
+3. **QR Codes**: Mantém controle de acesso existente
+
+### Validação de Formulários
+
+O formulário de Declarações usará Zod para validação:
+
+```typescript
+const declarationSchema = z.object({
+  guardianName: z.string().min(3, 'Nome muito curto'),
+  guardianRG: z.string().min(5, 'RG inválido'),
+  guardianCPF: z.string().regex(/^\d{11}$/, 'CPF deve ter 11 dígitos'),
+  guardianAddress: z.string().min(10, 'Endereço muito curto'),
+  studentId: z.string().uuid('Selecione um aluno'),
+  schoolYear: z.string().min(4, 'Ano letivo inválido'),
+  location: z.string().min(3, 'Local inválido'),
+  signerName: z.string().min(3, 'Nome muito curto'),
+  signerPhone: z.string().regex(/^\d{10,11}$/, 'Telefone inválido'),
+});
+```
