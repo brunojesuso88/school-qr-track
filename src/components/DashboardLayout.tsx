@@ -1,6 +1,6 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
-import { LayoutDashboard, Users, QrCode, Calendar, Bell, Settings, Menu, X, BookOpen, LogOut, ChevronRight, ArrowLeft, Heart } from 'lucide-react';
+import { LayoutDashboard, Users, QrCode, Calendar, Bell, Settings, Menu, X, BookOpen, LogOut, ChevronRight, ArrowLeft, Heart, FileText } from 'lucide-react';
 import { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -22,6 +22,7 @@ const allNavigation = [
   { name: 'Turmas', href: '/classes', icon: BookOpen, roles: ['admin', 'direction', 'teacher'] },
   { name: 'Escanear QR', href: '/scan', icon: QrCode, roles: ['admin', 'direction', 'teacher', 'staff'] },
   { name: 'Frequência', href: '/attendance', icon: Calendar, roles: ['admin', 'direction', 'teacher'] },
+  { name: 'Declarações', href: '/declarations', icon: FileText, roles: ['admin', 'direction'] },
   { name: 'Notificações', href: '/notifications', icon: Bell, roles: ['admin', 'direction', 'teacher'] },
   { name: 'Configurações', href: '/settings', icon: Settings, roles: ['admin', 'direction'] },
 ];
