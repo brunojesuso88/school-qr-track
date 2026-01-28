@@ -167,11 +167,11 @@ const Home = () => {
       <Sheet open={isSettingsOpen} onOpenChange={setIsSettingsOpen}>
         <SheetTrigger asChild>
           <Button
-            variant="ghost"
-            size="icon"
-            className="absolute top-4 right-4 rounded-full"
+            variant="outline"
+            size="lg"
+            className="absolute top-4 right-4 rounded-full h-14 w-14 shadow-md hover:shadow-lg border-2"
           >
-            <Settings className="h-5 w-5" />
+            <Settings className="h-7 w-7" />
           </Button>
         </SheetTrigger>
         <SheetContent>

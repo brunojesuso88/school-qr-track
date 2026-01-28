@@ -13,7 +13,7 @@ import Home from "./pages/Home";
 import Dashboard from "./pages/Dashboard";
 import Students from "./pages/Students";
 import Classes from "./pages/Classes";
-import ScanQR from "./pages/ScanQR";
+import QRCodes from "./pages/QRCodes";
 import StaffScanQR from "./pages/StaffScanQR";
 import Attendance from "./pages/Attendance";
 import Notifications from "./pages/Notifications";
@@ -22,6 +22,7 @@ import Auth from "./pages/Auth";
 import InstallPWA from "./pages/InstallPWA";
 import NotFound from "./pages/NotFound";
 import AEE from "./pages/AEE";
+import Declarations from "./pages/Declarations";
 import SchoolMapping from "./pages/SchoolMapping";
 import MappingTeachers from "./pages/mapping/MappingTeachers";
 import MappingSubjects from "./pages/mapping/MappingSubjects";
@@ -57,8 +58,9 @@ const App = () => (
               <Route path="/students" element={<AdminRoute><Students /></AdminRoute>} />
               <Route path="/aee" element={<AdminRoute><AEE /></AdminRoute>} />
               <Route path="/classes" element={<AdminRoute><Classes /></AdminRoute>} />
-              <Route path="/scan" element={<AdminRoute><ScanQR /></AdminRoute>} />
+              <Route path="/scan" element={<AdminRoute><QRCodes /></AdminRoute>} />
               <Route path="/attendance" element={<AdminRoute><Attendance /></AdminRoute>} />
+              <Route path="/declarations" element={<AdminRoute><Declarations /></AdminRoute>} />
               <Route path="/notifications" element={<AdminRoute><Notifications /></AdminRoute>} />
               <Route path="/settings" element={<AdminRoute><Settings /></AdminRoute>} />
               
