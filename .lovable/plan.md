@@ -1,49 +1,27 @@
 
 
-# Plano: Ajustar Formulário de Professores
+# Plano: Corrigir Formulário de Novo Professor
 
-## Resumo das Alterações
+## Problemas Identificados
 
-1. Remover a seção "Turnos Disponíveis" do formulário de professor
-2. Adicionar barra de rolagem (ScrollArea) na caixa de diálogo
-
----
-
-## Alterações Detalhadas
-
-### 1. Remover "Turnos Disponíveis"
-
-**Arquivo**: `src/components/mapping/TeacherForm.tsx`
-
-**Remover**:
-- Constante `SHIFTS` (linhas 18-22)
-- Estado `availability` e função `toggleShift` (linhas 33, 109-115)
-- Validação de `availability.length === 0` no submit (linhas 50-53)
-- Bloco JSX da seção "Turnos Disponíveis" (linhas 167-183)
-- Referência a `availability` no objeto `data` (linha 63)
-
-**Ajuste na Lógica**:
-- Como os turnos serão derivados do `TeacherAvailabilitySection`, vamos manter uma disponibilidade padrão ou calcular automaticamente com base na grid de horários
+1. **ScrollArea não funciona**: O `flex-1` no ScrollArea não funciona sem altura explícita no container
+2. **Botões invisíveis**: Os botões "Cancelar" e "Cadastrar" estão dentro do ScrollArea e ficam escondidos quando o conteúdo é maior que a tela
 
 ---
 
-### 2. Adicionar ScrollArea na Dialog
+## Solução
+
+### 1. Corrigir Layout do DialogContent
 
 **Arquivo**: `src/pages/mapping/MappingTeachers.tsx`
 
-**Alteração**: Envolver o conteúdo do `DialogContent` com `ScrollArea` para permitir rolagem quando o formulário for muito grande.
+**Problema**: O `ScrollArea` com `flex-1` precisa de altura definida no container pai.
+
+**Alteração**:
+- Adicionar `overflow-hidden` ao DialogContent
+- Usar altura fixa no ScrollArea ao invés de `flex-1`
 
 **De**:
-```typescript
-<DialogContent className="max-w-lg">
-  <DialogHeader>
-    <DialogTitle>...</DialogTitle>
-  </DialogHeader>
-  <TeacherForm ... />
-</DialogContent>
-```
-
-**Para**:
 ```typescript
 <DialogContent className="max-w-lg max-h-[90vh] flex flex-col">
   <DialogHeader>
@@ -55,27 +33,59 @@
 </DialogContent>
 ```
 
+**Para**:
+```typescript
+<DialogContent className="max-w-lg max-h-[90vh] overflow-hidden">
+  <DialogHeader>
+    <DialogTitle>...</DialogTitle>
+  </DialogHeader>
+  <ScrollArea className="h-[calc(90vh-120px)] pr-4">
+    <TeacherForm ... />
+  </ScrollArea>
+</DialogContent>
+```
+
+### 2. Mover Botões para Fora do ScrollArea
+
+**Arquivo**: `src/components/mapping/TeacherForm.tsx`
+
+**Problema**: Os botões estão dentro do form que está dentro do ScrollArea, então eles rolam e ficam invisíveis.
+
+**Solução**: Separar os botões do conteúdo rolável. Para isso, o TeacherForm precisa aceitar uma prop para renderizar os botões externamente, OU manter os botões sempre visíveis com posição fixa.
+
+**Opção escolhida**: Manter os botões dentro do formulário mas garantir que eles fiquem visíveis usando `sticky bottom-0`:
+
+```typescript
+<div className="flex justify-end gap-2 pt-4 sticky bottom-0 bg-background pb-2">
+  <Button type="button" variant="outline" onClick={onClose}>
+    Cancelar
+  </Button>
+  <Button type="submit" disabled={loading}>
+    {loading ? "Salvando..." : teacher ? "Salvar" : "Cadastrar"}
+  </Button>
+</div>
+```
+
 ---
 
 ## Arquivos Afetados
 
-| Arquivo | Ação |
-|---------|------|
-| `src/components/mapping/TeacherForm.tsx` | Remover seção "Turnos Disponíveis" |
-| `src/pages/mapping/MappingTeachers.tsx` | Adicionar ScrollArea na Dialog |
+| Arquivo | Alteração |
+|---------|-----------|
+| `src/pages/mapping/MappingTeachers.tsx` | Corrigir altura do ScrollArea |
+| `src/components/mapping/TeacherForm.tsx` | Adicionar sticky aos botões |
 
 ---
 
-## Seção Tecnica
+## Seção Técnica
 
-### Importações Necessárias
+### Detalhes da Correção do ScrollArea
 
-Em `MappingTeachers.tsx`:
-```typescript
-import { ScrollArea } from "@/components/ui/scroll-area";
-```
+O componente `ScrollArea` do Radix UI requer que seu container tenha uma altura definida para funcionar corretamente. Usando `h-[calc(90vh-120px)]`:
+- `90vh` = altura máxima do dialog
+- `120px` = espaço para header (~60px) + padding (~60px)
 
-### Lógica de Disponibilidade
+### Detalhes do Sticky
 
-Após remover os "Turnos Disponíveis", o campo `availability` do professor será definido automaticamente baseado na grid de disponibilidade detalhada, ou um valor padrão como `["morning", "afternoon", "evening"]` será usado para manter compatibilidade com outros componentes que dependem desse campo.
+O `sticky bottom-0` mantém os botões fixos no fundo da área de scroll, garantindo que sempre fiquem visíveis. O `bg-background` garante que o fundo tenha a cor correta e não fique transparente.
 
