@@ -194,7 +194,7 @@ const TeacherForm = ({ teacher, onClose }: TeacherFormProps) => {
         />
       </div>
 
-      <div className="flex justify-end gap-2 pt-4">
+      <div className="flex justify-end gap-2 pt-4 sticky bottom-0 bg-background pb-2">
         <Button type="button" variant="outline" onClick={onClose}>
           Cancelar
         </Button>

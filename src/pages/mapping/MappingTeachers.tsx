@@ -96,13 +96,13 @@ const MappingTeachersContent = () => {
                 Adicionar
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-lg max-h-[90vh] flex flex-col">
+            <DialogContent className="max-w-lg max-h-[90vh] overflow-hidden">
               <DialogHeader>
                 <DialogTitle>
                   {editingTeacher ? "Editar Professor" : "Novo Professor"}
                 </DialogTitle>
               </DialogHeader>
-              <ScrollArea className="flex-1 pr-4">
+              <ScrollArea className="h-[calc(90vh-120px)] pr-4">
                 <TeacherForm teacher={editingTeacher} onClose={handleCloseDialog} />
               </ScrollArea>
             </DialogContent>
