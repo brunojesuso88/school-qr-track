@@ -1,149 +1,179 @@
 
 
-# Plano: Associar Disciplinas Diretamente no Card do Professor
+# Plano: Salvar Atribuições em Lote
 
 ## Resumo
 
-Remover a selecao de "Disciplinas que leciona" do formulario de edicao de professores e adicionar um novo botao "Associar disciplina" no card do professor. Ao clicar, abre uma caixa de dialogo mostrando todas as turmas e suas disciplinas, permitindo que o usuario atribua o professor diretamente, com opcao de substituir outro professor ja atribuido.
+Modificar o diálogo de associação de disciplinas para que as alterações sejam feitas localmente (em memória) e só persistidas no banco de dados quando o usuário clicar em um botão "Salvar" ao final.
 
 ---
 
-## Alteracoes
+## Como Vai Funcionar
 
-### 1. Remover "Disciplinas que leciona" do Formulario
-
-**Arquivo**: `src/components/mapping/TeacherForm.tsx`
-
-Remover o bloco de codigo das linhas 157-179 que contem a secao de disciplinas com checkboxes. Tambem remover o estado `subjects` e a funcao `toggleSubject` que nao serao mais necessarios.
+| Ação | Comportamento Atual | Novo Comportamento |
+|------|---------------------|-------------------|
+| Clicar "Atribuir" | Salva imediatamente no banco | Marca localmente como pendente |
+| Clicar "Substituir" | Salva imediatamente no banco | Marca localmente como pendente |
+| Fechar diálogo | Alterações já salvas | Descarta alterações pendentes |
+| Clicar "Salvar" | Não existe | Persiste todas as alterações no banco |
 
 ---
 
-### 2. Adicionar Botao "Associar disciplina" no Card
+## Alterações
 
-**Arquivo**: `src/pages/mapping/MappingTeachers.tsx`
+### Arquivo: `src/components/mapping/TeacherAssociationDialog.tsx`
 
-Adicionar um novo botao ao lado dos botoes de editar e excluir no card do professor:
+**1. Adicionar estado local para alterações pendentes:**
+
+```typescript
+interface PendingChange {
+  classSubjectId: string;
+  action: 'assign' | 'unassign';
+  previousTeacherId?: string | null;
+}
+
+const [pendingChanges, setPendingChanges] = useState<PendingChange[]>([]);
+```
+
+**2. Criar estado local derivado das disciplinas:**
+
+Manter uma cópia local das atribuições que reflete as alterações pendentes, para que a UI mostre o estado atualizado sem salvar no banco.
+
+**3. Modificar `handleAssignOrReplace`:**
+
+Em vez de chamar `assignTeacher`/`unassignTeacher`, apenas adiciona a alteração à lista de pendentes.
+
+**4. Adicionar botão "Salvar" no rodapé:**
 
 ```
-[Icone Livro] Associar disciplina
++------------------------------------------+
+|  [Descartar]               [Salvar (3)]  |
++------------------------------------------+
 ```
+
+O número entre parênteses mostra quantas alterações pendentes existem.
+
+**5. Função `handleSaveAll`:**
+
+Processa todas as alterações pendentes em uma única operação.
+
+**6. Indicadores visuais:**
+
+- Disciplinas com alterações pendentes mostram um indicador visual (borda colorida ou ícone)
+- Badge mostrando "Pendente" em vez do estado atual
 
 ---
 
-### 3. Criar Dialogo de Associacao
-
-**Arquivo**: `src/pages/mapping/MappingTeachers.tsx`
-
-Criar um novo dialogo que exibe:
-
-- Cabecalho com nome do professor selecionado
-- Lista de turmas agrupadas por turno
-- Para cada turma, lista de disciplinas mostrando:
-  - Nome da disciplina
-  - Quantidade de aulas semanais
-  - Se ja tem professor atribuido: mostra nome + botao "Substituir"
-  - Se nao tem professor: botao "Atribuir"
-
-**Estrutura visual**:
+## Interface Atualizada
 
 ```text
 +------------------------------------------+
-|  Associar disciplina                     |
-|  Prof. Maria Silva                       |
+|  Associar disciplinas                    |
+|  Prof. Maria Silva (5h / 20h)            |
 +------------------------------------------+
 |                                          |
-|  MANHA                                   |
+|  MANHÃ                                   |
 |  ----------------------------------------|
 |  Turma 1A                                |
-|    Matematica (4h)         [Atribuir]    |
-|    Portugues (4h)  Joao    [Substituir]  |
-|    ...                                   |
+|    Matemática (4h)  [✓ Pendente]         |
+|    Português (4h)   João    [Substituir] |
 |  ----------------------------------------|
-|  Turma 2A                                |
-|    Historia (3h)           [Atribuir]    |
-|    ...                                   |
 |                                          |
-|  TARDE                                   |
-|  ----------------------------------------|
-|  ...                                     |
++------------------------------------------+
+|  [Descartar]               [Salvar (1)]  |
 +------------------------------------------+
 ```
-
----
-
-### 4. Logica de Substituicao
-
-Quando o usuario clica em "Substituir":
-1. Primeiro remove o professor atual da disciplina (usando `unassignTeacher`)
-2. Depois atribui o novo professor (usando `assignTeacher`)
-
-Quando o usuario clica em "Atribuir":
-1. Atribui diretamente o professor selecionado
-
----
-
-## Validacoes
-
-| Situacao | Comportamento |
-|----------|---------------|
-| Professor nao disponivel no turno | Disciplina aparece desabilitada |
-| Atribuicao excederia carga horaria | Botao desabilitado com aviso |
-| Disciplina ja atribuida ao mesmo professor | Mostra "Ja atribuido" |
 
 ---
 
 ## Arquivos Afetados
 
-| Arquivo | Alteracao |
+| Arquivo | Alteração |
 |---------|-----------|
-| `src/components/mapping/TeacherForm.tsx` | Remover secao de disciplinas e codigo relacionado |
-| `src/pages/mapping/MappingTeachers.tsx` | Adicionar botao e dialogo de associacao |
+| `src/components/mapping/TeacherAssociationDialog.tsx` | Adicionar lógica de alterações pendentes, botões Salvar/Descartar, indicadores visuais |
 
 ---
 
-## Secao Tecnica
+## Seção Técnica
 
-### Estrutura do novo estado
+### Estrutura de dados para alterações pendentes
 
 ```typescript
-const [associatingTeacher, setAssociatingTeacher] = useState<MappingTeacher | null>(null);
-const [isAssociating, setIsAssociating] = useState(false);
+interface PendingChange {
+  classSubjectId: string;
+  action: 'assign' | 'unassign';
+  previousTeacherId?: string | null;
+}
+
+const [pendingChanges, setPendingChanges] = useState<PendingChange[]>([]);
 ```
 
-### Funcao de substituicao
+### Estado local derivado
 
 ```typescript
-const handleAssignOrReplace = async (classSubjectId: string, currentTeacherId?: string) => {
-  if (!associatingTeacher) return;
+// Combina o estado real do banco com as alterações pendentes
+const getLocalTeacherId = (classSubjectId: string): string | null | undefined => {
+  const pending = pendingChanges.find(p => p.classSubjectId === classSubjectId);
+  if (pending) {
+    return pending.action === 'assign' ? teacher.id : null;
+  }
+  return classSubjects.find(cs => cs.id === classSubjectId)?.teacher_id;
+};
+```
+
+### Calcular carga horária local
+
+```typescript
+const getLocalCurrentHours = (): number => {
+  let hours = teacher.current_hours;
   
-  setIsAssociating(true);
-  try {
-    // Se ja tem professor, remove primeiro
-    if (currentTeacherId) {
-      await unassignTeacher(classSubjectId);
+  pendingChanges.forEach(change => {
+    const cs = classSubjects.find(c => c.id === change.classSubjectId);
+    if (!cs) return;
+    
+    if (change.action === 'assign') {
+      hours += cs.weekly_classes;
+    } else if (change.action === 'unassign' && change.previousTeacherId === teacher.id) {
+      hours -= cs.weekly_classes;
     }
-    // Atribui o novo professor
-    await assignTeacher(classSubjectId, associatingTeacher.id);
-    toast({ title: currentTeacherId ? "Professor substituido" : "Disciplina atribuida" });
+  });
+  
+  return Math.max(0, hours);
+};
+```
+
+### Função de salvar em lote
+
+```typescript
+const handleSaveAll = async () => {
+  setIsSaving(true);
+  try {
+    for (const change of pendingChanges) {
+      if (change.action === 'unassign' && change.previousTeacherId) {
+        await unassignTeacher(change.classSubjectId);
+      }
+      if (change.action === 'assign') {
+        await assignTeacher(change.classSubjectId, teacher.id);
+      }
+    }
+    
+    toast({ title: "Atribuições salvas", description: `${pendingChanges.length} alteração(ões) salva(s)` });
+    setPendingChanges([]);
+    onClose();
   } catch (error: any) {
-    toast({ title: "Erro", description: error.message, variant: "destructive" });
+    toast({ title: "Erro ao salvar", description: error.message, variant: "destructive" });
   } finally {
-    setIsAssociating(false);
+    setIsSaving(false);
   }
 };
 ```
 
-### Agrupamento por turno
+### Resetar ao fechar
 
 ```typescript
-const shiftGroups = {
-  morning: classes.filter(c => c.shift === 'morning'),
-  afternoon: classes.filter(c => c.shift === 'afternoon'),
-  evening: classes.filter(c => c.shift === 'evening')
+const handleClose = () => {
+  setPendingChanges([]);
+  onClose();
 };
 ```
-
-### Verificacao de disponibilidade
-
-Mostrar apenas turmas/disciplinas onde o turno da turma esta na disponibilidade do professor.
 
