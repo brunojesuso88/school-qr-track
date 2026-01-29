@@ -1,72 +1,74 @@
 
 
-# Plano: Desabilitar Refresh Automatico ao Trocar de Aba
+# Plano: Manter Dialog Aberto ao Trocar de Aba
 
 ## Problema Identificado
 
-O sistema esta atualizando a pagina automaticamente quando voce troca de aba no Windows e depois volta. Isso acontece devido a configuracao padrao do React Query que refaz as consultas quando a janela ganha foco novamente.
+Quando você está com um diálogo aberto (como "Atribuir Professor" na Distribuição) e troca de aba no Windows, o diálogo fecha automaticamente. Isso acontece porque o componente Dialog do Radix UI detecta que o foco saiu do diálogo e o fecha.
 
 ---
 
-## Solucao
+## Solução
 
-Desabilitar o comportamento de refetch automatico no React Query quando a janela ganha foco.
+Adicionar as propriedades `onPointerDownOutside` e `onFocusOutside` no DialogContent para prevenir o fechamento automático apenas quando a ação vem de fora da janela (como trocar de aba).
 
-### Alteracao
+---
 
-**Arquivo**: `src/App.tsx`
+## Alterações
 
-Configurar o QueryClient com opcoes que desabilitam o refetch automatico:
+### Arquivo: `src/pages/mapping/MappingDistribution.tsx`
 
-**De**:
+**Antes**:
 ```typescript
-const queryClient = new QueryClient();
+<DialogContent className="max-w-md">
 ```
 
-**Para**:
+**Depois**:
 ```typescript
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      refetchOnWindowFocus: false,
-      refetchOnReconnect: false,
-    },
-  },
-});
+<DialogContent 
+  className="max-w-md"
+  onFocusOutside={(e) => e.preventDefault()}
+>
 ```
 
 ---
 
-## O Que Cada Opcao Faz
+## Como Funciona
 
-| Opcao | Padrao | Nova Config | Efeito |
-|-------|--------|-------------|--------|
-| `refetchOnWindowFocus` | `true` | `false` | Nao refaz queries ao voltar para a aba |
-| `refetchOnReconnect` | `true` | `false` | Nao refaz queries ao reconectar internet |
+| Propriedade | Função |
+|-------------|--------|
+| `onFocusOutside` | Chamada quando o foco sai do diálogo (incluindo troca de aba). Ao chamar `preventDefault()`, impedimos que o diálogo feche. |
+
+O diálogo ainda fechará quando:
+- Você clicar no X
+- Você clicar no overlay escuro (fora do diálogo)
+- Você pressionar ESC
+- A atribuição for concluída com sucesso
 
 ---
 
 ## Arquivo Afetado
 
-| Arquivo | Alteracao |
+| Arquivo | Alteração |
 |---------|-----------|
-| `src/App.tsx` | Configurar QueryClient para desabilitar refetch automatico |
+| `src/pages/mapping/MappingDistribution.tsx` | Adicionar `onFocusOutside` no DialogContent |
 
 ---
 
-## Secao Tecnica
+## Seção Técnica
 
 ### Por que isso acontece
 
-O React Query, por padrao, assume que quando o usuario volta para a aba do navegador, os dados podem estar desatualizados. Por isso, ele automaticamente refaz todas as queries ativas para garantir que o usuario veja dados frescos.
+O Radix UI Dialog implementa "focus trapping" - mantém o foco dentro do diálogo enquanto está aberto. Quando a janela do navegador perde o foco (ao trocar de aba), o Dialog detecta isso como um evento de "focus outside" e fecha automaticamente.
 
-### Beneficios da mudanca
+### Solução técnica
 
-- A pagina nao vai mais "piscar" ou recarregar ao trocar de abas
-- Melhor experiencia do usuario ao trabalhar com multiplas abas
-- Os dados ainda podem ser atualizados manualmente ou apos operacoes CRUD
+Usando `onFocusOutside={(e) => e.preventDefault()}`, interceptamos esse evento e prevenimos o comportamento padrão de fechar o diálogo.
 
-### Alternativa
+### Comportamento preservado
 
-Se no futuro voce quiser manter os dados atualizados automaticamente sem o comportamento de "piscar", podemos implementar Realtime do banco de dados, que atualiza os dados silenciosamente em segundo plano apenas quando ha mudancas reais.
+- Clicar fora do diálogo (no overlay) ainda fecha o diálogo
+- O botão X ainda funciona
+- A tecla ESC ainda funciona
+- Concluir a atribuição ainda fecha o diálogo
 
