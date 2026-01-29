@@ -262,8 +262,8 @@ const TeacherAssociationDialog = ({ teacher, onClose }: TeacherAssociationDialog
 
   return (
     <Dialog open={!!teacher} onOpenChange={() => handleClose()}>
-      <DialogContent className="max-w-lg max-h-[85vh] overflow-hidden flex flex-col">
-        <DialogHeader className="flex-shrink-0">
+      <DialogContent className="max-w-lg max-h-[85vh] flex flex-col overflow-hidden">
+        <DialogHeader className="flex-shrink-0 pb-2">
           <DialogTitle className="flex items-center gap-2">
             <Book className="h-5 w-5" />
             Associar disciplinas
@@ -285,22 +285,24 @@ const TeacherAssociationDialog = ({ teacher, onClose }: TeacherAssociationDialog
           </div>
         </DialogHeader>
 
-        <ScrollArea className="flex-1 min-h-0 h-[400px] pr-4">
-          {!hasAnySubjects ? (
-            <div className="text-center py-8 text-muted-foreground">
-              <p>Nenhuma disciplina cadastrada nas turmas.</p>
-              <p className="text-sm">Adicione disciplinas às turmas primeiro.</p>
-            </div>
-          ) : (
-            <div className="space-y-6 pb-4">
-              {renderShiftSection('morning', shiftGroups.morning)}
-              {renderShiftSection('afternoon', shiftGroups.afternoon)}
-              {renderShiftSection('evening', shiftGroups.evening)}
-            </div>
-          )}
-        </ScrollArea>
+        <div className="flex-1 min-h-0 overflow-hidden">
+          <ScrollArea className="h-full max-h-[50vh] pr-4">
+            {!hasAnySubjects ? (
+              <div className="text-center py-8 text-muted-foreground">
+                <p>Nenhuma disciplina cadastrada nas turmas.</p>
+                <p className="text-sm">Adicione disciplinas às turmas primeiro.</p>
+              </div>
+            ) : (
+              <div className="space-y-6 pb-4">
+                {renderShiftSection('morning', shiftGroups.morning)}
+                {renderShiftSection('afternoon', shiftGroups.afternoon)}
+                {renderShiftSection('evening', shiftGroups.evening)}
+              </div>
+            )}
+          </ScrollArea>
+        </div>
 
-        <DialogFooter className="flex-shrink-0 gap-2 sm:gap-0">
+        <DialogFooter className="flex-shrink-0 pt-4 gap-2 sm:gap-0 border-t mt-2">
           <Button
             variant="outline"
             onClick={handleClose}
