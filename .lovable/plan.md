@@ -1,46 +1,72 @@
 
 
-# Plano: Corrigir Barra de Rolagem na Seleção de Professor
+# Plano: Desabilitar Refresh Automatico ao Trocar de Aba
 
 ## Problema Identificado
 
-O componente `ScrollArea` já existe no código (linha 197), mas está usando `max-h-[300px]` que não funciona corretamente com o componente ScrollArea do Radix UI. O ScrollArea requer uma altura fixa definida para funcionar.
+O sistema esta atualizando a pagina automaticamente quando voce troca de aba no Windows e depois volta. Isso acontece devido a configuracao padrao do React Query que refaz as consultas quando a janela ganha foco novamente.
 
 ---
 
-## Solução
+## Solucao
 
-**Arquivo**: `src/pages/mapping/MappingDistribution.tsx`
+Desabilitar o comportamento de refetch automatico no React Query quando a janela ganha foco.
 
-### Alteração
+### Alteracao
 
-Mudar de `max-h-[300px]` para `h-[300px]` no ScrollArea:
+**Arquivo**: `src/App.tsx`
+
+Configurar o QueryClient com opcoes que desabilitam o refetch automatico:
 
 **De**:
 ```typescript
-<ScrollArea className="max-h-[300px]">
+const queryClient = new QueryClient();
 ```
 
 **Para**:
 ```typescript
-<ScrollArea className="h-[300px]">
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      refetchOnWindowFocus: false,
+      refetchOnReconnect: false,
+    },
+  },
+});
 ```
+
+---
+
+## O Que Cada Opcao Faz
+
+| Opcao | Padrao | Nova Config | Efeito |
+|-------|--------|-------------|--------|
+| `refetchOnWindowFocus` | `true` | `false` | Nao refaz queries ao voltar para a aba |
+| `refetchOnReconnect` | `true` | `false` | Nao refaz queries ao reconectar internet |
 
 ---
 
 ## Arquivo Afetado
 
-| Arquivo | Alteração |
+| Arquivo | Alteracao |
 |---------|-----------|
-| `src/pages/mapping/MappingDistribution.tsx` | Corrigir altura do ScrollArea de `max-h` para `h` |
+| `src/App.tsx` | Configurar QueryClient para desabilitar refetch automatico |
 
 ---
 
-## Seção Técnica
+## Secao Tecnica
 
-### Por que max-h não funciona
+### Por que isso acontece
 
-O componente ScrollArea do Radix UI precisa de uma altura explícita (`h-[...]`) para calcular corretamente a área de rolagem. O uso de `max-h` (altura máxima) não define uma altura fixa, então o componente não consegue determinar quando mostrar a barra de rolagem.
+O React Query, por padrao, assume que quando o usuario volta para a aba do navegador, os dados podem estar desatualizados. Por isso, ele automaticamente refaz todas as queries ativas para garantir que o usuario veja dados frescos.
 
-Com `h-[300px]`, o container terá exatamente 300px de altura, e qualquer conteúdo que exceda essa altura será automaticamente rolável com a barra de scroll visível.
+### Beneficios da mudanca
+
+- A pagina nao vai mais "piscar" ou recarregar ao trocar de abas
+- Melhor experiencia do usuario ao trabalhar com multiplas abas
+- Os dados ainda podem ser atualizados manualmente ou apos operacoes CRUD
+
+### Alternativa
+
+Se no futuro voce quiser manter os dados atualizados automaticamente sem o comportamento de "piscar", podemos implementar Realtime do banco de dados, que atualiza os dados silenciosamente em segundo plano apenas quando ha mudancas reais.
 
