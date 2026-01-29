@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Plus, Pencil, Trash2, BookOpen } from "lucide-react";
+import { Plus, Pencil, Trash2, BookOpen, Copy } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -21,7 +22,7 @@ const SHIFT_LABELS: Record<string, string> = {
 };
 
 const MappingClassesContent = () => {
-  const { classes, classSubjects, teachers, deleteClass, loading } = useSchoolMapping();
+  const { classes, classSubjects, teachers, deleteClass, loading, refreshData } = useSchoolMapping();
   const { toast } = useToast();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingClass, setEditingClass] = useState<MappingClass | null>(null);
@@ -65,6 +66,51 @@ const MappingClassesContent = () => {
   const handleDeleteClick = (e: React.MouseEvent, classData: MappingClass) => {
     e.stopPropagation();
     setDeletingClass(classData);
+  };
+
+  const handleDuplicate = async (e: React.MouseEvent, classData: MappingClass) => {
+    e.stopPropagation();
+    try {
+      // Criar nova turma com nome modificado
+      const newClassName = `${classData.name} (Cópia)`;
+      
+      // Adicionar a turma
+      const { data: newClass, error: classError } = await supabase
+        .from('mapping_classes')
+        .insert({
+          name: newClassName,
+          shift: classData.shift,
+          student_count: classData.student_count,
+          weekly_hours: classData.weekly_hours
+        })
+        .select('id')
+        .single();
+      
+      if (classError) throw classError;
+      
+      // Copiar disciplinas da turma original (sem atribuição de professor)
+      const originalSubjects = classSubjects.filter(cs => cs.class_id === classData.id);
+      
+      if (originalSubjects.length > 0) {
+        const newSubjects = originalSubjects.map(cs => ({
+          class_id: newClass.id,
+          subject_name: cs.subject_name,
+          weekly_classes: cs.weekly_classes,
+          teacher_id: null // Não copiar atribuição de professor
+        }));
+        
+        const { error: subjectsError } = await supabase
+          .from('mapping_class_subjects')
+          .insert(newSubjects);
+        
+        if (subjectsError) throw subjectsError;
+      }
+      
+      toast({ title: "Turma duplicada com sucesso", description: `Nova turma: ${newClassName}` });
+      await refreshData();
+    } catch (error: any) {
+      toast({ title: "Erro ao duplicar turma", description: error.message, variant: "destructive" });
+    }
   };
 
   const handleCloseDialog = () => {
@@ -168,10 +214,19 @@ const MappingClassesContent = () => {
                           variant="ghost" 
                           size="icon"
                           onClick={(e) => handleManageSubjects(e, classData)}
+                          title="Gerenciar disciplinas"
                         >
                           <BookOpen className="h-4 w-4" />
                         </Button>
-                        <Button variant="ghost" size="icon" onClick={(e) => handleEdit(e, classData)}>
+                        <Button 
+                          variant="ghost" 
+                          size="icon"
+                          onClick={(e) => handleDuplicate(e, classData)}
+                          title="Duplicar turma"
+                        >
+                          <Copy className="h-4 w-4" />
+                        </Button>
+                        <Button variant="ghost" size="icon" onClick={(e) => handleEdit(e, classData)} title="Editar turma">
                           <Pencil className="h-4 w-4" />
                         </Button>
                         <Button 
@@ -179,6 +234,7 @@ const MappingClassesContent = () => {
                           size="icon" 
                           className="text-destructive"
                           onClick={(e) => handleDeleteClick(e, classData)}
+                          title="Excluir turma"
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>

@@ -110,9 +110,9 @@ const MappingTeachersContent = () => {
         </div>
 
         {/* Teachers List */}
-        <div className="grid gap-4">
+        <div className="grid gap-4 md:grid-cols-2">
           {teachers.length === 0 ? (
-            <Card className="p-8 text-center">
+            <Card className="p-8 text-center md:col-span-2">
               <p className="text-muted-foreground">Nenhum professor cadastrado</p>
               <Button className="mt-4" onClick={() => setIsDialogOpen(true)}>
                 <Plus className="h-4 w-4 mr-2" />
@@ -127,45 +127,37 @@ const MappingTeachersContent = () => {
               return (
                 <Card 
                   key={teacher.id} 
-                  className="overflow-hidden cursor-pointer hover:shadow-md transition-shadow"
+                  className="cursor-pointer hover:shadow-md transition-shadow"
                   onClick={() => setViewingTeacher(teacher)}
                 >
-                  <div 
-                    className="h-2" 
-                    style={{ backgroundColor: teacher.color }}
-                  />
                   <CardContent className="p-4">
                     <div className="flex items-start justify-between gap-4">
-                      <div className="flex-1 space-y-3">
+                      <div className="space-y-2 flex-1">
                         <div className="flex items-center gap-2">
-                          <h3 className="font-semibold text-lg">{teacher.name}</h3>
+                          <div 
+                            className="w-3 h-3 rounded-full flex-shrink-0" 
+                            style={{ backgroundColor: teacher.color }}
+                          />
+                          <h3 className="font-semibold">{teacher.name}</h3>
                           {isOverloaded && (
                             <AlertTriangle className="h-4 w-4 text-amber-500" />
                           )}
                         </div>
                         
-                        {teacher.email && (
-                          <p className="text-sm text-muted-foreground">{teacher.email}</p>
-                        )}
-
-                        <div className="flex flex-wrap gap-1">
-                          {getSubjectNames(teacher.subjects).map(name => (
-                            <Badge key={name} variant="secondary" className="text-xs">
-                              {name}
-                            </Badge>
-                          ))}
-                        </div>
-
-                        <div className="flex flex-wrap gap-1">
+                        <div className="flex gap-2 flex-wrap">
                           {teacher.availability.map(shift => (
                             <Badge key={shift} variant="outline" className="text-xs">
                               {SHIFT_LABELS[shift] || shift}
                             </Badge>
                           ))}
+                          <Badge variant="secondary" className="text-xs">
+                            {getSubjectNames(teacher.subjects).length} disciplinas
+                          </Badge>
                         </div>
 
+                        {/* Carga horária */}
                         <div className="space-y-1">
-                          <div className="flex justify-between text-sm">
+                          <div className="flex justify-between text-xs text-muted-foreground">
                             <span>Carga horária</span>
                             <span className={isOverloaded ? "text-amber-500 font-medium" : ""}>
                               {teacher.current_hours}h / {teacher.max_weekly_hours}h
@@ -173,7 +165,7 @@ const MappingTeachersContent = () => {
                           </div>
                           <Progress 
                             value={Math.min(progressPercent, 100)} 
-                            className={isOverloaded ? "[&>div]:bg-amber-500" : ""}
+                            className={`h-1.5 ${isOverloaded ? "[&>div]:bg-amber-500" : ""}`}
                           />
                         </div>
                       </div>
