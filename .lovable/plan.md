@@ -1,59 +1,128 @@
 
 
-# Plano: Corrigir Barra de Rolagem com Altura Fixa
+# Plano: Corrigir Card de Professor e Toggle de Atribuição
 
-## Problema
+## Problemas Identificados
 
-O componente `ScrollArea` do Radix UI requer uma **altura fixa explícita** para funcionar corretamente. O código atual usa `h-full max-h-[50vh]` que não resolve o problema porque:
+### 1. Quantidade de Disciplinas no Card
+O card mostra `teacher.subjects.length` que conta disciplinas que o professor *pode* lecionar, mas deveria mostrar quantas disciplinas estão efetivamente *atribuídas* a ele.
 
-1. `h-full` herda de um container flex sem altura definida
-2. `max-h` (altura máxima) não é interpretado como altura real pelo Radix ScrollArea
+**Atual (linha 161 MappingTeachers.tsx):**
+```tsx
+{getSubjectNames(teacher.subjects).length} disciplinas
+```
 
-## Solução
+**Correto:** Contar `classSubjects` onde `teacher_id === teacher.id`
 
-Usar uma altura fixa calculada com `calc()` que considera o espaço disponível no diálogo.
+### 2. Carga Horária no Card
+A carga horária (`current_hours`) deveria ser calculada dinamicamente a partir das disciplinas atribuídas, não apenas confiar no valor do banco.
+
+### 3. Toggle de Atribuição/Desatribuição
+O diálogo atual mostra "Já atribuído" como badge estático. Deveria permitir clicar para remover a atribuição.
 
 ---
 
-## Alteração
+## Alterações
+
+### Arquivo: `src/pages/mapping/MappingTeachers.tsx`
+
+**1. Adicionar função para contar disciplinas atribuídas**
+
+```tsx
+const getAssignedSubjectsCount = (teacherId: string) => {
+  return classSubjects.filter(cs => cs.teacher_id === teacherId).length;
+};
+
+const getCalculatedHours = (teacherId: string) => {
+  return classSubjects
+    .filter(cs => cs.teacher_id === teacherId)
+    .reduce((sum, cs) => sum + cs.weekly_classes, 0);
+};
+```
+
+**2. Atualizar badge de disciplinas (linha 160-162)**
+
+```tsx
+<Badge variant="secondary" className="text-xs">
+  {getAssignedSubjectsCount(teacher.id)} disciplinas
+</Badge>
+```
+
+**3. Usar carga horária calculada (linhas 131-132, 167-170)**
+
+Usar `getCalculatedHours(teacher.id)` em vez de `teacher.current_hours`
+
+---
 
 ### Arquivo: `src/components/mapping/TeacherAssociationDialog.tsx`
 
-**Linha 288-289 - Substituir:**
+**1. Adicionar função para desatribuir (toggle)**
+
+Modificar a lógica para permitir clicar em "Já atribuído" e adicionar uma ação pendente de `unassign`.
+
+**2. Atualizar renderização (linhas 228-249)**
+
+Quando `isAssignedToThisTeacher`:
+- Mostrar botão "Remover" em vez de badge estático
+- Ao clicar, adicionar `pendingChange` com `action: 'unassign'`
 
 ```tsx
-<div className="flex-1 min-h-0 overflow-hidden">
-  <ScrollArea className="h-full max-h-[50vh] pr-4">
+{isAssignedToThisTeacher && !isPending ? (
+  <Button
+    size="sm"
+    variant="outline"
+    className="h-7 text-xs text-destructive hover:text-destructive"
+    onClick={() => handleUnassign(subject.id)}
+    disabled={isSaving}
+  >
+    Remover
+  </Button>
+) : isPendingUnassign ? (
+  <Badge variant="destructive" className="text-xs">
+    A remover
+  </Badge>
+) : !isPending && (
+  // ... botão Atribuir/Substituir existente
+)}
 ```
 
-**Por:**
+**3. Adicionar handler handleUnassign**
 
 ```tsx
-<ScrollArea className="h-[calc(85vh-200px)] pr-4">
+const handleUnassign = (classSubjectId: string) => {
+  const filteredChanges = pendingChanges.filter(p => p.classSubjectId !== classSubjectId);
+  setPendingChanges([
+    ...filteredChanges,
+    {
+      classSubjectId,
+      action: 'unassign',
+      previousTeacherId: teacher.id
+    }
+  ]);
+};
 ```
 
-Onde:
-- `85vh` = altura máxima do diálogo
-- `200px` = espaço aproximado para header (~80px) + footer (~80px) + margens (~40px)
+**4. Atualizar cálculo de horas locais**
 
-Também remover o wrapper `div` que não é mais necessário.
+Considerar ações de `unassign` no cálculo.
 
 ---
 
 ## Resumo das Mudanças
 
-| Antes | Depois |
-|-------|--------|
-| `h-full max-h-[50vh]` | `h-[calc(85vh-200px)]` |
-| Wrapper div com flex-1 | Sem wrapper (direto no ScrollArea) |
+| Local | Antes | Depois |
+|-------|-------|--------|
+| Card - Disciplinas | `teacher.subjects.length` (cadastradas) | `classSubjects.filter(cs => cs.teacher_id === teacher.id).length` (atribuídas) |
+| Card - Carga | `teacher.current_hours` (banco) | Calculado dinamicamente |
+| Diálogo - Já atribuído | Badge estática | Botão "Remover" clicável |
+| Diálogo - Pending | Só assign | assign + unassign |
 
 ---
 
-## Seção Técnica
+## Arquivos Afetados
 
-A documentação de memória do projeto especifica:
-
-> "Radix UI ScrollArea components require an explicit, fixed height (e.g., `h-[300px]` or `h-[calc(90vh-120px)]`) rather than a maximum height (`max-h`) to correctly calculate the scrollable area and display scrollbars."
-
-O cálculo `calc(85vh-200px)` garante que o ScrollArea tenha uma altura fixa baseada no viewport, permitindo que o Radix calcule corretamente quando mostrar a barra de rolagem.
+| Arquivo | Alteração |
+|---------|-----------|
+| `src/pages/mapping/MappingTeachers.tsx` | Corrigir contagem de disciplinas e carga horária |
+| `src/components/mapping/TeacherAssociationDialog.tsx` | Adicionar toggle para remover atribuição |
 
