@@ -1,121 +1,171 @@
 
+# Plano: Reestruturar Distribuição com Cards de Turmas e Batch Save
 
-# Plano: Corrigir Card de Professor e Toggle de Atribuição
+## Visão Geral
 
-## Problemas Identificados
-
-### 1. Quantidade de Disciplinas no Card
-O card mostra `teacher.subjects.length` que conta disciplinas que o professor *pode* lecionar, mas deveria mostrar quantas disciplinas estão efetivamente *atribuídas* a ele.
-
-**Atual (linha 161 MappingTeachers.tsx):**
-```tsx
-{getSubjectNames(teacher.subjects).length} disciplinas
-```
-
-**Correto:** Contar `classSubjects` onde `teacher_id === teacher.id`
-
-### 2. Carga Horária no Card
-A carga horária (`current_hours`) deveria ser calculada dinamicamente a partir das disciplinas atribuídas, não apenas confiar no valor do banco.
-
-### 3. Toggle de Atribuição/Desatribuição
-O diálogo atual mostra "Já atribuído" como badge estático. Deveria permitir clicar para remover a atribuição.
+Transformar a página de Distribuição para exibir cards compactos de turmas. Ao clicar em um card, abre um diálogo modal mostrando as disciplinas da turma com possibilidade de atribuir/desatribuir professores usando salvamento em lote.
 
 ---
 
 ## Alterações
 
-### Arquivo: `src/pages/mapping/MappingTeachers.tsx`
+### Arquivo: `src/pages/mapping/MappingDistribution.tsx`
 
-**1. Adicionar função para contar disciplinas atribuídas**
+**1. Novo Layout - Grid de Cards de Turmas**
 
-```tsx
-const getAssignedSubjectsCount = (teacherId: string) => {
-  return classSubjects.filter(cs => cs.teacher_id === teacherId).length;
-};
+Cada card mostra:
+- Nome da turma
+- Badge do turno
+- Contagem de disciplinas atribuídas / total
+- Barra de progresso de atribuição
 
-const getCalculatedHours = (teacherId: string) => {
-  return classSubjects
-    .filter(cs => cs.teacher_id === teacherId)
-    .reduce((sum, cs) => sum + cs.weekly_classes, 0);
-};
-```
+**2. Criar Componente de Diálogo Interno**
 
-**2. Atualizar badge de disciplinas (linha 160-162)**
+Um diálogo modal que aparece ao clicar no card da turma, mostrando:
+- Header com nome da turma e estatísticas
+- Lista de disciplinas com botões de atribuição
+- Dropdown/lista de professores elegíveis para cada disciplina
+- Footer com botões "Descartar" e "Salvar (N)"
 
-```tsx
-<Badge variant="secondary" className="text-xs">
-  {getAssignedSubjectsCount(teacher.id)} disciplinas
-</Badge>
-```
+**3. Implementar Estado de Alterações Pendentes**
 
-**3. Usar carga horária calculada (linhas 131-132, 167-170)**
-
-Usar `getCalculatedHours(teacher.id)` em vez de `teacher.current_hours`
+Similar ao `TeacherAssociationDialog`, usar um array de `pendingChanges` para rastrear atribuições/desatribuições antes de salvar.
 
 ---
 
-### Arquivo: `src/components/mapping/TeacherAssociationDialog.tsx`
-
-**1. Adicionar função para desatribuir (toggle)**
-
-Modificar a lógica para permitir clicar em "Já atribuído" e adicionar uma ação pendente de `unassign`.
-
-**2. Atualizar renderização (linhas 228-249)**
-
-Quando `isAssignedToThisTeacher`:
-- Mostrar botão "Remover" em vez de badge estático
-- Ao clicar, adicionar `pendingChange` com `action: 'unassign'`
+## Estrutura do Código
 
 ```tsx
-{isAssignedToThisTeacher && !isPending ? (
-  <Button
-    size="sm"
-    variant="outline"
-    className="h-7 text-xs text-destructive hover:text-destructive"
-    onClick={() => handleUnassign(subject.id)}
-    disabled={isSaving}
-  >
-    Remover
-  </Button>
-) : isPendingUnassign ? (
-  <Badge variant="destructive" className="text-xs">
-    A remover
-  </Badge>
-) : !isPending && (
-  // ... botão Atribuir/Substituir existente
-)}
+interface PendingChange {
+  classSubjectId: string;
+  action: 'assign' | 'unassign';
+  newTeacherId?: string;
+  previousTeacherId?: string | null;
+}
+
+const MappingDistributionContent = () => {
+  const [selectedClass, setSelectedClass] = useState<MappingClass | null>(null);
+  const [pendingChanges, setPendingChanges] = useState<PendingChange[]>([]);
+  const [isSaving, setIsSaving] = useState(false);
+
+  // Cards de turmas clicáveis
+  // Diálogo de atribuição por turma
+  // Lógica de batch save
+};
 ```
 
-**3. Adicionar handler handleUnassign**
+---
+
+## Fluxo de Interação
+
+```text
++---------------------+     +---------------------------+
+|   Cards de Turmas   | --> | Diálogo: Disciplinas da   |
+|   [Clique para      |     | Turma + Atribuição        |
+|    abrir]           |     +---------------------------+
++---------------------+     |                           |
+                            | Disciplina 1  [Prof. A ▼] |
+                            | Disciplina 2  [Atribuir]  |
+                            | Disciplina 3  [Prof. B ▼] |
+                            |                           |
+                            | [Descartar] [Salvar (2)]  |
+                            +---------------------------+
+```
+
+---
+
+## Detalhes Técnicos
+
+### Card da Turma
 
 ```tsx
-const handleUnassign = (classSubjectId: string) => {
-  const filteredChanges = pendingChanges.filter(p => p.classSubjectId !== classSubjectId);
+<Card 
+  className="cursor-pointer hover:shadow-md transition-shadow"
+  onClick={() => setSelectedClass(classData)}
+>
+  <CardHeader className="pb-2">
+    <div className="flex items-center justify-between">
+      <CardTitle className="text-lg">{classData.name}</CardTitle>
+      <Badge variant="outline">{SHIFT_LABELS[classData.shift]}</Badge>
+    </div>
+  </CardHeader>
+  <CardContent>
+    <div className="flex items-center justify-between text-sm mb-2">
+      <span className="text-muted-foreground">Disciplinas atribuídas</span>
+      <span className="font-medium">{assignedCount}/{totalCount}</span>
+    </div>
+    <Progress value={progressPercent} />
+  </CardContent>
+</Card>
+```
+
+### Diálogo de Atribuição por Turma
+
+Exibir lista de disciplinas da turma selecionada, cada uma com:
+- Nome da disciplina e carga horária
+- Dropdown/Popover para selecionar professor
+- Badge do professor atual (se atribuído)
+- Botão "Remover" para desatribuir
+
+### Lógica de Atribuição
+
+```tsx
+const handleAssign = (classSubjectId: string, teacherId: string, previousTeacherId?: string | null) => {
+  const filtered = pendingChanges.filter(p => p.classSubjectId !== classSubjectId);
   setPendingChanges([
-    ...filteredChanges,
-    {
-      classSubjectId,
-      action: 'unassign',
-      previousTeacherId: teacher.id
-    }
+    ...filtered,
+    { classSubjectId, action: 'assign', newTeacherId: teacherId, previousTeacherId }
+  ]);
+};
+
+const handleUnassign = (classSubjectId: string, currentTeacherId: string) => {
+  const filtered = pendingChanges.filter(p => p.classSubjectId !== classSubjectId);
+  setPendingChanges([
+    ...filtered,
+    { classSubjectId, action: 'unassign', previousTeacherId: currentTeacherId }
   ]);
 };
 ```
 
-**4. Atualizar cálculo de horas locais**
+### Batch Save
 
-Considerar ações de `unassign` no cálculo.
+```tsx
+const handleSaveAll = async () => {
+  setIsSaving(true);
+  try {
+    for (const change of pendingChanges) {
+      if (change.action === 'unassign') {
+        await unassignTeacher(change.classSubjectId);
+      } else if (change.action === 'assign' && change.newTeacherId) {
+        if (change.previousTeacherId) {
+          await unassignTeacher(change.classSubjectId);
+        }
+        await assignTeacher(change.classSubjectId, change.newTeacherId);
+      }
+    }
+    toast({ title: "Atribuições salvas", description: `${pendingChanges.length} alteração(ões)` });
+    setPendingChanges([]);
+    setSelectedClass(null);
+  } catch (error) {
+    toast({ title: "Erro", description: error.message, variant: "destructive" });
+  } finally {
+    setIsSaving(false);
+  }
+};
+```
 
 ---
 
-## Resumo das Mudanças
+## Componentes Reutilizados
 
-| Local | Antes | Depois |
-|-------|-------|--------|
-| Card - Disciplinas | `teacher.subjects.length` (cadastradas) | `classSubjects.filter(cs => cs.teacher_id === teacher.id).length` (atribuídas) |
-| Card - Carga | `teacher.current_hours` (banco) | Calculado dinamicamente |
-| Diálogo - Já atribuído | Badge estática | Botão "Remover" clicável |
-| Diálogo - Pending | Só assign | assign + unassign |
+| Componente | Uso |
+|------------|-----|
+| `Card` | Cards de turmas |
+| `Dialog` | Modal de atribuição |
+| `ScrollArea` | Lista de disciplinas com scroll |
+| `Badge` | Turno, professor atribuído, status pendente |
+| `Progress` | Progresso de atribuição no card |
+| `Popover` + lista | Seleção de professor |
 
 ---
 
@@ -123,6 +173,16 @@ Considerar ações de `unassign` no cálculo.
 
 | Arquivo | Alteração |
 |---------|-----------|
-| `src/pages/mapping/MappingTeachers.tsx` | Corrigir contagem de disciplinas e carga horária |
-| `src/components/mapping/TeacherAssociationDialog.tsx` | Adicionar toggle para remover atribuição |
+| `src/pages/mapping/MappingDistribution.tsx` | Reestruturar para cards + diálogo com batch save |
 
+---
+
+## Interface Resultante
+
+**Antes:** Cards expandidos com todas as disciplinas visíveis inline
+
+**Depois:**
+1. Grid de cards compactos de turmas (progresso visual)
+2. Clique abre diálogo modal da turma
+3. No diálogo: lista de disciplinas com seletor de professor
+4. Botão "Salvar" aplica todas as alterações de uma vez
