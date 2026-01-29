@@ -1,133 +1,291 @@
 
 
-# Plano: Melhorias no Mapeamento Escolar
+# Plano: Exportação PDF com Preview no Resumo
 
-## Resumo das Alterações
+## Visao Geral
 
-1. **Associar Disciplina**: Adicionar filtro por turma e possibilidade de cancelar atribuição
-2. **Distribuição**: Corrigir scroll do mouse no Popover de atribuição
-3. **Resumo**: Adicionar exportação do mapeamento em formato tabular com páginas por turno
+Transformar a exportação do mapeamento de CSV para PDF, com visualização prévia em um diálogo antes do download. O PDF terá formato tabular com turmas nas linhas, disciplinas nas colunas e páginas separadas por turno.
 
 ---
 
-## 1. Associar Disciplina - Filtro por Turma e Cancelar Atribuição
+## Alterações Necessárias
 
-### Arquivo: `src/components/mapping/TeacherAssociationDialog.tsx`
+### 1. Instalar Dependências
 
-**Adicionar estado de filtro:**
-```tsx
-const [classFilter, setClassFilter] = useState<string>("");
+Adicionar as bibliotecas necessárias para geração de PDF:
+
+```bash
+npm install jspdf jspdf-autotable
 ```
 
-**Adicionar Select de filtro no header:**
-Um dropdown para selecionar uma turma específica, filtrando a exibição apenas para as disciplinas dessa turma.
-
-**Atualizar renderização:**
-- Filtrar turmas exibidas com base no `classFilter`
-- O filtro mostra "Todas as turmas" por padrão
-
-A funcionalidade de cancelar atribuição (Remover) já foi implementada anteriormente neste diálogo.
-
----
-
-## 2. Distribuição - Corrigir Scroll do Mouse no Popover
-
-### Arquivo: `src/pages/mapping/MappingDistribution.tsx`
-
-**Problema identificado:**
-O `Popover` que abre para selecionar professores (linhas 323-408) contém um `ScrollArea` interno. O problema é que o scroll do mouse pode estar sendo bloqueado pelo componente pai.
-
-**Solução:**
-Adicionar propriedades ao `ScrollArea` interno do Popover para garantir que eventos de scroll não sejam propagados:
-
-```tsx
-<PopoverContent 
-  className="w-80 p-0" 
-  align="end"
-  onWheel={(e) => e.stopPropagation()}
->
-```
-
-E também garantir que o `ScrollArea` tenha altura fixa correta sem `flex`:
-```tsx
-<ScrollArea className="h-[250px]">
+**Tipos TypeScript:**
+```bash
+npm install -D @types/jspdf @types/jspdf-autotable
 ```
 
 ---
 
-## 3. Resumo - Exportação do Mapeamento
+### 2. Arquivo: `src/pages/mapping/MappingSummary.tsx`
 
-### Arquivo: `src/pages/mapping/MappingSummary.tsx`
+**Mudanças principais:**
 
-**Adicionar funcionalidade de exportação CSV com formato tabular:**
-
-- **Estrutura do CSV:**
-  - 1ª coluna: Nome da turma
-  - 1ª linha: Nomes das disciplinas
-  - Células: Nome do professor + número de aulas (ex: "Maria Silva (4)")
-
-- **Páginas separadas por turno:**
-  - 3 arquivos CSV separados (manhã, tarde, noite) ou
-  - 1 arquivo com separadores claros entre turnos
-
-**Estrutura do código:**
-
+1. **Novo estado para controle do diálogo de preview:**
 ```tsx
-const exportMapping = async () => {
-  setExporting(true);
-  try {
-    const shifts = ['morning', 'afternoon', 'evening'];
+const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+const [previewData, setPreviewData] = useState<PreviewData | null>(null);
+```
+
+2. **Interface para dados do preview:**
+```tsx
+interface ShiftData {
+  shift: string;
+  shiftLabel: string;
+  headers: string[];
+  rows: string[][];
+}
+
+interface PreviewData {
+  shifts: ShiftData[];
+  generatedAt: string;
+}
+```
+
+3. **Função para preparar dados de preview:**
+```tsx
+const preparePreviewData = (): PreviewData => {
+  const shifts = ['morning', 'afternoon', 'evening'] as const;
+  const data: ShiftData[] = [];
+  
+  for (const shift of shifts) {
+    const shiftClasses = classes.filter(c => c.shift === shift);
+    if (shiftClasses.length === 0) continue;
     
-    for (const shift of shifts) {
-      const shiftClasses = classes.filter(c => c.shift === shift);
-      if (shiftClasses.length === 0) continue;
-      
-      // Obter todas as disciplinas únicas deste turno
-      const shiftSubjects = new Set<string>();
-      shiftClasses.forEach(c => {
-        classSubjects
-          .filter(cs => cs.class_id === c.id)
-          .forEach(cs => shiftSubjects.add(cs.subject_name));
-      });
-      
-      const subjectList = Array.from(shiftSubjects).sort();
-      
-      // Header: vazio + nomes das disciplinas
-      const header = ['Turma', ...subjectList];
-      
-      // Linhas: nome da turma + professor(aulas) para cada disciplina
-      const rows = shiftClasses.map(c => {
-        const row = [c.name];
-        subjectList.forEach(subjectName => {
-          const cs = classSubjects.find(
-            x => x.class_id === c.id && x.subject_name === subjectName
+    // Coletar disciplinas únicas
+    const shiftSubjects = new Set<string>();
+    shiftClasses.forEach(c => {
+      classSubjects
+        .filter(cs => cs.class_id === c.id)
+        .forEach(cs => shiftSubjects.add(cs.subject_name));
+    });
+    
+    const subjectList = Array.from(shiftSubjects).sort();
+    const headers = ['Turma', ...subjectList];
+    
+    const rows = shiftClasses.map(c => {
+      const row = [c.name];
+      subjectList.forEach(subjectName => {
+        const cs = classSubjects.find(
+          x => x.class_id === c.id && x.subject_name === subjectName
+        );
+        if (cs) {
+          const teacher = teachers.find(t => t.id === cs.teacher_id);
+          row.push(teacher 
+            ? `${teacher.name} (${cs.weekly_classes})` 
+            : `- (${cs.weekly_classes})`
           );
-          if (cs) {
-            const teacher = teachers.find(t => t.id === cs.teacher_id);
-            row.push(teacher 
-              ? `${teacher.name} (${cs.weekly_classes})` 
-              : `- (${cs.weekly_classes})`
-            );
-          } else {
-            row.push('-');
-          }
-        });
-        return row;
+        } else {
+          row.push('-');
+        }
       });
-      
-      const csv = [header, ...rows].map(r => r.join(';')).join('\n');
-      downloadCSV(csv, `mapeamento_${SHIFT_LABELS[shift]}_${date}.csv`);
-    }
+      return row;
+    });
     
-    toast.success('Mapeamento exportado!');
-  } finally {
-    setExporting(false);
+    data.push({
+      shift,
+      shiftLabel: SHIFT_LABELS[shift],
+      headers,
+      rows
+    });
   }
+  
+  return {
+    shifts: data,
+    generatedAt: new Date().toLocaleString('pt-BR')
+  };
 };
 ```
 
-**UI de exportação:**
-Adicionar um `Card` ou botão no topo da página de Resumo com a opção de exportar.
+4. **Função para gerar e baixar o PDF:**
+```tsx
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+
+const generatePDF = () => {
+  if (!previewData) return;
+  
+  const doc = new jsPDF('landscape', 'mm', 'a4');
+  const date = new Date().toISOString().split('T')[0];
+  
+  previewData.shifts.forEach((shiftData, index) => {
+    if (index > 0) {
+      doc.addPage();
+    }
+    
+    // Titulo do turno
+    doc.setFontSize(16);
+    doc.text(`Mapeamento Escolar - ${shiftData.shiftLabel}`, 14, 15);
+    doc.setFontSize(10);
+    doc.text(`Gerado em: ${previewData.generatedAt}`, 14, 22);
+    
+    // Tabela
+    autoTable(doc, {
+      startY: 28,
+      head: [shiftData.headers],
+      body: shiftData.rows,
+      theme: 'grid',
+      headStyles: { 
+        fillColor: [59, 130, 246], // azul
+        fontSize: 8 
+      },
+      bodyStyles: { 
+        fontSize: 7 
+      },
+      columnStyles: {
+        0: { fontStyle: 'bold', cellWidth: 25 }
+      }
+    });
+  });
+  
+  doc.save(`mapeamento_escolar_${date}.pdf`);
+  setIsPreviewOpen(false);
+  toast({ title: "PDF exportado", description: "Arquivo salvo com sucesso." });
+};
+```
+
+5. **Botão atualizado:**
+```tsx
+<Button onClick={() => {
+  const data = preparePreviewData();
+  setPreviewData(data);
+  setIsPreviewOpen(true);
+}} disabled={classes.length === 0}>
+  <Download className="h-4 w-4 mr-2" />
+  Exportar PDF
+</Button>
+```
+
+6. **Diálogo de Preview:**
+```tsx
+<Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
+  <DialogContent className="max-w-4xl max-h-[90vh]">
+    <DialogHeader>
+      <DialogTitle className="flex items-center gap-2">
+        <FileText className="h-5 w-5" />
+        Visualização da Exportação
+      </DialogTitle>
+      <DialogDescription>
+        Confira os dados antes de exportar o PDF
+      </DialogDescription>
+    </DialogHeader>
+    
+    <ScrollArea className="h-[60vh] pr-4">
+      {previewData?.shifts.map((shiftData, idx) => (
+        <div key={shiftData.shift} className={idx > 0 ? "mt-6" : ""}>
+          <h3 className="font-semibold text-lg mb-3 flex items-center gap-2">
+            <Badge>{shiftData.shiftLabel}</Badge>
+            <span className="text-sm text-muted-foreground">
+              {shiftData.rows.length} turma(s)
+            </span>
+          </h3>
+          
+          <div className="border rounded-lg overflow-hidden">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  {shiftData.headers.map((h, i) => (
+                    <TableHead 
+                      key={i} 
+                      className={i === 0 ? "font-bold bg-muted" : "text-xs"}
+                    >
+                      {h}
+                    </TableHead>
+                  ))}
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {shiftData.rows.map((row, rowIdx) => (
+                  <TableRow key={rowIdx}>
+                    {row.map((cell, cellIdx) => (
+                      <TableCell 
+                        key={cellIdx}
+                        className={cellIdx === 0 ? "font-medium" : "text-xs"}
+                      >
+                        {cell}
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </div>
+      ))}
+    </ScrollArea>
+    
+    <DialogFooter>
+      <Button variant="outline" onClick={() => setIsPreviewOpen(false)}>
+        Cancelar
+      </Button>
+      <Button onClick={generatePDF} disabled={exporting}>
+        {exporting ? (
+          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+        ) : (
+          <Download className="h-4 w-4 mr-2" />
+        )}
+        Baixar PDF
+      </Button>
+    </DialogFooter>
+  </DialogContent>
+</Dialog>
+```
+
+---
+
+## Imports Adicionais
+
+```tsx
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import { FileText } from "lucide-react";
+import { 
+  Dialog, 
+  DialogContent, 
+  DialogHeader, 
+  DialogTitle, 
+  DialogDescription,
+  DialogFooter 
+} from "@/components/ui/dialog";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+```
+
+---
+
+## Estrutura do PDF
+
+O PDF gerado terá:
+- Orientação paisagem (landscape) para acomodar várias colunas
+- Uma página por turno
+- Cabeçalho com título e data de geração
+- Tabela com grid colorido
+- Primeira coluna (turma) em negrito
+
+```text
++--------------------------------------------------+
+|  Mapeamento Escolar - Manhã                       |
+|  Gerado em: 29/01/2026 18:21                      |
++--------------------------------------------------+
+| Turma    | Português    | Matemática | História  |
++--------------------------------------------------+
+| 1º Ano A | Maria (4)    | João (4)   | Ana (2)   |
+| 1º Ano B | Maria (4)    | Carlos (4) | Ana (2)   |
+| 2º Ano A | Fernanda (4) | João (4)   | - (2)     |
++--------------------------------------------------+
+                    [Nova Página]
++--------------------------------------------------+
+|  Mapeamento Escolar - Tarde                       |
+...
+```
 
 ---
 
@@ -135,22 +293,17 @@ Adicionar um `Card` ou botão no topo da página de Resumo com a opção de expo
 
 | Arquivo | Alteração |
 |---------|-----------|
-| `src/components/mapping/TeacherAssociationDialog.tsx` | Adicionar filtro por turma |
-| `src/pages/mapping/MappingDistribution.tsx` | Corrigir scroll no Popover |
-| `src/pages/mapping/MappingSummary.tsx` | Adicionar exportação do mapeamento |
+| `package.json` | Adicionar jspdf e jspdf-autotable |
+| `src/pages/mapping/MappingSummary.tsx` | Substituir exportação CSV por PDF com preview |
 
 ---
 
-## Formato do CSV Exportado
+## Fluxo de Uso
 
-```text
-Exemplo - mapeamento_Manhã_2026-01-29.csv:
-
-Turma;Português;Matemática;História;Geografia;Ciências
-1º Ano A;Maria Silva (4);João Costa (4);Ana Lima (2);- (2);Pedro Santos (3)
-1º Ano B;Maria Silva (4);Carlos Souza (4);Ana Lima (2);Paulo Reis (2);Pedro Santos (3)
-2º Ano A;Fernanda Cruz (4);João Costa (4);- (2);Paulo Reis (2);Lucia Alves (3)
-```
-
-Cada turno gera um arquivo separado para facilitar a visualização e impressão.
+1. Usuário clica em "Exportar PDF"
+2. Abre diálogo com visualização das tabelas por turno
+3. Usuário confere os dados
+4. Clica em "Baixar PDF"
+5. PDF é gerado e baixado automaticamente
+6. Diálogo fecha
 
