@@ -1,76 +1,94 @@
 
 
-# Plano: Corrigir Dialog Fechando ao Trocar de Aba (Solucao Robusta)
+# Plano: Associar Disciplinas Diretamente no Card do Professor
 
-## Problema Identificado
+## Resumo
 
-A solucao anterior com `onFocusOutside` nao esta funcionando. Apos investigacao mais detalhada, identifiquei que o Radix UI Dialog tem multiplos mecanismos que podem causar o fechamento:
-
-1. `onFocusOutside` - quando o foco sai do dialogo
-2. `onPointerDownOutside` - quando clica fora
-3. `onInteractOutside` - combinacao dos dois anteriores
-4. O proprio `onOpenChange` que pode ser chamado internamente
+Remover a selecao de "Disciplinas que leciona" do formulario de edicao de professores e adicionar um novo botao "Associar disciplina" no card do professor. Ao clicar, abre uma caixa de dialogo mostrando todas as turmas e suas disciplinas, permitindo que o usuario atribua o professor diretamente, com opcao de substituir outro professor ja atribuido.
 
 ---
 
-## Solucao
+## Alteracoes
 
-Aplicar uma abordagem de multiplas camadas para garantir que o dialogo nao feche ao trocar de aba:
+### 1. Remover "Disciplinas que leciona" do Formulario
 
-### Alteracao 1: Usar `onInteractOutside` combinado com `onPointerDownOutside`
+**Arquivo**: `src/components/mapping/TeacherForm.tsx`
 
-Em vez de apenas `onFocusOutside`, usar `onInteractOutside` que captura TODOS os eventos de interacao externa, mas de forma inteligente - permitindo que o clique no overlay ainda funcione.
-
-### Alteracao 2: Controlar o `onOpenChange` de forma mais inteligente
-
-Modificar o `onOpenChange` para aceitar o valor booleano e so fechar quando realmente deve fechar (quando o valor e `false` vindo de uma acao intencional do usuario).
+Remover o bloco de codigo das linhas 157-179 que contem a secao de disciplinas com checkboxes. Tambem remover o estado `subjects` e a funcao `toggleSubject` que nao serao mais necessarios.
 
 ---
 
-## Arquivo: `src/pages/mapping/MappingDistribution.tsx`
+### 2. Adicionar Botao "Associar disciplina" no Card
 
-### Antes (linhas 181-186):
-```typescript
-<Dialog open={!!selectedSubjectId} onOpenChange={() => setSelectedSubjectId(null)}>
-  <DialogContent 
-    className="max-w-md"
-    onFocusOutside={(e) => e.preventDefault()}
-  >
+**Arquivo**: `src/pages/mapping/MappingTeachers.tsx`
+
+Adicionar um novo botao ao lado dos botoes de editar e excluir no card do professor:
+
 ```
-
-### Depois:
-```typescript
-<Dialog 
-  open={!!selectedSubjectId} 
-  onOpenChange={(open) => {
-    if (!open) setSelectedSubjectId(null);
-  }}
-  modal={true}
->
-  <DialogContent 
-    className="max-w-md"
-    onInteractOutside={(e) => {
-      // Previne fechamento por eventos de focus (troca de aba)
-      // Mas permite fechamento por clique no overlay
-      const isPointerEvent = e.type === 'pointerdown' || e.type === 'pointerup';
-      if (!isPointerEvent) {
-        e.preventDefault();
-      }
-    }}
-  >
+[Icone Livro] Associar disciplina
 ```
 
 ---
 
-## Como Funciona
+### 3. Criar Dialogo de Associacao
 
-| Evento | Comportamento |
-|--------|---------------|
-| Trocar de aba (focus outside) | Dialogo permanece aberto |
-| Clicar no overlay | Dialogo fecha normalmente |
-| Clicar no X | Dialogo fecha normalmente |
-| Pressionar ESC | Dialogo fecha normalmente |
-| Concluir atribuicao | Dialogo fecha normalmente |
+**Arquivo**: `src/pages/mapping/MappingTeachers.tsx`
+
+Criar um novo dialogo que exibe:
+
+- Cabecalho com nome do professor selecionado
+- Lista de turmas agrupadas por turno
+- Para cada turma, lista de disciplinas mostrando:
+  - Nome da disciplina
+  - Quantidade de aulas semanais
+  - Se ja tem professor atribuido: mostra nome + botao "Substituir"
+  - Se nao tem professor: botao "Atribuir"
+
+**Estrutura visual**:
+
+```text
++------------------------------------------+
+|  Associar disciplina                     |
+|  Prof. Maria Silva                       |
++------------------------------------------+
+|                                          |
+|  MANHA                                   |
+|  ----------------------------------------|
+|  Turma 1A                                |
+|    Matematica (4h)         [Atribuir]    |
+|    Portugues (4h)  Joao    [Substituir]  |
+|    ...                                   |
+|  ----------------------------------------|
+|  Turma 2A                                |
+|    Historia (3h)           [Atribuir]    |
+|    ...                                   |
+|                                          |
+|  TARDE                                   |
+|  ----------------------------------------|
+|  ...                                     |
++------------------------------------------+
+```
+
+---
+
+### 4. Logica de Substituicao
+
+Quando o usuario clica em "Substituir":
+1. Primeiro remove o professor atual da disciplina (usando `unassignTeacher`)
+2. Depois atribui o novo professor (usando `assignTeacher`)
+
+Quando o usuario clica em "Atribuir":
+1. Atribui diretamente o professor selecionado
+
+---
+
+## Validacoes
+
+| Situacao | Comportamento |
+|----------|---------------|
+| Professor nao disponivel no turno | Disciplina aparece desabilitada |
+| Atribuicao excederia carga horaria | Botao desabilitado com aviso |
+| Disciplina ja atribuida ao mesmo professor | Mostra "Ja atribuido" |
 
 ---
 
@@ -78,25 +96,54 @@ Modificar o `onOpenChange` para aceitar o valor booleano e so fechar quando real
 
 | Arquivo | Alteracao |
 |---------|-----------|
-| `src/pages/mapping/MappingDistribution.tsx` | Modificar Dialog e DialogContent com eventos mais robustos |
+| `src/components/mapping/TeacherForm.tsx` | Remover secao de disciplinas e codigo relacionado |
+| `src/pages/mapping/MappingTeachers.tsx` | Adicionar botao e dialogo de associacao |
 
 ---
 
 ## Secao Tecnica
 
-### Por que a solucao anterior nao funcionou
+### Estrutura do novo estado
 
-O `onFocusOutside` do Radix UI pode nao ser disparado corretamente em todos os navegadores/sistemas operacionais quando a janela do navegador perde o foco. Ao usar `onInteractOutside`, capturamos TODOS os eventos externos e podemos filtrar de forma mais precisa.
+```typescript
+const [associatingTeacher, setAssociatingTeacher] = useState<MappingTeacher | null>(null);
+const [isAssociating, setIsAssociating] = useState(false);
+```
 
-### Logica do `onInteractOutside`
+### Funcao de substituicao
 
-O evento `onInteractOutside` pode ser de dois tipos:
-- `FocusOutsideEvent` - quando o foco sai (troca de aba)
-- `PointerDownOutsideEvent` - quando clica fora (overlay)
+```typescript
+const handleAssignOrReplace = async (classSubjectId: string, currentTeacherId?: string) => {
+  if (!associatingTeacher) return;
+  
+  setIsAssociating(true);
+  try {
+    // Se ja tem professor, remove primeiro
+    if (currentTeacherId) {
+      await unassignTeacher(classSubjectId);
+    }
+    // Atribui o novo professor
+    await assignTeacher(classSubjectId, associatingTeacher.id);
+    toast({ title: currentTeacherId ? "Professor substituido" : "Disciplina atribuida" });
+  } catch (error: any) {
+    toast({ title: "Erro", description: error.message, variant: "destructive" });
+  } finally {
+    setIsAssociating(false);
+  }
+};
+```
 
-Verificando o `e.type`, podemos distinguir entre os dois e so bloquear eventos de foco, permitindo que cliques no overlay ainda fechem o dialogo.
+### Agrupamento por turno
 
-### Alternativa se ainda nao funcionar
+```typescript
+const shiftGroups = {
+  morning: classes.filter(c => c.shift === 'morning'),
+  afternoon: classes.filter(c => c.shift === 'afternoon'),
+  evening: classes.filter(c => c.shift === 'evening')
+};
+```
 
-Se esta solucao ainda nao funcionar, podemos implementar um listener de `visibilitychange` no documento para controlar o estado do dialogo de forma completamente manual.
+### Verificacao de disponibilidade
+
+Mostrar apenas turmas/disciplinas onde o turno da turma esta na disponibilidade do professor.
 
