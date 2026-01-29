@@ -1,11 +1,14 @@
-import { Users, GraduationCap, BookOpen, AlertTriangle, CheckCircle2, Clock } from "lucide-react";
+import { useState } from "react";
+import { Users, GraduationCap, BookOpen, AlertTriangle, CheckCircle2, Clock, Download, Loader2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import { SchoolMappingProvider, useSchoolMapping } from "@/contexts/SchoolMappingContext";
 import { Skeleton } from "@/components/ui/skeleton";
 import SchoolMappingLayout from "@/components/mapping/SchoolMappingLayout";
+import { useToast } from "@/hooks/use-toast";
 
 const SHIFT_LABELS: Record<string, string> = {
   morning: "Manhã",
@@ -15,6 +18,93 @@ const SHIFT_LABELS: Record<string, string> = {
 
 const MappingSummaryContent = () => {
   const { teachers, globalSubjects, classes, classSubjects, loading } = useSchoolMapping();
+  const { toast } = useToast();
+  const [exporting, setExporting] = useState(false);
+
+  const downloadCSV = (content: string, filename: string) => {
+    const BOM = '\uFEFF';
+    const blob = new Blob([BOM + content], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const exportMapping = async () => {
+    setExporting(true);
+    try {
+      const shifts = ['morning', 'afternoon', 'evening'] as const;
+      const date = new Date().toISOString().split('T')[0];
+      let filesGenerated = 0;
+      
+      for (const shift of shifts) {
+        const shiftClasses = classes.filter(c => c.shift === shift);
+        if (shiftClasses.length === 0) continue;
+        
+        // Get all unique subjects for this shift
+        const shiftSubjects = new Set<string>();
+        shiftClasses.forEach(c => {
+          classSubjects
+            .filter(cs => cs.class_id === c.id)
+            .forEach(cs => shiftSubjects.add(cs.subject_name));
+        });
+        
+        const subjectList = Array.from(shiftSubjects).sort();
+        
+        // Header row
+        const header = ['Turma', ...subjectList];
+        
+        // Data rows
+        const rows = shiftClasses.map(c => {
+          const row = [c.name];
+          subjectList.forEach(subjectName => {
+            const cs = classSubjects.find(
+              x => x.class_id === c.id && x.subject_name === subjectName
+            );
+            if (cs) {
+              const teacher = teachers.find(t => t.id === cs.teacher_id);
+              row.push(teacher 
+                ? `${teacher.name} (${cs.weekly_classes})` 
+                : `- (${cs.weekly_classes})`
+              );
+            } else {
+              row.push('-');
+            }
+          });
+          return row;
+        });
+        
+        const csv = [header, ...rows].map(r => r.join(';')).join('\n');
+        downloadCSV(csv, `mapeamento_${SHIFT_LABELS[shift]}_${date}.csv`);
+        filesGenerated++;
+      }
+      
+      if (filesGenerated > 0) {
+        toast({ 
+          title: "Exportação concluída", 
+          description: `${filesGenerated} arquivo(s) CSV gerado(s).` 
+        });
+      } else {
+        toast({ 
+          title: "Nenhum dado", 
+          description: "Não há turmas cadastradas para exportar.",
+          variant: "destructive"
+        });
+      }
+    } catch (error: any) {
+      toast({ 
+        title: "Erro na exportação", 
+        description: error.message,
+        variant: "destructive"
+      });
+    } finally {
+      setExporting(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -62,9 +152,19 @@ const MappingSummaryContent = () => {
   return (
     <SchoolMappingLayout>
       <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Resumo Geral</h1>
-          <p className="text-muted-foreground">Visão consolidada para conferência da direção</p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-foreground">Resumo Geral</h1>
+            <p className="text-muted-foreground">Visão consolidada para conferência da direção</p>
+          </div>
+          <Button onClick={exportMapping} disabled={exporting || classes.length === 0}>
+            {exporting ? (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <Download className="h-4 w-4 mr-2" />
+            )}
+            Exportar CSV
+          </Button>
         </div>
 
         {/* Quick Stats */}

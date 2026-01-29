@@ -332,11 +332,15 @@ const MappingDistributionContent = () => {
                                     Atribuir
                                   </Button>
                                 </PopoverTrigger>
-                                <PopoverContent className="w-80 p-0" align="end">
+                                <PopoverContent 
+                                  className="w-80 p-0" 
+                                  align="end"
+                                  onWheel={(e) => e.stopPropagation()}
+                                >
                                   <div className="p-2 border-b">
                                     <p className="text-sm font-medium">Selecionar professor</p>
                                   </div>
-                                  <ScrollArea className="h-[250px]">
+                                  <ScrollArea className="h-[250px]" onWheel={(e) => e.stopPropagation()}>
                                     <div className="p-2 space-y-1">
                                       {getEligibleTeachers(subject.subject_name, selectedClass.shift).length === 0 ? (
                                         <p className="text-sm text-muted-foreground text-center py-4">

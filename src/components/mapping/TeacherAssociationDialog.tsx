@@ -1,9 +1,10 @@
 import { useState } from "react";
-import { Book, ArrowRightLeft, Check } from "lucide-react";
+import { Book, ArrowRightLeft, Check, Filter } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useSchoolMapping, MappingTeacher, MappingClass, MappingClassSubject } from "@/contexts/SchoolMappingContext";
 import { useToast } from "@/hooks/use-toast";
 
@@ -29,6 +30,7 @@ const TeacherAssociationDialog = ({ teacher, onClose }: TeacherAssociationDialog
   const { toast } = useToast();
   const [pendingChanges, setPendingChanges] = useState<PendingChange[]>([]);
   const [isSaving, setIsSaving] = useState(false);
+  const [classFilter, setClassFilter] = useState<string>("all");
 
   if (!teacher) return null;
 
@@ -127,6 +129,7 @@ const TeacherAssociationDialog = ({ teacher, onClose }: TeacherAssociationDialog
 
   const handleClose = () => {
     setPendingChanges([]);
+    setClassFilter("all");
     onClose();
   };
 
@@ -311,7 +314,25 @@ const TeacherAssociationDialog = ({ teacher, onClose }: TeacherAssociationDialog
           </div>
         </DialogHeader>
 
-        <ScrollArea className="h-[calc(85vh-200px)] pr-4">
+        {/* Class Filter */}
+        <div className="flex items-center gap-2 pb-2">
+          <Filter className="h-4 w-4 text-muted-foreground" />
+          <Select value={classFilter} onValueChange={setClassFilter}>
+            <SelectTrigger className="flex-1 h-8 text-sm">
+              <SelectValue placeholder="Filtrar por turma" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todas as turmas</SelectItem>
+              {classes.map(cls => (
+                <SelectItem key={cls.id} value={cls.id}>
+                  {cls.name} ({SHIFT_LABELS[cls.shift]})
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <ScrollArea className="h-[calc(85vh-250px)] pr-4">
           {!hasAnySubjects ? (
             <div className="text-center py-8 text-muted-foreground">
               <p>Nenhuma disciplina cadastrada nas turmas.</p>
@@ -319,9 +340,18 @@ const TeacherAssociationDialog = ({ teacher, onClose }: TeacherAssociationDialog
             </div>
           ) : (
             <div className="space-y-6 pb-4">
-              {renderShiftSection('morning', shiftGroups.morning)}
-              {renderShiftSection('afternoon', shiftGroups.afternoon)}
-              {renderShiftSection('evening', shiftGroups.evening)}
+              {renderShiftSection('morning', classFilter === 'all' 
+                ? shiftGroups.morning 
+                : shiftGroups.morning.filter(c => c.id === classFilter)
+              )}
+              {renderShiftSection('afternoon', classFilter === 'all' 
+                ? shiftGroups.afternoon 
+                : shiftGroups.afternoon.filter(c => c.id === classFilter)
+              )}
+              {renderShiftSection('evening', classFilter === 'all' 
+                ? shiftGroups.evening 
+                : shiftGroups.evening.filter(c => c.id === classFilter)
+              )}
             </div>
           )}
         </ScrollArea>
