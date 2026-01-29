@@ -179,10 +179,23 @@ const MappingDistributionContent = () => {
       </div>
 
       {/* Assign Teacher Dialog */}
-      <Dialog open={!!selectedSubjectId} onOpenChange={() => setSelectedSubjectId(null)}>
+      <Dialog 
+        open={!!selectedSubjectId} 
+        onOpenChange={(open) => {
+          if (!open) setSelectedSubjectId(null);
+        }}
+        modal={true}
+      >
         <DialogContent 
           className="max-w-md"
-          onFocusOutside={(e) => e.preventDefault()}
+          onInteractOutside={(e) => {
+            // Previne fechamento por eventos de focus (troca de aba)
+            // Mas permite fechamento por clique no overlay
+            const isPointerEvent = e.type === 'pointerdown' || e.type === 'pointerup';
+            if (!isPointerEvent) {
+              e.preventDefault();
+            }
+          }}
         >
           <DialogHeader>
             <DialogTitle>Selecionar Professor</DialogTitle>
