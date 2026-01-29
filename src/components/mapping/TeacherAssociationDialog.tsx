@@ -263,7 +263,7 @@ const TeacherAssociationDialog = ({ teacher, onClose }: TeacherAssociationDialog
   return (
     <Dialog open={!!teacher} onOpenChange={() => handleClose()}>
       <DialogContent className="max-w-lg max-h-[85vh] overflow-hidden flex flex-col">
-        <DialogHeader>
+        <DialogHeader className="flex-shrink-0">
           <DialogTitle className="flex items-center gap-2">
             <Book className="h-5 w-5" />
             Associar disciplinas
@@ -285,7 +285,7 @@ const TeacherAssociationDialog = ({ teacher, onClose }: TeacherAssociationDialog
           </div>
         </DialogHeader>
 
-        <ScrollArea className="flex-1 h-[calc(85vh-200px)] pr-4">
+        <ScrollArea className="flex-1 min-h-0 h-[400px] pr-4">
           {!hasAnySubjects ? (
             <div className="text-center py-8 text-muted-foreground">
               <p>Nenhuma disciplina cadastrada nas turmas.</p>
