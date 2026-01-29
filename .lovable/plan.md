@@ -1,48 +1,43 @@
 
-
 # Plano: Ajustar Formatação do PDF de Exportação
 
 ## Visão Geral
 
-Melhorar a legibilidade do PDF exportado aumentando a fonte e aplicando negrito nos nomes de turmas e disciplinas, além de abreviar nomes de disciplinas longas para melhor aproveitamento do espaço.
+Ajustar a formatação do PDF para que os nomes dos professores fiquem em uma única linha e os nomes das disciplinas possam quebrar em 2 linhas centralizadas. Também corrigir as abreviações conforme solicitado.
 
 ---
 
 ## Alterações no Arquivo: `src/pages/mapping/MappingSummary.tsx`
 
-### 1. Adicionar Mapa de Abreviações
+### 1. Corrigir Mapa de Abreviações (linhas 31-41)
 
-Criar um objeto constante com as abreviações das disciplinas:
+Atualizar as abreviações conforme solicitado:
+
+| Nome Original | Abreviação Atual | Nova Abreviação |
+|--------------|------------------|-----------------|
+| Aprofundamento II | Aprof. II | Aprof II |
+| Letramento em Matemática | Let. M | Let. Mat |
+| Letramento em Português | Let. P | Let. Port |
 
 ```tsx
 const SUBJECT_ABBREVIATIONS: Record<string, string> = {
-  'Aprofundamento I': 'Aprof. I',
-  'Aprofundamento II': 'Aprof. II',
+  'Aprofundamento I': 'Aprof I',
+  'Aprofundamento II': 'Aprof II',
   'Educação Digital': 'Ed. Dig',
   'Educação Física': 'Ed. Fís',
   'Eletiva de Base': 'Eletiva',
   'Identidade e Protagonismo': 'Id. Prot',
-  'Letramento em Matemática': 'Let. M',
-  'Letramento em Português': 'Let. P',
+  'Letramento em Matemática': 'Let. Mat',
+  'Letramento em Português': 'Let. Port',
   'Língua Inglesa': 'Inglês'
 };
-
-const abbreviateSubject = (name: string): string => {
-  return SUBJECT_ABBREVIATIONS[name] || name;
-};
 ```
 
-### 2. Aplicar Abreviações na Preparação dos Dados
+### 2. Ajustar Estilos do PDF (linhas 152-168)
 
-Modificar a função `preparePreviewData` para usar as abreviações nos headers:
-
-```tsx
-const headers = ['Turma', ...subjectList.map(abbreviateSubject)];
-```
-
-### 3. Ajustar Estilos do PDF
-
-Modificar a função `generatePDF` para aumentar fontes e aplicar negrito:
+Modificar a configuração do `autoTable` para:
+- **Headers (disciplinas)**: Texto centralizado com quebra de linha permitida
+- **Body (professores)**: Texto em uma única linha com `cellWidth: 'auto'` e `overflow: 'ellipsize'` ou largura mínima adequada
 
 ```tsx
 autoTable(doc, {
@@ -52,47 +47,36 @@ autoTable(doc, {
   theme: 'grid',
   headStyles: { 
     fillColor: [59, 130, 246],
-    fontSize: 9,           // Aumentar de 8 para 9
-    fontStyle: 'bold'      // Manter negrito no header
+    fontSize: 9,
+    fontStyle: 'bold',
+    halign: 'center',    // Centralizar headers
+    valign: 'middle'     // Alinhar verticalmente ao meio
   },
   bodyStyles: { 
-    fontSize: 8            // Aumentar de 7 para 8
+    fontSize: 8,
+    cellPadding: 2,
+    overflow: 'linebreak',  // Permitir quebra de linha se necessário
+    minCellWidth: 20        // Largura mínima para evitar quebra excessiva
   },
   columnStyles: {
-    0: { 
-      fontStyle: 'bold', 
-      cellWidth: 25,
-      fontSize: 10         // Fonte maior para turmas
-    }
+    0: { fontStyle: 'bold', cellWidth: 25, fontSize: 10 }
+  },
+  styles: {
+    cellPadding: 2,
+    valign: 'middle'
   }
 });
 ```
 
 ---
 
-## Mapa de Abreviações
+## Resumo das Alterações
 
-| Nome Original | Abreviação |
-|--------------|------------|
-| Aprofundamento I | Aprof. I |
-| Aprofundamento II | Aprof. II |
-| Educação Digital | Ed. Dig |
-| Educação Física | Ed. Fís |
-| Eletiva de Base | Eletiva |
-| Identidade e Protagonismo | Id. Prot |
-| Letramento em Matemática | Let. M |
-| Letramento em Português | Let. P |
-| Língua Inglesa | Inglês |
-
----
-
-## Resumo das Mudanças de Fonte
-
-| Elemento | Antes | Depois |
-|----------|-------|--------|
-| Header (disciplinas) | fontSize: 8 | fontSize: 9, fontStyle: bold |
-| Body (conteúdo) | fontSize: 7 | fontSize: 8 |
-| Coluna Turma | fontSize: 7, bold | fontSize: 10, bold |
+| Item | Alteração |
+|------|-----------|
+| Abreviações | Aprof. I/II → Aprof I/II, Let. M → Let. Mat, Let. P → Let. Port |
+| Headers | Centralizado horizontal e verticalmente |
+| Células do body | Largura mínima para manter professores em uma linha |
 
 ---
 
@@ -100,5 +84,4 @@ autoTable(doc, {
 
 | Arquivo | Alteração |
 |---------|-----------|
-| `src/pages/mapping/MappingSummary.tsx` | Adicionar abreviações e ajustar estilos de fonte |
-
+| `src/pages/mapping/MappingSummary.tsx` | Corrigir abreviações e ajustar estilos do autoTable |
