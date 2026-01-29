@@ -4,14 +4,17 @@
 
 ## Problema Identificado
 
-O componente `ScrollArea` do Radix UI não está exibindo a barra de rolagem corretamente. Isso ocorre porque o Radix UI ScrollArea requer uma altura fixa explícita para calcular corretamente a área de rolagem.
+O `DialogContent` do Radix UI usa `grid` como display base, e ao sobrescrever com `flex flex-col`, há um conflito de layout. O componente `ScrollArea` do Radix UI requer uma altura explícita e um container bem definido para funcionar corretamente.
+
+## Causa Raiz
+
+1. **Conflito de Layout**: O CSS base do DialogContent tem `grid` (linha 39 do dialog.tsx), mas estamos aplicando `flex flex-col` por cima
+2. **Viewport do ScrollArea**: O Radix ScrollArea cria um `Viewport` interno que precisa herdar altura corretamente
+3. **Altura não propagada**: Mesmo com `h-[400px]`, o flex container pode não estar propagando a altura corretamente
 
 ## Solução
 
-Modificar a estrutura do `DialogContent` e `ScrollArea` para garantir que a barra de rolagem funcione corretamente:
-
-1. Usar uma altura fixa no `ScrollArea` em vez de `calc()`
-2. Garantir que o layout flex do DialogContent esteja configurado corretamente
+Usar uma abordagem mais robusta com um container wrapper que garante a altura fixa do ScrollArea:
 
 ---
 
@@ -19,42 +22,60 @@ Modificar a estrutura do `DialogContent` e `ScrollArea` para garantir que a barr
 
 ### Arquivo: `src/components/mapping/TeacherAssociationDialog.tsx`
 
-**Linha 265 - DialogContent:**
-- Manter `overflow-hidden flex flex-col`
+**1. Simplificar o DialogContent (linha 265)**
 
-**Linha 288 - ScrollArea:**
-- Alterar de `h-[calc(85vh-200px)]` para uma altura fixa como `h-[400px]` ou `h-[50vh]`
-- Adicionar `min-h-0` para permitir que o flexbox funcione corretamente
+Remover `overflow-hidden flex flex-col` e usar uma estrutura mais simples com altura máxima.
+
+**2. Envolver o ScrollArea em um div com altura fixa (linha 288)**
+
+Criar um wrapper `div` com altura fixa que contenha o ScrollArea.
+
+**3. Mover o DialogFooter para fora do fluxo do scroll**
+
+Garantir que o footer sempre esteja visível.
 
 ---
 
 ## Código Final
 
-```typescript
-<DialogContent className="max-w-lg max-h-[85vh] overflow-hidden flex flex-col">
-  <DialogHeader className="flex-shrink-0">
-    {/* ... header content ... */}
-  </DialogHeader>
+```tsx
+return (
+  <Dialog open={!!teacher} onOpenChange={() => handleClose()}>
+    <DialogContent className="max-w-lg max-h-[85vh] flex flex-col overflow-hidden">
+      <DialogHeader className="flex-shrink-0 pb-2">
+        <DialogTitle className="flex items-center gap-2">
+          <Book className="h-5 w-5" />
+          Associar disciplinas
+        </DialogTitle>
+        <div className="flex items-center gap-2 pt-1">
+          {/* ... header content ... */}
+        </div>
+      </DialogHeader>
 
-  <ScrollArea className="flex-1 min-h-0 h-[400px] pr-4">
-    {/* ... content ... */}
-  </ScrollArea>
+      <div className="flex-1 min-h-0 overflow-hidden">
+        <ScrollArea className="h-full max-h-[50vh] pr-4">
+          {/* ... scroll content ... */}
+        </ScrollArea>
+      </div>
 
-  <DialogFooter className="flex-shrink-0 gap-2 sm:gap-0">
-    {/* ... buttons ... */}
-  </DialogFooter>
-</DialogContent>
+      <DialogFooter className="flex-shrink-0 pt-4 gap-2 sm:gap-0 border-t mt-2">
+        {/* ... buttons ... */}
+      </DialogFooter>
+    </DialogContent>
+  </Dialog>
+);
 ```
 
 ---
 
-## Por Que Isso Funciona
+## Explicação Técnica
 
 | Problema | Solução |
 |----------|---------|
-| `calc()` nem sempre é interpretado corretamente pelo Radix | Altura fixa explícita |
-| Flexbox pode interferir no cálculo de altura | `min-h-0` permite compressão |
-| Header/Footer podem não ter `flex-shrink-0` | Adicionar classe ao header |
+| `grid` vs `flex` conflito | Usar `flex flex-col` com `!important` via Tailwind ou estrutura mais explícita |
+| ScrollArea sem altura definida | Wrapper `div` com `flex-1 min-h-0 overflow-hidden` + ScrollArea com `h-full max-h-[50vh]` |
+| Footer cortado | `flex-shrink-0` + `pt-4` + `border-t` para separação visual |
+| Viewport interno do ScrollArea | `h-full` permite que o viewport herde a altura do container |
 
 ---
 
@@ -62,5 +83,5 @@ Modificar a estrutura do `DialogContent` e `ScrollArea` para garantir que a barr
 
 | Arquivo | Alteração |
 |---------|-----------|
-| `src/components/mapping/TeacherAssociationDialog.tsx` | Ajustar classes do ScrollArea e DialogHeader |
+| `src/components/mapping/TeacherAssociationDialog.tsx` | Reestruturar layout do diálogo com wrapper para ScrollArea |
 
