@@ -1,74 +1,102 @@
 
 
-# Plano: Manter Dialog Aberto ao Trocar de Aba
+# Plano: Corrigir Dialog Fechando ao Trocar de Aba (Solucao Robusta)
 
 ## Problema Identificado
 
-Quando você está com um diálogo aberto (como "Atribuir Professor" na Distribuição) e troca de aba no Windows, o diálogo fecha automaticamente. Isso acontece porque o componente Dialog do Radix UI detecta que o foco saiu do diálogo e o fecha.
+A solucao anterior com `onFocusOutside` nao esta funcionando. Apos investigacao mais detalhada, identifiquei que o Radix UI Dialog tem multiplos mecanismos que podem causar o fechamento:
+
+1. `onFocusOutside` - quando o foco sai do dialogo
+2. `onPointerDownOutside` - quando clica fora
+3. `onInteractOutside` - combinacao dos dois anteriores
+4. O proprio `onOpenChange` que pode ser chamado internamente
 
 ---
 
-## Solução
+## Solucao
 
-Adicionar as propriedades `onPointerDownOutside` e `onFocusOutside` no DialogContent para prevenir o fechamento automático apenas quando a ação vem de fora da janela (como trocar de aba).
+Aplicar uma abordagem de multiplas camadas para garantir que o dialogo nao feche ao trocar de aba:
+
+### Alteracao 1: Usar `onInteractOutside` combinado com `onPointerDownOutside`
+
+Em vez de apenas `onFocusOutside`, usar `onInteractOutside` que captura TODOS os eventos de interacao externa, mas de forma inteligente - permitindo que o clique no overlay ainda funcione.
+
+### Alteracao 2: Controlar o `onOpenChange` de forma mais inteligente
+
+Modificar o `onOpenChange` para aceitar o valor booleano e so fechar quando realmente deve fechar (quando o valor e `false` vindo de uma acao intencional do usuario).
 
 ---
 
-## Alterações
+## Arquivo: `src/pages/mapping/MappingDistribution.tsx`
 
-### Arquivo: `src/pages/mapping/MappingDistribution.tsx`
-
-**Antes**:
+### Antes (linhas 181-186):
 ```typescript
-<DialogContent className="max-w-md">
+<Dialog open={!!selectedSubjectId} onOpenChange={() => setSelectedSubjectId(null)}>
+  <DialogContent 
+    className="max-w-md"
+    onFocusOutside={(e) => e.preventDefault()}
+  >
 ```
 
-**Depois**:
+### Depois:
 ```typescript
-<DialogContent 
-  className="max-w-md"
-  onFocusOutside={(e) => e.preventDefault()}
+<Dialog 
+  open={!!selectedSubjectId} 
+  onOpenChange={(open) => {
+    if (!open) setSelectedSubjectId(null);
+  }}
+  modal={true}
 >
+  <DialogContent 
+    className="max-w-md"
+    onInteractOutside={(e) => {
+      // Previne fechamento por eventos de focus (troca de aba)
+      // Mas permite fechamento por clique no overlay
+      const isPointerEvent = e.type === 'pointerdown' || e.type === 'pointerup';
+      if (!isPointerEvent) {
+        e.preventDefault();
+      }
+    }}
+  >
 ```
 
 ---
 
 ## Como Funciona
 
-| Propriedade | Função |
-|-------------|--------|
-| `onFocusOutside` | Chamada quando o foco sai do diálogo (incluindo troca de aba). Ao chamar `preventDefault()`, impedimos que o diálogo feche. |
-
-O diálogo ainda fechará quando:
-- Você clicar no X
-- Você clicar no overlay escuro (fora do diálogo)
-- Você pressionar ESC
-- A atribuição for concluída com sucesso
+| Evento | Comportamento |
+|--------|---------------|
+| Trocar de aba (focus outside) | Dialogo permanece aberto |
+| Clicar no overlay | Dialogo fecha normalmente |
+| Clicar no X | Dialogo fecha normalmente |
+| Pressionar ESC | Dialogo fecha normalmente |
+| Concluir atribuicao | Dialogo fecha normalmente |
 
 ---
 
-## Arquivo Afetado
+## Arquivos Afetados
 
-| Arquivo | Alteração |
+| Arquivo | Alteracao |
 |---------|-----------|
-| `src/pages/mapping/MappingDistribution.tsx` | Adicionar `onFocusOutside` no DialogContent |
+| `src/pages/mapping/MappingDistribution.tsx` | Modificar Dialog e DialogContent com eventos mais robustos |
 
 ---
 
-## Seção Técnica
+## Secao Tecnica
 
-### Por que isso acontece
+### Por que a solucao anterior nao funcionou
 
-O Radix UI Dialog implementa "focus trapping" - mantém o foco dentro do diálogo enquanto está aberto. Quando a janela do navegador perde o foco (ao trocar de aba), o Dialog detecta isso como um evento de "focus outside" e fecha automaticamente.
+O `onFocusOutside` do Radix UI pode nao ser disparado corretamente em todos os navegadores/sistemas operacionais quando a janela do navegador perde o foco. Ao usar `onInteractOutside`, capturamos TODOS os eventos externos e podemos filtrar de forma mais precisa.
 
-### Solução técnica
+### Logica do `onInteractOutside`
 
-Usando `onFocusOutside={(e) => e.preventDefault()}`, interceptamos esse evento e prevenimos o comportamento padrão de fechar o diálogo.
+O evento `onInteractOutside` pode ser de dois tipos:
+- `FocusOutsideEvent` - quando o foco sai (troca de aba)
+- `PointerDownOutsideEvent` - quando clica fora (overlay)
 
-### Comportamento preservado
+Verificando o `e.type`, podemos distinguir entre os dois e so bloquear eventos de foco, permitindo que cliques no overlay ainda fechem o dialogo.
 
-- Clicar fora do diálogo (no overlay) ainda fecha o diálogo
-- O botão X ainda funciona
-- A tecla ESC ainda funciona
-- Concluir a atribuição ainda fecha o diálogo
+### Alternativa se ainda nao funcionar
+
+Se esta solucao ainda nao funcionar, podemos implementar um listener de `visibilitychange` no documento para controlar o estado do dialogo de forma completamente manual.
 
