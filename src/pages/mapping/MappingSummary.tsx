@@ -28,6 +28,22 @@ const SHIFT_LABELS: Record<string, string> = {
   evening: "Noite"
 };
 
+const SUBJECT_ABBREVIATIONS: Record<string, string> = {
+  'Aprofundamento I': 'Aprof. I',
+  'Aprofundamento II': 'Aprof. II',
+  'Educação Digital': 'Ed. Dig',
+  'Educação Física': 'Ed. Fís',
+  'Eletiva de Base': 'Eletiva',
+  'Identidade e Protagonismo': 'Id. Prot',
+  'Letramento em Matemática': 'Let. M',
+  'Letramento em Português': 'Let. P',
+  'Língua Inglesa': 'Inglês'
+};
+
+const abbreviateSubject = (name: string): string => {
+  return SUBJECT_ABBREVIATIONS[name] || name;
+};
+
 interface ShiftData {
   shift: string;
   shiftLabel: string;
@@ -64,7 +80,7 @@ const MappingSummaryContent = () => {
       });
       
       const subjectList = Array.from(shiftSubjects).sort();
-      const headers = ['Turma', ...subjectList];
+      const headers = ['Turma', ...subjectList.map(abbreviateSubject)];
       
       const rows = shiftClasses.map(c => {
         const row = [c.name];
@@ -140,13 +156,14 @@ const MappingSummaryContent = () => {
           theme: 'grid',
           headStyles: { 
             fillColor: [59, 130, 246],
-            fontSize: 8 
+            fontSize: 9,
+            fontStyle: 'bold'
           },
           bodyStyles: { 
-            fontSize: 7 
+            fontSize: 8 
           },
           columnStyles: {
-            0: { fontStyle: 'bold', cellWidth: 25 }
+            0: { fontStyle: 'bold', cellWidth: 25, fontSize: 10 }
           }
         });
       });
