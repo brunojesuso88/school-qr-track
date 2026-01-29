@@ -1,87 +1,59 @@
 
 
-# Plano: Corrigir Barra de Rolagem no Diálogo de Associar Disciplina
+# Plano: Corrigir Barra de Rolagem com Altura Fixa
 
-## Problema Identificado
+## Problema
 
-O `DialogContent` do Radix UI usa `grid` como display base, e ao sobrescrever com `flex flex-col`, há um conflito de layout. O componente `ScrollArea` do Radix UI requer uma altura explícita e um container bem definido para funcionar corretamente.
+O componente `ScrollArea` do Radix UI requer uma **altura fixa explícita** para funcionar corretamente. O código atual usa `h-full max-h-[50vh]` que não resolve o problema porque:
 
-## Causa Raiz
-
-1. **Conflito de Layout**: O CSS base do DialogContent tem `grid` (linha 39 do dialog.tsx), mas estamos aplicando `flex flex-col` por cima
-2. **Viewport do ScrollArea**: O Radix ScrollArea cria um `Viewport` interno que precisa herdar altura corretamente
-3. **Altura não propagada**: Mesmo com `h-[400px]`, o flex container pode não estar propagando a altura corretamente
+1. `h-full` herda de um container flex sem altura definida
+2. `max-h` (altura máxima) não é interpretado como altura real pelo Radix ScrollArea
 
 ## Solução
 
-Usar uma abordagem mais robusta com um container wrapper que garante a altura fixa do ScrollArea:
+Usar uma altura fixa calculada com `calc()` que considera o espaço disponível no diálogo.
 
 ---
 
-## Alterações
+## Alteração
 
 ### Arquivo: `src/components/mapping/TeacherAssociationDialog.tsx`
 
-**1. Simplificar o DialogContent (linha 265)**
-
-Remover `overflow-hidden flex flex-col` e usar uma estrutura mais simples com altura máxima.
-
-**2. Envolver o ScrollArea em um div com altura fixa (linha 288)**
-
-Criar um wrapper `div` com altura fixa que contenha o ScrollArea.
-
-**3. Mover o DialogFooter para fora do fluxo do scroll**
-
-Garantir que o footer sempre esteja visível.
-
----
-
-## Código Final
+**Linha 288-289 - Substituir:**
 
 ```tsx
-return (
-  <Dialog open={!!teacher} onOpenChange={() => handleClose()}>
-    <DialogContent className="max-w-lg max-h-[85vh] flex flex-col overflow-hidden">
-      <DialogHeader className="flex-shrink-0 pb-2">
-        <DialogTitle className="flex items-center gap-2">
-          <Book className="h-5 w-5" />
-          Associar disciplinas
-        </DialogTitle>
-        <div className="flex items-center gap-2 pt-1">
-          {/* ... header content ... */}
-        </div>
-      </DialogHeader>
-
-      <div className="flex-1 min-h-0 overflow-hidden">
-        <ScrollArea className="h-full max-h-[50vh] pr-4">
-          {/* ... scroll content ... */}
-        </ScrollArea>
-      </div>
-
-      <DialogFooter className="flex-shrink-0 pt-4 gap-2 sm:gap-0 border-t mt-2">
-        {/* ... buttons ... */}
-      </DialogFooter>
-    </DialogContent>
-  </Dialog>
-);
+<div className="flex-1 min-h-0 overflow-hidden">
+  <ScrollArea className="h-full max-h-[50vh] pr-4">
 ```
 
+**Por:**
+
+```tsx
+<ScrollArea className="h-[calc(85vh-200px)] pr-4">
+```
+
+Onde:
+- `85vh` = altura máxima do diálogo
+- `200px` = espaço aproximado para header (~80px) + footer (~80px) + margens (~40px)
+
+Também remover o wrapper `div` que não é mais necessário.
+
 ---
 
-## Explicação Técnica
+## Resumo das Mudanças
 
-| Problema | Solução |
-|----------|---------|
-| `grid` vs `flex` conflito | Usar `flex flex-col` com `!important` via Tailwind ou estrutura mais explícita |
-| ScrollArea sem altura definida | Wrapper `div` com `flex-1 min-h-0 overflow-hidden` + ScrollArea com `h-full max-h-[50vh]` |
-| Footer cortado | `flex-shrink-0` + `pt-4` + `border-t` para separação visual |
-| Viewport interno do ScrollArea | `h-full` permite que o viewport herde a altura do container |
+| Antes | Depois |
+|-------|--------|
+| `h-full max-h-[50vh]` | `h-[calc(85vh-200px)]` |
+| Wrapper div com flex-1 | Sem wrapper (direto no ScrollArea) |
 
 ---
 
-## Arquivos Afetados
+## Seção Técnica
 
-| Arquivo | Alteração |
-|---------|-----------|
-| `src/components/mapping/TeacherAssociationDialog.tsx` | Reestruturar layout do diálogo com wrapper para ScrollArea |
+A documentação de memória do projeto especifica:
+
+> "Radix UI ScrollArea components require an explicit, fixed height (e.g., `h-[300px]` or `h-[calc(90vh-120px)]`) rather than a maximum height (`max-h`) to correctly calculate the scrollable area and display scrollbars."
+
+O cálculo `calc(85vh-200px)` garante que o ScrollArea tenha uma altura fixa baseada no viewport, permitindo que o Radix calcule corretamente quando mostrar a barra de rolagem.
 
