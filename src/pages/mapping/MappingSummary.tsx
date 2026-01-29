@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Users, GraduationCap, BookOpen, AlertTriangle, CheckCircle2, Clock, Download, Loader2 } from "lucide-react";
+import { Users, GraduationCap, BookOpen, AlertTriangle, CheckCircle2, Clock, Download, Loader2, FileText } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,18 @@ import { SchoolMappingProvider, useSchoolMapping } from "@/contexts/SchoolMappin
 import { Skeleton } from "@/components/ui/skeleton";
 import SchoolMappingLayout from "@/components/mapping/SchoolMappingLayout";
 import { useToast } from "@/hooks/use-toast";
+import { 
+  Dialog, 
+  DialogContent, 
+  DialogHeader, 
+  DialogTitle, 
+  DialogDescription,
+  DialogFooter 
+} from "@/components/ui/dialog";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 const SHIFT_LABELS: Record<string, string> = {
   morning: "Manhã",
@@ -16,85 +28,132 @@ const SHIFT_LABELS: Record<string, string> = {
   evening: "Noite"
 };
 
+interface ShiftData {
+  shift: string;
+  shiftLabel: string;
+  headers: string[];
+  rows: string[][];
+}
+
+interface PreviewData {
+  shifts: ShiftData[];
+  generatedAt: string;
+}
+
 const MappingSummaryContent = () => {
   const { teachers, globalSubjects, classes, classSubjects, loading } = useSchoolMapping();
   const { toast } = useToast();
   const [exporting, setExporting] = useState(false);
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [previewData, setPreviewData] = useState<PreviewData | null>(null);
 
-  const downloadCSV = (content: string, filename: string) => {
-    const BOM = '\uFEFF';
-    const blob = new Blob([BOM + content], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+  const preparePreviewData = (): PreviewData => {
+    const shifts = ['morning', 'afternoon', 'evening'] as const;
+    const data: ShiftData[] = [];
+    
+    for (const shift of shifts) {
+      const shiftClasses = classes.filter(c => c.shift === shift);
+      if (shiftClasses.length === 0) continue;
+      
+      // Coletar disciplinas únicas deste turno
+      const shiftSubjects = new Set<string>();
+      shiftClasses.forEach(c => {
+        classSubjects
+          .filter(cs => cs.class_id === c.id)
+          .forEach(cs => shiftSubjects.add(cs.subject_name));
+      });
+      
+      const subjectList = Array.from(shiftSubjects).sort();
+      const headers = ['Turma', ...subjectList];
+      
+      const rows = shiftClasses.map(c => {
+        const row = [c.name];
+        subjectList.forEach(subjectName => {
+          const cs = classSubjects.find(
+            x => x.class_id === c.id && x.subject_name === subjectName
+          );
+          if (cs) {
+            const teacher = teachers.find(t => t.id === cs.teacher_id);
+            row.push(teacher 
+              ? `${teacher.name} (${cs.weekly_classes})` 
+              : `- (${cs.weekly_classes})`
+            );
+          } else {
+            row.push('-');
+          }
+        });
+        return row;
+      });
+      
+      data.push({
+        shift,
+        shiftLabel: SHIFT_LABELS[shift],
+        headers,
+        rows
+      });
+    }
+    
+    return {
+      shifts: data,
+      generatedAt: new Date().toLocaleString('pt-BR')
+    };
   };
 
-  const exportMapping = async () => {
+  const openPreview = () => {
+    const data = preparePreviewData();
+    if (data.shifts.length === 0) {
+      toast({ 
+        title: "Nenhum dado", 
+        description: "Não há turmas cadastradas para exportar.",
+        variant: "destructive"
+      });
+      return;
+    }
+    setPreviewData(data);
+    setIsPreviewOpen(true);
+  };
+
+  const generatePDF = () => {
+    if (!previewData) return;
+    
     setExporting(true);
     try {
-      const shifts = ['morning', 'afternoon', 'evening'] as const;
+      const doc = new jsPDF('landscape', 'mm', 'a4');
       const date = new Date().toISOString().split('T')[0];
-      let filesGenerated = 0;
       
-      for (const shift of shifts) {
-        const shiftClasses = classes.filter(c => c.shift === shift);
-        if (shiftClasses.length === 0) continue;
+      previewData.shifts.forEach((shiftData, index) => {
+        if (index > 0) {
+          doc.addPage();
+        }
         
-        // Get all unique subjects for this shift
-        const shiftSubjects = new Set<string>();
-        shiftClasses.forEach(c => {
-          classSubjects
-            .filter(cs => cs.class_id === c.id)
-            .forEach(cs => shiftSubjects.add(cs.subject_name));
+        // Titulo do turno
+        doc.setFontSize(16);
+        doc.text(`Mapeamento Escolar - ${shiftData.shiftLabel}`, 14, 15);
+        doc.setFontSize(10);
+        doc.text(`Gerado em: ${previewData.generatedAt}`, 14, 22);
+        
+        // Tabela
+        autoTable(doc, {
+          startY: 28,
+          head: [shiftData.headers],
+          body: shiftData.rows,
+          theme: 'grid',
+          headStyles: { 
+            fillColor: [59, 130, 246],
+            fontSize: 8 
+          },
+          bodyStyles: { 
+            fontSize: 7 
+          },
+          columnStyles: {
+            0: { fontStyle: 'bold', cellWidth: 25 }
+          }
         });
-        
-        const subjectList = Array.from(shiftSubjects).sort();
-        
-        // Header row
-        const header = ['Turma', ...subjectList];
-        
-        // Data rows
-        const rows = shiftClasses.map(c => {
-          const row = [c.name];
-          subjectList.forEach(subjectName => {
-            const cs = classSubjects.find(
-              x => x.class_id === c.id && x.subject_name === subjectName
-            );
-            if (cs) {
-              const teacher = teachers.find(t => t.id === cs.teacher_id);
-              row.push(teacher 
-                ? `${teacher.name} (${cs.weekly_classes})` 
-                : `- (${cs.weekly_classes})`
-              );
-            } else {
-              row.push('-');
-            }
-          });
-          return row;
-        });
-        
-        const csv = [header, ...rows].map(r => r.join(';')).join('\n');
-        downloadCSV(csv, `mapeamento_${SHIFT_LABELS[shift]}_${date}.csv`);
-        filesGenerated++;
-      }
+      });
       
-      if (filesGenerated > 0) {
-        toast({ 
-          title: "Exportação concluída", 
-          description: `${filesGenerated} arquivo(s) CSV gerado(s).` 
-        });
-      } else {
-        toast({ 
-          title: "Nenhum dado", 
-          description: "Não há turmas cadastradas para exportar.",
-          variant: "destructive"
-        });
-      }
+      doc.save(`mapeamento_escolar_${date}.pdf`);
+      setIsPreviewOpen(false);
+      toast({ title: "PDF exportado", description: "Arquivo salvo com sucesso." });
     } catch (error: any) {
       toast({ 
         title: "Erro na exportação", 
@@ -157,13 +216,9 @@ const MappingSummaryContent = () => {
             <h1 className="text-2xl font-bold text-foreground">Resumo Geral</h1>
             <p className="text-muted-foreground">Visão consolidada para conferência da direção</p>
           </div>
-          <Button onClick={exportMapping} disabled={exporting || classes.length === 0}>
-            {exporting ? (
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-            ) : (
-              <Download className="h-4 w-4 mr-2" />
-            )}
-            Exportar CSV
+          <Button onClick={openPreview} disabled={classes.length === 0}>
+            <Download className="h-4 w-4 mr-2" />
+            Exportar PDF
           </Button>
         </div>
 
@@ -381,6 +436,86 @@ const MappingSummaryContent = () => {
           </CardContent>
         </Card>
       </div>
+
+      {/* Preview Dialog */}
+      <Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
+        <DialogContent 
+          className="max-w-4xl max-h-[90vh] flex flex-col"
+          onInteractOutside={(e) => {
+            if (e.type !== 'pointerdown') {
+              e.preventDefault();
+            }
+          }}
+        >
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileText className="h-5 w-5" />
+              Visualização da Exportação
+            </DialogTitle>
+            <DialogDescription>
+              Confira os dados antes de exportar o PDF
+            </DialogDescription>
+          </DialogHeader>
+          
+          <ScrollArea className="h-[calc(90vh-200px)] pr-4">
+            {previewData?.shifts.map((shiftData, idx) => (
+              <div key={shiftData.shift} className={idx > 0 ? "mt-6" : ""}>
+                <h3 className="font-semibold text-lg mb-3 flex items-center gap-2">
+                  <Badge>{shiftData.shiftLabel}</Badge>
+                  <span className="text-sm text-muted-foreground">
+                    {shiftData.rows.length} turma(s)
+                  </span>
+                </h3>
+                
+                <div className="border rounded-lg overflow-hidden">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        {shiftData.headers.map((h, i) => (
+                          <TableHead 
+                            key={i} 
+                            className={i === 0 ? "font-bold bg-muted" : "text-xs"}
+                          >
+                            {h}
+                          </TableHead>
+                        ))}
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {shiftData.rows.map((row, rowIdx) => (
+                        <TableRow key={rowIdx}>
+                          {row.map((cell, cellIdx) => (
+                            <TableCell 
+                              key={cellIdx}
+                              className={cellIdx === 0 ? "font-medium" : "text-xs"}
+                            >
+                              {cell}
+                            </TableCell>
+                          ))}
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+            ))}
+          </ScrollArea>
+          
+          <DialogFooter className="mt-4">
+            <Button variant="outline" onClick={() => setIsPreviewOpen(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={generatePDF} disabled={exporting}>
+              {exporting ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Download className="h-4 w-4 mr-2" />
+              )}
+              Baixar PDF
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </SchoolMappingLayout>
   );
 };
