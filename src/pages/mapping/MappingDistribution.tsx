@@ -194,7 +194,7 @@ const MappingDistributionContent = () => {
                 </p>
               </div>
 
-              <ScrollArea className="max-h-[300px]">
+              <ScrollArea className="h-[300px]">
                 <div className="space-y-2 pr-2">
                   {getEligibleTeachers(selectedClassSubject.subject_name, selectedClass.shift).length === 0 ? (
                     <p className="text-sm text-muted-foreground text-center py-4">
