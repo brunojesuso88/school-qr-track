@@ -285,22 +285,20 @@ const TeacherAssociationDialog = ({ teacher, onClose }: TeacherAssociationDialog
           </div>
         </DialogHeader>
 
-        <div className="flex-1 min-h-0 overflow-hidden">
-          <ScrollArea className="h-full max-h-[50vh] pr-4">
-            {!hasAnySubjects ? (
-              <div className="text-center py-8 text-muted-foreground">
-                <p>Nenhuma disciplina cadastrada nas turmas.</p>
-                <p className="text-sm">Adicione disciplinas às turmas primeiro.</p>
-              </div>
-            ) : (
-              <div className="space-y-6 pb-4">
-                {renderShiftSection('morning', shiftGroups.morning)}
-                {renderShiftSection('afternoon', shiftGroups.afternoon)}
-                {renderShiftSection('evening', shiftGroups.evening)}
-              </div>
-            )}
-          </ScrollArea>
-        </div>
+        <ScrollArea className="h-[calc(85vh-200px)] pr-4">
+          {!hasAnySubjects ? (
+            <div className="text-center py-8 text-muted-foreground">
+              <p>Nenhuma disciplina cadastrada nas turmas.</p>
+              <p className="text-sm">Adicione disciplinas às turmas primeiro.</p>
+            </div>
+          ) : (
+            <div className="space-y-6 pb-4">
+              {renderShiftSection('morning', shiftGroups.morning)}
+              {renderShiftSection('afternoon', shiftGroups.afternoon)}
+              {renderShiftSection('evening', shiftGroups.evening)}
+            </div>
+          )}
+        </ScrollArea>
 
         <DialogFooter className="flex-shrink-0 pt-4 gap-2 sm:gap-0 border-t mt-2">
           <Button
