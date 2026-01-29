@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { SchoolMappingProvider, useSchoolMapping, MappingTeacher } from "@/contexts/SchoolMappingContext";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import TeacherForm from "@/components/mapping/TeacherForm";
 import TeacherSummarySheet from "@/components/mapping/TeacherSummarySheet";
@@ -95,13 +96,15 @@ const MappingTeachersContent = () => {
                 Adicionar
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-lg">
+            <DialogContent className="max-w-lg max-h-[90vh] flex flex-col">
               <DialogHeader>
                 <DialogTitle>
                   {editingTeacher ? "Editar Professor" : "Novo Professor"}
                 </DialogTitle>
               </DialogHeader>
-              <TeacherForm teacher={editingTeacher} onClose={handleCloseDialog} />
+              <ScrollArea className="flex-1 pr-4">
+                <TeacherForm teacher={editingTeacher} onClose={handleCloseDialog} />
+              </ScrollArea>
             </DialogContent>
           </Dialog>
         </div>

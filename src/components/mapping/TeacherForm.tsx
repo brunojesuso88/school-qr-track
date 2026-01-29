@@ -15,12 +15,6 @@ interface TeacherFormProps {
   onClose: () => void;
 }
 
-const SHIFTS = [
-  { id: "morning", label: "Manhã" },
-  { id: "afternoon", label: "Tarde" },
-  { id: "evening", label: "Noite" }
-];
-
 const TeacherForm = ({ teacher, onClose }: TeacherFormProps) => {
   const { globalSubjects, addTeacher, updateTeacher } = useSchoolMapping();
   const { toast } = useToast();
@@ -30,7 +24,6 @@ const TeacherForm = ({ teacher, onClose }: TeacherFormProps) => {
   const [phone, setPhone] = useState(teacher?.phone || "");
   const [maxWeeklyHours, setMaxWeeklyHours] = useState(teacher?.max_weekly_hours?.toString() || "20");
   const [subjects, setSubjects] = useState<string[]>(teacher?.subjects || []);
-  const [availability, setAvailability] = useState<string[]>(teacher?.availability || []);
   const [notes, setNotes] = useState(teacher?.notes || "");
   const [loading, setLoading] = useState(false);
   const [detailedAvailability, setDetailedAvailability] = useState<{ day: number; period: number; available: boolean }[]>([]);
@@ -47,20 +40,24 @@ const TeacherForm = ({ teacher, onClose }: TeacherFormProps) => {
       return;
     }
 
-    if (availability.length === 0) {
-      toast({ title: "Selecione ao menos um turno", variant: "destructive" });
-      return;
-    }
-
     setLoading(true);
     try {
+      // Derive availability from detailed grid or use default
+      const derivedAvailability = detailedAvailability.length > 0 
+        ? [...new Set(detailedAvailability.filter(a => a.available).map(a => {
+            if (a.period <= 5) return "morning";
+            if (a.period <= 10) return "afternoon";
+            return "evening";
+          }))]
+        : ["morning", "afternoon", "evening"];
+
       const data = {
         name: name.trim(),
         email: email.trim() || undefined,
         phone: phone.trim() || undefined,
         max_weekly_hours: parseInt(maxWeeklyHours),
         subjects,
-        availability,
+        availability: derivedAvailability,
         notes: notes.trim() || undefined
       };
 
@@ -106,13 +103,6 @@ const TeacherForm = ({ teacher, onClose }: TeacherFormProps) => {
     );
   };
 
-  const toggleShift = (shiftId: string) => {
-    setAvailability(prev => 
-      prev.includes(shiftId) 
-        ? prev.filter(id => id !== shiftId)
-        : [...prev, shiftId]
-    );
-  };
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
@@ -162,24 +152,6 @@ const TeacherForm = ({ teacher, onClose }: TeacherFormProps) => {
             </div>
           </div>
         </RadioGroup>
-      </div>
-
-      <div className="space-y-2">
-        <Label>Turnos Disponíveis *</Label>
-        <div className="flex gap-4">
-          {SHIFTS.map(shift => (
-            <div key={shift.id} className="flex items-center space-x-2">
-              <Checkbox
-                id={`shift-${shift.id}`}
-                checked={availability.includes(shift.id)}
-                onCheckedChange={() => toggleShift(shift.id)}
-              />
-              <Label htmlFor={`shift-${shift.id}`} className="font-normal">
-                {shift.label}
-              </Label>
-            </div>
-          ))}
-        </div>
       </div>
 
       <div className="space-y-2">
