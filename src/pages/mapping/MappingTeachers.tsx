@@ -36,6 +36,16 @@ const MappingTeachersContent = () => {
       .filter(Boolean) as string[];
   };
 
+  const getAssignedSubjectsCount = (teacherId: string) => {
+    return classSubjects.filter(cs => cs.teacher_id === teacherId).length;
+  };
+
+  const getCalculatedHours = (teacherId: string) => {
+    return classSubjects
+      .filter(cs => cs.teacher_id === teacherId)
+      .reduce((sum, cs) => sum + cs.weekly_classes, 0);
+  };
+
   const getOverloadThreshold = (maxHours: number) => {
     return maxHours === 20 ? 13 : 26;
   };
@@ -128,8 +138,9 @@ const MappingTeachersContent = () => {
             </Card>
           ) : (
             teachers.map((teacher) => {
-              const isOverloaded = teacher.current_hours >= getOverloadThreshold(teacher.max_weekly_hours);
-              const progressPercent = (teacher.current_hours / teacher.max_weekly_hours) * 100;
+              const calculatedHours = getCalculatedHours(teacher.id);
+              const isOverloaded = calculatedHours >= getOverloadThreshold(teacher.max_weekly_hours);
+              const progressPercent = (calculatedHours / teacher.max_weekly_hours) * 100;
 
               return (
                 <Card 
@@ -158,7 +169,7 @@ const MappingTeachersContent = () => {
                             </Badge>
                           ))}
                           <Badge variant="secondary" className="text-xs">
-                            {getSubjectNames(teacher.subjects).length} disciplinas
+                            {getAssignedSubjectsCount(teacher.id)} disciplinas
                           </Badge>
                         </div>
 
@@ -167,7 +178,7 @@ const MappingTeachersContent = () => {
                           <div className="flex justify-between text-xs text-muted-foreground">
                             <span>Carga horária</span>
                             <span className={isOverloaded ? "text-amber-500 font-medium" : ""}>
-                              {teacher.current_hours}h / {teacher.max_weekly_hours}h
+                              {calculatedHours}h / {teacher.max_weekly_hours}h
                             </span>
                           </div>
                           <Progress 

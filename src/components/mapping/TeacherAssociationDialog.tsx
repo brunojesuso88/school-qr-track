@@ -79,6 +79,18 @@ const TeacherAssociationDialog = ({ teacher, onClose }: TeacherAssociationDialog
     ]);
   };
 
+  const handleUnassign = (classSubjectId: string) => {
+    const filteredChanges = pendingChanges.filter(p => p.classSubjectId !== classSubjectId);
+    setPendingChanges([
+      ...filteredChanges,
+      {
+        classSubjectId,
+        action: 'unassign',
+        previousTeacherId: teacher.id
+      }
+    ]);
+  };
+
   const handleSaveAll = async () => {
     if (pendingChanges.length === 0) {
       handleClose();
@@ -197,13 +209,17 @@ const TeacherAssociationDialog = ({ teacher, onClose }: TeacherAssociationDialog
                   const canAssign = isAvailable && !isAssignedToThisTeacher && !exceeds;
                   const isPending = pending?.action === 'assign';
 
+                  const isPendingUnassign = pending?.action === 'unassign';
+
                   return (
                     <div 
                       key={subject.id} 
                       className={`flex items-center justify-between py-1.5 px-2 rounded ${
                         isPending 
                           ? 'bg-primary/10 border border-primary/30' 
-                          : 'bg-muted/50'
+                          : isPendingUnassign
+                            ? 'bg-destructive/10 border border-destructive/30'
+                            : 'bg-muted/50'
                       }`}
                     >
                       <div className="flex items-center gap-2">
@@ -216,6 +232,10 @@ const TeacherAssociationDialog = ({ teacher, onClose }: TeacherAssociationDialog
                             <Check className="h-3 w-3 mr-1" />
                             Pendente
                           </Badge>
+                        ) : isPendingUnassign ? (
+                          <Badge variant="destructive" className="text-xs">
+                            A remover
+                          </Badge>
                         ) : (
                           localTeacherName && !isAssignedToThisTeacher && (
                             <Badge variant="secondary" className="text-xs">
@@ -225,11 +245,17 @@ const TeacherAssociationDialog = ({ teacher, onClose }: TeacherAssociationDialog
                         )}
                       </div>
 
-                      {isAssignedToThisTeacher && !isPending ? (
-                        <Badge variant="default" className="text-xs">
-                          Já atribuído
-                        </Badge>
-                      ) : !isPending && (
+                      {isAssignedToThisTeacher && !isPending && !isPendingUnassign ? (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-xs text-destructive hover:text-destructive"
+                          onClick={() => handleUnassign(subject.id)}
+                          disabled={isSaving}
+                        >
+                          Remover
+                        </Button>
+                      ) : !isPending && !isPendingUnassign && (
                         <Button
                           size="sm"
                           variant={originalTeacherName ? "outline" : "default"}
