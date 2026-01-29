@@ -31,12 +31,15 @@ const SHIFT_LABELS: Record<string, string> = {
 const SUBJECT_ABBREVIATIONS: Record<string, string> = {
   'Aprofundamento I': 'Aprof I',
   'Aprofundamento II': 'Aprof II',
+  'Aprofundamento 2': 'Aprof II',        // Nome no banco de dados
   'Educação Digital': 'Ed. Dig',
   'Educação Física': 'Ed. Fís',
   'Eletiva de Base': 'Eletiva',
   'Identidade e Protagonismo': 'Id. Prot',
   'Letramento em Matemática': 'Let. Mat',
   'Letramento em Português': 'Let. Port',
+  'Let. em Matemática': 'Let. Mat',      // Nome no banco de dados
+  'Let. em Português': 'Let. Port',      // Nome no banco de dados
   'Língua Inglesa': 'Inglês'
 };
 
@@ -44,11 +47,17 @@ const abbreviateSubject = (name: string): string => {
   return SUBJECT_ABBREVIATIONS[name] || name;
 };
 
+interface PageData {
+  headers: string[];
+  rows: string[][];
+  pageNumber: number;
+  totalPages: number;
+}
+
 interface ShiftData {
   shift: string;
   shiftLabel: string;
-  headers: string[];
-  rows: string[][];
+  pages: PageData[];
 }
 
 interface PreviewData {
@@ -80,32 +89,50 @@ const MappingSummaryContent = () => {
       });
       
       const subjectList = Array.from(shiftSubjects).sort();
-      const headers = ['Turma', ...subjectList.map(abbreviateSubject)];
       
-      const rows = shiftClasses.map(c => {
-        const row = [c.name];
-        subjectList.forEach(subjectName => {
-          const cs = classSubjects.find(
-            x => x.class_id === c.id && x.subject_name === subjectName
-          );
-          if (cs) {
-            const teacher = teachers.find(t => t.id === cs.teacher_id);
-            row.push(teacher 
-              ? `${teacher.name} (${cs.weekly_classes})` 
-              : `- (${cs.weekly_classes})`
-            );
-          } else {
-            row.push('-');
-          }
+      // Dividir disciplinas em 2 grupos para 2 páginas
+      const midPoint = Math.ceil(subjectList.length / 2);
+      const subjectGroups = [
+        subjectList.slice(0, midPoint),
+        subjectList.slice(midPoint)
+      ];
+      
+      const pages = subjectGroups
+        .filter(group => group.length > 0)
+        .map((subjectGroup, pageIndex, arr) => {
+          const headers = ['Turma', ...subjectGroup.map(abbreviateSubject)];
+          
+          const rows = shiftClasses.map(c => {
+            const row = [c.name];
+            subjectGroup.forEach(subjectName => {
+              const cs = classSubjects.find(
+                x => x.class_id === c.id && x.subject_name === subjectName
+              );
+              if (cs) {
+                const teacher = teachers.find(t => t.id === cs.teacher_id);
+                row.push(teacher 
+                  ? `${teacher.name} (${cs.weekly_classes})` 
+                  : `- (${cs.weekly_classes})`
+                );
+              } else {
+                row.push('-');
+              }
+            });
+            return row;
+          });
+          
+          return {
+            headers,
+            rows,
+            pageNumber: pageIndex + 1,
+            totalPages: arr.length
+          };
         });
-        return row;
-      });
       
       data.push({
         shift,
         shiftLabel: SHIFT_LABELS[shift],
-        headers,
-        rows
+        pages
       });
     }
     
@@ -136,43 +163,47 @@ const MappingSummaryContent = () => {
     try {
       const doc = new jsPDF('landscape', 'mm', 'a4');
       const date = new Date().toISOString().split('T')[0];
+      let isFirstPage = true;
       
-      previewData.shifts.forEach((shiftData, index) => {
-        if (index > 0) {
-          doc.addPage();
-        }
-        
-        // Titulo do turno
-        doc.setFontSize(16);
-        doc.text(`Mapeamento Escolar - ${shiftData.shiftLabel}`, 14, 15);
-        doc.setFontSize(10);
-        doc.text(`Gerado em: ${previewData.generatedAt}`, 14, 22);
-        
-        // Tabela
-        autoTable(doc, {
-          startY: 28,
-          head: [shiftData.headers],
-          body: shiftData.rows,
-          theme: 'grid',
-          headStyles: { 
-            fillColor: [59, 130, 246],
-            fontSize: 9,
-            fontStyle: 'bold',
-            halign: 'center',
-            valign: 'middle'
-          },
-          bodyStyles: { 
-            fontSize: 8,
-            cellPadding: 2,
-            minCellWidth: 20
-          },
-          columnStyles: {
-            0: { fontStyle: 'bold', cellWidth: 25, fontSize: 10 }
-          },
-          styles: {
-            cellPadding: 2,
-            valign: 'middle'
+      previewData.shifts.forEach((shiftData) => {
+        shiftData.pages.forEach((page) => {
+          if (!isFirstPage) {
+            doc.addPage();
           }
+          isFirstPage = false;
+          
+          // Titulo do turno com número da página
+          doc.setFontSize(16);
+          doc.text(`Mapeamento Escolar - ${shiftData.shiftLabel}`, 14, 15);
+          doc.setFontSize(10);
+          doc.text(`Gerado em: ${previewData.generatedAt} | Página ${page.pageNumber}/${page.totalPages}`, 14, 22);
+          
+          // Tabela
+          autoTable(doc, {
+            startY: 28,
+            head: [page.headers],
+            body: page.rows,
+            theme: 'grid',
+            headStyles: { 
+              fillColor: [59, 130, 246],
+              fontSize: 9,
+              fontStyle: 'bold',
+              halign: 'center',
+              valign: 'middle'
+            },
+            bodyStyles: { 
+              fontSize: 8,
+              cellPadding: 2,
+              minCellWidth: 20
+            },
+            columnStyles: {
+              0: { fontStyle: 'bold', cellWidth: 25, fontSize: 10 }
+            },
+            styles: {
+              cellPadding: 2,
+              valign: 'middle'
+            }
+          });
         });
       });
       
@@ -487,41 +518,46 @@ const MappingSummaryContent = () => {
               <div key={shiftData.shift} className={idx > 0 ? "mt-6" : ""}>
                 <h3 className="font-semibold text-lg mb-3 flex items-center gap-2">
                   <Badge>{shiftData.shiftLabel}</Badge>
-                  <span className="text-sm text-muted-foreground">
-                    {shiftData.rows.length} turma(s)
-                  </span>
                 </h3>
                 
-                <div className="border rounded-lg overflow-hidden">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        {shiftData.headers.map((h, i) => (
-                          <TableHead 
-                            key={i} 
-                            className={i === 0 ? "font-bold bg-muted" : "text-xs"}
-                          >
-                            {h}
-                          </TableHead>
-                        ))}
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {shiftData.rows.map((row, rowIdx) => (
-                        <TableRow key={rowIdx}>
-                          {row.map((cell, cellIdx) => (
-                            <TableCell 
-                              key={cellIdx}
-                              className={cellIdx === 0 ? "font-medium" : "text-xs"}
-                            >
-                              {cell}
-                            </TableCell>
+                {shiftData.pages.map((page, pageIdx) => (
+                  <div key={pageIdx} className={pageIdx > 0 ? "mt-4" : ""}>
+                    <p className="text-sm text-muted-foreground mb-2">
+                      Página {page.pageNumber}/{page.totalPages} - {page.headers.length - 1} disciplina(s)
+                    </p>
+                    
+                    <div className="border rounded-lg overflow-hidden">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            {page.headers.map((h, i) => (
+                              <TableHead 
+                                key={i} 
+                                className={i === 0 ? "font-bold bg-muted" : "text-xs"}
+                              >
+                                {h}
+                              </TableHead>
+                            ))}
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {page.rows.map((row, rowIdx) => (
+                            <TableRow key={rowIdx}>
+                              {row.map((cell, cellIdx) => (
+                                <TableCell 
+                                  key={cellIdx}
+                                  className={cellIdx === 0 ? "font-medium" : "text-xs"}
+                                >
+                                  {cell}
+                                </TableCell>
+                              ))}
+                            </TableRow>
                           ))}
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </div>
+                ))}
               </div>
             ))}
           </ScrollArea>
