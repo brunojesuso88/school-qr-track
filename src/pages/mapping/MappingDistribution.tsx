@@ -180,7 +180,10 @@ const MappingDistributionContent = () => {
 
       {/* Assign Teacher Dialog */}
       <Dialog open={!!selectedSubjectId} onOpenChange={() => setSelectedSubjectId(null)}>
-        <DialogContent className="max-w-md">
+        <DialogContent 
+          className="max-w-md"
+          onFocusOutside={(e) => e.preventDefault()}
+        >
           <DialogHeader>
             <DialogTitle>Selecionar Professor</DialogTitle>
           </DialogHeader>
