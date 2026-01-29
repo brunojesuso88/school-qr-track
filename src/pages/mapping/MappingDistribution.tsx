@@ -242,7 +242,7 @@ const MappingDistributionContent = () => {
           
           {selectedClass && (
             <>
-              <ScrollArea className="flex-1 h-[calc(70vh-120px)] pr-4">
+              <ScrollArea className="h-[calc(85vh-200px)] pr-4">
                 <div className="space-y-3">
                   {getClassSubjects(selectedClass.id).length === 0 ? (
                     <p className="text-sm text-muted-foreground text-center py-8">
