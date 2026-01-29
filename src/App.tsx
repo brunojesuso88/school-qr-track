@@ -35,7 +35,14 @@ import TimetableRules from "./pages/timetable/TimetableRules";
 import TimetableGenerate from "./pages/timetable/TimetableGenerate";
 import TimetableExport from "./pages/timetable/TimetableExport";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      refetchOnWindowFocus: false,
+      refetchOnReconnect: false,
+    },
+  },
+});
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
