@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Plus, Pencil, Trash2, AlertTriangle } from "lucide-react";
+import { Plus, Pencil, Trash2, AlertTriangle, Book } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -11,6 +11,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import TeacherForm from "@/components/mapping/TeacherForm";
 import TeacherSummarySheet from "@/components/mapping/TeacherSummarySheet";
+import TeacherAssociationDialog from "@/components/mapping/TeacherAssociationDialog";
 import SchoolMappingLayout from "@/components/mapping/SchoolMappingLayout";
 import { useToast } from "@/hooks/use-toast";
 
@@ -27,6 +28,7 @@ const MappingTeachersContent = () => {
   const [editingTeacher, setEditingTeacher] = useState<MappingTeacher | null>(null);
   const [deletingTeacher, setDeletingTeacher] = useState<MappingTeacher | null>(null);
   const [viewingTeacher, setViewingTeacher] = useState<MappingTeacher | null>(null);
+  const [associatingTeacher, setAssociatingTeacher] = useState<MappingTeacher | null>(null);
 
   const getSubjectNames = (subjectIds: string[]) => {
     return subjectIds
@@ -59,6 +61,11 @@ const MappingTeachersContent = () => {
   const handleDeleteClick = (e: React.MouseEvent, teacher: MappingTeacher) => {
     e.stopPropagation();
     setDeletingTeacher(teacher);
+  };
+
+  const handleAssociateClick = (e: React.MouseEvent, teacher: MappingTeacher) => {
+    e.stopPropagation();
+    setAssociatingTeacher(teacher);
   };
 
   const handleCloseDialog = () => {
@@ -170,7 +177,15 @@ const MappingTeachersContent = () => {
                         </div>
                       </div>
 
-                      <div className="flex gap-2">
+                      <div className="flex gap-1">
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          title="Associar disciplinas"
+                          onClick={(e) => handleAssociateClick(e, teacher)}
+                        >
+                          <Book className="h-4 w-4" />
+                        </Button>
                         <Button variant="ghost" size="icon" onClick={(e) => handleEdit(e, teacher)}>
                           <Pencil className="h-4 w-4" />
                         </Button>
@@ -199,6 +214,12 @@ const MappingTeachersContent = () => {
         classSubjects={classSubjects}
         globalSubjects={globalSubjects}
         onClose={() => setViewingTeacher(null)}
+      />
+
+      {/* Teacher Association Dialog */}
+      <TeacherAssociationDialog
+        teacher={associatingTeacher}
+        onClose={() => setAssociatingTeacher(null)}
       />
 
       {/* Delete Confirmation */}

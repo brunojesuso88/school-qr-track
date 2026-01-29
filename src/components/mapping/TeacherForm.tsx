@@ -3,7 +3,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Checkbox } from "@/components/ui/checkbox";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useSchoolMapping, MappingTeacher } from "@/contexts/SchoolMappingContext";
 import { useToast } from "@/hooks/use-toast";
@@ -23,7 +22,6 @@ const TeacherForm = ({ teacher, onClose }: TeacherFormProps) => {
   const [email, setEmail] = useState(teacher?.email || "");
   const [phone, setPhone] = useState(teacher?.phone || "");
   const [maxWeeklyHours, setMaxWeeklyHours] = useState(teacher?.max_weekly_hours?.toString() || "20");
-  const [subjects, setSubjects] = useState<string[]>(teacher?.subjects || []);
   const [notes, setNotes] = useState(teacher?.notes || "");
   const [loading, setLoading] = useState(false);
   const [detailedAvailability, setDetailedAvailability] = useState<{ day: number; period: number; available: boolean }[]>([]);
@@ -56,7 +54,7 @@ const TeacherForm = ({ teacher, onClose }: TeacherFormProps) => {
         email: email.trim() || undefined,
         phone: phone.trim() || undefined,
         max_weekly_hours: parseInt(maxWeeklyHours),
-        subjects,
+        subjects: teacher?.subjects || [],
         availability: derivedAvailability,
         notes: notes.trim() || undefined
       };
@@ -94,15 +92,6 @@ const TeacherForm = ({ teacher, onClose }: TeacherFormProps) => {
       setLoading(false);
     }
   };
-
-  const toggleSubject = (subjectId: string) => {
-    setSubjects(prev => 
-      prev.includes(subjectId) 
-        ? prev.filter(id => id !== subjectId)
-        : [...prev, subjectId]
-    );
-  };
-
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
@@ -154,31 +143,7 @@ const TeacherForm = ({ teacher, onClose }: TeacherFormProps) => {
         </RadioGroup>
       </div>
 
-      <div className="space-y-2">
-        <Label>Disciplinas que leciona</Label>
-        {globalSubjects.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            Nenhuma disciplina cadastrada
-          </p>
-        ) : (
-          <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto">
-            {globalSubjects.map(subject => (
-              <div key={subject.id} className="flex items-center space-x-2">
-                <Checkbox
-                  id={`subject-${subject.id}`}
-                  checked={subjects.includes(subject.id)}
-                  onCheckedChange={() => toggleSubject(subject.id)}
-                />
-                <Label htmlFor={`subject-${subject.id}`} className="font-normal text-sm">
-                  {subject.name}
-                </Label>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      <TeacherAvailabilitySection 
+      <TeacherAvailabilitySection
         teacherId={teacher?.id} 
         onChange={handleAvailabilityChange} 
       />
