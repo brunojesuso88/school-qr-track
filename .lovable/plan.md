@@ -1,328 +1,278 @@
 
 
-# Plano: PDF com 1 Pagina por Turno Dividida em 2 Secoes Horizontais
+# Plano: Correção de Refresh ao Trocar Aba e Múltiplas Requisições no Salvamento
 
-## Visao Geral
+## Análise dos Problemas
 
-Reorganizar a exportacao do PDF para que cada turno ocupe apenas **1 pagina no sentido paisagem**, com a pagina dividida em **2 secoes horizontais** (metade superior e metade inferior), ajustando o tamanho da fonte para preencher o maximo da folha.
+### Problema 1: Refresh ao Trocar de Aba no Windows
+
+**Causa Raiz Identificada:**
+
+No arquivo `src/components/UpdatePrompt.tsx` (linhas 33-40), há um listener que reage a mudanças do controller do Service Worker:
+
+```typescript
+navigator.serviceWorker.addEventListener('controllerchange', () => {
+  if (!refreshing) {
+    refreshing = true;
+    window.location.reload();  // <-- Causa do refresh automático
+  }
+});
+```
+
+Este comportamento pode ser acionado quando:
+1. Uma nova versão do Service Worker é instalada em background
+2. O usuário troca de aba e ao voltar, o novo SW assume o controle
+3. O autoUpdate do VitePWA (configurado em `vite.config.ts`) detecta atualizações
+
+O PWA está configurado com `registerType: 'autoUpdate'` que atualiza automaticamente o Service Worker em background, e quando o novo SW toma controle, o listener força um reload.
 
 ---
 
-## Alteracoes no Arquivo: `src/pages/mapping/MappingSummary.tsx`
+### Problema 2: Múltiplas Requisições ao Salvar Atribuições
 
-### 1. Modificar Interface de Dados (linhas 50-66)
+**Causa Raiz Identificada:**
 
-Alterar a estrutura para ter 2 secoes por turno em vez de 2 paginas:
+Nos arquivos `MappingDistribution.tsx` e `TeacherAssociationDialog.tsx`, a função `handleSaveAll` processa as mudanças sequencialmente:
 
-```tsx
-interface SectionData {
-  headers: string[];
-  rows: string[][];
-  sectionNumber: number;
-}
-
-interface ShiftData {
-  shift: string;
-  shiftLabel: string;
-  sections: SectionData[];  // 2 secoes horizontais na mesma pagina
+```typescript
+for (const change of pendingChanges) {
+  if (change.action === 'unassign') {
+    await unassignTeacher(change.classSubjectId);  // 1 requisição + fetchData()
+  } else if (change.action === 'assign' && change.newTeacherId) {
+    if (change.previousTeacherId) {
+      await unassignTeacher(change.classSubjectId);  // 1 requisição + fetchData()
+    }
+    await assignTeacher(change.classSubjectId, change.newTeacherId);  // 1 requisição + fetchData()
+  }
 }
 ```
 
----
+E no `SchoolMappingContext.tsx`, cada função `assignTeacher` e `unassignTeacher` chama `fetchData()` após cada operação:
 
-### 2. Atualizar Funcao preparePreviewData (linhas 75-143)
-
-Manter a divisao das disciplinas em 2 grupos, mas renomear para "secoes" em vez de "paginas":
-
-```tsx
-const preparePreviewData = (): PreviewData => {
-  const shifts = ['morning', 'afternoon', 'evening'] as const;
-  const data: ShiftData[] = [];
-  
-  for (const shift of shifts) {
-    const shiftClasses = classes.filter(c => c.shift === shift);
-    if (shiftClasses.length === 0) continue;
-    
-    // Coletar disciplinas unicas deste turno
-    const shiftSubjects = new Set<string>();
-    shiftClasses.forEach(c => {
-      classSubjects
-        .filter(cs => cs.class_id === c.id)
-        .forEach(cs => shiftSubjects.add(cs.subject_name));
-    });
-    
-    const subjectList = Array.from(shiftSubjects).sort();
-    
-    // Dividir disciplinas em 2 grupos (secoes horizontais)
-    const midPoint = Math.ceil(subjectList.length / 2);
-    const subjectGroups = [
-      subjectList.slice(0, midPoint),
-      subjectList.slice(midPoint)
-    ];
-    
-    const sections = subjectGroups
-      .filter(group => group.length > 0)
-      .map((subjectGroup, sectionIndex) => {
-        const headers = ['Turma', ...subjectGroup.map(abbreviateSubject)];
-        
-        const rows = shiftClasses.map(c => {
-          const row = [c.name];
-          subjectGroup.forEach(subjectName => {
-            const cs = classSubjects.find(
-              x => x.class_id === c.id && x.subject_name === subjectName
-            );
-            if (cs) {
-              const teacher = teachers.find(t => t.id === cs.teacher_id);
-              row.push(teacher 
-                ? `${teacher.name} (${cs.weekly_classes})` 
-                : `- (${cs.weekly_classes})`
-              );
-            } else {
-              row.push('-');
-            }
-          });
-          return row;
-        });
-        
-        return {
-          headers,
-          rows,
-          sectionNumber: sectionIndex + 1
-        };
-      });
-    
-    data.push({
-      shift,
-      shiftLabel: SHIFT_LABELS[shift],
-      sections
-    });
-  }
-  
-  return {
-    shifts: data,
-    generatedAt: new Date().toLocaleString('pt-BR')
-  };
+```typescript
+const assignTeacher = async (classSubjectId: string, teacherId: string) => {
+  // ... operações no banco
+  await fetchData();  // Refetch de TODAS as tabelas a cada operação
 };
 ```
 
+**Resultado:** Para 3 mudanças pendentes, podem ocorrer 6+ chamadas ao banco e 6+ refetches completos.
+
 ---
 
-### 3. Reescrever Funcao generatePDF (linhas 159-222)
+## Solução Proposta
 
-Gerar apenas 1 pagina por turno com 2 tabelas empilhadas verticalmente:
+### Parte 1: Remover Reload Automático no controllerchange
 
-```tsx
-const generatePDF = () => {
-  if (!previewData) return;
+Modificar o `UpdatePrompt.tsx` para NÃO fazer reload automático quando o controller mudar. Em vez disso, apenas mostrar o prompt de atualização.
+
+**Arquivo:** `src/components/UpdatePrompt.tsx`
+
+**Alteração:** Remover ou modificar o listener de `controllerchange` para apenas mostrar o prompt em vez de recarregar automaticamente.
+
+```typescript
+// ANTES
+navigator.serviceWorker.addEventListener('controllerchange', () => {
+  if (!refreshing) {
+    refreshing = true;
+    window.location.reload();
+  }
+});
+
+// DEPOIS
+navigator.serviceWorker.addEventListener('controllerchange', () => {
+  // Nova versão assumiu controle, mostrar prompt ao invés de reload
+  if (!refreshing) {
+    setNeedRefresh(true);
+    setShowPrompt(true);
+  }
+});
+```
+
+---
+
+### Parte 2: Otimizar Salvamento em Lote (Batch Save)
+
+Criar funções de batch no contexto que fazem todas as operações em uma única transação e chamam `fetchData()` apenas uma vez no final.
+
+#### Alteração 1: `src/contexts/SchoolMappingContext.tsx`
+
+Adicionar novas funções de batch:
+
+```typescript
+interface BatchChange {
+  classSubjectId: string;
+  action: 'assign' | 'unassign';
+  newTeacherId?: string;
+  previousTeacherId?: string | null;
+}
+
+// Nova função para salvar todas as mudanças em lote
+const batchSaveAssignments = async (changes: BatchChange[]) => {
+  // Agrupar operações por tipo para minimizar queries
+  const unassigns: { classSubjectId: string; teacherId: string }[] = [];
+  const assigns: { classSubjectId: string; teacherId: string }[] = [];
   
-  setExporting(true);
-  try {
-    const doc = new jsPDF('landscape', 'mm', 'a4');
-    const pageWidth = doc.internal.pageSize.getWidth();   // 297mm
-    const pageHeight = doc.internal.pageSize.getHeight(); // 210mm
-    const margin = 10;
-    const date = new Date().toISOString().split('T')[0];
-    let isFirstPage = true;
-    
-    previewData.shifts.forEach((shiftData) => {
-      if (!isFirstPage) {
-        doc.addPage();
-      }
-      isFirstPage = false;
-      
-      // Titulo do turno
-      doc.setFontSize(14);
-      doc.text(`Mapeamento Escolar - ${shiftData.shiftLabel}`, margin, 12);
-      doc.setFontSize(8);
-      doc.text(`Gerado em: ${previewData.generatedAt}`, margin, 18);
-      
-      const numSections = shiftData.sections.length;
-      const headerHeight = 22;
-      const availableHeight = pageHeight - headerHeight - margin;
-      const sectionHeight = availableHeight / numSections;
-      
-      shiftData.sections.forEach((section, sectionIndex) => {
-        const sectionStartY = headerHeight + (sectionIndex * sectionHeight);
-        
-        // Calcular tamanho da fonte dinamicamente
-        const numRows = section.rows.length;
-        const numCols = section.headers.length;
-        
-        // Ajustar fonte baseado na quantidade de dados
-        let headerFontSize = 9;
-        let bodyFontSize = 8;
-        let cellPadding = 2;
-        
-        // Se tiver muitas linhas, reduzir fonte
-        if (numRows > 10) {
-          headerFontSize = 8;
-          bodyFontSize = 7;
-          cellPadding = 1.5;
-        }
-        if (numRows > 15) {
-          headerFontSize = 7;
-          bodyFontSize = 6;
-          cellPadding = 1;
-        }
-        
-        // Calcular largura das colunas
-        const tableWidth = pageWidth - (margin * 2);
-        const firstColWidth = 20;
-        const otherColWidth = (tableWidth - firstColWidth) / (numCols - 1);
-        
-        autoTable(doc, {
-          startY: sectionStartY,
-          head: [section.headers],
-          body: section.rows,
-          theme: 'grid',
-          tableWidth: tableWidth,
-          margin: { left: margin, right: margin },
-          headStyles: { 
-            fillColor: [59, 130, 246],
-            fontSize: headerFontSize,
-            fontStyle: 'bold',
-            halign: 'center',
-            valign: 'middle',
-            cellPadding: cellPadding
-          },
-          bodyStyles: { 
-            fontSize: bodyFontSize,
-            cellPadding: cellPadding,
-            halign: 'center',
-            valign: 'middle'
-          },
-          columnStyles: {
-            0: { 
-              fontStyle: 'bold', 
-              cellWidth: firstColWidth, 
-              fontSize: headerFontSize,
-              halign: 'left'
-            }
-          },
-          styles: {
-            cellPadding: cellPadding,
-            valign: 'middle',
-            overflow: 'linebreak'
-          },
-          // Limitar altura da tabela para caber na secao
-          didDrawPage: () => {}
-        });
+  for (const change of changes) {
+    if (change.action === 'unassign' && change.previousTeacherId) {
+      unassigns.push({
+        classSubjectId: change.classSubjectId,
+        teacherId: change.previousTeacherId
       });
-    });
+    } else if (change.action === 'assign' && change.newTeacherId) {
+      if (change.previousTeacherId) {
+        unassigns.push({
+          classSubjectId: change.classSubjectId,
+          teacherId: change.previousTeacherId
+        });
+      }
+      assigns.push({
+        classSubjectId: change.classSubjectId,
+        teacherId: change.newTeacherId
+      });
+    }
+  }
+  
+  // Processar todas as desatribuições de uma vez
+  if (unassigns.length > 0) {
+    const unassignIds = unassigns.map(u => u.classSubjectId);
+    await supabase
+      .from('mapping_class_subjects')
+      .update({ teacher_id: null })
+      .in('id', unassignIds);
     
-    doc.save(`mapeamento_escolar_${date}.pdf`);
-    setIsPreviewOpen(false);
-    toast({ title: "PDF exportado", description: "Arquivo salvo com sucesso." });
+    // Atualizar horas dos professores
+    const teacherHourUpdates = new Map<string, number>();
+    for (const unassign of unassigns) {
+      const cs = classSubjects.find(c => c.id === unassign.classSubjectId);
+      if (cs) {
+        const current = teacherHourUpdates.get(unassign.teacherId) || 0;
+        teacherHourUpdates.set(unassign.teacherId, current - cs.weekly_classes);
+      }
+    }
+    
+    for (const [teacherId, hoursDelta] of teacherHourUpdates) {
+      const teacher = teachers.find(t => t.id === teacherId);
+      if (teacher) {
+        await supabase
+          .from('mapping_teachers')
+          .update({ current_hours: Math.max(0, teacher.current_hours + hoursDelta) })
+          .eq('id', teacherId);
+      }
+    }
+  }
+  
+  // Processar todas as atribuições de uma vez
+  if (assigns.length > 0) {
+    for (const assign of assigns) {
+      await supabase
+        .from('mapping_class_subjects')
+        .update({ teacher_id: assign.teacherId })
+        .eq('id', assign.classSubjectId);
+    }
+    
+    // Atualizar horas dos professores
+    const teacherHourUpdates = new Map<string, number>();
+    for (const assign of assigns) {
+      const cs = classSubjects.find(c => c.id === assign.classSubjectId);
+      if (cs) {
+        const current = teacherHourUpdates.get(assign.teacherId) || 0;
+        teacherHourUpdates.set(assign.teacherId, current + cs.weekly_classes);
+      }
+    }
+    
+    for (const [teacherId, hoursDelta] of teacherHourUpdates) {
+      const teacher = teachers.find(t => t.id === teacherId);
+      if (teacher) {
+        await supabase
+          .from('mapping_teachers')
+          .update({ current_hours: teacher.current_hours + hoursDelta })
+          .eq('id', teacherId);
+      }
+    }
+  }
+  
+  // Único fetchData no final
+  await fetchData();
+};
+```
+
+#### Alteração 2: `src/pages/mapping/MappingDistribution.tsx`
+
+Usar a nova função de batch:
+
+```typescript
+const handleSaveAll = async () => {
+  if (pendingChanges.length === 0) return;
+  
+  setIsSaving(true);
+  try {
+    await batchSaveAssignments(pendingChanges);
+    toast({ 
+      title: "Atribuições salvas", 
+      description: `${pendingChanges.length} alteração(ões) aplicada(s)` 
+    });
+    setPendingChanges([]);
+    setSelectedClass(null);
   } catch (error: any) {
     toast({ 
-      title: "Erro na exportacao", 
-      description: error.message,
-      variant: "destructive"
+      title: "Erro ao salvar", 
+      description: error.message, 
+      variant: "destructive" 
     });
   } finally {
-    setExporting(false);
+    setIsSaving(false);
   }
 };
 ```
 
----
+#### Alteração 3: `src/components/mapping/TeacherAssociationDialog.tsx`
 
-### 4. Atualizar Preview Dialog (linhas 516-562)
-
-Atualizar labels de "Pagina" para "Secao" e mostrar ambas secoes juntas:
-
-```tsx
-{previewData?.shifts.map((shiftData, idx) => (
-  <div key={shiftData.shift} className={idx > 0 ? "mt-6" : ""}>
-    <h3 className="font-semibold text-lg mb-3 flex items-center gap-2">
-      <Badge>{shiftData.shiftLabel}</Badge>
-      <span className="text-sm text-muted-foreground font-normal">
-        (1 pagina com {shiftData.sections.length} secao(oes))
-      </span>
-    </h3>
-    
-    {shiftData.sections.map((section, sectionIdx) => (
-      <div key={sectionIdx} className={sectionIdx > 0 ? "mt-4" : ""}>
-        <p className="text-sm text-muted-foreground mb-2">
-          Secao {section.sectionNumber} - {section.headers.length - 1} disciplina(s)
-        </p>
-        
-        <div className="border rounded-lg overflow-hidden">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                {section.headers.map((h, i) => (
-                  <TableHead 
-                    key={i} 
-                    className={i === 0 ? "font-bold bg-muted" : "text-xs text-center"}
-                  >
-                    {h}
-                  </TableHead>
-                ))}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {section.rows.map((row, rowIdx) => (
-                <TableRow key={rowIdx}>
-                  {row.map((cell, cellIdx) => (
-                    <TableCell 
-                      key={cellIdx}
-                      className={cellIdx === 0 ? "font-medium" : "text-xs text-center"}
-                    >
-                      {cell}
-                    </TableCell>
-                  ))}
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-      </div>
-    ))}
-  </div>
-))}
-```
+Aplicar a mesma lógica de batch save.
 
 ---
 
-## Resumo das Alteracoes
+## Resumo das Alterações
 
-| Alteracao | Descricao |
-|-----------|-----------|
-| Estrutura de dados | Renomear `pages` para `sections` (secoes) |
-| Geracao do PDF | 1 pagina por turno com 2 tabelas empilhadas verticalmente |
-| Tamanho de fonte | Dinamico baseado na quantidade de linhas e colunas |
-| Espacamento | Reduzido para preencher mais a folha |
-| Preview | Atualizar labels para "Secao" em vez de "Pagina" |
+| Arquivo | Alteração |
+|---------|-----------|
+| `src/components/UpdatePrompt.tsx` | Remover reload automático em `controllerchange`, apenas mostrar prompt |
+| `src/contexts/SchoolMappingContext.tsx` | Adicionar função `batchSaveAssignments` para salvar todas as mudanças de uma vez |
+| `src/pages/mapping/MappingDistribution.tsx` | Usar `batchSaveAssignments` em vez de loop com chamadas individuais |
+| `src/components/mapping/TeacherAssociationDialog.tsx` | Usar `batchSaveAssignments` em vez de loop com chamadas individuais |
 
 ---
 
-## Layout Visual do PDF
+## Benefícios
+
+1. **Problema 1 (Refresh)**: A página não será mais recarregada automaticamente ao trocar de aba. O usuário verá o prompt de atualização e poderá escolher quando atualizar.
+
+2. **Problema 2 (Múltiplas requisições)**:
+   - Redução de N chamadas de `fetchData()` para apenas 1
+   - Operações de update agrupadas quando possível
+   - Melhor performance e UX (menos flickering na UI)
+   - Menos carga no banco de dados
+
+---
+
+## Diagrama do Fluxo Otimizado
 
 ```text
-+--------------------------------------------------+
-|  Mapeamento Escolar - Manha                      |
-|  Gerado em: 30/01/2026 10:00                     |
-+--------------------------------------------------+
-|                    SECAO 1                        |
-| Turma | Disc1 | Disc2 | Disc3 | ... | Disc7      |
-|-------|-------|-------|-------|-----|------------|
-| 1A    | Prof  | Prof  | Prof  | ... | Prof       |
-| 1B    | Prof  | Prof  | Prof  | ... | Prof       |
-+--------------------------------------------------+
-|                    SECAO 2                        |
-| Turma | Disc8 | Disc9 | Disc10| ... | Disc14     |
-|-------|-------|-------|-------|-----|------------|
-| 1A    | Prof  | Prof  | Prof  | ... | Prof       |
-| 1B    | Prof  | Prof  | Prof  | ... | Prof       |
-+--------------------------------------------------+
+ANTES (N mudanças):
+┌─────────────────────────────────────────────────────┐
+│ for cada mudança:                                   │
+│   → unassign → fetchData() → UI atualiza           │
+│   → assign → fetchData() → UI atualiza             │
+│ Total: 2N requisições + 2N refetches               │
+└─────────────────────────────────────────────────────┘
+
+DEPOIS (N mudanças):
+┌─────────────────────────────────────────────────────┐
+│ batchSaveAssignments(mudanças)                      │
+│   → Agrupa todas as desatribuições                 │
+│   → Agrupa todas as atribuições                    │
+│   → fetchData() uma única vez                      │
+│ Total: ~4 requisições + 1 refetch                  │
+└─────────────────────────────────────────────────────┘
 ```
-
----
-
-## Arquivos Afetados
-
-| Arquivo | Alteracao |
-|---------|-----------|
-| `src/pages/mapping/MappingSummary.tsx` | Estrutura de dados, geracao PDF e preview |
 
