@@ -47,17 +47,16 @@ const abbreviateSubject = (name: string): string => {
   return SUBJECT_ABBREVIATIONS[name] || name;
 };
 
-interface PageData {
+interface SectionData {
   headers: string[];
   rows: string[][];
-  pageNumber: number;
-  totalPages: number;
+  sectionNumber: number;
 }
 
 interface ShiftData {
   shift: string;
   shiftLabel: string;
-  pages: PageData[];
+  sections: SectionData[];
 }
 
 interface PreviewData {
@@ -90,16 +89,16 @@ const MappingSummaryContent = () => {
       
       const subjectList = Array.from(shiftSubjects).sort();
       
-      // Dividir disciplinas em 2 grupos para 2 páginas
+      // Dividir disciplinas em 2 grupos (seções horizontais)
       const midPoint = Math.ceil(subjectList.length / 2);
       const subjectGroups = [
         subjectList.slice(0, midPoint),
         subjectList.slice(midPoint)
       ];
       
-      const pages = subjectGroups
+      const sections = subjectGroups
         .filter(group => group.length > 0)
-        .map((subjectGroup, pageIndex, arr) => {
+        .map((subjectGroup, sectionIndex) => {
           const headers = ['Turma', ...subjectGroup.map(abbreviateSubject)];
           
           const rows = shiftClasses.map(c => {
@@ -124,15 +123,14 @@ const MappingSummaryContent = () => {
           return {
             headers,
             rows,
-            pageNumber: pageIndex + 1,
-            totalPages: arr.length
+            sectionNumber: sectionIndex + 1
           };
         });
       
       data.push({
         shift,
         shiftLabel: SHIFT_LABELS[shift],
-        pages
+        sections
       });
     }
     
@@ -162,46 +160,90 @@ const MappingSummaryContent = () => {
     setExporting(true);
     try {
       const doc = new jsPDF('landscape', 'mm', 'a4');
+      const pageWidth = doc.internal.pageSize.getWidth();   // 297mm
+      const pageHeight = doc.internal.pageSize.getHeight(); // 210mm
+      const margin = 10;
       const date = new Date().toISOString().split('T')[0];
       let isFirstPage = true;
       
       previewData.shifts.forEach((shiftData) => {
-        shiftData.pages.forEach((page) => {
-          if (!isFirstPage) {
-            doc.addPage();
+        if (!isFirstPage) {
+          doc.addPage();
+        }
+        isFirstPage = false;
+        
+        // Título do turno
+        doc.setFontSize(14);
+        doc.text(`Mapeamento Escolar - ${shiftData.shiftLabel}`, margin, 12);
+        doc.setFontSize(8);
+        doc.text(`Gerado em: ${previewData.generatedAt}`, margin, 18);
+        
+        const numSections = shiftData.sections.length;
+        const headerHeight = 22;
+        const availableHeight = pageHeight - headerHeight - margin;
+        const sectionHeight = availableHeight / numSections;
+        
+        shiftData.sections.forEach((section, sectionIndex) => {
+          const sectionStartY = headerHeight + (sectionIndex * sectionHeight);
+          
+          // Calcular tamanho da fonte dinamicamente
+          const numRows = section.rows.length;
+          const numCols = section.headers.length;
+          
+          // Ajustar fonte baseado na quantidade de dados
+          let headerFontSize = 9;
+          let bodyFontSize = 8;
+          let cellPadding = 2;
+          
+          // Se tiver muitas linhas, reduzir fonte
+          if (numRows > 10) {
+            headerFontSize = 8;
+            bodyFontSize = 7;
+            cellPadding = 1.5;
           }
-          isFirstPage = false;
+          if (numRows > 15) {
+            headerFontSize = 7;
+            bodyFontSize = 6;
+            cellPadding = 1;
+          }
           
-          // Titulo do turno com número da página
-          doc.setFontSize(16);
-          doc.text(`Mapeamento Escolar - ${shiftData.shiftLabel}`, 14, 15);
-          doc.setFontSize(10);
-          doc.text(`Gerado em: ${previewData.generatedAt} | Página ${page.pageNumber}/${page.totalPages}`, 14, 22);
+          // Calcular largura das colunas
+          const tableWidth = pageWidth - (margin * 2);
+          const firstColWidth = 20;
           
-          // Tabela
           autoTable(doc, {
-            startY: 28,
-            head: [page.headers],
-            body: page.rows,
+            startY: sectionStartY,
+            head: [section.headers],
+            body: section.rows,
             theme: 'grid',
+            tableWidth: tableWidth,
+            margin: { left: margin, right: margin },
             headStyles: { 
               fillColor: [59, 130, 246],
-              fontSize: 9,
+              fontSize: headerFontSize,
               fontStyle: 'bold',
+              halign: 'center',
+              valign: 'middle',
+              cellPadding: cellPadding
+            },
+            bodyStyles: { 
+              fontSize: bodyFontSize,
+              cellPadding: cellPadding,
               halign: 'center',
               valign: 'middle'
             },
-            bodyStyles: { 
-              fontSize: 8,
-              cellPadding: 2,
-              minCellWidth: 20
-            },
             columnStyles: {
-              0: { fontStyle: 'bold', cellWidth: 25, fontSize: 10 }
+              0: { 
+                fontStyle: 'bold', 
+                cellWidth: firstColWidth, 
+                fontSize: headerFontSize,
+                halign: 'left'
+              }
             },
             styles: {
-              cellPadding: 2,
-              valign: 'middle'
+              cellPadding: cellPadding,
+              valign: 'middle',
+              overflow: 'linebreak'
             }
           });
         });
@@ -518,22 +560,25 @@ const MappingSummaryContent = () => {
               <div key={shiftData.shift} className={idx > 0 ? "mt-6" : ""}>
                 <h3 className="font-semibold text-lg mb-3 flex items-center gap-2">
                   <Badge>{shiftData.shiftLabel}</Badge>
+                  <span className="text-sm text-muted-foreground font-normal">
+                    (1 página com {shiftData.sections.length} seção(ões))
+                  </span>
                 </h3>
                 
-                {shiftData.pages.map((page, pageIdx) => (
-                  <div key={pageIdx} className={pageIdx > 0 ? "mt-4" : ""}>
+                {shiftData.sections.map((section, sectionIdx) => (
+                  <div key={sectionIdx} className={sectionIdx > 0 ? "mt-4" : ""}>
                     <p className="text-sm text-muted-foreground mb-2">
-                      Página {page.pageNumber}/{page.totalPages} - {page.headers.length - 1} disciplina(s)
+                      Seção {section.sectionNumber} - {section.headers.length - 1} disciplina(s)
                     </p>
                     
                     <div className="border rounded-lg overflow-hidden">
                       <Table>
                         <TableHeader>
                           <TableRow>
-                            {page.headers.map((h, i) => (
+                            {section.headers.map((h, i) => (
                               <TableHead 
                                 key={i} 
-                                className={i === 0 ? "font-bold bg-muted" : "text-xs"}
+                                className={i === 0 ? "font-bold bg-muted" : "text-xs text-center"}
                               >
                                 {h}
                               </TableHead>
@@ -541,12 +586,12 @@ const MappingSummaryContent = () => {
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {page.rows.map((row, rowIdx) => (
+                          {section.rows.map((row, rowIdx) => (
                             <TableRow key={rowIdx}>
                               {row.map((cell, cellIdx) => (
                                 <TableCell 
                                   key={cellIdx}
-                                  className={cellIdx === 0 ? "font-medium" : "text-xs"}
+                                  className={cellIdx === 0 ? "font-medium" : "text-xs text-center"}
                                 >
                                   {cell}
                                 </TableCell>
