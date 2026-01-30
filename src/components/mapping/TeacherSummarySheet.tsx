@@ -103,19 +103,12 @@ const TeacherSummarySheet: React.FC<TeacherSummarySheetProps> = ({
             </div>
           </div>
 
-          {/* Subjects teacher can teach */}
+          {/* Assigned subjects count */}
           <div className="space-y-2">
-            <p className="text-sm font-medium">Disciplinas Cadastradas</p>
-            <div className="flex flex-wrap gap-1">
-              {teacher.subjects.map(subjectId => (
-                <Badge key={subjectId} variant="secondary" className="text-xs">
-                  {getSubjectName(subjectId)}
-                </Badge>
-              ))}
-              {teacher.subjects.length === 0 && (
-                <p className="text-sm text-muted-foreground">Nenhuma disciplina cadastrada</p>
-              )}
-            </div>
+            <p className="text-sm font-medium">Disciplinas Atribuídas</p>
+            <Badge variant="secondary">
+              {teacherSubjects.length} disciplina(s)
+            </Badge>
           </div>
 
           <Separator />

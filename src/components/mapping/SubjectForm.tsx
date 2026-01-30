@@ -2,7 +2,6 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useSchoolMapping, MappingGlobalSubject } from "@/contexts/SchoolMappingContext";
 import { useToast } from "@/hooks/use-toast";
 
@@ -19,7 +18,6 @@ const SubjectForm = ({ subject, onClose }: SubjectFormProps) => {
   const [defaultWeeklyClasses, setDefaultWeeklyClasses] = useState(
     subject?.default_weekly_classes?.toString() || "4"
   );
-  const [shift, setShift] = useState(subject?.shift || "morning");
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -34,8 +32,7 @@ const SubjectForm = ({ subject, onClose }: SubjectFormProps) => {
     try {
       const data = {
         name: name.trim(),
-        default_weekly_classes: parseInt(defaultWeeklyClasses),
-        shift
+        default_weekly_classes: parseInt(defaultWeeklyClasses)
       };
 
       if (subject) {
@@ -66,17 +63,15 @@ const SubjectForm = ({ subject, onClose }: SubjectFormProps) => {
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="shift">Turno Padrão *</Label>
-        <Select value={shift} onValueChange={setShift}>
-          <SelectTrigger>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="morning">Manhã</SelectItem>
-            <SelectItem value="afternoon">Tarde</SelectItem>
-            <SelectItem value="evening">Noite</SelectItem>
-          </SelectContent>
-        </Select>
+        <Label htmlFor="weekly">Aulas por Semana (padrão)</Label>
+        <Input
+          id="weekly"
+          type="number"
+          min="1"
+          max="20"
+          value={defaultWeeklyClasses}
+          onChange={e => setDefaultWeeklyClasses(e.target.value)}
+        />
       </div>
 
       <div className="flex justify-end gap-2 pt-4">

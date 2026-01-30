@@ -30,12 +30,6 @@ const MappingTeachersContent = () => {
   const [viewingTeacher, setViewingTeacher] = useState<MappingTeacher | null>(null);
   const [associatingTeacher, setAssociatingTeacher] = useState<MappingTeacher | null>(null);
 
-  const getSubjectNames = (subjectIds: string[]) => {
-    return subjectIds
-      .map(id => globalSubjects.find(s => s.id === id)?.name)
-      .filter(Boolean) as string[];
-  };
-
   const getAssignedSubjectsCount = (teacherId: string) => {
     return classSubjects.filter(cs => cs.teacher_id === teacherId).length;
   };
@@ -168,9 +162,6 @@ const MappingTeachersContent = () => {
                               {SHIFT_LABELS[shift] || shift}
                             </Badge>
                           ))}
-                          <Badge variant="secondary" className="text-xs">
-                            {getAssignedSubjectsCount(teacher.id)} disciplinas
-                          </Badge>
                         </div>
 
                         {/* Carga horária */}

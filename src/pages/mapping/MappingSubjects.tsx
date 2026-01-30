@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Plus, Pencil, Trash2, Sun, Sunset, Moon } from "lucide-react";
+import { Plus, Pencil, Trash2 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -10,12 +10,6 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import SubjectForm from "@/components/mapping/SubjectForm";
 import { useToast } from "@/hooks/use-toast";
 import SchoolMappingLayout from "@/components/mapping/SchoolMappingLayout";
-
-const SHIFT_CONFIG = {
-  morning: { label: "Manhã", icon: Sun, color: "text-amber-500" },
-  afternoon: { label: "Tarde", icon: Sunset, color: "text-orange-500" },
-  evening: { label: "Noite", icon: Moon, color: "text-indigo-500" }
-};
 
 const MappingSubjectsContent = () => {
   const { globalSubjects, deleteGlobalSubject, loading } = useSchoolMapping();
@@ -45,17 +39,6 @@ const MappingSubjectsContent = () => {
     setIsDialogOpen(false);
     setEditingSubject(null);
   };
-
-  // Group subjects by shift
-  const morningSubjects = globalSubjects.filter(s => s.shift === 'morning');
-  const afternoonSubjects = globalSubjects.filter(s => s.shift === 'afternoon');
-  const eveningSubjects = globalSubjects.filter(s => s.shift === 'evening');
-
-  const shiftGroups = [
-    { key: 'morning', subjects: morningSubjects },
-    { key: 'afternoon', subjects: afternoonSubjects },
-    { key: 'evening', subjects: eveningSubjects }
-  ].filter(group => group.subjects.length > 0);
 
   if (loading) {
     return (
@@ -138,24 +121,12 @@ const MappingSubjectsContent = () => {
           </Card>
         )}
 
-        {/* Subjects grouped by shift */}
-        {shiftGroups.map(({ key, subjects }) => {
-          const config = SHIFT_CONFIG[key as keyof typeof SHIFT_CONFIG];
-          const ShiftIcon = config.icon;
-          
-          return (
-            <div key={key} className="space-y-4">
-              <div className="flex items-center gap-2">
-                <ShiftIcon className={`h-5 w-5 ${config.color}`} />
-                <h2 className="text-lg font-semibold">{config.label}</h2>
-                <Badge variant="outline">{subjects.length}</Badge>
-              </div>
-              <div className="grid gap-4 md:grid-cols-2">
-                {subjects.map(renderSubjectCard)}
-              </div>
-            </div>
-          );
-        })}
+        {/* Subjects List - Simple grid without shift grouping */}
+        {globalSubjects.length > 0 && (
+          <div className="grid gap-4 md:grid-cols-2">
+            {globalSubjects.map(renderSubjectCard)}
+          </div>
+        )}
       </div>
 
       {/* Delete Confirmation */}
