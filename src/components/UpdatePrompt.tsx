@@ -31,12 +31,10 @@ const UpdatePrompt = () => {
       });
 
       // Listen for controller change (when new SW takes over)
-      let refreshing = false;
+      // Instead of auto-reloading, show prompt to let user choose when to update
       navigator.serviceWorker.addEventListener('controllerchange', () => {
-        if (!refreshing) {
-          refreshing = true;
-          window.location.reload();
-        }
+        setNeedRefresh(true);
+        setShowPrompt(true);
       });
     }
   }, []);
