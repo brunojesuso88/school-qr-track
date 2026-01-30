@@ -46,10 +46,8 @@ const MappingDistributionContent = () => {
   };
 
   const getEligibleTeachers = (subjectName: string, classShift: string) => {
-    return teachers.filter(teacher => {
-      const hasShift = teacher.availability.includes(classShift);
-      return hasShift;
-    });
+    // Todos os professores estão disponíveis para todos os turnos
+    return teachers;
   };
 
   const getOverloadThreshold = (maxHours: number) => maxHours === 20 ? 13 : 26;

@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -6,8 +6,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useSchoolMapping, MappingTeacher } from "@/contexts/SchoolMappingContext";
 import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
-import TeacherAvailabilitySection from "./TeacherAvailabilitySection";
 
 interface TeacherFormProps {
   teacher?: MappingTeacher | null;
@@ -15,7 +13,7 @@ interface TeacherFormProps {
 }
 
 const TeacherForm = ({ teacher, onClose }: TeacherFormProps) => {
-  const { globalSubjects, addTeacher, updateTeacher } = useSchoolMapping();
+  const { addTeacher, updateTeacher } = useSchoolMapping();
   const { toast } = useToast();
   
   const [name, setName] = useState(teacher?.name || "");
@@ -24,11 +22,6 @@ const TeacherForm = ({ teacher, onClose }: TeacherFormProps) => {
   const [maxWeeklyHours, setMaxWeeklyHours] = useState(teacher?.max_weekly_hours?.toString() || "20");
   const [notes, setNotes] = useState(teacher?.notes || "");
   const [loading, setLoading] = useState(false);
-  const [detailedAvailability, setDetailedAvailability] = useState<{ day: number; period: number; available: boolean }[]>([]);
-
-  const handleAvailabilityChange = useCallback((avail: { day: number; period: number; available: boolean }[]) => {
-    setDetailedAvailability(avail);
-  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -40,47 +33,18 @@ const TeacherForm = ({ teacher, onClose }: TeacherFormProps) => {
 
     setLoading(true);
     try {
-      // Derive availability from detailed grid or use default
-      const derivedAvailability = detailedAvailability.length > 0 
-        ? [...new Set(detailedAvailability.filter(a => a.available).map(a => {
-            if (a.period <= 5) return "morning";
-            if (a.period <= 10) return "afternoon";
-            return "evening";
-          }))]
-        : ["morning", "afternoon", "evening"];
-
       const data = {
         name: name.trim(),
         email: email.trim() || undefined,
         phone: phone.trim() || undefined,
         max_weekly_hours: parseInt(maxWeeklyHours),
-        availability: derivedAvailability,
         notes: notes.trim() || undefined
       };
 
-      let teacherId = teacher?.id;
-      
       if (teacher) {
         await updateTeacher(teacher.id, data);
       } else {
-        const result = await addTeacher(data);
-        teacherId = result?.id;
-      }
-
-      // Save detailed availability if we have a teacher ID
-      if (teacherId && detailedAvailability.length > 0) {
-        // Delete existing availability
-        await supabase.from('teacher_availability').delete().eq('teacher_id', teacherId);
-        
-        // Insert new availability
-        const inserts = detailedAvailability.map(a => ({
-          teacher_id: teacherId,
-          day_of_week: a.day,
-          period_number: a.period,
-          available: a.available
-        }));
-        
-        await supabase.from('teacher_availability').insert(inserts);
+        await addTeacher(data);
       }
 
       toast({ title: teacher ? "Professor atualizado com sucesso" : "Professor cadastrado com sucesso" });
@@ -142,10 +106,6 @@ const TeacherForm = ({ teacher, onClose }: TeacherFormProps) => {
         </RadioGroup>
       </div>
 
-      <TeacherAvailabilitySection
-        teacherId={teacher?.id} 
-        onChange={handleAvailabilityChange} 
-      />
 
       <div className="space-y-2">
         <Label htmlFor="notes">Observações</Label>

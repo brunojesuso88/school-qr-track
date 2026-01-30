@@ -15,11 +15,6 @@ import TeacherAssociationDialog from "@/components/mapping/TeacherAssociationDia
 import SchoolMappingLayout from "@/components/mapping/SchoolMappingLayout";
 import { useToast } from "@/hooks/use-toast";
 
-const SHIFT_LABELS: Record<string, string> = {
-  morning: "Manhã",
-  afternoon: "Tarde",
-  evening: "Noite"
-};
 
 const MappingTeachersContent = () => {
   const { teachers, globalSubjects, classes, classSubjects, deleteTeacher, loading } = useSchoolMapping();
@@ -156,13 +151,6 @@ const MappingTeachersContent = () => {
                           )}
                         </div>
                         
-                        <div className="flex gap-2 flex-wrap">
-                          {teacher.availability.map(shift => (
-                            <Badge key={shift} variant="outline" className="text-xs">
-                              {SHIFT_LABELS[shift] || shift}
-                            </Badge>
-                          ))}
-                        </div>
 
                         {/* Carga horária */}
                         <div className="space-y-1">

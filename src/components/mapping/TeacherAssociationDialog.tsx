@@ -142,9 +142,9 @@ const TeacherAssociationDialog = ({ teacher, onClose }: TeacherAssociationDialog
     evening: classes.filter(c => c.shift === 'evening')
   };
 
-  // Verificar se o professor está disponível no turno
+  // Todos os professores estão disponíveis para todos os turnos
   const isAvailableInShift = (shift: string) => {
-    return teacher.availability.includes(shift);
+    return true;
   };
 
   // Verificar se atribuição excederia carga horária (usando horas locais)

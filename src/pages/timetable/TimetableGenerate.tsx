@@ -32,7 +32,7 @@ const GenerateContent = () => {
   const loading = timetableLoading || mappingLoading;
 
   const activeRules = rules.filter(r => r.is_active);
-  const teachersWithAvailability = teachers.filter(t => t.availability && t.availability.length > 0);
+  const teachersWithAvailability = teachers;
 
   // Get classes for selected shifts
   const classesForGeneration = useMemo(() => {
