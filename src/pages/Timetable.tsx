@@ -49,9 +49,9 @@ const TimetableContent = () => {
   }, [classes, selectedShift]);
 
   const filteredTeachers = useMemo(() => {
-    if (selectedShift === 'all') return teachers;
-    return teachers.filter(t => t.availability?.includes(selectedShift));
-  }, [teachers, selectedShift]);
+    // Todos os professores estão disponíveis para todos os turnos
+    return teachers;
+  }, [teachers]);
 
   // Stats
   const totalEntries = entries.length;

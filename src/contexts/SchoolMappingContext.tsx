@@ -17,7 +17,6 @@ export interface MappingTeacher {
   max_weekly_hours: number;
   current_hours: number;
   color: string;
-  availability: string[];
   notes?: string;
   created_at: string;
   updated_at: string;

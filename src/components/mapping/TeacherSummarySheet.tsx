@@ -91,17 +91,6 @@ const TeacherSummarySheet: React.FC<TeacherSummarySheetProps> = ({
             />
           </div>
 
-          {/* Availability */}
-          <div className="space-y-2">
-            <p className="text-sm font-medium">Disponibilidade</p>
-            <div className="flex flex-wrap gap-1">
-              {teacher.availability.map(shift => (
-                <Badge key={shift} variant="outline" className="text-xs">
-                  {SHIFT_LABELS[shift] || shift}
-                </Badge>
-              ))}
-            </div>
-          </div>
 
           {/* Assigned subjects count */}
           <div className="space-y-2">
