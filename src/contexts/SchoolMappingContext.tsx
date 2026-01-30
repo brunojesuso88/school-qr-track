@@ -48,6 +48,13 @@ export interface MappingClassSubject {
   created_at: string;
 }
 
+export interface BatchChange {
+  classSubjectId: string;
+  action: 'assign' | 'unassign';
+  newTeacherId?: string;
+  previousTeacherId?: string | null;
+}
+
 interface SchoolMappingContextType {
   teachers: MappingTeacher[];
   globalSubjects: MappingGlobalSubject[];
@@ -78,6 +85,7 @@ interface SchoolMappingContextType {
   // Assignment functions
   assignTeacher: (classSubjectId: string, teacherId: string) => Promise<void>;
   unassignTeacher: (classSubjectId: string) => Promise<void>;
+  batchSaveAssignments: (changes: BatchChange[]) => Promise<void>;
   
   // Helpers
   getNextColor: () => string;
@@ -250,6 +258,90 @@ export const SchoolMappingProvider: React.FC<{ children: React.ReactNode }> = ({
     await fetchData();
   };
 
+  // Batch save function - processes all changes and calls fetchData only once
+  const batchSaveAssignments = async (changes: BatchChange[]) => {
+    // Group operations
+    const unassigns: { classSubjectId: string; teacherId: string; weeklyClasses: number }[] = [];
+    const assigns: { classSubjectId: string; teacherId: string; weeklyClasses: number }[] = [];
+    
+    for (const change of changes) {
+      const cs = classSubjects.find(c => c.id === change.classSubjectId);
+      if (!cs) continue;
+      
+      if (change.action === 'unassign' && change.previousTeacherId) {
+        unassigns.push({
+          classSubjectId: change.classSubjectId,
+          teacherId: change.previousTeacherId,
+          weeklyClasses: cs.weekly_classes
+        });
+      } else if (change.action === 'assign' && change.newTeacherId) {
+        // If there's a previous teacher, we need to unassign first
+        if (change.previousTeacherId) {
+          unassigns.push({
+            classSubjectId: change.classSubjectId,
+            teacherId: change.previousTeacherId,
+            weeklyClasses: cs.weekly_classes
+          });
+        }
+        assigns.push({
+          classSubjectId: change.classSubjectId,
+          teacherId: change.newTeacherId,
+          weeklyClasses: cs.weekly_classes
+        });
+      }
+    }
+    
+    // Calculate teacher hour deltas
+    const teacherHourDeltas = new Map<string, number>();
+    
+    // Process unassigns - decrease hours
+    for (const unassign of unassigns) {
+      const current = teacherHourDeltas.get(unassign.teacherId) || 0;
+      teacherHourDeltas.set(unassign.teacherId, current - unassign.weeklyClasses);
+    }
+    
+    // Process assigns - increase hours
+    for (const assign of assigns) {
+      const current = teacherHourDeltas.get(assign.teacherId) || 0;
+      teacherHourDeltas.set(assign.teacherId, current + assign.weeklyClasses);
+    }
+    
+    // Execute all unassignments in batch
+    if (unassigns.length > 0) {
+      const unassignIds = unassigns.map(u => u.classSubjectId);
+      const { error } = await supabase
+        .from('mapping_class_subjects')
+        .update({ teacher_id: null })
+        .in('id', unassignIds);
+      if (error) throw error;
+    }
+    
+    // Execute all assignments (one by one since each has different teacher_id)
+    for (const assign of assigns) {
+      const { error } = await supabase
+        .from('mapping_class_subjects')
+        .update({ teacher_id: assign.teacherId })
+        .eq('id', assign.classSubjectId);
+      if (error) throw error;
+    }
+    
+    // Update teacher hours in batch
+    for (const [teacherId, delta] of teacherHourDeltas) {
+      const teacher = teachers.find(t => t.id === teacherId);
+      if (teacher) {
+        const newHours = Math.max(0, teacher.current_hours + delta);
+        const { error } = await supabase
+          .from('mapping_teachers')
+          .update({ current_hours: newHours })
+          .eq('id', teacherId);
+        if (error) throw error;
+      }
+    }
+    
+    // Single fetchData at the end
+    await fetchData();
+  };
+
   return (
     <SchoolMappingContext.Provider value={{
       teachers,
@@ -271,6 +363,7 @@ export const SchoolMappingProvider: React.FC<{ children: React.ReactNode }> = ({
       deleteClassSubject,
       assignTeacher,
       unassignTeacher,
+      batchSaveAssignments,
       getNextColor,
       refreshData: fetchData
     }}>

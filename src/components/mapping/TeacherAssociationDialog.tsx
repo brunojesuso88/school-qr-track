@@ -26,7 +26,7 @@ const SHIFT_LABELS: Record<string, string> = {
 };
 
 const TeacherAssociationDialog = ({ teacher, onClose }: TeacherAssociationDialogProps) => {
-  const { classes, classSubjects, teachers, assignTeacher, unassignTeacher } = useSchoolMapping();
+  const { classes, classSubjects, teachers, batchSaveAssignments } = useSchoolMapping();
   const { toast } = useToast();
   const [pendingChanges, setPendingChanges] = useState<PendingChange[]>([]);
   const [isSaving, setIsSaving] = useState(false);
@@ -101,18 +101,16 @@ const TeacherAssociationDialog = ({ teacher, onClose }: TeacherAssociationDialog
 
     setIsSaving(true);
     try {
-      for (const change of pendingChanges) {
-        if (change.action === 'unassign' && change.previousTeacherId) {
-          await unassignTeacher(change.classSubjectId);
-        }
-        if (change.action === 'assign') {
-          // Se tinha professor anterior, desatribui primeiro
-          if (change.previousTeacherId) {
-            await unassignTeacher(change.classSubjectId);
-          }
-          await assignTeacher(change.classSubjectId, teacher.id);
-        }
-      }
+      // Convert to BatchChange format with newTeacherId
+      const batchChanges = pendingChanges.map(change => ({
+        classSubjectId: change.classSubjectId,
+        action: change.action,
+        newTeacherId: change.action === 'assign' ? teacher.id : undefined,
+        previousTeacherId: change.previousTeacherId
+      }));
+      
+      // Use batch save - single fetchData at the end
+      await batchSaveAssignments(batchChanges);
       
       toast({ 
         title: "Atribuições salvas", 

@@ -27,7 +27,7 @@ interface PendingChange {
 }
 
 const MappingDistributionContent = () => {
-  const { teachers, classes, classSubjects, globalSubjects, assignTeacher, unassignTeacher, loading } = useSchoolMapping();
+  const { teachers, classes, classSubjects, globalSubjects, batchSaveAssignments, loading } = useSchoolMapping();
   const { toast } = useToast();
   const [selectedClass, setSelectedClass] = useState<MappingClass | null>(null);
   const [pendingChanges, setPendingChanges] = useState<PendingChange[]>([]);
@@ -102,16 +102,8 @@ const MappingDistributionContent = () => {
     
     setIsSaving(true);
     try {
-      for (const change of pendingChanges) {
-        if (change.action === 'unassign') {
-          await unassignTeacher(change.classSubjectId);
-        } else if (change.action === 'assign' && change.newTeacherId) {
-          if (change.previousTeacherId) {
-            await unassignTeacher(change.classSubjectId);
-          }
-          await assignTeacher(change.classSubjectId, change.newTeacherId);
-        }
-      }
+      // Use batch save - single fetchData at the end
+      await batchSaveAssignments(pendingChanges);
       toast({ 
         title: "Atribuições salvas", 
         description: `${pendingChanges.length} alteração(ões) aplicada(s)` 
