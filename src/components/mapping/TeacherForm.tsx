@@ -54,7 +54,6 @@ const TeacherForm = ({ teacher, onClose }: TeacherFormProps) => {
         email: email.trim() || undefined,
         phone: phone.trim() || undefined,
         max_weekly_hours: parseInt(maxWeeklyHours),
-        subjects: teacher?.subjects || [],
         availability: derivedAvailability,
         notes: notes.trim() || undefined
       };

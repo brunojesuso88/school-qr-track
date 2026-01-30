@@ -46,15 +46,10 @@ const MappingDistributionContent = () => {
   };
 
   const getEligibleTeachers = (subjectName: string, classShift: string) => {
-    const subject = globalSubjects.find(s => s.name === subjectName);
-    
     return teachers.filter(teacher => {
       const hasShift = teacher.availability.includes(classShift);
       return hasShift;
-    }).map(teacher => ({
-      ...teacher,
-      hasSubject: subject ? teacher.subjects.includes(subject.id) : false
-    }));
+    });
   };
 
   const getOverloadThreshold = (maxHours: number) => maxHours === 20 ? 13 : 26;
@@ -377,11 +372,6 @@ const MappingDistributionContent = () => {
                                                 <div className="flex-1 min-w-0">
                                                   <div className="flex items-center gap-1 flex-wrap">
                                                     <span className="font-medium text-sm truncate">{teacher.name}</span>
-                                                    {teacher.hasSubject && (
-                                                      <Badge variant="outline" className="text-[10px] h-4 px-1">
-                                                        Disciplina
-                                                      </Badge>
-                                                    )}
                                                     {isOverloaded && (
                                                       <AlertTriangle className="h-3 w-3 text-amber-500" />
                                                     )}

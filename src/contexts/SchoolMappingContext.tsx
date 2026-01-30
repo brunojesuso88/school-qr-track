@@ -14,7 +14,6 @@ export interface MappingTeacher {
   name: string;
   email?: string;
   phone?: string;
-  subjects: string[];
   max_weekly_hours: number;
   current_hours: number;
   color: string;
@@ -28,7 +27,6 @@ export interface MappingGlobalSubject {
   id: string;
   name: string;
   default_weekly_classes: number;
-  shift: string;
   created_at: string;
 }
 
