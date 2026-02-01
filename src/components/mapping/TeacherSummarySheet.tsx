@@ -1,9 +1,10 @@
-import { X } from "lucide-react";
+import { useState, useEffect } from "react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import { MappingTeacher, MappingClass, MappingClassSubject } from "@/contexts/SchoolMappingContext";
+import { supabase } from "@/integrations/supabase/client";
 
 const SHIFT_LABELS: Record<string, string> = {
   morning: "Manhã",
@@ -19,6 +20,15 @@ interface TeacherSummarySheetProps {
   onClose: () => void;
 }
 
+interface AvailabilitySummary {
+  morning: number;
+  afternoon: number;
+  evening: number;
+  morningTotal: number;
+  afternoonTotal: number;
+  eveningTotal: number;
+}
+
 const TeacherSummarySheet: React.FC<TeacherSummarySheetProps> = ({
   teacher,
   classes,
@@ -26,6 +36,53 @@ const TeacherSummarySheet: React.FC<TeacherSummarySheetProps> = ({
   globalSubjects,
   onClose
 }) => {
+  const [availability, setAvailability] = useState<AvailabilitySummary | null>(null);
+
+  useEffect(() => {
+    const loadAvailability = async () => {
+      if (!teacher?.id) {
+        setAvailability(null);
+        return;
+      }
+      
+      const { data } = await supabase
+        .from("teacher_availability")
+        .select("*")
+        .eq("teacher_id", teacher.id);
+      
+      if (data && data.length > 0) {
+        let morning = 0, afternoon = 0, evening = 0;
+        let morningTotal = 0, afternoonTotal = 0, eveningTotal = 0;
+        
+        data.forEach(row => {
+          if (row.period_number <= 6) {
+            morningTotal++;
+            if (row.available) morning++;
+          } else if (row.period_number <= 12) {
+            afternoonTotal++;
+            if (row.available) afternoon++;
+          } else {
+            eveningTotal++;
+            if (row.available) evening++;
+          }
+        });
+        
+        setAvailability({
+          morning,
+          afternoon,
+          evening,
+          morningTotal,
+          afternoonTotal,
+          eveningTotal
+        });
+      } else {
+        setAvailability(null);
+      }
+    };
+    
+    loadAvailability();
+  }, [teacher?.id]);
+
   if (!teacher) return null;
 
   const teacherSubjects = classSubjects.filter(cs => cs.teacher_id === teacher.id);
@@ -89,6 +146,46 @@ const TeacherSummarySheet: React.FC<TeacherSummarySheetProps> = ({
               value={Math.min(progressPercent, 100)} 
               className={isOverloaded ? "[&>div]:bg-amber-500" : ""}
             />
+          </div>
+
+          <Separator />
+
+          {/* Disponibilidade por Turno */}
+          <div className="space-y-3">
+            <p className="text-sm font-medium">Disponibilidade por Turno</p>
+            
+            {availability ? (
+              <div className="grid grid-cols-3 gap-2">
+                {availability.morningTotal > 0 && (
+                  <div className="p-2 rounded-lg bg-green-500/10 border border-green-500/30 text-center">
+                    <p className="text-xs text-muted-foreground">Manhã</p>
+                    <p className="text-sm font-medium text-green-600">
+                      {availability.morning}/{availability.morningTotal}
+                    </p>
+                  </div>
+                )}
+                {availability.afternoonTotal > 0 && (
+                  <div className="p-2 rounded-lg bg-green-500/10 border border-green-500/30 text-center">
+                    <p className="text-xs text-muted-foreground">Tarde</p>
+                    <p className="text-sm font-medium text-green-600">
+                      {availability.afternoon}/{availability.afternoonTotal}
+                    </p>
+                  </div>
+                )}
+                {availability.eveningTotal > 0 && (
+                  <div className="p-2 rounded-lg bg-green-500/10 border border-green-500/30 text-center">
+                    <p className="text-xs text-muted-foreground">Noite</p>
+                    <p className="text-sm font-medium text-green-600">
+                      {availability.evening}/{availability.eveningTotal}
+                    </p>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground py-2 text-center">
+                Nenhuma disponibilidade configurada
+              </p>
+            )}
           </div>
 
           <Separator />
