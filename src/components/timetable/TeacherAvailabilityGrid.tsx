@@ -115,11 +115,11 @@ const TeacherAvailabilityGrid = ({ availability, onChange, readOnly = false }: T
     <div className="space-y-2">
       <div className="flex items-center gap-4 text-sm text-muted-foreground mb-2">
         <div className="flex items-center gap-1">
-          <div className="w-4 h-4 rounded bg-success/20 border border-success/50" />
+          <div className="w-4 h-4 rounded bg-green-500/20 border border-green-500" />
           <span>Disponível</span>
         </div>
         <div className="flex items-center gap-1">
-          <div className="w-4 h-4 rounded bg-destructive/20 border border-destructive/50" />
+          <div className="w-4 h-4 rounded bg-red-500/20 border border-red-500" />
           <span>Indisponível</span>
         </div>
       </div>
@@ -168,16 +168,16 @@ const TeacherAvailabilityGrid = ({ availability, onChange, readOnly = false }: T
                       className={cn(
                         "p-2 text-center border border-border transition-colors",
                         available 
-                          ? "bg-success/10 hover:bg-success/20" 
-                          : "bg-destructive/10 hover:bg-destructive/20",
+                          ? "bg-green-500/10 hover:bg-green-500/20" 
+                          : "bg-red-500/10 hover:bg-red-500/20",
                         !readOnly && "cursor-pointer"
                       )}
                       onClick={() => toggleCell(day.id, period.id)}
                     >
                       {available ? (
-                        <Check className="w-4 h-4 mx-auto text-success" />
+                        <Check className="w-4 h-4 mx-auto text-green-500" />
                       ) : (
-                        <X className="w-4 h-4 mx-auto text-destructive" />
+                        <X className="w-4 h-4 mx-auto text-red-500" />
                       )}
                     </td>
                   );
