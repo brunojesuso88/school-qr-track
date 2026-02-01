@@ -1,67 +1,97 @@
 
+# Plano: Correcao do Salvamento de Disponibilidade e Resumo no Card
 
-# Plano: Disponibilidade por Turno e Ajustes no Formulario de Professor
+## Analise dos Problemas
 
-## Visao Geral
+### Problema 1: Disponibilidade Nao Salva
 
-Adicionar seletor de turnos no formulario de edicao de professor para controlar quais turnos sao exibidos na grade de disponibilidade por horario. Ajustar as cores para verde (disponivel) e vermelho (indisponivel). Remover o indicativo "Disciplinas Atribuidas" do card de resumo do professor.
+**Causa Raiz Identificada:**
 
----
+No `TeacherForm.tsx`, quando o usuario seleciona um turno, o `availabilityByShift[turno]` comeca como um array vazio `[]`. O componente `TeacherAvailabilityGrid` inicializa internamente todas as celulas como "disponivel", mas so chama `onChange` quando o usuario clica em alguma celula.
 
-## Estrutura de Turnos e Horarios
-
-Cada turno possui 6 horarios:
-- **Manha**: Horarios 1-6
-- **Tarde**: Horarios 1-6  
-- **Noite**: Horarios 1-6
-
-A tabela `teacher_availability` armazena a disponibilidade por `day_of_week` (1-5) e `period_number` (1-6). Para diferenciar turnos, usaremos periodos:
-- Manha: period_number 1-6
-- Tarde: period_number 7-12
-- Noite: period_number 13-18
-
----
-
-## Alteracoes Necessarias
-
-### 1. TeacherForm.tsx - Adicionar Seletor de Turnos e Grid de Disponibilidade
-
-**Adicionar imports e estados:**
-
-```tsx
-import { Checkbox } from "@/components/ui/checkbox";
-import TeacherAvailabilityGrid from "@/components/timetable/TeacherAvailabilityGrid";
-import { supabase } from "@/integrations/supabase/client";
-
-// Estados adicionais
-const [selectedShifts, setSelectedShifts] = useState<string[]>([]);
-const [currentShiftTab, setCurrentShiftTab] = useState<string>("morning");
+```typescript
+// TeacherForm.tsx - Estado inicial
 const [availabilityByShift, setAvailabilityByShift] = useState<Record<string, AvailabilityCell[]>>({
-  morning: [],
+  morning: [],    // <-- Vazio! Mesmo que o grid mostre tudo verde
   afternoon: [],
   evening: []
 });
 ```
 
-**Adicionar constantes de turnos:**
+**Fluxo do Bug:**
+1. Usuario seleciona turno "Manha" 
+2. `availabilityByShift.morning` = [] (vazio)
+3. Grid renderiza tudo verde (default interno)
+4. Usuario NAO clica em nenhuma celula
+5. Ao salvar, `availability.forEach(cell => ...)` itera sobre array vazio
+6. Nenhum registro e inserido no banco
 
-```tsx
-const SHIFT_OPTIONS = [
-  { value: "morning", label: "Manha" },
-  { value: "afternoon", label: "Tarde" },
-  { value: "evening", label: "Noite" }
-];
+---
 
-const SHIFT_PERIOD_OFFSET = {
-  morning: 0,
-  afternoon: 6,
-  evening: 12
+### Problema 2: Falta Resumo de Disponibilidade
+
+O `TeacherSummarySheet.tsx` nao busca nem exibe os dados de disponibilidade do professor.
+
+---
+
+## Solucao Proposta
+
+### Parte 1: Corrigir Salvamento - TeacherForm.tsx
+
+**Alteracao 1:** Inicializar disponibilidade completa ao selecionar um turno
+
+```typescript
+const handleShiftToggle = (shift: string, checked: boolean) => {
+  if (checked) {
+    const newShifts = [...selectedShifts, shift];
+    setSelectedShifts(newShifts);
+    
+    // Inicializar disponibilidade completa se estiver vazia
+    if (!availabilityByShift[shift] || availabilityByShift[shift].length === 0) {
+      const fullAvailability: AvailabilityCell[] = [];
+      for (let day = 1; day <= 5; day++) {
+        for (let period = 1; period <= 6; period++) {
+          fullAvailability.push({ day, period, available: true });
+        }
+      }
+      setAvailabilityByShift(prev => ({
+        ...prev,
+        [shift]: fullAvailability
+      }));
+    }
+    
+    if (selectedShifts.length === 0) {
+      setCurrentShiftTab(shift);
+    }
+  } else {
+    // ... resto do codigo
+  }
 };
 ```
 
-**Carregar disponibilidade ao editar professor:**
+**Alteracao 2:** Garantir que ao carregar dados existentes, turnos vazios sejam inicializados
 
-```tsx
+No useEffect de carregamento, se um turno nao tem dados salvos, inicializar com disponibilidade completa.
+
+---
+
+### Parte 2: Adicionar Resumo de Disponibilidade - TeacherSummarySheet.tsx
+
+**Adicionar busca de disponibilidade:**
+
+```typescript
+import { useState, useEffect } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { Check, X } from "lucide-react";
+
+// Dentro do componente:
+const [availability, setAvailability] = useState<{
+  morning: number;
+  afternoon: number;
+  evening: number;
+  total: number;
+} | null>(null);
+
 useEffect(() => {
   const loadAvailability = async () => {
     if (!teacher?.id) return;
@@ -71,46 +101,26 @@ useEffect(() => {
       .select("*")
       .eq("teacher_id", teacher.id);
     
-    if (data) {
-      // Converter para formato por turno
-      const byShift: Record<string, AvailabilityCell[]> = {
-        morning: [],
-        afternoon: [],
-        evening: []
-      };
+    if (data && data.length > 0) {
+      // Contar slots disponiveis por turno
+      let morning = 0, afternoon = 0, evening = 0;
       
       data.forEach(row => {
-        // Determinar turno pelo period_number
-        if (row.period_number <= 6) {
-          byShift.morning.push({
-            day: row.day_of_week,
-            period: row.period_number,
-            available: row.available
-          });
-        } else if (row.period_number <= 12) {
-          byShift.afternoon.push({
-            day: row.day_of_week,
-            period: row.period_number - 6,
-            available: row.available
-          });
-        } else {
-          byShift.evening.push({
-            day: row.day_of_week,
-            period: row.period_number - 12,
-            available: row.available
-          });
+        if (row.available) {
+          if (row.period_number <= 6) morning++;
+          else if (row.period_number <= 12) afternoon++;
+          else evening++;
         }
       });
       
-      setAvailabilityByShift(byShift);
-      
-      // Determinar turnos selecionados
-      const shifts: string[] = [];
-      if (byShift.morning.length > 0) shifts.push("morning");
-      if (byShift.afternoon.length > 0) shifts.push("afternoon");
-      if (byShift.evening.length > 0) shifts.push("evening");
-      setSelectedShifts(shifts);
-      if (shifts.length > 0) setCurrentShiftTab(shifts[0]);
+      setAvailability({
+        morning,
+        afternoon,
+        evening,
+        total: morning + afternoon + evening
+      });
+    } else {
+      setAvailability(null);
     }
   };
   
@@ -118,171 +128,41 @@ useEffect(() => {
 }, [teacher?.id]);
 ```
 
-**Adicionar UI de selecao de turnos:**
+**Adicionar visualizacao na UI:**
 
 ```tsx
-<div className="space-y-2">
-  <Label>Turnos Disponiveis</Label>
-  <div className="flex gap-4">
-    {SHIFT_OPTIONS.map(shift => (
-      <div key={shift.value} className="flex items-center space-x-2">
-        <Checkbox
-          id={`shift-${shift.value}`}
-          checked={selectedShifts.includes(shift.value)}
-          onCheckedChange={(checked) => {
-            if (checked) {
-              setSelectedShifts([...selectedShifts, shift.value]);
-              if (selectedShifts.length === 0) {
-                setCurrentShiftTab(shift.value);
-              }
-            } else {
-              setSelectedShifts(selectedShifts.filter(s => s !== shift.value));
-            }
-          }}
-        />
-        <Label htmlFor={`shift-${shift.value}`} className="font-normal">
-          {shift.label}
-        </Label>
-      </div>
-    ))}
-  </div>
-</div>
-```
+{/* Disponibilidade - Novo Bloco */}
+<Separator />
 
-**Adicionar Grid de Disponibilidade com Tabs por Turno:**
-
-```tsx
-{selectedShifts.length > 0 && (
-  <div className="space-y-2">
-    <Label>Disponibilidade por Horario</Label>
-    
-    {selectedShifts.length > 1 && (
-      <div className="flex gap-2 mb-2">
-        {selectedShifts.map(shift => (
-          <Button
-            key={shift}
-            type="button"
-            variant={currentShiftTab === shift ? "default" : "outline"}
-            size="sm"
-            onClick={() => setCurrentShiftTab(shift)}
-          >
-            {SHIFT_OPTIONS.find(s => s.value === shift)?.label}
-          </Button>
-        ))}
-      </div>
-    )}
-    
-    <TeacherAvailabilityGrid
-      availability={availabilityByShift[currentShiftTab] || []}
-      onChange={(newAvailability) => {
-        setAvailabilityByShift(prev => ({
-          ...prev,
-          [currentShiftTab]: newAvailability
-        }));
-      }}
-    />
-  </div>
-)}
-```
-
-**Salvar disponibilidade no submit:**
-
-```tsx
-// No handleSubmit, apos salvar o professor:
-if (teacher?.id || newTeacherId) {
-  const teacherId = teacher?.id || newTeacherId;
+<div className="space-y-3">
+  <p className="text-sm font-medium">Disponibilidade por Turno</p>
   
-  // Deletar disponibilidade existente
-  await supabase
-    .from("teacher_availability")
-    .delete()
-    .eq("teacher_id", teacherId);
-  
-  // Inserir nova disponibilidade
-  const records: any[] = [];
-  
-  for (const shift of selectedShifts) {
-    const offset = SHIFT_PERIOD_OFFSET[shift];
-    const availability = availabilityByShift[shift] || [];
-    
-    availability.forEach(cell => {
-      records.push({
-        teacher_id: teacherId,
-        day_of_week: cell.day,
-        period_number: cell.period + offset,
-        available: cell.available
-      });
-    });
-  }
-  
-  if (records.length > 0) {
-    await supabase.from("teacher_availability").insert(records);
-  }
-}
-```
-
----
-
-### 2. TeacherAvailabilityGrid.tsx - Ajustar Cores
-
-**Alterar cores na legenda (linha 117-124):**
-
-```tsx
-// ANTES
-<div className="w-4 h-4 rounded bg-success/20 border border-success/50" />
-<div className="w-4 h-4 rounded bg-destructive/20 border border-destructive/50" />
-
-// DEPOIS
-<div className="w-4 h-4 rounded bg-green-500/20 border border-green-500" />
-<div className="w-4 h-4 rounded bg-red-500/20 border border-red-500" />
-```
-
-**Alterar cores das celulas (linhas 169-179):**
-
-```tsx
-// ANTES
-className={cn(
-  "p-2 text-center border border-border transition-colors",
-  available 
-    ? "bg-success/10 hover:bg-success/20" 
-    : "bg-destructive/10 hover:bg-destructive/20",
-  ...
-)}
-{available ? (
-  <Check className="w-4 h-4 mx-auto text-success" />
-) : (
-  <X className="w-4 h-4 mx-auto text-destructive" />
-)}
-
-// DEPOIS
-className={cn(
-  "p-2 text-center border border-border transition-colors",
-  available 
-    ? "bg-green-500/10 hover:bg-green-500/20" 
-    : "bg-red-500/10 hover:bg-red-500/20",
-  ...
-)}
-{available ? (
-  <Check className="w-4 h-4 mx-auto text-green-500" />
-) : (
-  <X className="w-4 h-4 mx-auto text-red-500" />
-)}
-```
-
----
-
-### 3. TeacherSummarySheet.tsx - Remover "Disciplinas Atribuidas"
-
-**Remover linhas 95-101:**
-
-```tsx
-// REMOVER ESTE BLOCO:
-{/* Assigned subjects count */}
-<div className="space-y-2">
-  <p className="text-sm font-medium">Disciplinas Atribuidas</p>
-  <Badge variant="secondary">
-    {teacherSubjects.length} disciplina(s)
-  </Badge>
+  {availability ? (
+    <div className="grid grid-cols-3 gap-2">
+      {availability.morning > 0 && (
+        <div className="p-2 rounded-lg bg-green-500/10 border border-green-500/30 text-center">
+          <p className="text-xs text-muted-foreground">Manha</p>
+          <p className="text-sm font-medium text-green-600">{availability.morning}/30</p>
+        </div>
+      )}
+      {availability.afternoon > 0 && (
+        <div className="p-2 rounded-lg bg-green-500/10 border border-green-500/30 text-center">
+          <p className="text-xs text-muted-foreground">Tarde</p>
+          <p className="text-sm font-medium text-green-600">{availability.afternoon}/30</p>
+        </div>
+      )}
+      {availability.evening > 0 && (
+        <div className="p-2 rounded-lg bg-green-500/10 border border-green-500/30 text-center">
+          <p className="text-xs text-muted-foreground">Noite</p>
+          <p className="text-sm font-medium text-green-600">{availability.evening}/30</p>
+        </div>
+      )}
+    </div>
+  ) : (
+    <p className="text-sm text-muted-foreground py-2 text-center">
+      Nenhuma disponibilidade configurada
+    </p>
+  )}
 </div>
 ```
 
@@ -292,43 +172,39 @@ className={cn(
 
 | Arquivo | Alteracao |
 |---------|-----------|
-| `src/components/mapping/TeacherForm.tsx` | Adicionar seletor de turnos, tabs por turno e grid de disponibilidade |
-| `src/components/timetable/TeacherAvailabilityGrid.tsx` | Alterar cores: verde para disponivel, vermelho para indisponivel |
-| `src/components/mapping/TeacherSummarySheet.tsx` | Remover secao "Disciplinas Atribuidas" |
+| `src/components/mapping/TeacherForm.tsx` | Inicializar disponibilidade completa ao selecionar turno |
+| `src/components/mapping/TeacherSummarySheet.tsx` | Adicionar busca e exibicao do resumo de disponibilidade |
 
 ---
 
-## Layout Visual do Formulario
+## Fluxo Corrigido
+
+```text
+ANTES:
+1. Seleciona turno -> availabilityByShift[turno] = []
+2. Grid exibe verde (default interno) 
+3. Salva -> Nada inserido no banco
+
+DEPOIS:
+1. Seleciona turno -> Inicializa 30 slots como disponiveis
+2. Grid exibe verde (dados reais)
+3. Salva -> 30 registros inseridos no banco
+```
+
+---
+
+## Layout do Resumo de Disponibilidade
 
 ```text
 +------------------------------------------+
-|  Nome *                                  |
-|  [______________________________]        |
+|  Disponibilidade por Turno               |
 |                                          |
-|  E-mail              Telefone            |
-|  [______________]   [______________]     |
+|  +----------+  +----------+  +----------+|
+|  |  Manha   |  |  Tarde   |  |  Noite   ||
+|  |  28/30   |  |  30/30   |  |  15/30   ||
+|  +----------+  +----------+  +----------+|
 |                                          |
-|  Carga Horaria Semanal *                 |
-|  ( ) 20 horas   ( ) 40 horas             |
-|                                          |
-|  Turnos Disponiveis                      |
-|  [x] Manha   [x] Tarde   [ ] Noite       |
-|                                          |
-|  Disponibilidade por Horario             |
-|  [Manha] [Tarde]                         |
-|  +-------+-----+-----+-----+-----+-----+ |
-|  |       | Seg | Ter | Qua | Qui | Sex | |
-|  | 1o    | [V] | [V] | [V] | [X] | [V] | |
-|  | 2o    | [V] | [V] | [X] | [V] | [V] | |
-|  | ...   | ... | ... | ... | ... | ... | |
-|  +-------+-----+-----+-----+-----+-----+ |
-|                                          |
-|  Observacoes                             |
-|  [______________________________]        |
-|                                          |
-|  [Cancelar]              [Salvar]        |
 +------------------------------------------+
 
-Legenda: [V] = Verde (disponivel)  [X] = Vermelho (indisponivel)
+Legenda: X/30 = X slots disponiveis de 30 possiveis (5 dias x 6 horarios)
 ```
-
