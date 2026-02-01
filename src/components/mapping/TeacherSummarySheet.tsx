@@ -91,15 +91,6 @@ const TeacherSummarySheet: React.FC<TeacherSummarySheetProps> = ({
             />
           </div>
 
-
-          {/* Assigned subjects count */}
-          <div className="space-y-2">
-            <p className="text-sm font-medium">Disciplinas Atribuídas</p>
-            <Badge variant="secondary">
-              {teacherSubjects.length} disciplina(s)
-            </Badge>
-          </div>
-
           <Separator />
 
           {/* Classes and subjects assigned */}
