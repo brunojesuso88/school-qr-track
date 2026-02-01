@@ -111,6 +111,21 @@ const TeacherForm = ({ teacher, onClose }: TeacherFormProps) => {
     if (checked) {
       const newShifts = [...selectedShifts, shift];
       setSelectedShifts(newShifts);
+      
+      // Inicializar disponibilidade completa se estiver vazia
+      if (!availabilityByShift[shift] || availabilityByShift[shift].length === 0) {
+        const fullAvailability: AvailabilityCell[] = [];
+        for (let day = 1; day <= 5; day++) {
+          for (let period = 1; period <= 6; period++) {
+            fullAvailability.push({ day, period, available: true });
+          }
+        }
+        setAvailabilityByShift(prev => ({
+          ...prev,
+          [shift]: fullAvailability
+        }));
+      }
+      
       if (selectedShifts.length === 0) {
         setCurrentShiftTab(shift);
       }
