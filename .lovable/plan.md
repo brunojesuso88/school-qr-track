@@ -1,278 +1,334 @@
 
 
-# Plano: Correção de Refresh ao Trocar Aba e Múltiplas Requisições no Salvamento
+# Plano: Disponibilidade por Turno e Ajustes no Formulario de Professor
 
-## Análise dos Problemas
+## Visao Geral
 
-### Problema 1: Refresh ao Trocar de Aba no Windows
-
-**Causa Raiz Identificada:**
-
-No arquivo `src/components/UpdatePrompt.tsx` (linhas 33-40), há um listener que reage a mudanças do controller do Service Worker:
-
-```typescript
-navigator.serviceWorker.addEventListener('controllerchange', () => {
-  if (!refreshing) {
-    refreshing = true;
-    window.location.reload();  // <-- Causa do refresh automático
-  }
-});
-```
-
-Este comportamento pode ser acionado quando:
-1. Uma nova versão do Service Worker é instalada em background
-2. O usuário troca de aba e ao voltar, o novo SW assume o controle
-3. O autoUpdate do VitePWA (configurado em `vite.config.ts`) detecta atualizações
-
-O PWA está configurado com `registerType: 'autoUpdate'` que atualiza automaticamente o Service Worker em background, e quando o novo SW toma controle, o listener força um reload.
+Adicionar seletor de turnos no formulario de edicao de professor para controlar quais turnos sao exibidos na grade de disponibilidade por horario. Ajustar as cores para verde (disponivel) e vermelho (indisponivel). Remover o indicativo "Disciplinas Atribuidas" do card de resumo do professor.
 
 ---
 
-### Problema 2: Múltiplas Requisições ao Salvar Atribuições
+## Estrutura de Turnos e Horarios
 
-**Causa Raiz Identificada:**
+Cada turno possui 6 horarios:
+- **Manha**: Horarios 1-6
+- **Tarde**: Horarios 1-6  
+- **Noite**: Horarios 1-6
 
-Nos arquivos `MappingDistribution.tsx` e `TeacherAssociationDialog.tsx`, a função `handleSaveAll` processa as mudanças sequencialmente:
+A tabela `teacher_availability` armazena a disponibilidade por `day_of_week` (1-5) e `period_number` (1-6). Para diferenciar turnos, usaremos periodos:
+- Manha: period_number 1-6
+- Tarde: period_number 7-12
+- Noite: period_number 13-18
 
-```typescript
-for (const change of pendingChanges) {
-  if (change.action === 'unassign') {
-    await unassignTeacher(change.classSubjectId);  // 1 requisição + fetchData()
-  } else if (change.action === 'assign' && change.newTeacherId) {
-    if (change.previousTeacherId) {
-      await unassignTeacher(change.classSubjectId);  // 1 requisição + fetchData()
+---
+
+## Alteracoes Necessarias
+
+### 1. TeacherForm.tsx - Adicionar Seletor de Turnos e Grid de Disponibilidade
+
+**Adicionar imports e estados:**
+
+```tsx
+import { Checkbox } from "@/components/ui/checkbox";
+import TeacherAvailabilityGrid from "@/components/timetable/TeacherAvailabilityGrid";
+import { supabase } from "@/integrations/supabase/client";
+
+// Estados adicionais
+const [selectedShifts, setSelectedShifts] = useState<string[]>([]);
+const [currentShiftTab, setCurrentShiftTab] = useState<string>("morning");
+const [availabilityByShift, setAvailabilityByShift] = useState<Record<string, AvailabilityCell[]>>({
+  morning: [],
+  afternoon: [],
+  evening: []
+});
+```
+
+**Adicionar constantes de turnos:**
+
+```tsx
+const SHIFT_OPTIONS = [
+  { value: "morning", label: "Manha" },
+  { value: "afternoon", label: "Tarde" },
+  { value: "evening", label: "Noite" }
+];
+
+const SHIFT_PERIOD_OFFSET = {
+  morning: 0,
+  afternoon: 6,
+  evening: 12
+};
+```
+
+**Carregar disponibilidade ao editar professor:**
+
+```tsx
+useEffect(() => {
+  const loadAvailability = async () => {
+    if (!teacher?.id) return;
+    
+    const { data } = await supabase
+      .from("teacher_availability")
+      .select("*")
+      .eq("teacher_id", teacher.id);
+    
+    if (data) {
+      // Converter para formato por turno
+      const byShift: Record<string, AvailabilityCell[]> = {
+        morning: [],
+        afternoon: [],
+        evening: []
+      };
+      
+      data.forEach(row => {
+        // Determinar turno pelo period_number
+        if (row.period_number <= 6) {
+          byShift.morning.push({
+            day: row.day_of_week,
+            period: row.period_number,
+            available: row.available
+          });
+        } else if (row.period_number <= 12) {
+          byShift.afternoon.push({
+            day: row.day_of_week,
+            period: row.period_number - 6,
+            available: row.available
+          });
+        } else {
+          byShift.evening.push({
+            day: row.day_of_week,
+            period: row.period_number - 12,
+            available: row.available
+          });
+        }
+      });
+      
+      setAvailabilityByShift(byShift);
+      
+      // Determinar turnos selecionados
+      const shifts: string[] = [];
+      if (byShift.morning.length > 0) shifts.push("morning");
+      if (byShift.afternoon.length > 0) shifts.push("afternoon");
+      if (byShift.evening.length > 0) shifts.push("evening");
+      setSelectedShifts(shifts);
+      if (shifts.length > 0) setCurrentShiftTab(shifts[0]);
     }
-    await assignTeacher(change.classSubjectId, change.newTeacherId);  // 1 requisição + fetchData()
+  };
+  
+  loadAvailability();
+}, [teacher?.id]);
+```
+
+**Adicionar UI de selecao de turnos:**
+
+```tsx
+<div className="space-y-2">
+  <Label>Turnos Disponiveis</Label>
+  <div className="flex gap-4">
+    {SHIFT_OPTIONS.map(shift => (
+      <div key={shift.value} className="flex items-center space-x-2">
+        <Checkbox
+          id={`shift-${shift.value}`}
+          checked={selectedShifts.includes(shift.value)}
+          onCheckedChange={(checked) => {
+            if (checked) {
+              setSelectedShifts([...selectedShifts, shift.value]);
+              if (selectedShifts.length === 0) {
+                setCurrentShiftTab(shift.value);
+              }
+            } else {
+              setSelectedShifts(selectedShifts.filter(s => s !== shift.value));
+            }
+          }}
+        />
+        <Label htmlFor={`shift-${shift.value}`} className="font-normal">
+          {shift.label}
+        </Label>
+      </div>
+    ))}
+  </div>
+</div>
+```
+
+**Adicionar Grid de Disponibilidade com Tabs por Turno:**
+
+```tsx
+{selectedShifts.length > 0 && (
+  <div className="space-y-2">
+    <Label>Disponibilidade por Horario</Label>
+    
+    {selectedShifts.length > 1 && (
+      <div className="flex gap-2 mb-2">
+        {selectedShifts.map(shift => (
+          <Button
+            key={shift}
+            type="button"
+            variant={currentShiftTab === shift ? "default" : "outline"}
+            size="sm"
+            onClick={() => setCurrentShiftTab(shift)}
+          >
+            {SHIFT_OPTIONS.find(s => s.value === shift)?.label}
+          </Button>
+        ))}
+      </div>
+    )}
+    
+    <TeacherAvailabilityGrid
+      availability={availabilityByShift[currentShiftTab] || []}
+      onChange={(newAvailability) => {
+        setAvailabilityByShift(prev => ({
+          ...prev,
+          [currentShiftTab]: newAvailability
+        }));
+      }}
+    />
+  </div>
+)}
+```
+
+**Salvar disponibilidade no submit:**
+
+```tsx
+// No handleSubmit, apos salvar o professor:
+if (teacher?.id || newTeacherId) {
+  const teacherId = teacher?.id || newTeacherId;
+  
+  // Deletar disponibilidade existente
+  await supabase
+    .from("teacher_availability")
+    .delete()
+    .eq("teacher_id", teacherId);
+  
+  // Inserir nova disponibilidade
+  const records: any[] = [];
+  
+  for (const shift of selectedShifts) {
+    const offset = SHIFT_PERIOD_OFFSET[shift];
+    const availability = availabilityByShift[shift] || [];
+    
+    availability.forEach(cell => {
+      records.push({
+        teacher_id: teacherId,
+        day_of_week: cell.day,
+        period_number: cell.period + offset,
+        available: cell.available
+      });
+    });
+  }
+  
+  if (records.length > 0) {
+    await supabase.from("teacher_availability").insert(records);
   }
 }
 ```
 
-E no `SchoolMappingContext.tsx`, cada função `assignTeacher` e `unassignTeacher` chama `fetchData()` após cada operação:
-
-```typescript
-const assignTeacher = async (classSubjectId: string, teacherId: string) => {
-  // ... operações no banco
-  await fetchData();  // Refetch de TODAS as tabelas a cada operação
-};
-```
-
-**Resultado:** Para 3 mudanças pendentes, podem ocorrer 6+ chamadas ao banco e 6+ refetches completos.
-
 ---
 
-## Solução Proposta
+### 2. TeacherAvailabilityGrid.tsx - Ajustar Cores
 
-### Parte 1: Remover Reload Automático no controllerchange
+**Alterar cores na legenda (linha 117-124):**
 
-Modificar o `UpdatePrompt.tsx` para NÃO fazer reload automático quando o controller mudar. Em vez disso, apenas mostrar o prompt de atualização.
-
-**Arquivo:** `src/components/UpdatePrompt.tsx`
-
-**Alteração:** Remover ou modificar o listener de `controllerchange` para apenas mostrar o prompt em vez de recarregar automaticamente.
-
-```typescript
+```tsx
 // ANTES
-navigator.serviceWorker.addEventListener('controllerchange', () => {
-  if (!refreshing) {
-    refreshing = true;
-    window.location.reload();
-  }
-});
+<div className="w-4 h-4 rounded bg-success/20 border border-success/50" />
+<div className="w-4 h-4 rounded bg-destructive/20 border border-destructive/50" />
 
 // DEPOIS
-navigator.serviceWorker.addEventListener('controllerchange', () => {
-  // Nova versão assumiu controle, mostrar prompt ao invés de reload
-  if (!refreshing) {
-    setNeedRefresh(true);
-    setShowPrompt(true);
-  }
-});
+<div className="w-4 h-4 rounded bg-green-500/20 border border-green-500" />
+<div className="w-4 h-4 rounded bg-red-500/20 border border-red-500" />
+```
+
+**Alterar cores das celulas (linhas 169-179):**
+
+```tsx
+// ANTES
+className={cn(
+  "p-2 text-center border border-border transition-colors",
+  available 
+    ? "bg-success/10 hover:bg-success/20" 
+    : "bg-destructive/10 hover:bg-destructive/20",
+  ...
+)}
+{available ? (
+  <Check className="w-4 h-4 mx-auto text-success" />
+) : (
+  <X className="w-4 h-4 mx-auto text-destructive" />
+)}
+
+// DEPOIS
+className={cn(
+  "p-2 text-center border border-border transition-colors",
+  available 
+    ? "bg-green-500/10 hover:bg-green-500/20" 
+    : "bg-red-500/10 hover:bg-red-500/20",
+  ...
+)}
+{available ? (
+  <Check className="w-4 h-4 mx-auto text-green-500" />
+) : (
+  <X className="w-4 h-4 mx-auto text-red-500" />
+)}
 ```
 
 ---
 
-### Parte 2: Otimizar Salvamento em Lote (Batch Save)
+### 3. TeacherSummarySheet.tsx - Remover "Disciplinas Atribuidas"
 
-Criar funções de batch no contexto que fazem todas as operações em uma única transação e chamam `fetchData()` apenas uma vez no final.
+**Remover linhas 95-101:**
 
-#### Alteração 1: `src/contexts/SchoolMappingContext.tsx`
-
-Adicionar novas funções de batch:
-
-```typescript
-interface BatchChange {
-  classSubjectId: string;
-  action: 'assign' | 'unassign';
-  newTeacherId?: string;
-  previousTeacherId?: string | null;
-}
-
-// Nova função para salvar todas as mudanças em lote
-const batchSaveAssignments = async (changes: BatchChange[]) => {
-  // Agrupar operações por tipo para minimizar queries
-  const unassigns: { classSubjectId: string; teacherId: string }[] = [];
-  const assigns: { classSubjectId: string; teacherId: string }[] = [];
-  
-  for (const change of changes) {
-    if (change.action === 'unassign' && change.previousTeacherId) {
-      unassigns.push({
-        classSubjectId: change.classSubjectId,
-        teacherId: change.previousTeacherId
-      });
-    } else if (change.action === 'assign' && change.newTeacherId) {
-      if (change.previousTeacherId) {
-        unassigns.push({
-          classSubjectId: change.classSubjectId,
-          teacherId: change.previousTeacherId
-        });
-      }
-      assigns.push({
-        classSubjectId: change.classSubjectId,
-        teacherId: change.newTeacherId
-      });
-    }
-  }
-  
-  // Processar todas as desatribuições de uma vez
-  if (unassigns.length > 0) {
-    const unassignIds = unassigns.map(u => u.classSubjectId);
-    await supabase
-      .from('mapping_class_subjects')
-      .update({ teacher_id: null })
-      .in('id', unassignIds);
-    
-    // Atualizar horas dos professores
-    const teacherHourUpdates = new Map<string, number>();
-    for (const unassign of unassigns) {
-      const cs = classSubjects.find(c => c.id === unassign.classSubjectId);
-      if (cs) {
-        const current = teacherHourUpdates.get(unassign.teacherId) || 0;
-        teacherHourUpdates.set(unassign.teacherId, current - cs.weekly_classes);
-      }
-    }
-    
-    for (const [teacherId, hoursDelta] of teacherHourUpdates) {
-      const teacher = teachers.find(t => t.id === teacherId);
-      if (teacher) {
-        await supabase
-          .from('mapping_teachers')
-          .update({ current_hours: Math.max(0, teacher.current_hours + hoursDelta) })
-          .eq('id', teacherId);
-      }
-    }
-  }
-  
-  // Processar todas as atribuições de uma vez
-  if (assigns.length > 0) {
-    for (const assign of assigns) {
-      await supabase
-        .from('mapping_class_subjects')
-        .update({ teacher_id: assign.teacherId })
-        .eq('id', assign.classSubjectId);
-    }
-    
-    // Atualizar horas dos professores
-    const teacherHourUpdates = new Map<string, number>();
-    for (const assign of assigns) {
-      const cs = classSubjects.find(c => c.id === assign.classSubjectId);
-      if (cs) {
-        const current = teacherHourUpdates.get(assign.teacherId) || 0;
-        teacherHourUpdates.set(assign.teacherId, current + cs.weekly_classes);
-      }
-    }
-    
-    for (const [teacherId, hoursDelta] of teacherHourUpdates) {
-      const teacher = teachers.find(t => t.id === teacherId);
-      if (teacher) {
-        await supabase
-          .from('mapping_teachers')
-          .update({ current_hours: teacher.current_hours + hoursDelta })
-          .eq('id', teacherId);
-      }
-    }
-  }
-  
-  // Único fetchData no final
-  await fetchData();
-};
+```tsx
+// REMOVER ESTE BLOCO:
+{/* Assigned subjects count */}
+<div className="space-y-2">
+  <p className="text-sm font-medium">Disciplinas Atribuidas</p>
+  <Badge variant="secondary">
+    {teacherSubjects.length} disciplina(s)
+  </Badge>
+</div>
 ```
-
-#### Alteração 2: `src/pages/mapping/MappingDistribution.tsx`
-
-Usar a nova função de batch:
-
-```typescript
-const handleSaveAll = async () => {
-  if (pendingChanges.length === 0) return;
-  
-  setIsSaving(true);
-  try {
-    await batchSaveAssignments(pendingChanges);
-    toast({ 
-      title: "Atribuições salvas", 
-      description: `${pendingChanges.length} alteração(ões) aplicada(s)` 
-    });
-    setPendingChanges([]);
-    setSelectedClass(null);
-  } catch (error: any) {
-    toast({ 
-      title: "Erro ao salvar", 
-      description: error.message, 
-      variant: "destructive" 
-    });
-  } finally {
-    setIsSaving(false);
-  }
-};
-```
-
-#### Alteração 3: `src/components/mapping/TeacherAssociationDialog.tsx`
-
-Aplicar a mesma lógica de batch save.
 
 ---
 
-## Resumo das Alterações
+## Resumo das Alteracoes
 
-| Arquivo | Alteração |
+| Arquivo | Alteracao |
 |---------|-----------|
-| `src/components/UpdatePrompt.tsx` | Remover reload automático em `controllerchange`, apenas mostrar prompt |
-| `src/contexts/SchoolMappingContext.tsx` | Adicionar função `batchSaveAssignments` para salvar todas as mudanças de uma vez |
-| `src/pages/mapping/MappingDistribution.tsx` | Usar `batchSaveAssignments` em vez de loop com chamadas individuais |
-| `src/components/mapping/TeacherAssociationDialog.tsx` | Usar `batchSaveAssignments` em vez de loop com chamadas individuais |
+| `src/components/mapping/TeacherForm.tsx` | Adicionar seletor de turnos, tabs por turno e grid de disponibilidade |
+| `src/components/timetable/TeacherAvailabilityGrid.tsx` | Alterar cores: verde para disponivel, vermelho para indisponivel |
+| `src/components/mapping/TeacherSummarySheet.tsx` | Remover secao "Disciplinas Atribuidas" |
 
 ---
 
-## Benefícios
-
-1. **Problema 1 (Refresh)**: A página não será mais recarregada automaticamente ao trocar de aba. O usuário verá o prompt de atualização e poderá escolher quando atualizar.
-
-2. **Problema 2 (Múltiplas requisições)**:
-   - Redução de N chamadas de `fetchData()` para apenas 1
-   - Operações de update agrupadas quando possível
-   - Melhor performance e UX (menos flickering na UI)
-   - Menos carga no banco de dados
-
----
-
-## Diagrama do Fluxo Otimizado
+## Layout Visual do Formulario
 
 ```text
-ANTES (N mudanças):
-┌─────────────────────────────────────────────────────┐
-│ for cada mudança:                                   │
-│   → unassign → fetchData() → UI atualiza           │
-│   → assign → fetchData() → UI atualiza             │
-│ Total: 2N requisições + 2N refetches               │
-└─────────────────────────────────────────────────────┘
++------------------------------------------+
+|  Nome *                                  |
+|  [______________________________]        |
+|                                          |
+|  E-mail              Telefone            |
+|  [______________]   [______________]     |
+|                                          |
+|  Carga Horaria Semanal *                 |
+|  ( ) 20 horas   ( ) 40 horas             |
+|                                          |
+|  Turnos Disponiveis                      |
+|  [x] Manha   [x] Tarde   [ ] Noite       |
+|                                          |
+|  Disponibilidade por Horario             |
+|  [Manha] [Tarde]                         |
+|  +-------+-----+-----+-----+-----+-----+ |
+|  |       | Seg | Ter | Qua | Qui | Sex | |
+|  | 1o    | [V] | [V] | [V] | [X] | [V] | |
+|  | 2o    | [V] | [V] | [X] | [V] | [V] | |
+|  | ...   | ... | ... | ... | ... | ... | |
+|  +-------+-----+-----+-----+-----+-----+ |
+|                                          |
+|  Observacoes                             |
+|  [______________________________]        |
+|                                          |
+|  [Cancelar]              [Salvar]        |
++------------------------------------------+
 
-DEPOIS (N mudanças):
-┌─────────────────────────────────────────────────────┐
-│ batchSaveAssignments(mudanças)                      │
-│   → Agrupa todas as desatribuições                 │
-│   → Agrupa todas as atribuições                    │
-│   → fetchData() uma única vez                      │
-│ Total: ~4 requisições + 1 refetch                  │
-└─────────────────────────────────────────────────────┘
+Legenda: [V] = Verde (disponivel)  [X] = Vermelho (indisponivel)
 ```
 
