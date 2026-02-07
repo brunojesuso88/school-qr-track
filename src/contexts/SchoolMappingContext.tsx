@@ -117,10 +117,31 @@ export const SchoolMappingProvider: React.FC<{ children: React.ReactNode }> = ({
       if (classesRes.error) throw classesRes.error;
       if (classSubjectsRes.error) throw classSubjectsRes.error;
 
-      setTeachers(teachersRes.data || []);
+      const teachersData = teachersRes.data || [];
+      const classSubjectsData = classSubjectsRes.data || [];
+
+      // Recalcular current_hours dinamicamente
+      const recalculatedTeachers = teachersData.map(teacher => {
+        const realHours = classSubjectsData
+          .filter(cs => cs.teacher_id === teacher.id)
+          .reduce((sum, cs) => sum + cs.weekly_classes, 0);
+        return { ...teacher, current_hours: realHours };
+      });
+
+      // Sincronizar banco quando houver divergência
+      for (const teacher of recalculatedTeachers) {
+        const original = teachersData.find(t => t.id === teacher.id);
+        if (original && original.current_hours !== teacher.current_hours) {
+          supabase.from('mapping_teachers')
+            .update({ current_hours: teacher.current_hours })
+            .eq('id', teacher.id);
+        }
+      }
+
+      setTeachers(recalculatedTeachers);
       setGlobalSubjects(subjectsRes.data || []);
       setClasses(classesRes.data || []);
-      setClassSubjects(classSubjectsRes.data || []);
+      setClassSubjects(classSubjectsData);
     } catch (error: any) {
       console.error('Error fetching mapping data:', error);
       toast({

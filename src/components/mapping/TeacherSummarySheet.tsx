@@ -84,8 +84,13 @@ const TeacherSummarySheet: React.FC<TeacherSummarySheetProps> = ({
     return acc;
   }, {} as Record<string, { shift: string; subjects: MappingClassSubject[] }>);
 
-  const progressPercent = (teacher.current_hours / teacher.max_weekly_hours) * 100;
-  const isOverloaded = teacher.current_hours >= teacher.max_weekly_hours * 0.8;
+  // Calcular horas reais dinamicamente
+  const realHours = classSubjects
+    .filter(cs => cs.teacher_id === teacher.id)
+    .reduce((sum, cs) => sum + cs.weekly_classes, 0);
+
+  const progressPercent = (realHours / teacher.max_weekly_hours) * 100;
+  const isOverloaded = realHours >= teacher.max_weekly_hours * 0.8;
 
   // Build availability grids per shift
   const shiftsWithData = SHIFT_CONFIG.filter(sc => 
@@ -136,7 +141,7 @@ const TeacherSummarySheet: React.FC<TeacherSummarySheetProps> = ({
             <div className="flex justify-between text-sm">
               <span className="font-medium">Carga Horária</span>
               <span className={isOverloaded ? "text-amber-500 font-medium" : ""}>
-                {teacher.current_hours}h / {teacher.max_weekly_hours}h
+                {realHours}h / {teacher.max_weekly_hours}h
               </span>
             </div>
             <Progress 
