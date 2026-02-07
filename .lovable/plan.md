@@ -1,74 +1,67 @@
 
-# Plano: Reabrir Turma Apos Salvar e Ordenar Disciplinas
 
-## Alteracoes em `src/pages/mapping/MappingDistribution.tsx`
+# Plano: Disciplinas reordenaveis com drag-and-drop na Distribuicao
 
-### 1. Reabrir a turma apos salvar alteracoes
+## Visao Geral
 
-No `handleSaveAll` (linhas 100-122), atualmente apos salvar o codigo faz `setSelectedClass(null)` que fecha o dialog. A alteracao vai manter a turma aberta:
+Ao abrir o dialog de uma turma na Distribuicao, as disciplinas serao exibidas como cards arrataveis (drag-and-drop). O usuario pode reorganizar a ordem e salvar essa ordem no banco de dados.
 
-```typescript
-// ANTES (linha 111-112):
-setPendingChanges([]);
-setSelectedClass(null);
+---
 
-// DEPOIS:
-setPendingChanges([]);
-// Manter selectedClass aberta (nao fechar o dialog)
-```
+## 1. Adicionar coluna `sort_order` na tabela `mapping_class_subjects`
 
-### 2. Ordenar disciplinas com ordem fixa
+Uma migracao SQL para adicionar a coluna que armazena a posicao de cada disciplina por turma:
 
-Adicionar uma constante com a ordem desejada e uma funcao de ordenacao. As disciplinas serao ordenadas ao exibir no dialog da turma.
-
-**Constante de ordem (adicionar no topo do arquivo):**
-
-```typescript
-const SUBJECT_ORDER = [
-  "Arte",
-  "Biologia",
-  "Educação Física",
-  "Filosofia",
-  "Física",
-  "Geografia",
-  "História",
-  "Língua Inglesa",
-  "Português",
-  "Matemática",
-  "Química",
-  "Sociologia",
-  "Educação Digital",
-  "Identidade e Protagonismo",
-  "Aprofundamento I",
-  "Aprofundamento II",
-  "Let. em Português",
-  "Let. em Matemática",
-  "Eletiva de Base"
-];
-```
-
-**Alterar `getClassSubjects` para retornar ordenado:**
-
-```typescript
-const getClassSubjects = (classId: string) => {
-  const subjects = classSubjects.filter(cs => cs.class_id === classId);
-  return subjects.sort((a, b) => {
-    const indexA = SUBJECT_ORDER.indexOf(a.subject_name);
-    const indexB = SUBJECT_ORDER.indexOf(b.subject_name);
-    // Disciplinas nao listadas vao para o final, ordenadas alfabeticamente
-    const orderA = indexA === -1 ? SUBJECT_ORDER.length : indexA;
-    const orderB = indexB === -1 ? SUBJECT_ORDER.length : indexB;
-    if (orderA !== orderB) return orderA - orderB;
-    return a.subject_name.localeCompare(b.subject_name);
-  });
-};
+```sql
+ALTER TABLE mapping_class_subjects 
+ADD COLUMN sort_order integer DEFAULT 0;
 ```
 
 ---
 
-## Resumo
+## 2. Alterar `src/pages/mapping/MappingDistribution.tsx`
 
-| Alteracao | Local |
-|-----------|-------|
-| Manter dialog aberto apos salvar | `handleSaveAll` - remover `setSelectedClass(null)` |
-| Ordenar disciplinas na ordem fixa | `getClassSubjects` - adicionar sort com `SUBJECT_ORDER` |
+### 2.1 Adicionar imports do dnd-kit (ja instalado no projeto)
+
+Importar `DndContext`, `closestCenter`, `KeyboardSensor`, `PointerSensor`, `useSensor`, `useSensors` de `@dnd-kit/core`, e `SortableContext`, `verticalListSortingStrategy`, `useSortable`, `arrayMove` de `@dnd-kit/sortable`, e `CSS` de `@dnd-kit/utilities`.
+
+### 2.2 Criar componente `SortableSubjectCard`
+
+Um componente interno que encapsula cada disciplina existente (linhas 274-426) com funcionalidade de drag usando `useSortable`. Tera um handle de arraste (icone de grip) no lado esquerdo do card.
+
+### 2.3 Estado local de ordem
+
+Quando o dialog abre (`selectedClass` muda), inicializar um estado `orderedSubjects` com os subjects da turma ordenados por `sort_order` (e fallback para SUBJECT_ORDER). Manter um flag `orderChanged` para rastrear se houve reordenacao.
+
+### 2.4 Handler de reordenacao
+
+Ao finalizar o drag (`onDragEnd`), usar `arrayMove` para atualizar `orderedSubjects` e marcar `orderChanged = true`.
+
+### 2.5 Botao de salvar ordem
+
+Quando `orderChanged` for true, exibir um botao "Salvar Ordem" no footer do dialog (ao lado dos botoes existentes). Ao clicar, faz update no banco:
+
+```typescript
+// Para cada subject, atualizar sort_order com o indice atual
+const updates = orderedSubjects.map((s, index) => 
+  supabase.from('mapping_class_subjects')
+    .update({ sort_order: index })
+    .eq('id', s.id)
+);
+```
+
+### 2.6 Ajustar `getClassSubjects`
+
+Alterar a funcao para ordenar primeiro por `sort_order` e usar `SUBJECT_ORDER` apenas como fallback para disciplinas com `sort_order = 0` (sem ordem personalizada definida).
+
+---
+
+## 3. Detalhes Tecnicos
+
+| Item | Detalhe |
+|------|---------|
+| Biblioteca | `@dnd-kit/core` + `@dnd-kit/sortable` (ja instaladas) |
+| Persistencia | Coluna `sort_order` em `mapping_class_subjects` |
+| Arquivo alterado | `src/pages/mapping/MappingDistribution.tsx` |
+| Migracao SQL | Adicionar coluna `sort_order integer DEFAULT 0` |
+
