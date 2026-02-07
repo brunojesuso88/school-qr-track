@@ -131,23 +131,16 @@ const TimetableGrid = ({ classId, className, highlightTeacherId }: TimetableGrid
                           {periods.map(period => {
                             const teachersList = getTeachersForDayPeriod(day.id, period.id);
                             const available = teachersList.filter(t => t.available);
-                            const unavailable = teachersList.filter(t => !t.available);
                             return (
                               <div key={period.id} className="text-xs">
                                 <p className="font-medium text-muted-foreground mb-1">{period.label} Horário</p>
-                                {available.length === 0 && unavailable.length === 0 ? (
-                                  <p className="text-muted-foreground italic ml-2">Nenhum professor cadastrado</p>
+                                {available.length === 0 ? (
+                                  <p className="text-muted-foreground italic ml-2">Nenhum professor disponível</p>
                                 ) : (
                                   <div className="ml-2 space-y-0.5">
                                     {available.map(t => (
                                       <div key={t.id} className="flex items-center gap-1.5">
                                         <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: t.color }} />
-                                        <span>{t.name}</span>
-                                      </div>
-                                    ))}
-                                    {unavailable.map(t => (
-                                      <div key={t.id} className="flex items-center gap-1.5 text-muted-foreground line-through opacity-50">
-                                        <span className="w-2 h-2 rounded-full shrink-0 bg-muted-foreground" />
                                         <span>{t.name}</span>
                                       </div>
                                     ))}
