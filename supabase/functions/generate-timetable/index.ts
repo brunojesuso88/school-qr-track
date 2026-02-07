@@ -60,7 +60,6 @@ interface ConflictInput {
 }
 
 serve(async (req) => {
-  // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -75,7 +74,7 @@ serve(async (req) => {
     
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Handle suggest_fixes action with deep analysis
+    // Handle suggest_fixes action
     if (action === 'suggest_fixes') {
       console.log('Generating deep analysis for conflicts...');
       
@@ -87,7 +86,6 @@ serve(async (req) => {
         });
       }
 
-      // Fetch additional context for deep analysis
       const [
         { data: teachersData },
         { data: availabilityData },
@@ -105,7 +103,6 @@ serve(async (req) => {
       const entries = entriesData || [];
       const classes = classesData || [];
 
-      // Build teacher workload map
       const teacherWorkload = new Map<string, number>();
       entries.forEach((e: TimetableEntry) => {
         if (e.teacher_id) {
@@ -113,7 +110,6 @@ serve(async (req) => {
         }
       });
 
-      // Build availability summary per teacher
       const teacherAvailabilitySummary = teachers.map((t: MappingTeacher) => {
         const teacherAvail = availability.filter((a: TeacherAvailability) => a.teacher_id === t.id);
         const availableSlots = teacherAvail.filter((a: TeacherAvailability) => a.available).length;
@@ -149,18 +145,11 @@ ${classes.map((c: MappingClass) => `- ${c.name} (${c.shift})`).join('\n')}
 INSTRUÇÕES:
 1. Analise cada conflito em detalhes
 2. Identifique os professores envolvidos
-3. Proponha MÚLTIPLAS opções de solução para cada conflito, incluindo:
-   - Mudanças na disponibilidade dos professores (especificar DIA e HORÁRIO)
-   - Redistribuição de aulas entre professores
-   - Ajustes na carga horária
-4. Para cada sugestão, explique o IMPACTO (quantos conflitos resolve, consequências)
+3. Proponha MÚLTIPLAS opções de solução para cada conflito
+4. Para cada sugestão, explique o IMPACTO
 
-Forneça 5-7 sugestões práticas e específicas. Seja objetivo e inclua detalhes concretos como:
-- "Professor X poderia adicionar disponibilidade na Segunda-feira, 3º horário"
-- "Mover aula de Matemática da turma Y para Quarta-feira liberaria o conflito com..."
-- "Redistribuir 2 aulas do Professor Z para o Professor W que tem capacidade disponível"
-
-Responda APENAS com um JSON array de strings, cada string sendo uma sugestão detalhada. Exemplo:
+Forneça 5-7 sugestões práticas e específicas.
+Responda APENAS com um JSON array de strings. Exemplo:
 ["Sugestão 1 com detalhes...", "Sugestão 2 com detalhes..."]`;
 
       const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
@@ -171,9 +160,7 @@ Responda APENAS com um JSON array de strings, cada string sendo uma sugestão de
         },
         body: JSON.stringify({
           model: 'google/gemini-2.5-flash',
-          messages: [
-            { role: 'user', content: suggestPrompt }
-          ],
+          messages: [{ role: 'user', content: suggestPrompt }],
           temperature: 0.5,
           max_tokens: 3000
         }),
@@ -181,17 +168,14 @@ Responda APENAS com um JSON array de strings, cada string sendo uma sugestão de
 
       if (!aiResponse.ok) {
         console.error('AI Gateway error:', aiResponse.status);
-        // Fallback suggestions based on available data
-        const fallbackSuggestions = [
-          'Revise a disponibilidade dos professores envolvidos nos conflitos - verifique se há horários bloqueados desnecessariamente.',
-          'Considere redistribuir as aulas ao longo de dias diferentes para evitar sobreposições.',
-          'Verifique professores com baixa taxa de utilização que poderiam assumir mais aulas.',
-          'Analise se há professores sobrecarregados que precisam de ajuste na carga horária.',
-          'Tente agendar manualmente as aulas conflitantes em horários alternativos disponíveis.'
-        ];
-        
         return new Response(JSON.stringify({
-          suggestions: fallbackSuggestions
+          suggestions: [
+            'Revise a disponibilidade dos professores envolvidos nos conflitos.',
+            'Considere redistribuir as aulas ao longo de dias diferentes.',
+            'Verifique professores com baixa taxa de utilização.',
+            'Analise se há professores sobrecarregados.',
+            'Tente agendar manualmente as aulas conflitantes.'
+          ]
         }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
@@ -202,7 +186,8 @@ Responda APENAS com um JSON array de strings, cada string sendo uma sugestão de
 
       let suggestions: string[] = [];
       try {
-        const jsonMatch = content.match(/\[[\s\S]*\]/);
+        const cleaned = content.replace(/```(?:json)?\s*/gi, '').replace(/```/g, '').trim();
+        const jsonMatch = cleaned.match(/\[[\s\S]*\]/);
         if (jsonMatch) {
           suggestions = JSON.parse(jsonMatch[0]);
         }
@@ -210,9 +195,9 @@ Responda APENAS com um JSON array de strings, cada string sendo uma sugestão de
         suggestions = [
           'Revise a disponibilidade dos professores envolvidos nos conflitos.',
           'Considere redistribuir as aulas ao longo de dias diferentes.',
-          'Verifique se há professores sobrecarregados que precisam de ajuste na carga horária.',
-          'Analise professores com capacidade disponível que poderiam assumir mais aulas.',
-          'Tente agendar manualmente as aulas conflitantes em horários alternativos.'
+          'Verifique se há professores sobrecarregados.',
+          'Analise professores com capacidade disponível.',
+          'Tente agendar manualmente as aulas conflitantes.'
         ];
       }
 
@@ -221,7 +206,9 @@ Responda APENAS com um JSON array de strings, cada string sendo uma sugestão de
       });
     }
 
-    // Original timetable generation logic
+    // =============================================
+    // TIMETABLE GENERATION - CLASS BY CLASS LOOP
+    // =============================================
     if (!classIds || classIds.length === 0) {
       throw new Error('Nenhuma turma selecionada');
     }
@@ -229,12 +216,12 @@ Responda APENAS com um JSON array de strings, cada string sendo uma sugestão de
     // Fetch all necessary data
     const [
       { data: classes },
-      { data: classSubjects },
+      { data: allClassSubjects },
       { data: teachers },
       { data: availability },
       { data: rules },
       { data: settings },
-      { data: existingEntries }
+      { data: allExistingEntries }
     ] = await Promise.all([
       supabase.from('mapping_classes').select('*').in('id', classIds),
       supabase.from('mapping_class_subjects').select('*').in('class_id', classIds),
@@ -242,14 +229,15 @@ Responda APENAS com um JSON array de strings, cada string sendo uma sugestão de
       supabase.from('teacher_availability').select('*'),
       supabase.from('timetable_rules').select('*').eq('is_active', true).order('priority', { ascending: false }),
       supabase.from('timetable_settings').select('*').limit(1).single(),
-      supabase.from('timetable_entries').select('*').in('class_id', classIds)
+      // FIX: Fetch ALL entries to detect teacher conflicts across ALL classes
+      supabase.from('timetable_entries').select('*')
     ]);
 
     if (!classes || classes.length === 0) {
       throw new Error('Turmas não encontradas');
     }
 
-    if (!classSubjects || classSubjects.length === 0) {
+    if (!allClassSubjects || allClassSubjects.length === 0) {
       throw new Error('Nenhuma disciplina configurada para as turmas');
     }
 
@@ -261,43 +249,6 @@ Responda APENAS com um JSON array de strings, cada string sendo uma sugestão de
     (availability || []).forEach((a: TeacherAvailability) => {
       availabilityMap.set(`${a.teacher_id}-${a.day_of_week}-${a.period_number}`, a.available);
     });
-
-    // Build teacher workload map
-    const teacherWorkload = new Map<string, number>();
-    (teachers || []).forEach((t: MappingTeacher) => {
-      teacherWorkload.set(t.id, 0);
-    });
-
-    // Keep locked entries
-    const lockedEntries = (existingEntries || []).filter((e: TimetableEntry) => e.is_locked);
-    lockedEntries.forEach((e: TimetableEntry) => {
-      if (e.teacher_id) {
-        teacherWorkload.set(e.teacher_id, (teacherWorkload.get(e.teacher_id) || 0) + 1);
-      }
-    });
-
-    // Build occupied slots map
-    const occupiedSlots = new Map<string, boolean>();
-    lockedEntries.forEach((e: TimetableEntry) => {
-      occupiedSlots.set(`${e.class_id}-${e.day_of_week}-${e.period_number}`, true);
-      if (e.teacher_id) {
-        occupiedSlots.set(`teacher-${e.teacher_id}-${e.day_of_week}-${e.period_number}`, true);
-      }
-    });
-
-    // Prepare the prompt for AI
-    const classInfo = (classes as MappingClass[]).map(c => ({
-      id: c.id,
-      name: c.name,
-      shift: c.shift,
-      subjects: (classSubjects as ClassSubject[])
-        .filter(cs => cs.class_id === c.id)
-        .map(cs => ({
-          name: cs.subject_name,
-          teacherId: cs.teacher_id,
-          weeklyClasses: cs.weekly_classes
-        }))
-    }));
 
     const teacherInfo = (teachers || []).map((t: MappingTeacher) => ({
       id: t.id,
@@ -313,26 +264,118 @@ Responda APENAS com um JSON array de strings, cada string sendo uma sugestão de
       params: r.parameters
     }));
 
-    const systemPrompt = `Você é um sistema especializado em criar horários escolares.
-Sua tarefa é criar um horário escolar otimizado respeitando as restrições.
+    const allEntries = allExistingEntries || [];
+
+    // Separate locked entries of selected classes and entries of OTHER classes
+    const lockedEntriesSelected = allEntries.filter(
+      (e: TimetableEntry) => classIds.includes(e.class_id) && e.is_locked
+    );
+    const entriesOtherClasses = allEntries.filter(
+      (e: TimetableEntry) => !classIds.includes(e.class_id)
+    );
+
+    // Build global occupied teacher slots from:
+    // 1) Locked entries of selected classes
+    // 2) ALL entries from other classes (they won't be deleted)
+    const globalTeacherOccupied = new Map<string, string>(); // "teacherId-day-period" -> className
+    
+    // Map class IDs to names for better prompts
+    const allClassesMap = new Map<string, string>();
+    (classes as MappingClass[]).forEach(c => allClassesMap.set(c.id, c.name));
+    
+    // Also fetch other class names if needed
+    const otherClassIds = [...new Set(entriesOtherClasses.map((e: TimetableEntry) => e.class_id))];
+    if (otherClassIds.length > 0) {
+      const { data: otherClasses } = await supabase.from('mapping_classes').select('id, name').in('id', otherClassIds);
+      (otherClasses || []).forEach((c: { id: string; name: string }) => allClassesMap.set(c.id, c.name));
+    }
+
+    // Register occupied slots from other classes
+    entriesOtherClasses.forEach((e: TimetableEntry) => {
+      if (e.teacher_id) {
+        const key = `${e.teacher_id}-${e.day_of_week}-${e.period_number}`;
+        globalTeacherOccupied.set(key, allClassesMap.get(e.class_id) || e.class_id);
+      }
+    });
+
+    // Register occupied slots from locked entries of selected classes
+    lockedEntriesSelected.forEach((e: TimetableEntry) => {
+      if (e.teacher_id) {
+        const key = `${e.teacher_id}-${e.day_of_week}-${e.period_number}`;
+        globalTeacherOccupied.set(key, allClassesMap.get(e.class_id) || e.class_id);
+      }
+    });
+
+    // Delete non-locked entries for selected classes BEFORE generation
+    await supabase
+      .from('timetable_entries')
+      .delete()
+      .in('class_id', classIds)
+      .eq('is_locked', false);
+
+    console.log(`Starting class-by-class generation for ${classIds.length} classes...`);
+
+    // =============================================
+    // GENERATE CLASS BY CLASS TO AVOID TOKEN OVERFLOW
+    // =============================================
+    const allGeneratedEntries: TimetableEntry[] = [];
+    const errors: string[] = [];
+
+    for (const classId of classIds) {
+      const cls = (classes as MappingClass[]).find(c => c.id === classId);
+      if (!cls) continue;
+
+      const classSubjects = (allClassSubjects as ClassSubject[]).filter(cs => cs.class_id === classId);
+      if (classSubjects.length === 0) continue;
+
+      // Build locked slots for this specific class
+      const lockedForThisClass = lockedEntriesSelected.filter(e => e.class_id === classId);
+      const classOccupiedSlots: string[] = [];
+      lockedForThisClass.forEach((e: TimetableEntry) => {
+        classOccupiedSlots.push(`${e.class_id}-${e.day_of_week}-${e.period_number}`);
+      });
+
+      // Build teacher restrictions string
+      const teacherRestrictions: string[] = [];
+      globalTeacherOccupied.forEach((className, key) => {
+        // key format: "teacherId-dayOfWeek-periodNumber"
+        const parts = key.split('-');
+        const teacherId = parts.slice(0, 5).join('-'); // UUID has 5 parts with dashes
+        const dayOfWeek = parts[5];
+        const periodNumber = parts[6];
+        const teacher = teacherInfo.find(t => t.id === teacherId);
+        const teacherName = teacher?.name || teacherId;
+        teacherRestrictions.push(
+          `Professor "${teacherName}" (${teacherId}) NÃO pode ser usado no dia ${dayOfWeek}, período ${periodNumber} (já alocado na turma ${className})`
+        );
+      });
+
+      const subjectsInfo = classSubjects.map(cs => ({
+        name: cs.subject_name,
+        teacherId: cs.teacher_id,
+        weeklyClasses: cs.weekly_classes
+      }));
+
+      const systemPrompt = `Você é um sistema especializado em criar horários escolares.
+Crie o horário para UMA turma respeitando TODAS as restrições.
 
 REGRAS CRÍTICAS:
-1. Um professor NÃO pode ter duas aulas no mesmo horário
-2. Uma turma NÃO pode ter duas aulas no mesmo horário
-3. Respeitar a disponibilidade dos professores
-4. Distribuir as aulas de cada disciplina ao longo da semana (evitar 2 aulas seguidas da mesma disciplina, exceto se necessário)
-5. Priorizar o início do dia para disciplinas mais complexas (Matemática, Português)
+1. Um professor NÃO pode ter duas aulas no mesmo horário (verifique as RESTRIÇÕES DE PROFESSORES abaixo)
+2. Respeitar a disponibilidade dos professores
+3. Distribuir as aulas de cada disciplina ao longo da semana (evitar aulas seguidas da mesma disciplina, exceto se necessário por carga horária)
+4. Priorizar o início do dia para disciplinas mais complexas (Matemática, Português)
+5. Cada slot (dia+período) da turma deve ter NO MÁXIMO 1 aula
 
 Formato de resposta: JSON array com objetos contendo:
-{ "classId": "id", "subjectName": "nome", "teacherId": "id|null", "dayOfWeek": 1-5, "periodNumber": 1-6 }
+{ "classId": "${classId}", "subjectName": "nome", "teacherId": "id|null", "dayOfWeek": 1-5, "periodNumber": 1-${periodsPerDay} }
 
 Dias: 1=Segunda, 2=Terça, 3=Quarta, 4=Quinta, 5=Sexta
 Períodos: 1 ao ${periodsPerDay}`;
 
-    const userPrompt = `Crie o horário para as seguintes turmas:
+      const userPrompt = `Crie o horário para a turma "${cls.name}" (turno: ${cls.shift}).
 
-TURMAS E DISCIPLINAS:
-${JSON.stringify(classInfo, null, 2)}
+DISCIPLINAS DA TURMA:
+${JSON.stringify(subjectsInfo, null, 2)}
 
 PROFESSORES DISPONÍVEIS:
 ${JSON.stringify(teacherInfo, null, 2)}
@@ -340,104 +383,120 @@ ${JSON.stringify(teacherInfo, null, 2)}
 REGRAS PEDAGÓGICAS ATIVAS:
 ${JSON.stringify(activeRules, null, 2)}
 
-SLOTS JÁ OCUPADOS (não usar):
-${JSON.stringify(Array.from(occupiedSlots.keys()), null, 2)}
+SLOTS JÁ OCUPADOS DESTA TURMA (entradas travadas, NÃO usar estes slots):
+${JSON.stringify(classOccupiedSlots, null, 2)}
+
+${teacherRestrictions.length > 0 ? `RESTRIÇÕES DE PROFESSORES (estes professores JÁ TÊM aula nos horários indicados e NÃO podem ser usados nesses slots):
+${teacherRestrictions.join('\n')}` : 'Nenhuma restrição de professor de outras turmas.'}
 
 DISPONIBILIDADE DOS PROFESSORES (formato: teacherId-dia-periodo = disponível):
 ${JSON.stringify(Object.fromEntries(availabilityMap), null, 2)}
 
-Gere APENAS o JSON array com as aulas. Nenhum texto adicional.`;
+Gere APENAS o JSON array com as aulas para esta turma. Nenhum texto adicional.`;
 
-    console.log('Calling AI for timetable generation...');
+      console.log(`Generating for class ${cls.name} (${classId})...`);
 
-    // Call Lovable AI Gateway
-    const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${lovableApiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt }
-        ],
-        temperature: 0.3,
-        max_tokens: 8000
-      }),
-    });
+      try {
+        const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${lovableApiKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: 'google/gemini-2.5-flash',
+            messages: [
+              { role: 'system', content: systemPrompt },
+              { role: 'user', content: userPrompt }
+            ],
+            temperature: 0.3,
+            max_tokens: 16000
+          }),
+        });
 
-    if (!aiResponse.ok) {
-      const errorText = await aiResponse.text();
-      console.error('AI Gateway error:', aiResponse.status, errorText);
-      
-      if (aiResponse.status === 429) {
-        throw new Error('Limite de requisições excedido. Tente novamente em alguns minutos.');
+        if (!aiResponse.ok) {
+          const errorText = await aiResponse.text();
+          console.error(`AI error for class ${cls.name}:`, aiResponse.status, errorText);
+          
+          if (aiResponse.status === 429) {
+            errors.push(`Turma ${cls.name}: Limite de requisições excedido. Tente novamente em alguns minutos.`);
+            break; // Stop generating more classes if rate limited
+          }
+          if (aiResponse.status === 402) {
+            errors.push(`Turma ${cls.name}: Créditos insuficientes.`);
+            break;
+          }
+          errors.push(`Turma ${cls.name}: Erro na IA (${aiResponse.status})`);
+          continue;
+        }
+
+        const aiData = await aiResponse.json();
+        const content = aiData.choices?.[0]?.message?.content;
+
+        if (!content) {
+          errors.push(`Turma ${cls.name}: Resposta vazia da IA`);
+          continue;
+        }
+
+        // Parse response
+        let classEntries: TimetableEntry[] = [];
+        try {
+          const cleaned = content.replace(/```(?:json)?\s*/gi, '').replace(/```/g, '').trim();
+          const jsonMatch = cleaned.match(/\[[\s\S]*\]/);
+          if (jsonMatch) {
+            const parsed = JSON.parse(jsonMatch[0]);
+            classEntries = parsed.map((e: Record<string, unknown>) => ({
+              class_id: e.classId as string,
+              subject_name: e.subjectName as string,
+              teacher_id: e.teacherId as string | null,
+              day_of_week: e.dayOfWeek as number,
+              period_number: e.periodNumber as number,
+              is_locked: false
+            }));
+          } else {
+            errors.push(`Turma ${cls.name}: JSON não encontrado na resposta da IA`);
+            continue;
+          }
+        } catch (parseError) {
+          console.error(`Parse error for class ${cls.name}:`, parseError);
+          errors.push(`Turma ${cls.name}: Erro ao processar resposta da IA`);
+          continue;
+        }
+
+        // Validate entries
+        const validEntries = classEntries.filter(e =>
+          e.class_id &&
+          e.subject_name &&
+          e.day_of_week >= 1 &&
+          e.day_of_week <= daysPerWeek &&
+          e.period_number >= 1 &&
+          e.period_number <= periodsPerDay &&
+          // Ensure not conflicting with locked slots
+          !classOccupiedSlots.includes(`${e.class_id}-${e.day_of_week}-${e.period_number}`)
+        );
+
+        allGeneratedEntries.push(...validEntries);
+
+        // Update global occupied slots with newly generated entries for next class iteration
+        validEntries.forEach((e: TimetableEntry) => {
+          if (e.teacher_id) {
+            const key = `${e.teacher_id}-${e.day_of_week}-${e.period_number}`;
+            globalTeacherOccupied.set(key, cls.name);
+          }
+        });
+
+        console.log(`Class ${cls.name}: ${validEntries.length} entries generated`);
+      } catch (classError) {
+        console.error(`Error generating for class ${cls.name}:`, classError);
+        errors.push(`Turma ${cls.name}: Erro inesperado`);
       }
-      if (aiResponse.status === 402) {
-        throw new Error('Créditos insuficientes. Adicione créditos no Lovable.');
-      }
-      throw new Error('Erro ao gerar horário com IA');
     }
 
-    const aiData = await aiResponse.json();
-    const content = aiData.choices?.[0]?.message?.content;
-
-    if (!content) {
-      throw new Error('Resposta vazia da IA');
-    }
-
-    console.log('AI response received, parsing...');
-
-    // Parse the AI response - extract JSON from the content
-    let generatedEntries: TimetableEntry[] = [];
-    try {
-      // Strip markdown code fences if present (```json ... ```)
-      const cleaned = content.replace(/```(?:json)?\s*/gi, '').replace(/```/g, '').trim();
-      // Try to find JSON array in the response
-      const jsonMatch = cleaned.match(/\[[\s\S]*\]/);
-      if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]);
-        generatedEntries = parsed.map((e: Record<string, unknown>) => ({
-          class_id: e.classId as string,
-          subject_name: e.subjectName as string,
-          teacher_id: e.teacherId as string | null,
-          day_of_week: e.dayOfWeek as number,
-          period_number: e.periodNumber as number,
-          is_locked: false
-        }));
-      } else {
-        throw new Error('JSON não encontrado na resposta');
-      }
-    } catch (parseError) {
-      console.error('Parse error:', parseError, 'Content:', content);
-      throw new Error('Erro ao processar resposta da IA');
-    }
-
-    // Validate and filter entries
-    const validEntries = generatedEntries.filter(e => 
-      e.class_id && 
-      e.subject_name && 
-      e.day_of_week >= 1 && 
-      e.day_of_week <= daysPerWeek &&
-      e.period_number >= 1 && 
-      e.period_number <= periodsPerDay &&
-      !occupiedSlots.has(`${e.class_id}-${e.day_of_week}-${e.period_number}`)
-    );
-
-    // Delete non-locked entries for selected classes
-    await supabase
-      .from('timetable_entries')
-      .delete()
-      .in('class_id', classIds)
-      .eq('is_locked', false);
-
-    // Insert new entries
-    if (validEntries.length > 0) {
+    // Insert all generated entries
+    if (allGeneratedEntries.length > 0) {
       const { error: insertError } = await supabase
         .from('timetable_entries')
-        .insert(validEntries);
+        .insert(allGeneratedEntries);
       
       if (insertError) {
         console.error('Insert error:', insertError);
@@ -450,13 +509,21 @@ Gere APENAS o JSON array com as aulas. Nenhum texto adicional.`;
     const teacherSlots = new Map<string, number>();
     const classSlots = new Map<string, number>();
     
-    [...lockedEntries, ...validEntries].forEach(e => {
+    [...lockedEntriesSelected, ...allGeneratedEntries].forEach(e => {
       if (e.teacher_id) {
         const teacherKey = `${e.teacher_id}-${e.day_of_week}-${e.period_number}`;
         teacherSlots.set(teacherKey, (teacherSlots.get(teacherKey) || 0) + 1);
       }
       const classKey = `${e.class_id}-${e.day_of_week}-${e.period_number}`;
       classSlots.set(classKey, (classSlots.get(classKey) || 0) + 1);
+    });
+
+    // Also check against other classes' entries for teacher conflicts
+    entriesOtherClasses.forEach((e: TimetableEntry) => {
+      if (e.teacher_id) {
+        const teacherKey = `${e.teacher_id}-${e.day_of_week}-${e.period_number}`;
+        teacherSlots.set(teacherKey, (teacherSlots.get(teacherKey) || 0) + 1);
+      }
     });
 
     teacherSlots.forEach(count => { if (count > 1) conflictsCount++; });
@@ -469,20 +536,24 @@ Gere APENAS o JSON array com as aulas. Nenhum texto adicional.`;
       quality_score: qualityScore,
       conflicts_count: conflictsCount,
       status: conflictsCount === 0 ? 'success' : 'warning',
-      explanation: `Horário gerado com ${validEntries.length} aulas. ${conflictsCount} conflitos encontrados.`,
-      snapshot: { entries: validEntries, lockedEntries }
+      explanation: `Horário gerado com ${allGeneratedEntries.length} aulas para ${classIds.length} turma(s). ${conflictsCount} conflitos encontrados.${errors.length > 0 ? ' Erros: ' + errors.join('; ') : ''}`,
+      snapshot: { entries: allGeneratedEntries, lockedEntries: lockedEntriesSelected }
     });
 
-    console.log(`Timetable generated: ${validEntries.length} entries, ${conflictsCount} conflicts, score: ${qualityScore}`);
+    console.log(`Timetable generated: ${allGeneratedEntries.length} entries, ${conflictsCount} conflicts, score: ${qualityScore}`);
+
+    const explanation = errors.length > 0
+      ? `Horário gerado com ${allGeneratedEntries.length} aulas. ${conflictsCount} conflitos. Erros em algumas turmas: ${errors.join('; ')}`
+      : conflictsCount === 0
+        ? `Horário gerado com sucesso! ${allGeneratedEntries.length} aulas alocadas para ${classIds.length} turma(s) sem conflitos.`
+        : `Horário gerado com ${allGeneratedEntries.length} aulas para ${classIds.length} turma(s). ${conflictsCount} conflitos precisam de revisão manual.`;
 
     return new Response(JSON.stringify({
       success: true,
-      entriesCount: validEntries.length,
-      conflictsCount: conflictsCount,
+      entriesCount: allGeneratedEntries.length,
+      conflictsCount,
       qualityScore,
-      explanation: conflictsCount === 0 
-        ? `Horário gerado com sucesso! ${validEntries.length} aulas alocadas sem conflitos.`
-        : `Horário gerado com ${validEntries.length} aulas. ${conflictsCount} conflitos precisam de revisão manual.`
+      explanation
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });

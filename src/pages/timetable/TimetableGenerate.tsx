@@ -25,6 +25,7 @@ const GenerateContent = () => {
   const { rules, history, loading: timetableLoading, generateTimetable, clearEntries } = useTimetable();
   const { classes, teachers, classSubjects, loading: mappingLoading } = useSchoolMapping();
   
+  const { teacherAvailability } = useTimetable();
   const [selectedClassIds, setSelectedClassIds] = useState<string[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [lastResult, setLastResult] = useState<{ success: boolean; message: string } | null>(null);
@@ -32,7 +33,12 @@ const GenerateContent = () => {
   const loading = timetableLoading || mappingLoading;
 
   const activeRules = rules.filter(r => r.is_active);
-  const teachersWithAvailability = teachers;
+  
+  // Count teachers with REAL availability configured
+  const teachersWithAvailabilityCount = useMemo(() => {
+    const teacherIdsWithAvailability = new Set(teacherAvailability.map(a => a.teacher_id));
+    return teacherIdsWithAvailability.size;
+  }, [teacherAvailability]);
 
   // Get classes for generation
   const classesForGeneration = useMemo(() => {
@@ -87,11 +93,7 @@ const GenerateContent = () => {
     try {
       const classIds = classesForGeneration.map(c => c.id);
       
-      // Clear existing entries for selected classes
-      for (const classId of classIds) {
-        await clearEntries(classId);
-      }
-
+      // Edge function handles deletion of non-locked entries internally
       const result = await generateTimetable(classIds);
       setLastResult(result);
       
@@ -116,7 +118,7 @@ const GenerateContent = () => {
     );
   }
 
-  const canGenerate = classesForGeneration.length > 0 && teachersWithAvailability.length > 0 && classSubjects.length > 0;
+  const canGenerate = classesForGeneration.length > 0 && teachersWithAvailabilityCount > 0 && classSubjects.length > 0;
 
   return (
     <TimetableLayout title="Gerar Horário" description="Geração automática com IA">
@@ -144,13 +146,13 @@ const GenerateContent = () => {
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
-                  {teachersWithAvailability.length > 0 ? (
+                  {teachersWithAvailabilityCount > 0 ? (
                     <CheckCircle2 className="h-4 w-4 text-success" />
                   ) : (
                     <AlertCircle className="h-4 w-4 text-destructive" />
                   )}
                   <span className="text-sm">
-                    {teachersWithAvailability.length} professores com disponibilidade configurada
+                    {teachersWithAvailabilityCount} professores com disponibilidade configurada
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
