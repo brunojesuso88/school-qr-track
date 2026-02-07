@@ -15,17 +15,17 @@ import { Wand2, Loader2, History, CheckCircle2, AlertCircle, Info } from 'lucide
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
-const SHIFT_LABELS: Record<string, string> = {
-  morning: 'Manhã',
-  afternoon: 'Tarde',
-  evening: 'Noite',
-};
+const SHIFTS = [
+  { id: 'morning', label: 'Manhã' },
+  { id: 'afternoon', label: 'Tarde' },
+  { id: 'evening', label: 'Noite' },
+];
 
 const GenerateContent = () => {
   const { rules, history, loading: timetableLoading, generateTimetable, clearEntries } = useTimetable();
   const { classes, teachers, classSubjects, loading: mappingLoading } = useSchoolMapping();
   
-  const [selectedClassIds, setSelectedClassIds] = useState<string[]>([]);
+  const [selectedShifts, setSelectedShifts] = useState<string[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [lastResult, setLastResult] = useState<{ success: boolean; message: string } | null>(null);
 
@@ -34,43 +34,31 @@ const GenerateContent = () => {
   const activeRules = rules.filter(r => r.is_active);
   const teachersWithAvailability = teachers;
 
-  // Group classes by shift
-  const classesByShift = useMemo(() => {
-    const groups: Record<string, typeof classes> = {};
-    classes.forEach(c => {
-      if (!groups[c.shift]) groups[c.shift] = [];
-      groups[c.shift].push(c);
-    });
-    return groups;
+  // Get classes for selected shifts
+  const classesForGeneration = useMemo(() => {
+    if (selectedShifts.length === 0) return [];
+    return classes.filter(c => selectedShifts.includes(c.shift));
+  }, [classes, selectedShifts]);
+
+  // Available shifts (only those with classes)
+  const availableShifts = useMemo(() => {
+    const shiftsWithClasses = new Set(classes.map(c => c.shift));
+    return SHIFTS.filter(s => shiftsWithClasses.has(s.id));
   }, [classes]);
 
-  const classesForGeneration = useMemo(() => {
-    return classes.filter(c => selectedClassIds.includes(c.id));
-  }, [classes, selectedClassIds]);
-
-  const toggleClass = (classId: string) => {
-    setSelectedClassIds(prev =>
-      prev.includes(classId)
-        ? prev.filter(id => id !== classId)
-        : [...prev, classId]
+  const toggleShift = (shiftId: string) => {
+    setSelectedShifts(prev => 
+      prev.includes(shiftId)
+        ? prev.filter(id => id !== shiftId)
+        : [...prev, shiftId]
     );
   };
 
-  const toggleShiftGroup = (shift: string) => {
-    const shiftClassIds = (classesByShift[shift] || []).map(c => c.id);
-    const allSelected = shiftClassIds.every(id => selectedClassIds.includes(id));
-    if (allSelected) {
-      setSelectedClassIds(prev => prev.filter(id => !shiftClassIds.includes(id)));
+  const selectAllShifts = () => {
+    if (selectedShifts.length === availableShifts.length) {
+      setSelectedShifts([]);
     } else {
-      setSelectedClassIds(prev => [...new Set([...prev, ...shiftClassIds])]);
-    }
-  };
-
-  const selectAll = () => {
-    if (selectedClassIds.length === classes.length) {
-      setSelectedClassIds([]);
-    } else {
-      setSelectedClassIds(classes.map(c => c.id));
+      setSelectedShifts(availableShifts.map(s => s.id));
     }
   };
 
@@ -182,70 +170,60 @@ const GenerateContent = () => {
             </CardContent>
           </Card>
 
-          {/* Class Selection */}
+          {/* Shift Selection */}
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
-                <CardTitle>Selecionar Turmas</CardTitle>
-                <Button variant="outline" size="sm" onClick={selectAll}>
-                  {selectedClassIds.length === classes.length ? 'Desmarcar Todas' : 'Selecionar Todas'}
+                <CardTitle>Selecionar Turnos</CardTitle>
+                <Button variant="outline" size="sm" onClick={selectAllShifts}>
+                  {selectedShifts.length === availableShifts.length ? 'Desmarcar Todos' : 'Selecionar Todos'}
                 </Button>
               </div>
               <CardDescription>
-                Escolha turmas individuais ou grupos por turno
+                Escolha os turnos para gerar o horário
               </CardDescription>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {Object.entries(classesByShift).map(([shift, shiftClasses]) => {
-                  const shiftClassIds = shiftClasses.map(c => c.id);
-                  const allSelected = shiftClassIds.every(id => selectedClassIds.includes(id));
-                  const someSelected = shiftClassIds.some(id => selectedClassIds.includes(id));
-
-                  return (
-                    <div key={shift} className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <Checkbox
-                            id={`shift-group-${shift}`}
-                            checked={allSelected}
-                            onCheckedChange={() => toggleShiftGroup(shift)}
-                            className={someSelected && !allSelected ? "opacity-70" : ""}
-                          />
-                          <Label htmlFor={`shift-group-${shift}`} className="font-medium cursor-pointer">
-                            {SHIFT_LABELS[shift] || shift}
-                          </Label>
-                          <span className="text-xs text-muted-foreground">
+                <div className="flex flex-wrap gap-4">
+                  {availableShifts.map(shift => {
+                    const shiftClasses = classes.filter(c => c.shift === shift.id);
+                    return (
+                      <div
+                        key={shift.id}
+                        className="flex items-center space-x-3 p-3 rounded-lg border hover:bg-muted transition-colors"
+                      >
+                        <Checkbox
+                          id={`shift-${shift.id}`}
+                          checked={selectedShifts.includes(shift.id)}
+                          onCheckedChange={() => toggleShift(shift.id)}
+                        />
+                        <Label htmlFor={`shift-${shift.id}`} className="font-normal cursor-pointer">
+                          <span className="font-medium">{shift.label}</span>
+                          <span className="text-xs text-muted-foreground ml-2">
                             ({shiftClasses.length} turmas)
                           </span>
-                        </div>
+                        </Label>
                       </div>
-                      <div className="flex flex-wrap gap-2 ml-6">
-                        {shiftClasses.map(cls => (
-                          <div
-                            key={cls.id}
-                            className="flex items-center space-x-2 p-2 rounded-md border hover:bg-muted transition-colors"
-                          >
-                            <Checkbox
-                              id={`class-${cls.id}`}
-                              checked={selectedClassIds.includes(cls.id)}
-                              onCheckedChange={() => toggleClass(cls.id)}
-                            />
-                            <Label htmlFor={`class-${cls.id}`} className="font-normal cursor-pointer text-sm">
-                              {cls.name}
-                            </Label>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
 
-                {selectedClassIds.length > 0 && (
+                {selectedShifts.length > 0 && (
                   <div className="pt-2 border-t">
-                    <p className="text-sm text-muted-foreground">
-                      {selectedClassIds.length} turma(s) selecionada(s)
+                    <p className="text-sm text-muted-foreground mb-2">
+                      Turmas selecionadas ({classesForGeneration.length}):
                     </p>
+                    <div className="flex flex-wrap gap-1">
+                      {classesForGeneration.map(cls => (
+                        <span 
+                          key={cls.id}
+                          className="px-2 py-1 text-xs rounded-md bg-muted"
+                        >
+                          {cls.name}
+                        </span>
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>

@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { User, X, AlertTriangle, ChevronRight, Clock } from "lucide-react";
+import { useState } from "react";
+import { User, X, AlertTriangle, ChevronRight } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -9,12 +9,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import SchoolMappingLayout from "@/components/mapping/SchoolMappingLayout";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import { supabase } from "@/integrations/supabase/client";
-import { Check, X as XIcon } from "lucide-react";
 
 const SUBJECT_ORDER = [
   "Arte",
@@ -51,134 +48,12 @@ interface PendingChange {
   previousTeacherId?: string | null;
 }
 
-const DAYS = [
-  { id: 1, label: 'Seg' },
-  { id: 2, label: 'Ter' },
-  { id: 3, label: 'Qua' },
-  { id: 4, label: 'Qui' },
-  { id: 5, label: 'Sex' }
-];
-
-const PERIODS = [
-  { id: 1, label: '1º' },
-  { id: 2, label: '2º' },
-  { id: 3, label: '3º' },
-  { id: 4, label: '4º' },
-  { id: 5, label: '5º' },
-  { id: 6, label: '6º' }
-];
-
-const getShiftOffset = (shift: string): number => {
-  switch (shift) {
-    case 'morning': return 0;
-    case 'afternoon': return 6;
-    case 'evening': return 12;
-    default: return 0;
-  }
-};
-
-interface TeacherAvailabilityRow {
-  teacher_id: string;
-  day_of_week: number;
-  period_number: number;
-  available: boolean;
-}
-
-const CompactAvailabilityGrid = ({ 
-  availability, 
-  shift 
-}: { 
-  availability: TeacherAvailabilityRow[];
-  shift: string;
-}) => {
-  const offset = getShiftOffset(shift);
-
-  const isAvailable = (day: number, period: number) => {
-    const periodNumber = offset + period;
-    const record = availability.find(
-      a => a.day_of_week === day && a.period_number === periodNumber
-    );
-    return record ? record.available : true;
-  };
-
-  const totalSlots = DAYS.length * PERIODS.length;
-  const availableSlots = DAYS.reduce((acc, day) => {
-    return acc + PERIODS.reduce((pAcc, period) => {
-      return pAcc + (isAvailable(day.id, period.id) ? 1 : 0);
-    }, 0);
-  }, 0);
-
-  return (
-    <div className="mt-2 space-y-1">
-      <div className="flex items-center justify-between text-[10px] text-muted-foreground mb-1">
-        <span>Disponibilidade ({SHIFT_LABELS[shift]})</span>
-        <span>{availableSlots}/{totalSlots} slots</span>
-      </div>
-      <table className="w-full border-collapse text-[10px]">
-        <thead>
-          <tr>
-            <th className="p-0.5 font-medium text-muted-foreground border border-border bg-muted/30 w-8"></th>
-            {DAYS.map(day => (
-              <th key={day.id} className="p-0.5 font-medium text-muted-foreground border border-border bg-muted/30">
-                {day.label}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {PERIODS.map(period => (
-            <tr key={period.id}>
-              <td className="p-0.5 text-center font-medium text-muted-foreground border border-border bg-muted/30">
-                {period.label}
-              </td>
-              {DAYS.map(day => {
-                const available = isAvailable(day.id, period.id);
-                return (
-                  <td
-                    key={`${day.id}-${period.id}`}
-                    className={cn(
-                      "p-0.5 text-center border border-border",
-                      available ? "bg-green-500/10" : "bg-red-500/10"
-                    )}
-                  >
-                    {available ? (
-                      <Check className="w-2.5 h-2.5 mx-auto text-green-500" />
-                    ) : (
-                      <XIcon className="w-2.5 h-2.5 mx-auto text-red-500" />
-                    )}
-                  </td>
-                );
-              })}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-};
-
 const MappingDistributionContent = () => {
   const { teachers, classes, classSubjects, globalSubjects, batchSaveAssignments, loading } = useSchoolMapping();
   const { toast } = useToast();
   const [selectedClass, setSelectedClass] = useState<MappingClass | null>(null);
   const [pendingChanges, setPendingChanges] = useState<PendingChange[]>([]);
   const [isSaving, setIsSaving] = useState(false);
-  const [teacherAvailability, setTeacherAvailability] = useState<TeacherAvailabilityRow[]>([]);
-  const [expandedTeacherId, setExpandedTeacherId] = useState<string | null>(null);
-
-  // Fetch teacher availability when dialog opens
-  useEffect(() => {
-    if (selectedClass) {
-      const fetchAvailability = async () => {
-        const { data } = await supabase.from('teacher_availability').select('*');
-        if (data) {
-          setTeacherAvailability(data as TeacherAvailabilityRow[]);
-        }
-      };
-      fetchAvailability();
-      setExpandedTeacherId(null);
-    }
-  }, [selectedClass]);
 
   const getTeacherById = (id: string) => teachers.find(t => t.id === id);
 
@@ -492,77 +367,52 @@ const MappingDistributionContent = () => {
                                           const wouldExceed = effectiveHours + subject.weekly_classes > teacher.max_weekly_hours;
                                           const isOverloaded = effectiveHours >= getOverloadThreshold(teacher.max_weekly_hours);
                                           const progressPercent = (effectiveHours / teacher.max_weekly_hours) * 100;
-                                          const teacherAvail = teacherAvailability.filter(a => a.teacher_id === teacher.id);
-                                          const isExpanded = expandedTeacherId === teacher.id;
 
                                           return (
-                                            <div key={teacher.id}>
-                                              <div className="flex items-center gap-1">
-                                                <button
-                                                  className={cn(
-                                                    "flex-1 p-2 rounded-md text-left transition-colors",
-                                                    wouldExceed 
-                                                      ? "opacity-50 cursor-not-allowed" 
-                                                      : "hover:bg-muted cursor-pointer"
-                                                  )}
-                                                  onClick={() => {
-                                                    if (!wouldExceed) {
-                                                      handleAssign(subject.id, teacher.id, subject.teacher_id);
-                                                    }
-                                                  }}
-                                                  disabled={wouldExceed}
-                                                >
-                                                  <div className="flex items-center gap-2">
-                                                    <div 
-                                                      className="w-3 h-3 rounded-full"
-                                                      style={{ backgroundColor: teacher.color }}
-                                                    />
-                                                    <div className="flex-1 min-w-0">
-                                                      <div className="flex items-center gap-1 flex-wrap">
-                                                        <span className="font-medium text-sm truncate">{teacher.name}</span>
-                                                        {isOverloaded && (
-                                                          <AlertTriangle className="h-3 w-3 text-amber-500" />
-                                                        )}
-                                                      </div>
-                                                      <div className="flex items-center gap-2 mt-0.5">
-                                                        <Progress 
-                                                          value={progressPercent} 
-                                                          className="h-1 flex-1" 
-                                                        />
-                                                        <span className="text-[10px] text-muted-foreground whitespace-nowrap">
-                                                          {effectiveHours}h/{teacher.max_weekly_hours}h
-                                                        </span>
-                                                      </div>
-                                                    </div>
-                                                  </div>
-                                                  {wouldExceed && (
-                                                    <p className="text-[10px] text-destructive mt-1">
-                                                      Excederia carga máxima
-                                                    </p>
-                                                  )}
-                                                </button>
-                                                <Button
-                                                  variant="ghost"
-                                                  size="icon"
-                                                  className={cn("h-7 w-7 shrink-0", isExpanded && "text-primary")}
-                                                  onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    setExpandedTeacherId(isExpanded ? null : teacher.id);
-                                                  }}
-                                                  title="Ver disponibilidade"
-                                                >
-                                                  <Clock className="h-3.5 w-3.5" />
-                                                </Button>
-                                              </div>
-                                              {isExpanded && selectedClass && (
-                                                <div className="px-2 pb-2">
-                                                  <CompactAvailabilityGrid
-                                                    availability={teacherAvail}
-                                                    shift={selectedClass.shift}
-                                                  />
-                                                </div>
+                                            <button
+                                              key={teacher.id}
+                                              className={cn(
+                                                "w-full p-2 rounded-md text-left transition-colors",
+                                                wouldExceed 
+                                                  ? "opacity-50 cursor-not-allowed" 
+                                                  : "hover:bg-muted cursor-pointer"
                                               )}
-                                            </div>
+                                              onClick={() => {
+                                                if (!wouldExceed) {
+                                                  handleAssign(subject.id, teacher.id, subject.teacher_id);
+                                                }
+                                              }}
+                                              disabled={wouldExceed}
+                                            >
+                                              <div className="flex items-center gap-2">
+                                                <div 
+                                                  className="w-3 h-3 rounded-full"
+                                                  style={{ backgroundColor: teacher.color }}
+                                                />
+                                                <div className="flex-1 min-w-0">
+                                                  <div className="flex items-center gap-1 flex-wrap">
+                                                    <span className="font-medium text-sm truncate">{teacher.name}</span>
+                                                    {isOverloaded && (
+                                                      <AlertTriangle className="h-3 w-3 text-amber-500" />
+                                                    )}
+                                                  </div>
+                                                  <div className="flex items-center gap-2 mt-0.5">
+                                                    <Progress 
+                                                      value={progressPercent} 
+                                                      className="h-1 flex-1" 
+                                                    />
+                                                    <span className="text-[10px] text-muted-foreground whitespace-nowrap">
+                                                      {effectiveHours}h/{teacher.max_weekly_hours}h
+                                                    </span>
+                                                  </div>
+                                                </div>
+                                              </div>
+                                              {wouldExceed && (
+                                                <p className="text-[10px] text-destructive mt-1">
+                                                  Excederia carga máxima
+                                                </p>
+                                              )}
+                                            </button>
                                           );
                                         })
                                       )}
