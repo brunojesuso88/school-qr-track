@@ -3,14 +3,22 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { MappingTeacher, MappingClass, MappingClassSubject } from "@/contexts/SchoolMappingContext";
 import { supabase } from "@/integrations/supabase/client";
+import TeacherAvailabilityGrid from "@/components/timetable/TeacherAvailabilityGrid";
 
 const SHIFT_LABELS: Record<string, string> = {
   morning: "Manhã",
   afternoon: "Tarde",
   evening: "Noite"
 };
+
+const SHIFT_CONFIG = [
+  { key: "morning", label: "Manhã", offset: 0, range: [1, 6] },
+  { key: "afternoon", label: "Tarde", offset: 6, range: [7, 12] },
+  { key: "evening", label: "Noite", offset: 12, range: [13, 18] },
+];
 
 interface TeacherSummarySheetProps {
   teacher: MappingTeacher | null;
@@ -20,13 +28,10 @@ interface TeacherSummarySheetProps {
   onClose: () => void;
 }
 
-interface AvailabilitySummary {
-  morning: number;
-  afternoon: number;
-  evening: number;
-  morningTotal: number;
-  afternoonTotal: number;
-  eveningTotal: number;
+interface AvailabilityRow {
+  day_of_week: number;
+  period_number: number;
+  available: boolean;
 }
 
 const TeacherSummarySheet: React.FC<TeacherSummarySheetProps> = ({
@@ -36,12 +41,12 @@ const TeacherSummarySheet: React.FC<TeacherSummarySheetProps> = ({
   globalSubjects,
   onClose
 }) => {
-  const [availability, setAvailability] = useState<AvailabilitySummary | null>(null);
+  const [rawAvailability, setRawAvailability] = useState<AvailabilityRow[]>([]);
 
   useEffect(() => {
     const loadAvailability = async () => {
       if (!teacher?.id) {
-        setAvailability(null);
+        setRawAvailability([]);
         return;
       }
       
@@ -50,34 +55,7 @@ const TeacherSummarySheet: React.FC<TeacherSummarySheetProps> = ({
         .select("*")
         .eq("teacher_id", teacher.id);
       
-      if (data && data.length > 0) {
-        let morning = 0, afternoon = 0, evening = 0;
-        let morningTotal = 0, afternoonTotal = 0, eveningTotal = 0;
-        
-        data.forEach(row => {
-          if (row.period_number <= 6) {
-            morningTotal++;
-            if (row.available) morning++;
-          } else if (row.period_number <= 12) {
-            afternoonTotal++;
-            if (row.available) afternoon++;
-          } else {
-            eveningTotal++;
-            if (row.available) evening++;
-          }
-        });
-        
-        setAvailability({
-          morning,
-          afternoon,
-          evening,
-          morningTotal,
-          afternoonTotal,
-          eveningTotal
-        });
-      } else {
-        setAvailability(null);
-      }
+      setRawAvailability(data || []);
     };
     
     loadAvailability();
@@ -96,10 +74,6 @@ const TeacherSummarySheet: React.FC<TeacherSummarySheetProps> = ({
     return classData ? SHIFT_LABELS[classData.shift] || classData.shift : "";
   };
 
-  const getSubjectName = (subjectId: string) => {
-    return globalSubjects.find(s => s.id === subjectId)?.name || subjectId;
-  };
-
   // Group by class
   const subjectsByClass = teacherSubjects.reduce((acc, cs) => {
     const className = getClassName(cs.class_id);
@@ -112,6 +86,29 @@ const TeacherSummarySheet: React.FC<TeacherSummarySheetProps> = ({
 
   const progressPercent = (teacher.current_hours / teacher.max_weekly_hours) * 100;
   const isOverloaded = teacher.current_hours >= teacher.max_weekly_hours * 0.8;
+
+  // Build availability grids per shift
+  const shiftsWithData = SHIFT_CONFIG.filter(sc => 
+    rawAvailability.some(r => r.period_number >= sc.range[0] && r.period_number <= sc.range[1])
+  );
+
+  const getGridDataForShift = (offset: number, range: [number, number]) => {
+    return rawAvailability
+      .filter(r => r.period_number >= range[0] && r.period_number <= range[1])
+      .map(r => ({
+        day: r.day_of_week,
+        period: r.period_number - offset,
+        available: r.available
+      }));
+  };
+
+  // Summary counts per shift
+  const getShiftSummary = (range: [number, number]) => {
+    const rows = rawAvailability.filter(r => r.period_number >= range[0] && r.period_number <= range[1]);
+    const total = rows.length;
+    const available = rows.filter(r => r.available).length;
+    return { available, total };
+  };
 
   return (
     <Sheet open={!!teacher} onOpenChange={onClose}>
@@ -150,37 +147,47 @@ const TeacherSummarySheet: React.FC<TeacherSummarySheetProps> = ({
 
           <Separator />
 
-          {/* Disponibilidade por Turno */}
+          {/* Disponibilidade detalhada por turno */}
           <div className="space-y-3">
             <p className="text-sm font-medium">Disponibilidade por Turno</p>
             
-            {availability ? (
-              <div className="grid grid-cols-3 gap-2">
-                {availability.morningTotal > 0 && (
-                  <div className="p-2 rounded-lg bg-green-500/10 border border-green-500/30 text-center">
-                    <p className="text-xs text-muted-foreground">Manhã</p>
-                    <p className="text-sm font-medium text-green-600">
-                      {availability.morning}/{availability.morningTotal}
-                    </p>
-                  </div>
-                )}
-                {availability.afternoonTotal > 0 && (
-                  <div className="p-2 rounded-lg bg-green-500/10 border border-green-500/30 text-center">
-                    <p className="text-xs text-muted-foreground">Tarde</p>
-                    <p className="text-sm font-medium text-green-600">
-                      {availability.afternoon}/{availability.afternoonTotal}
-                    </p>
-                  </div>
-                )}
-                {availability.eveningTotal > 0 && (
-                  <div className="p-2 rounded-lg bg-green-500/10 border border-green-500/30 text-center">
-                    <p className="text-xs text-muted-foreground">Noite</p>
-                    <p className="text-sm font-medium text-green-600">
-                      {availability.evening}/{availability.eveningTotal}
-                    </p>
-                  </div>
-                )}
-              </div>
+            {shiftsWithData.length > 0 ? (
+              <>
+                {/* Summary badges */}
+                <div className="grid grid-cols-3 gap-2">
+                  {shiftsWithData.map(sc => {
+                    const summary = getShiftSummary(sc.range as [number, number]);
+                    return (
+                      <div key={sc.key} className="p-2 rounded-lg bg-green-500/10 border border-green-500/30 text-center">
+                        <p className="text-xs text-muted-foreground">{sc.label}</p>
+                        <p className="text-sm font-medium text-green-600">
+                          {summary.available}/{summary.total}
+                        </p>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Tabs with availability grids */}
+                <Tabs defaultValue={shiftsWithData[0]?.key}>
+                  <TabsList className="w-full">
+                    {shiftsWithData.map(sc => (
+                      <TabsTrigger key={sc.key} value={sc.key} className="flex-1 text-xs">
+                        {sc.label}
+                      </TabsTrigger>
+                    ))}
+                  </TabsList>
+                  {shiftsWithData.map(sc => (
+                    <TabsContent key={sc.key} value={sc.key}>
+                      <TeacherAvailabilityGrid
+                        availability={getGridDataForShift(sc.offset, sc.range as [number, number])}
+                        onChange={() => {}}
+                        readOnly
+                      />
+                    </TabsContent>
+                  ))}
+                </Tabs>
+              </>
             ) : (
               <p className="text-sm text-muted-foreground py-2 text-center">
                 Nenhuma disponibilidade configurada

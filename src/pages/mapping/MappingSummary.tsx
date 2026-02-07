@@ -59,8 +59,17 @@ interface ShiftData {
   sections: SectionData[];
 }
 
+interface TeacherSummaryRow {
+  teacherName: string;
+  className: string;
+  subjectName: string;
+  weeklyClasses: number;
+  totalHours: number; // used for grouping footer
+}
+
 interface PreviewData {
   shifts: ShiftData[];
+  teacherSummary: TeacherSummaryRow[];
   generatedAt: string;
 }
 
@@ -134,8 +143,38 @@ const MappingSummaryContent = () => {
       });
     }
     
+    // Build teacher summary data
+    const teacherSummaryMap = new Map<string, { rows: TeacherSummaryRow[]; totalHours: number }>();
+    
+    teachers.forEach(t => {
+      const teacherCS = classSubjects.filter(cs => cs.teacher_id === t.id);
+      if (teacherCS.length === 0) return;
+      
+      const rows: TeacherSummaryRow[] = teacherCS.map(cs => {
+        const cls = classes.find(c => c.id === cs.class_id);
+        return {
+          teacherName: t.name,
+          className: cls?.name || '-',
+          subjectName: cs.subject_name,
+          weeklyClasses: cs.weekly_classes,
+          totalHours: t.current_hours,
+        };
+      });
+      
+      teacherSummaryMap.set(t.name, { rows, totalHours: t.current_hours });
+    });
+
+    const teacherSummary: TeacherSummaryRow[] = [];
+    // Sort teachers alphabetically
+    const sortedNames = Array.from(teacherSummaryMap.keys()).sort();
+    sortedNames.forEach(name => {
+      const entry = teacherSummaryMap.get(name)!;
+      teacherSummary.push(...entry.rows);
+    });
+
     return {
       shifts: data,
+      teacherSummary,
       generatedAt: new Date().toLocaleString('pt-BR')
     };
   };
@@ -249,6 +288,73 @@ const MappingSummaryContent = () => {
         });
       });
       
+      // Teacher Summary Page(s)
+      if (previewData.teacherSummary.length > 0) {
+        doc.addPage();
+        doc.setFontSize(14);
+        doc.text('Resumo por Professor', margin, 12);
+        doc.setFontSize(8);
+        doc.text(`Gerado em: ${previewData.generatedAt}`, margin, 18);
+
+        // Build autoTable rows grouped by teacher
+        const tableRows: (string | number)[][] = [];
+        let currentTeacher = '';
+        
+        previewData.teacherSummary.forEach(row => {
+          const isNewTeacher = row.teacherName !== currentTeacher;
+          currentTeacher = row.teacherName;
+          tableRows.push([
+            isNewTeacher ? row.teacherName : '',
+            row.className,
+            row.subjectName,
+            row.weeklyClasses,
+          ]);
+          
+          // Check if next row is different teacher - add total row
+          const idx = previewData.teacherSummary.indexOf(row);
+          const nextRow = previewData.teacherSummary[idx + 1];
+          if (!nextRow || nextRow.teacherName !== currentTeacher) {
+            tableRows.push([
+              '',
+              '',
+              'Total',
+              row.totalHours,
+            ]);
+          }
+        });
+
+        autoTable(doc, {
+          startY: 22,
+          head: [['Professor', 'Turma', 'Disciplina', 'Aulas/Sem']],
+          body: tableRows,
+          theme: 'grid',
+          margin: { left: margin, right: margin },
+          headStyles: {
+            fillColor: [59, 130, 246],
+            fontSize: 9,
+            fontStyle: 'bold',
+            halign: 'center',
+            valign: 'middle',
+          },
+          bodyStyles: {
+            fontSize: 8,
+            valign: 'middle',
+          },
+          columnStyles: {
+            0: { fontStyle: 'bold', cellWidth: 60 },
+            1: { cellWidth: 30 },
+            3: { halign: 'center', cellWidth: 25 },
+          },
+          didParseCell: (data: any) => {
+            // Bold the total rows
+            if (data.section === 'body' && data.row.raw[2] === 'Total') {
+              data.cell.styles.fontStyle = 'bold';
+              data.cell.styles.fillColor = [240, 240, 240];
+            }
+          },
+        });
+      }
+
       doc.save(`mapeamento_escolar_${date}.pdf`);
       setIsPreviewOpen(false);
       toast({ title: "PDF exportado", description: "Arquivo salvo com sucesso." });
@@ -605,6 +711,62 @@ const MappingSummaryContent = () => {
                 ))}
               </div>
             ))}
+
+            {/* Teacher Summary Preview */}
+            {previewData?.teacherSummary && previewData.teacherSummary.length > 0 && (
+              <div className="mt-6">
+                <h3 className="font-semibold text-lg mb-3 flex items-center gap-2">
+                  <Badge variant="secondary">Resumo por Professor</Badge>
+                  <span className="text-sm text-muted-foreground font-normal">
+                    (página adicional no PDF)
+                  </span>
+                </h3>
+                <div className="border rounded-lg overflow-hidden">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="font-bold">Professor</TableHead>
+                        <TableHead>Turma</TableHead>
+                        <TableHead>Disciplina</TableHead>
+                        <TableHead className="text-center">Aulas/Sem</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {(() => {
+                        let currentTeacher = '';
+                        return previewData.teacherSummary.map((row, idx) => {
+                          const isNewTeacher = row.teacherName !== currentTeacher;
+                          currentTeacher = row.teacherName;
+                          const nextRow = previewData.teacherSummary[idx + 1];
+                          const isLastOfTeacher = !nextRow || nextRow.teacherName !== currentTeacher;
+                          
+                          return (
+                            <>
+                              <TableRow key={`row-${idx}`} className={isNewTeacher ? "border-t-2" : ""}>
+                                <TableCell className="font-medium">
+                                  {isNewTeacher ? row.teacherName : ''}
+                                </TableCell>
+                                <TableCell>{row.className}</TableCell>
+                                <TableCell>{row.subjectName}</TableCell>
+                                <TableCell className="text-center">{row.weeklyClasses}</TableCell>
+                              </TableRow>
+                              {isLastOfTeacher && (
+                                <TableRow key={`total-${idx}`} className="bg-muted/50">
+                                  <TableCell></TableCell>
+                                  <TableCell></TableCell>
+                                  <TableCell className="font-medium">Total</TableCell>
+                                  <TableCell className="text-center font-medium">{row.totalHours}h</TableCell>
+                                </TableRow>
+                              )}
+                            </>
+                          );
+                        });
+                      })()}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+            )}
           </ScrollArea>
           
           <DialogFooter className="mt-4">
