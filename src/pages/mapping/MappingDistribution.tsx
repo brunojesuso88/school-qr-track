@@ -13,6 +13,28 @@ import SchoolMappingLayout from "@/components/mapping/SchoolMappingLayout";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
+const SUBJECT_ORDER = [
+  "Arte",
+  "Biologia",
+  "Educação Física",
+  "Filosofia",
+  "Física",
+  "Geografia",
+  "História",
+  "Língua Inglesa",
+  "Português",
+  "Matemática",
+  "Química",
+  "Sociologia",
+  "Educação Digital",
+  "Identidade e Protagonismo",
+  "Aprofundamento I",
+  "Aprofundamento II",
+  "Let. em Português",
+  "Let. em Matemática",
+  "Eletiva de Base"
+];
+
 const SHIFT_LABELS: Record<string, string> = {
   morning: "Manhã",
   afternoon: "Tarde",
@@ -35,8 +57,17 @@ const MappingDistributionContent = () => {
 
   const getTeacherById = (id: string) => teachers.find(t => t.id === id);
 
-  const getClassSubjects = (classId: string) => 
-    classSubjects.filter(cs => cs.class_id === classId);
+  const getClassSubjects = (classId: string) => {
+    const subjects = classSubjects.filter(cs => cs.class_id === classId);
+    return subjects.sort((a, b) => {
+      const indexA = SUBJECT_ORDER.indexOf(a.subject_name);
+      const indexB = SUBJECT_ORDER.indexOf(b.subject_name);
+      const orderA = indexA === -1 ? SUBJECT_ORDER.length : indexA;
+      const orderB = indexB === -1 ? SUBJECT_ORDER.length : indexB;
+      if (orderA !== orderB) return orderA - orderB;
+      return a.subject_name.localeCompare(b.subject_name);
+    });
+  };
 
   const getClassStats = (classId: string) => {
     const subjects = getClassSubjects(classId);
@@ -109,7 +140,6 @@ const MappingDistributionContent = () => {
         description: `${pendingChanges.length} alteração(ões) aplicada(s)` 
       });
       setPendingChanges([]);
-      setSelectedClass(null);
     } catch (error: any) {
       toast({ 
         title: "Erro ao salvar", 
