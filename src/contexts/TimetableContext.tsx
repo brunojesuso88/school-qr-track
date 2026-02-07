@@ -87,7 +87,7 @@ interface TimetableContextType {
   updateRulePriority: (id: string, priority: number) => Promise<void>;
   
   // Generation
-  generateTimetable: (classIds: string[]) => Promise<{ success: boolean; message: string }>;
+  generateTimetable: (classIds: string[], level?: string) => Promise<{ success: boolean; message: string }>;
   
   // Helpers
   validateTimetable: () => Conflict[];
@@ -301,10 +301,10 @@ export const TimetableProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   };
 
   // Generation function
-  const generateTimetable = async (classIds: string[]): Promise<{ success: boolean; message: string }> => {
+  const generateTimetable = async (classIds: string[], level?: string): Promise<{ success: boolean; message: string }> => {
     try {
       const response = await supabase.functions.invoke('generate-timetable', {
-        body: { classIds }
+        body: { classIds, generationLevel: level || 'moderate' }
       });
 
       if (response.error) {
