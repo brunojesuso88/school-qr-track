@@ -393,8 +393,10 @@ Gere APENAS o JSON array com as aulas. Nenhum texto adicional.`;
     // Parse the AI response - extract JSON from the content
     let generatedEntries: TimetableEntry[] = [];
     try {
+      // Strip markdown code fences if present (```json ... ```)
+      const cleaned = content.replace(/```(?:json)?\s*/gi, '').replace(/```/g, '').trim();
       // Try to find JSON array in the response
-      const jsonMatch = content.match(/\[[\s\S]*\]/);
+      const jsonMatch = cleaned.match(/\[[\s\S]*\]/);
       if (jsonMatch) {
         const parsed = JSON.parse(jsonMatch[0]);
         generatedEntries = parsed.map((e: Record<string, unknown>) => ({
