@@ -11,7 +11,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { toast } from 'sonner';
-import { Wand2, Loader2, History, CheckCircle2, AlertCircle, Info } from 'lucide-react';
+import { Wand2, Loader2, History, CheckCircle2, AlertCircle, Info, Zap, Scale, Shield } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
@@ -29,6 +29,7 @@ const GenerateContent = () => {
   const [selectedClassIds, setSelectedClassIds] = useState<string[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [lastResult, setLastResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [generationLevel, setGenerationLevel] = useState<'light' | 'moderate' | 'strict'>('moderate');
 
   const loading = timetableLoading || mappingLoading;
 
@@ -94,7 +95,7 @@ const GenerateContent = () => {
       const classIds = classesForGeneration.map(c => c.id);
       
       // Edge function handles deletion of non-locked entries internally
-      const result = await generateTimetable(classIds);
+      const result = await generateTimetable(classIds, generationLevel);
       setLastResult(result);
       
       if (result.success) {
@@ -255,6 +256,74 @@ const GenerateContent = () => {
             </CardContent>
           </Card>
 
+          {/* Generation Level */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Nível de Geração</CardTitle>
+              <CardDescription>Escolha o nível de otimização do horário</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <button
+                  onClick={() => setGenerationLevel('light')}
+                  className={`p-4 rounded-xl border-2 text-left transition-all ${
+                    generationLevel === 'light'
+                      ? 'border-green-500 bg-green-500/10 ring-1 ring-green-500/30'
+                      : 'border-border hover:border-green-500/50 hover:bg-muted/50'
+                  }`}
+                >
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="p-1.5 rounded-lg bg-green-500/20">
+                      <Zap className="h-4 w-4 text-green-500" />
+                    </div>
+                    <span className="font-semibold text-sm">Leve</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Rápida. Evita conflitos básicos e garante carga horária. Sem otimização pedagógica.
+                  </p>
+                </button>
+
+                <button
+                  onClick={() => setGenerationLevel('moderate')}
+                  className={`p-4 rounded-xl border-2 text-left transition-all ${
+                    generationLevel === 'moderate'
+                      ? 'border-yellow-500 bg-yellow-500/10 ring-1 ring-yellow-500/30'
+                      : 'border-border hover:border-yellow-500/50 hover:bg-muted/50'
+                  }`}
+                >
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="p-1.5 rounded-lg bg-yellow-500/20">
+                      <Scale className="h-4 w-4 text-yellow-500" />
+                    </div>
+                    <span className="font-semibold text-sm">Moderada</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Equilibrada. Distribuição pedagógica, limita consecutivas, respeita disponibilidade.
+                  </p>
+                </button>
+
+                <button
+                  onClick={() => setGenerationLevel('strict')}
+                  className={`p-4 rounded-xl border-2 text-left transition-all ${
+                    generationLevel === 'strict'
+                      ? 'border-red-500 bg-red-500/10 ring-1 ring-red-500/30'
+                      : 'border-border hover:border-red-500/50 hover:bg-muted/50'
+                  }`}
+                >
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="p-1.5 rounded-lg bg-red-500/20">
+                      <Shield className="h-4 w-4 text-red-500" />
+                    </div>
+                    <span className="font-semibold text-sm">Rigorosa</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Máxima. Zero janelas, sequência pedagógica ideal, otimização global. Mais lenta.
+                  </p>
+                </button>
+              </div>
+            </CardContent>
+          </Card>
+
           {/* Generate Button */}
           <Card>
             <CardContent className="pt-6">
@@ -267,7 +336,7 @@ const GenerateContent = () => {
                 {isGenerating ? (
                   <>
                     <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                    Gerando horário...
+                    Gerando horário ({generationLevel === 'light' ? 'Leve' : generationLevel === 'strict' ? 'Rigorosa' : 'Moderada'})...
                   </>
                 ) : (
                   <>

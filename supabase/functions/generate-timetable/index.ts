@@ -66,7 +66,7 @@ serve(async (req) => {
 
   try {
     const body = await req.json();
-    const { action, classIds, conflicts: inputConflicts } = body;
+    const { action, classIds, conflicts: inputConflicts, generationLevel } = body;
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -356,15 +356,59 @@ Responda APENAS com um JSON array de strings. Exemplo:
         weeklyClasses: cs.weekly_classes
       }));
 
+      // Build prompt based on generation level
+      const level = generationLevel || 'moderate';
+      
+      let levelRules = '';
+      let temperature = 0.3;
+      let model = 'google/gemini-2.5-flash';
+
+      if (level === 'light') {
+        temperature = 0.5;
+        levelRules = `NÍVEL: GERAÇÃO LEVE (rápida)
+REGRAS:
+1. Evitar conflitos de professor (mesmo professor, mesmo horário)
+2. Evitar conflitos de turma (mesma turma, mesmo horário)
+3. Garantir carga horária total de cada disciplina
+NÃO se preocupe com distribuição pedagógica, janelas ou otimização.`;
+      } else if (level === 'strict') {
+        temperature = 0.1;
+        model = 'google/gemini-2.5-pro';
+        levelRules = `NÍVEL: GERAÇÃO RIGOROSA (otimização máxima)
+REGRAS OBRIGATÓRIAS:
+1. Evitar conflitos de professor (mesmo professor, mesmo horário)
+2. Evitar conflitos de turma (mesma turma, mesmo horário)
+3. Garantir carga horária total de cada disciplina
+4. Distribuir disciplinas ao longo da semana (evitar mesma disciplina em dias consecutivos)
+5. Limitar a NO MÁXIMO 1 aula consecutiva da mesma disciplina
+6. Respeitar 100% a disponibilidade dos professores
+7. ZERO janelas para professores (sem períodos vazios entre aulas)
+8. Balancear carga diária (distribuir uniformemente)
+9. Sequência pedagógica: disciplinas exatas (Matemática, Ciências) no INÍCIO do dia, disciplinas práticas (Ed. Física, Artes) no FIM
+10. Preferências de professores devem ser 100% respeitadas
+11. Otimização global: minimizar deslocamentos e maximizar aproveitamento do tempo`;
+      } else {
+        // moderate (default)
+        levelRules = `NÍVEL: GERAÇÃO MODERADA (equilíbrio)
+REGRAS:
+1. Evitar conflitos de professor (mesmo professor, mesmo horário)
+2. Evitar conflitos de turma (mesma turma, mesmo horário)
+3. Garantir carga horária total de cada disciplina
+4. Distribuir disciplinas ao longo da semana (evitar mesma disciplina em dias consecutivos)
+5. Limitar a 2 aulas consecutivas da mesma disciplina
+6. Respeitar disponibilidade dos professores
+7. Reduzir janelas (horários vazios entre aulas)
+8. Balancear carga diária (distribuir uniformemente)`;
+      }
+
       const systemPrompt = `Você é um sistema especializado em criar horários escolares.
 Crie o horário para UMA turma respeitando TODAS as restrições.
 
-REGRAS CRÍTICAS:
-1. Um professor NÃO pode ter duas aulas no mesmo horário (verifique as RESTRIÇÕES DE PROFESSORES abaixo)
-2. Respeitar a disponibilidade dos professores
-3. Distribuir as aulas de cada disciplina ao longo da semana (evitar aulas seguidas da mesma disciplina, exceto se necessário por carga horária)
-4. Priorizar o início do dia para disciplinas mais complexas (Matemática, Português)
-5. Cada slot (dia+período) da turma deve ter NO MÁXIMO 1 aula
+${levelRules}
+
+RESTRIÇÕES CRÍTICAS ADICIONAIS:
+- Um professor NÃO pode ter duas aulas no mesmo horário (verifique as RESTRIÇÕES DE PROFESSORES abaixo)
+- Cada slot (dia+período) da turma deve ter NO MÁXIMO 1 aula
 
 Formato de resposta: JSON array com objetos contendo:
 { "classId": "${classId}", "subjectName": "nome", "teacherId": "id|null", "dayOfWeek": 1-5, "periodNumber": 1-${periodsPerDay} }
@@ -394,7 +438,7 @@ ${JSON.stringify(Object.fromEntries(availabilityMap), null, 2)}
 
 Gere APENAS o JSON array com as aulas para esta turma. Nenhum texto adicional.`;
 
-      console.log(`Generating for class ${cls.name} (${classId})...`);
+      console.log(`Generating for class ${cls.name} (${classId}) with level: ${level}...`);
 
       try {
         const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
@@ -404,12 +448,12 @@ Gere APENAS o JSON array com as aulas para esta turma. Nenhum texto adicional.`;
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            model: 'google/gemini-2.5-flash',
+            model,
             messages: [
               { role: 'system', content: systemPrompt },
               { role: 'user', content: userPrompt }
             ],
-            temperature: 0.3,
+            temperature,
             max_tokens: 16000
           }),
         });
