@@ -120,6 +120,7 @@ export type Database = {
           class_id: string | null
           created_at: string | null
           id: string
+          sort_order: number | null
           subject_name: string
           teacher_id: string | null
           weekly_classes: number
@@ -128,6 +129,7 @@ export type Database = {
           class_id?: string | null
           created_at?: string | null
           id?: string
+          sort_order?: number | null
           subject_name: string
           teacher_id?: string | null
           weekly_classes?: number
@@ -136,6 +138,7 @@ export type Database = {
           class_id?: string | null
           created_at?: string | null
           id?: string
+          sort_order?: number | null
           subject_name?: string
           teacher_id?: string | null
           weekly_classes?: number
