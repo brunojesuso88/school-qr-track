@@ -5,6 +5,8 @@ import TimetableSlot from './TimetableSlot';
 import { TimetableEntry, useTimetable } from '@/contexts/TimetableContext';
 import { useSchoolMapping, MappingTeacher } from '@/contexts/SchoolMappingContext';
 import { cn } from '@/lib/utils';
+import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 const DAYS = [
   { id: 1, label: 'Segunda' },
@@ -21,9 +23,30 @@ interface TimetableGridProps {
 }
 
 const TimetableGrid = ({ classId, className, highlightTeacherId }: TimetableGridProps) => {
-  const { settings, entries, conflicts, moveEntry } = useTimetable();
-  const { teachers } = useSchoolMapping();
+  const { settings, entries, conflicts, moveEntry, teacherAvailability } = useTimetable();
+  const { teachers, classes } = useSchoolMapping();
   const [activeEntry, setActiveEntry] = useState<TimetableEntry | null>(null);
+
+  // Determine shift offset for availability periods
+  const shiftOffset = useMemo(() => {
+    const cls = classes.find(c => c.id === classId);
+    const shift = cls?.shift || 'Manhã';
+    if (shift === 'Tarde') return 6;
+    if (shift === 'Noite') return 12;
+    return 0; // Manhã
+  }, [classes, classId]);
+
+  const getTeachersForDayPeriod = (day: number, period: number) => {
+    const actualPeriod = period + shiftOffset;
+    return teachers.map(teacher => {
+      const record = teacherAvailability.find(
+        a => a.teacher_id === teacher.id && a.day_of_week === day && a.period_number === actualPeriod
+      );
+      // No record means available by default
+      const available = record ? record.available : true;
+      return { ...teacher, available };
+    });
+  };
 
   const periodsPerDay = settings?.periods_per_day || 6;
   const breakAfterPeriod = settings?.break_after_period || [3];
@@ -93,7 +116,50 @@ const TimetableGrid = ({ classId, className, highlightTeacherId }: TimetableGrid
                   key={day.id} 
                   className="p-2 text-xs font-medium border border-border bg-muted/30"
                 >
-                  {day.label}
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <button className="hover:text-primary underline-offset-2 hover:underline cursor-pointer transition-colors w-full">
+                        {day.label}
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-72 p-0" align="center">
+                      <div className="p-3 border-b border-border">
+                        <p className="text-sm font-semibold">{day.label}-feira — Disponibilidade</p>
+                      </div>
+                      <ScrollArea className="h-[280px]" onWheel={(e) => e.stopPropagation()}>
+                        <div className="p-2 space-y-2">
+                          {periods.map(period => {
+                            const teachersList = getTeachersForDayPeriod(day.id, period.id);
+                            const available = teachersList.filter(t => t.available);
+                            const unavailable = teachersList.filter(t => !t.available);
+                            return (
+                              <div key={period.id} className="text-xs">
+                                <p className="font-medium text-muted-foreground mb-1">{period.label} Horário</p>
+                                {available.length === 0 && unavailable.length === 0 ? (
+                                  <p className="text-muted-foreground italic ml-2">Nenhum professor cadastrado</p>
+                                ) : (
+                                  <div className="ml-2 space-y-0.5">
+                                    {available.map(t => (
+                                      <div key={t.id} className="flex items-center gap-1.5">
+                                        <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: t.color }} />
+                                        <span>{t.name}</span>
+                                      </div>
+                                    ))}
+                                    {unavailable.map(t => (
+                                      <div key={t.id} className="flex items-center gap-1.5 text-muted-foreground line-through opacity-50">
+                                        <span className="w-2 h-2 rounded-full shrink-0 bg-muted-foreground" />
+                                        <span>{t.name}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </ScrollArea>
+                    </PopoverContent>
+                  </Popover>
                 </th>
               ))}
             </tr>
