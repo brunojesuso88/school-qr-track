@@ -1,82 +1,133 @@
 
+# Plano: Niveis de Geracao + Chat de Resolucao de Conflitos com IA
 
-# Plano: Correcoes na Geracao de Horario por Grupo de Turmas
+## Resumo
 
-## Problemas Encontrados
-
-### Problema 1 (CRITICO): max_tokens insuficiente para grupos grandes
-A edge function usa `max_tokens: 8000`. Cada turma gera ~30 entradas JSON, e cada entrada ocupa ~120 tokens. Para o turno da manha (7 turmas x 30 aulas = 210 entradas), sao necessarios ~25.000 tokens. A resposta da IA e truncada, o JSON fica incompleto, e o parse falha com "Erro ao processar resposta da IA".
-
-**Solucao:** Aumentar `max_tokens` para 32000 e, como seguranca adicional, gerar turma por turma dentro da edge function (loop), concatenando os resultados. Isso garante que mesmo com muitas turmas, cada chamada individual cabe no limite.
-
-### Problema 2 (CRITICO): Conflitos entre turmas nao-selecionadas
-Quando o usuario gera horario para um grupo (ex: so MM100 e MM101), a edge function nao consulta as entradas existentes das OUTRAS turmas. Se o professor X ja tem aula na MM102 no 1o horario de segunda, a IA nao sabe disso e pode alocar o mesmo professor no mesmo horario para MM100, criando conflito.
-
-**Solucao:** Na edge function, buscar TODAS as entradas existentes (nao apenas das turmas selecionadas) para construir o mapa de slots ocupados por professor. Passar esses slots como restricao para a IA.
-
-### Problema 3 (MEDIO): Duplicacao de delecao
-O frontend (`handleGenerate`) faz `clearEntries(classId)` para cada turma antes de chamar a edge function. A edge function TAMBEM deleta entradas nao-travadas das mesmas turmas (linha 430-434). Isso e redundante e causa uma janela onde as entradas ja foram deletadas pelo frontend antes da IA gerar novas.
-
-**Solucao:** Remover a delecao no frontend (`handleGenerate`), deixando apenas a edge function responsavel por limpar e inserir.
-
-### Problema 4 (MEDIO): Prerequisito de disponibilidade enganoso
-O card de pre-requisitos mostra "X professores com disponibilidade configurada" mas usa `teachersWithAvailability = teachers` (linha 35), ou seja, mostra TODOS os professores como se tivessem disponibilidade, mesmo que nenhum tenha configurado.
-
-**Solucao:** Buscar dados reais de `teacher_availability` e contar apenas professores que realmente tem registros.
+Adicionar 3 niveis de geracao de horario (Leve, Moderada, Rigorosa) na pagina "Gerar" e criar uma area de chat interativo com IA para resolucao de conflitos. O projeto ja usa Lovable AI (gateway), entao nao e necessario integrar API KEY da OpenAI -- o sistema ja possui essa capacidade via Lovable AI.
 
 ---
 
-## Alteracoes Planejadas
+## 1. Niveis de Geracao de Horario
 
-### 1. `supabase/functions/generate-timetable/index.ts`
+### O que muda na UI (`src/pages/timetable/TimetableGenerate.tsx`)
 
-**a) Buscar entradas de TODAS as turmas para evitar conflitos entre professores:**
-```typescript
-// ANTES (linha 245):
-supabase.from('timetable_entries').select('*').in('class_id', classIds)
+Adicionar um novo Card "Nivel de Geracao" entre a selecao de turmas e o botao de gerar, com 3 opcoes visuais:
 
-// DEPOIS:
-supabase.from('timetable_entries').select('*')
+- **Leve** (icone verde): Geracao rapida focada em viabilidade. Evita conflitos basicos, garante carga horaria, permite janelas.
+- **Moderada** (icone amarelo): Equilibrio entre qualidade e viabilidade. Distribuicao equilibrada, limita aulas consecutivas, respeita disponibilidade, reduz janelas.
+- **Rigorosa** (icone vermelho): Otimizacao maxima. Sequencia pedagogica ideal, minimiza janelas, limite rigido de consecutivas, preferencias obrigatorias, otimizacao global.
+
+Cada nivel sera um card clicavel com radio-button visual. O nivel selecionado sera enviado como parametro `generationLevel` para a edge function.
+
+### Estado novo
 ```
-E adicionar ao mapa de slots ocupados as entradas de turmas NAO selecionadas (para que a IA saiba que aqueles horarios de professor estao tomados).
-
-**b) Gerar turma por turma em loop (evitar estouro de tokens):**
-Em vez de enviar todas as turmas num unico prompt, iterar sobre cada turma individualmente:
-- Para cada turma, montar o prompt com as disciplinas daquela turma
-- Incluir no prompt os slots ja ocupados (de turmas anteriores + entradas existentes)
-- Acumular os resultados
-- Atualizar os slots ocupados apos cada geracao
-
-**c) Aumentar max_tokens para 16000** (suficiente para 1 turma com 30 aulas).
-
-**d) Adicionar explicacao no prompt sobre slots ocupados por professor em outras turmas.**
-
-### 2. `src/pages/timetable/TimetableGenerate.tsx`
-
-**a) Remover delecao duplicada no frontend:**
-```typescript
-// REMOVER linhas 91-93:
-for (const classId of classIds) {
-  await clearEntries(classId);
-}
+const [generationLevel, setGenerationLevel] = useState<'light' | 'moderate' | 'strict'>('moderate');
 ```
 
-**b) Corrigir prerequisito de disponibilidade:**
-```typescript
-// ANTES:
-const teachersWithAvailability = teachers;
+### O que muda na Edge Function (`supabase/functions/generate-timetable/index.ts`)
 
-// DEPOIS:
-// Buscar contagem real de professores com disponibilidade configurada
+Receber o parametro `generationLevel` do body e ajustar o prompt da IA de acordo:
+
+- **light**: Prompt simples focado apenas em evitar conflitos de professor/turma e garantir carga horaria total. `temperature: 0.5`
+- **moderate**: Prompt com regras pedagogicas de distribuicao, limites de consecutivas, balanceamento. `temperature: 0.3` (atual)
+- **strict**: Prompt detalhado com todas as regras + otimizacao global + sequencia pedagogica + minimizacao de janelas. `temperature: 0.1`, modelo `google/gemini-2.5-pro` (mais potente)
+
+### O que muda no Context (`src/contexts/TimetableContext.tsx`)
+
+Atualizar a assinatura de `generateTimetable` para aceitar o nivel:
 ```
-Adicionar um `useMemo` que consulta `teacherAvailability` do TimetableContext para contar professores com registros reais.
+generateTimetable: (classIds: string[], level?: string) => Promise<...>
+```
 
 ---
 
-## Resumo de Arquivos
+## 2. Chat Interativo para Resolucao de Conflitos
 
-| Arquivo | Alteracao |
-|---------|-----------|
-| `supabase/functions/generate-timetable/index.ts` | Gerar turma por turma em loop; buscar entradas de todas as turmas para evitar conflitos; ajustar max_tokens |
-| `src/pages/timetable/TimetableGenerate.tsx` | Remover delecao duplicada; corrigir contagem de disponibilidade |
+### Nova Edge Function: `supabase/functions/conflict-chat/index.ts`
 
+Uma edge function dedicada ao chat de resolucao de conflitos que:
+- Recebe o historico de mensagens do usuario + contexto dos conflitos atuais
+- Envia para o Lovable AI com um system prompt especializado em resolucao de conflitos de horarios escolares
+- Retorna resposta em streaming (SSE) para exibicao em tempo real
+- O system prompt inclui: dados dos professores, turmas, entradas atuais e conflitos detectados
+
+### Novo Componente: `src/components/timetable/ConflictChat.tsx`
+
+Um componente de chat embutido na pagina de Visao Geral do horario (`src/pages/Timetable.tsx`), acessivel por um botao flutuante ou dentro do ConflictAlert:
+
+- Interface de chat com historico de mensagens
+- Campo de input para o usuario digitar perguntas/solicitacoes
+- Streaming de resposta token por token
+- Renderizacao com markdown (react-markdown ja disponivel via dependencias)
+- Contexto automatico: ao abrir, envia automaticamente os conflitos atuais como contexto
+- Sugestoes rapidas pre-definidas (botoes): "Como resolver os conflitos?", "Quais professores estao sobrecarregados?", "Sugerir redistribuicao"
+
+### Integracao na UI
+
+- No `ConflictAlert.tsx`: substituir o botao "Sugestoes" atual por "Chat com IA" que abre o componente de chat
+- O chat abre em um Dialog/Sheet lateral
+- O usuario pode fazer perguntas livres sobre seus conflitos e receber orientacoes detalhadas
+
+---
+
+## 3. Nota sobre API KEY da OpenAI
+
+O projeto ja utiliza o Lovable AI Gateway que oferece acesso a modelos de IA (incluindo modelos equivalentes ao OpenAI) sem necessidade de API key adicional. O `LOVABLE_API_KEY` ja esta configurado automaticamente. Portanto, **nao e necessario adicionar uma integracao separada com API key da OpenAI** -- toda a funcionalidade de IA ja esta coberta.
+
+---
+
+## Arquivos Alterados/Criados
+
+| Arquivo | Acao |
+|---------|------|
+| `src/pages/timetable/TimetableGenerate.tsx` | Adicionar card de selecao de nivel de geracao |
+| `src/contexts/TimetableContext.tsx` | Atualizar `generateTimetable` para receber `level` |
+| `supabase/functions/generate-timetable/index.ts` | Receber `generationLevel` e ajustar prompt/modelo por nivel |
+| `supabase/functions/conflict-chat/index.ts` | **NOVO** - Edge function de chat com streaming para resolucao de conflitos |
+| `src/components/timetable/ConflictChat.tsx` | **NOVO** - Componente de chat interativo com IA |
+| `src/components/timetable/ConflictAlert.tsx` | Substituir botao "Sugestoes" por "Chat com IA" |
+| `supabase/config.toml` | Adicionar configuracao da nova function `conflict-chat` |
+
+---
+
+## Detalhes Tecnicos
+
+### Prompts por Nivel (Edge Function)
+
+**Leve:**
+```
+Crie um horario BASICO. Regras:
+1. Evitar conflitos de professor (mesmo professor, mesmo horario)
+2. Evitar conflitos de turma (mesma turma, mesmo horario)  
+3. Garantir carga horaria total de cada disciplina
+Nao se preocupe com distribuicao pedagogica ou janelas.
+```
+
+**Moderada (atual, melhorado):**
+```
+Crie um horario EQUILIBRADO. Regras:
+1-3 da Leve +
+4. Distribuir disciplinas ao longo da semana (evitar mesma disciplina em dias consecutivos)
+5. Limitar a 2 aulas consecutivas da mesma disciplina
+6. Respeitar disponibilidade dos professores
+7. Reduzir janelas (horarios vazios entre aulas)
+8. Balancear carga diaria (distribuir uniformemente)
+```
+
+**Rigorosa:**
+```
+Crie o MELHOR horario possivel. Regras:
+1-8 da Moderada +
+9. Sequencia pedagogica: disciplinas exatas no inicio do dia, praticas no fim
+10. ZERO janelas para professores
+11. Maximo 1 aula consecutiva da mesma disciplina (exceto se necessario)
+12. Preferencias obrigatorias de professores devem ser 100% respeitadas
+13. Otimizacao global: minimizar deslocamentos e maximizar aproveitamento
+```
+
+### Chat Streaming (conflict-chat)
+
+- Usa o padrao SSE documentado no Lovable AI
+- System prompt inclui dados em tempo real (buscados do banco)
+- Frontend usa `fetch` com `ReadableStream` para processar tokens
+- Tratamento de erros 429 (rate limit) e 402 (creditos)
