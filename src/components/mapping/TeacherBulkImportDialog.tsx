@@ -5,7 +5,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Upload, Loader2, FileText } from "lucide-react";
-import { useSchoolMapping } from "@/contexts/SchoolMappingContext";
+import { useSchoolMapping, TEACHER_COLORS } from "@/contexts/SchoolMappingContext";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -24,7 +24,7 @@ interface TeacherBulkImportDialogProps {
 }
 
 const TeacherBulkImportDialog = ({ open, onOpenChange }: TeacherBulkImportDialogProps) => {
-  const { addTeacher } = useSchoolMapping();
+  const { teachers, refreshData } = useSchoolMapping();
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -113,59 +113,114 @@ const TeacherBulkImportDialog = ({ open, onOpenChange }: TeacherBulkImportDialog
     }
 
     setIsSaving(true);
-    let successCount = 0;
-    let classAssignCount = 0;
 
     try {
-      for (const t of selected) {
-        try {
-          const result = await addTeacher({
-            name: t.name,
-            email: t.email || undefined,
-            phone: t.phone || undefined,
-            max_weekly_hours: t.max_weekly_hours,
-            notes: undefined,
-          });
+      // Calculate colors locally for all teachers at once
+      const usedColors = teachers.map(t => t.color);
+      const teachersToInsert = selected.map((t, index) => {
+        const allUsed = [...usedColors];
+        // Add colors already assigned in this batch
+        for (let i = 0; i < index; i++) {
+          const prevColor = TEACHER_COLORS.find(c => !allUsed.includes(c)) || 
+            TEACHER_COLORS[(teachers.length + i) % TEACHER_COLORS.length];
+          allUsed.push(prevColor);
+        }
+        const color = TEACHER_COLORS.find(c => !allUsed.includes(c)) || 
+          TEACHER_COLORS[(teachers.length + index) % TEACHER_COLORS.length];
 
-          if (result?.id && t.classes.length > 0) {
-            // Find matching classes and assign teacher to unassigned subjects
-            for (const className of t.classes) {
-              const { data: matchedClasses } = await supabase
-                .from("mapping_classes")
-                .select("id")
-                .ilike("name", className.trim());
+        return {
+          name: t.name,
+          email: t.email || null,
+          phone: t.phone || null,
+          max_weekly_hours: t.max_weekly_hours,
+          current_hours: 0,
+          color,
+        };
+      });
 
-              if (matchedClasses && matchedClasses.length > 0) {
-                for (const mc of matchedClasses) {
-                  const { data: unassigned } = await supabase
-                    .from("mapping_class_subjects")
-                    .select("id")
-                    .eq("class_id", mc.id)
-                    .is("teacher_id", null);
+      // Single batch insert
+      const { data: insertedTeachers, error } = await supabase
+        .from("mapping_teachers")
+        .insert(teachersToInsert)
+        .select("id, name");
 
-                  if (unassigned && unassigned.length > 0) {
-                    for (const subj of unassigned) {
-                      await supabase
-                        .from("mapping_class_subjects")
-                        .update({ teacher_id: result.id })
-                        .eq("id", subj.id);
-                      classAssignCount++;
-                    }
-                  }
+      if (error) throw error;
+      if (!insertedTeachers) throw new Error("Nenhum professor retornado do banco");
+
+      // Batch class assignments
+      let classAssignCount = 0;
+      
+      // Build a map of inserted teacher name -> id
+      const teacherIdMap = new Map<string, string>();
+      insertedTeachers.forEach(t => teacherIdMap.set(t.name, t.id));
+
+      // Collect all class names we need to look up
+      const allClassNames = new Set<string>();
+      selected.forEach(t => t.classes.forEach(c => allClassNames.add(c.trim())));
+
+      if (allClassNames.size > 0) {
+        // Fetch all matching classes in one query
+        const { data: allMatchedClasses } = await supabase
+          .from("mapping_classes")
+          .select("id, name");
+
+        if (allMatchedClasses && allMatchedClasses.length > 0) {
+          // Build class name -> id map (case-insensitive)
+          const classIdMap = new Map<string, string>();
+          allMatchedClasses.forEach(c => classIdMap.set(c.name.toLowerCase(), c.id));
+
+          // Fetch all unassigned class subjects in one query
+          const classIds = allMatchedClasses.map(c => c.id);
+          const { data: allUnassigned } = await supabase
+            .from("mapping_class_subjects")
+            .select("id, class_id")
+            .in("class_id", classIds)
+            .is("teacher_id", null);
+
+          if (allUnassigned && allUnassigned.length > 0) {
+            // Group unassigned by class_id
+            const unassignedByClass = new Map<string, string[]>();
+            allUnassigned.forEach(u => {
+              const list = unassignedByClass.get(u.class_id!) || [];
+              list.push(u.id);
+              unassignedByClass.set(u.class_id!, list);
+            });
+
+            // For each teacher, assign to their classes' unassigned subjects
+            for (const t of selected) {
+              const teacherId = teacherIdMap.get(t.name);
+              if (!teacherId || t.classes.length === 0) continue;
+
+              for (const className of t.classes) {
+                const classId = classIdMap.get(className.trim().toLowerCase());
+                if (!classId) continue;
+
+                const subjectIds = unassignedByClass.get(classId);
+                if (!subjectIds || subjectIds.length === 0) continue;
+
+                // Update all unassigned subjects for this class
+                const { error: assignError } = await supabase
+                  .from("mapping_class_subjects")
+                  .update({ teacher_id: teacherId })
+                  .in("id", subjectIds);
+
+                if (!assignError) {
+                  classAssignCount += subjectIds.length;
+                  // Remove from map so next teacher doesn't get the same subjects
+                  unassignedByClass.delete(classId);
                 }
               }
             }
           }
-
-          successCount++;
-        } catch (err: any) {
-          console.error(`Error adding teacher ${t.name}:`, err);
         }
       }
 
+      // Single refresh at the end
+      await refreshData();
+
       const msg = classAssignCount > 0
-        ? `${successCount} professor(es) adicionado(s) e ${classAssignCount} disciplina(s) atribuída(s)!`
-        : `${successCount} professor(es) adicionado(s) com sucesso!`;
+        ? `${insertedTeachers.length} professor(es) adicionado(s) e ${classAssignCount} disciplina(s) atribuída(s)!`
+        : `${insertedTeachers.length} professor(es) adicionado(s) com sucesso!`;
       toast({ title: msg });
       handleClose();
     } catch (error: any) {
