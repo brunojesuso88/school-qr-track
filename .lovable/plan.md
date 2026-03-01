@@ -1,46 +1,32 @@
 
 
-# Plano: Importar Professores com Turmas via PDF
+# Plano: Corrigir importacao em lote - salvar todos de uma vez + associar turmas
 
-## Problema
+## Problemas identificados
 
-A Edge Function `parse-teachers-pdf` extrai apenas nome, email, telefone e carga horaria. Nao extrai as turmas associadas a cada professor. Apos importar, os professores ficam sem nenhuma atribuicao de turma.
+1. **Salvando um por um**: `handleSave` chama `addTeacher()` em loop. Cada `addTeacher` chama `fetchData()` internamente, causando N refetches para N professores - lento e com flickering.
+
+2. **Turmas nao associadas**: A associacao de turmas depende do `result.id` retornado por `addTeacher`, mas o `fetchData()` dentro de `addTeacher` pode causar race conditions. Alem disso, ao atribuir o professor a TODAS as disciplinas sem professor de uma turma, o comportamento e excessivo - deveria ser mais controlado.
 
 ## Solucao
 
-### 1. Edge Function: `supabase/functions/parse-teachers-pdf/index.ts`
+### `src/components/mapping/TeacherBulkImportDialog.tsx`
 
-Atualizar o prompt da IA e o schema da tool call para extrair tambem um campo `classes` (array de nomes de turma) para cada professor:
+Reescrever `handleSave` para:
 
-```
-// Novo campo no schema
-classes: { type: 'array', items: { type: 'string' }, description: 'Nomes das turmas (ex: 1A, 2B, 3C)' }
-```
+1. **Inserir todos os professores de uma vez** usando `supabase.from('mapping_teachers').insert([...]).select()` - um unico request ao banco retornando todos os IDs
+2. **Associar turmas em batch**: Para cada professor com turmas, buscar `mapping_classes` pelo nome e atualizar `mapping_class_subjects` sem professor
+3. **Chamar `refreshData()` uma unica vez** no final
 
-O prompt sera atualizado para instruir a IA a identificar as turmas/classes associadas a cada professor no PDF.
+Nao usar `addTeacher` do contexto. Usar insert direto no Supabase para evitar os N `fetchData()`.
 
-O retorno incluira `classes: string[]` em cada professor.
+### `src/contexts/SchoolMappingContext.tsx`
 
-### 2. Dialog: `src/components/mapping/TeacherBulkImportDialog.tsx`
-
-- Adicionar campo `classes: string[]` na interface `ExtractedTeacher`
-- Exibir as turmas como Badges na tela de revisao de cada professor
-- No `handleSave`, apos adicionar o professor via `addTeacher`, buscar as turmas correspondentes em `mapping_classes` pelo nome e atribuir o professor a todas as disciplinas sem professor nessas turmas via `assignTeacher`
-
-Fluxo do save:
-1. `addTeacher(...)` retorna o `id` do novo professor
-2. Para cada turma extraida do PDF, buscar `mapping_classes` pelo nome
-3. Para cada classe encontrada, buscar `mapping_class_subjects` sem `teacher_id`
-4. Atribuir o professor a essas disciplinas
-
-### 3. Contexto: `src/contexts/SchoolMappingContext.tsx`
-
-A funcao `addTeacher` ja retorna `{ id: string }`, entao pode ser usada diretamente. Nenhuma alteracao necessaria no contexto.
+Expor `getNextColor` de forma que o dialog consiga calcular cores para N professores. Ja esta exposto, mas precisamos gerar N cores de uma vez. O dialog calculara as cores localmente usando a mesma logica.
 
 ## Resumo
 
 | Arquivo | Alteracao |
 |---------|-----------|
-| `supabase/functions/parse-teachers-pdf/index.ts` | Adicionar extracao de turmas no prompt e schema |
-| `src/components/mapping/TeacherBulkImportDialog.tsx` | Mostrar turmas na revisao + atribuir disciplinas ao salvar |
+| `src/components/mapping/TeacherBulkImportDialog.tsx` | Insert em batch + associacao de turmas em batch + refreshData uma vez |
 
