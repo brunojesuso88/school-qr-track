@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
-import { Upload, Loader2, FileText, AlertTriangle } from "lucide-react";
+import { Upload, Loader2, FileText } from "lucide-react";
 import { useSchoolMapping } from "@/contexts/SchoolMappingContext";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
@@ -14,6 +14,7 @@ interface ExtractedTeacher {
   email: string;
   phone: string;
   max_weekly_hours: number;
+  classes: string[];
   selected: boolean;
 }
 
@@ -22,14 +23,8 @@ interface TeacherBulkImportDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
-const COLORS = [
-  "#3B82F6", "#EF4444", "#10B981", "#F59E0B", "#8B5CF6",
-  "#EC4899", "#06B6D4", "#84CC16", "#F97316", "#6366F1",
-  "#14B8A6", "#E11D48", "#0EA5E9", "#A855F7", "#D946EF",
-];
-
 const TeacherBulkImportDialog = ({ open, onOpenChange }: TeacherBulkImportDialogProps) => {
-  const { addTeacher, teachers } = useSchoolMapping();
+  const { addTeacher } = useSchoolMapping();
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -37,13 +32,6 @@ const TeacherBulkImportDialog = ({ open, onOpenChange }: TeacherBulkImportDialog
   const [extractedTeachers, setExtractedTeachers] = useState<ExtractedTeacher[]>([]);
   const [isSaving, setIsSaving] = useState(false);
   const [fileName, setFileName] = useState("");
-
-  const getNextColor = (index: number) => {
-    const usedColors = teachers.map(t => t.color);
-    const available = COLORS.filter(c => !usedColors.includes(c));
-    if (available.length > 0) return available[index % available.length];
-    return COLORS[index % COLORS.length];
-  };
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -85,6 +73,7 @@ const TeacherBulkImportDialog = ({ open, onOpenChange }: TeacherBulkImportDialog
         email: t.email || "",
         phone: t.phone || "",
         max_weekly_hours: t.max_weekly_hours || 20,
+        classes: Array.isArray(t.classes) ? t.classes : [],
         selected: true,
       }));
 
@@ -125,25 +114,59 @@ const TeacherBulkImportDialog = ({ open, onOpenChange }: TeacherBulkImportDialog
 
     setIsSaving(true);
     let successCount = 0;
+    let classAssignCount = 0;
 
     try {
-      for (let i = 0; i < selected.length; i++) {
-        const t = selected[i];
+      for (const t of selected) {
         try {
-          await addTeacher({
+          const result = await addTeacher({
             name: t.name,
             email: t.email || undefined,
             phone: t.phone || undefined,
             max_weekly_hours: t.max_weekly_hours,
             notes: undefined,
           });
+
+          if (result?.id && t.classes.length > 0) {
+            // Find matching classes and assign teacher to unassigned subjects
+            for (const className of t.classes) {
+              const { data: matchedClasses } = await supabase
+                .from("mapping_classes")
+                .select("id")
+                .ilike("name", className.trim());
+
+              if (matchedClasses && matchedClasses.length > 0) {
+                for (const mc of matchedClasses) {
+                  const { data: unassigned } = await supabase
+                    .from("mapping_class_subjects")
+                    .select("id")
+                    .eq("class_id", mc.id)
+                    .is("teacher_id", null);
+
+                  if (unassigned && unassigned.length > 0) {
+                    for (const subj of unassigned) {
+                      await supabase
+                        .from("mapping_class_subjects")
+                        .update({ teacher_id: result.id })
+                        .eq("id", subj.id);
+                      classAssignCount++;
+                    }
+                  }
+                }
+              }
+            }
+          }
+
           successCount++;
         } catch (err: any) {
           console.error(`Error adding teacher ${t.name}:`, err);
         }
       }
 
-      toast({ title: `${successCount} professor(es) adicionado(s) com sucesso!` });
+      const msg = classAssignCount > 0
+        ? `${successCount} professor(es) adicionado(s) e ${classAssignCount} disciplina(s) atribuída(s)!`
+        : `${successCount} professor(es) adicionado(s) com sucesso!`;
+      toast({ title: msg });
       handleClose();
     } catch (error: any) {
       toast({ title: "Erro ao salvar professores", description: error.message, variant: "destructive" });
@@ -234,6 +257,13 @@ const TeacherBulkImportDialog = ({ open, onOpenChange }: TeacherBulkImportDialog
                         )}
                         <Badge variant="secondary" className="text-[10px]">{teacher.max_weekly_hours}h/sem</Badge>
                       </div>
+                      {teacher.classes.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {teacher.classes.map((cls, i) => (
+                            <Badge key={i} className="text-[10px]">{cls}</Badge>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </div>
                 ))}
