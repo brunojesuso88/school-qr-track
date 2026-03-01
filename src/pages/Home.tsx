@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { QrCode, LayoutDashboard, Map, Settings, RefreshCw, Sun, Moon, Monitor, User, Lock, LogOut, Trash2, Clock, Download } from "lucide-react";
+import { QrCode, LayoutDashboard, Map, Settings, RefreshCw, Sun, Moon, Monitor, User, Lock, LogOut, Trash2, Clock, Download, Info } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
@@ -14,6 +14,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
+import AboutSystemDialog from "@/components/AboutSystemDialog";
 
 const Home = () => {
   const navigate = useNavigate();
@@ -28,6 +29,7 @@ const Home = () => {
   const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
   const [deleteConfirmation, setDeleteConfirmation] = useState("");
+  const [isAboutDialogOpen, setIsAboutDialogOpen] = useState(false);
 
   const canAccessSchoolMapping = userRole === 'admin' || userRole === 'direction';
 
@@ -202,6 +204,14 @@ const Home = () => {
                 <Download className="mr-2 h-4 w-4" />
                 Instalar Aplicativo
               </Button>
+              <Button
+                variant="outline"
+                className="w-full justify-start"
+                onClick={() => setIsAboutDialogOpen(true)}
+              >
+                <Info className="mr-2 h-4 w-4" />
+                Sobre o Sistema
+              </Button>
             </div>
 
             <Separator />
@@ -345,6 +355,9 @@ const Home = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* About System Dialog */}
+      <AboutSystemDialog open={isAboutDialogOpen} onOpenChange={setIsAboutDialogOpen} />
 
       <div className="w-full max-w-lg space-y-0 animate-fade-in">
         {/* Logo */}

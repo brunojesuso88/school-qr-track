@@ -1,19 +1,21 @@
 import { useState } from "react";
-import { Plus, Pencil, Trash2, AlertTriangle, Book } from "lucide-react";
+import { Plus, Pencil, Trash2, AlertTriangle, Book, ChevronDown, Upload } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { SchoolMappingProvider, useSchoolMapping, MappingTeacher } from "@/contexts/SchoolMappingContext";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import TeacherForm from "@/components/mapping/TeacherForm";
 import TeacherSummarySheet from "@/components/mapping/TeacherSummarySheet";
 import TeacherAssociationDialog from "@/components/mapping/TeacherAssociationDialog";
+import TeacherBulkImportDialog from "@/components/mapping/TeacherBulkImportDialog";
 import SchoolMappingLayout from "@/components/mapping/SchoolMappingLayout";
 import { useToast } from "@/hooks/use-toast";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
 
 const MappingTeachersContent = () => {
@@ -24,6 +26,7 @@ const MappingTeachersContent = () => {
   const [deletingTeacher, setDeletingTeacher] = useState<MappingTeacher | null>(null);
   const [viewingTeacher, setViewingTeacher] = useState<MappingTeacher | null>(null);
   const [associatingTeacher, setAssociatingTeacher] = useState<MappingTeacher | null>(null);
+  const [isBulkImportOpen, setIsBulkImportOpen] = useState(false);
 
   const getAssignedSubjectsCount = (teacherId: string) => {
     return classSubjects.filter(cs => cs.teacher_id === teacherId).length;
@@ -96,12 +99,25 @@ const MappingTeachersContent = () => {
           </div>
 
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-            <DialogTrigger asChild>
-              <Button onClick={() => setEditingTeacher(null)}>
-                <Plus className="h-4 w-4 mr-2" />
-                Adicionar
-              </Button>
-            </DialogTrigger>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Adicionar
+                  <ChevronDown className="h-4 w-4 ml-1" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => { setEditingTeacher(null); setIsDialogOpen(true); }}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Adicionar Professor
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setIsBulkImportOpen(true)}>
+                  <Upload className="h-4 w-4 mr-2" />
+                  Adicionar em Lote (PDF)
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
             <DialogContent className="max-w-lg max-h-[90vh] overflow-hidden">
               <DialogHeader>
                 <DialogTitle>
@@ -204,6 +220,12 @@ const MappingTeachersContent = () => {
         classSubjects={classSubjects}
         globalSubjects={globalSubjects}
         onClose={() => setViewingTeacher(null)}
+      />
+
+      {/* Teacher Bulk Import Dialog */}
+      <TeacherBulkImportDialog
+        open={isBulkImportOpen}
+        onOpenChange={setIsBulkImportOpen}
       />
 
       {/* Teacher Association Dialog */}
