@@ -75,8 +75,11 @@ Para cada professor, identifique:
 - E-mail (se disponível)
 - Telefone (se disponível)
 - Carga horária semanal máxima (se disponível, default 20)
+- Turmas/classes associadas ao professor (ex: 1A, 2B, 3ºA, 1º Ano A, etc.)
 
-Seja rigoroso: extraia TODOS os nomes de professores, mesmo que as outras informações não estejam disponíveis.
+Seja rigoroso: extraia TODOS os nomes de professores e suas respectivas turmas.
+As turmas podem aparecer como "1A", "1ºA", "1º Ano A", "Turma 1A", etc.
+Se um professor leciona em múltiplas turmas, liste todas elas.
 Ignore cabeçalhos, títulos e textos que não sejam nomes de professores.`
           },
           {
@@ -84,7 +87,7 @@ Ignore cabeçalhos, títulos e textos que não sejam nomes de professores.`
             content: [
               {
                 type: 'text',
-                text: 'Analise este documento PDF e extraia todos os dados de professores encontrados. Seja rigoroso e extraia todos os nomes.'
+                text: 'Analise este documento PDF e extraia todos os dados de professores encontrados, incluindo as turmas de cada professor. Seja rigoroso e extraia todos os nomes e turmas.'
               },
               {
                 type: 'image_url',
@@ -100,7 +103,7 @@ Ignore cabeçalhos, títulos e textos que não sejam nomes de professores.`
             type: 'function',
             function: {
               name: 'extract_teachers',
-              description: 'Extrai dados de professores do documento',
+              description: 'Extrai dados de professores do documento, incluindo suas turmas',
               parameters: {
                 type: 'object',
                 properties: {
@@ -112,7 +115,12 @@ Ignore cabeçalhos, títulos e textos que não sejam nomes de professores.`
                         name: { type: 'string', description: 'Nome completo do professor' },
                         email: { type: 'string', description: 'E-mail do professor' },
                         phone: { type: 'string', description: 'Telefone do professor' },
-                        max_weekly_hours: { type: 'number', description: 'Carga horária semanal máxima' }
+                        max_weekly_hours: { type: 'number', description: 'Carga horária semanal máxima' },
+                        classes: { 
+                          type: 'array', 
+                          items: { type: 'string' }, 
+                          description: 'Nomes das turmas/classes do professor (ex: 1A, 2B, 3ºA)' 
+                        }
                       },
                       required: ['name']
                     }
@@ -181,6 +189,7 @@ Ignore cabeçalhos, títulos e textos que não sejam nomes de professores.`
         email: String(t.email || '').trim().substring(0, 100) || '',
         phone: String(t.phone || t.telefone || '').replace(/\D/g, '').substring(0, 15) || '',
         max_weekly_hours: Number(t.max_weekly_hours || t.carga_horaria || 20),
+        classes: Array.isArray(t.classes) ? t.classes.map((c: any) => String(c).trim()).filter((c: string) => c.length > 0) : [],
       }))
       .filter((t: any) => t.name.length >= 2);
 
