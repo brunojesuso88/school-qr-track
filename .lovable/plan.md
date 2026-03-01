@@ -1,73 +1,47 @@
 
 
-# Plano: "Sobre o Sistema" + Importacao de Professores em Lote via PDF
+# Plano: Corrigir botao "Adicionar em Lote (PDF)"
 
-## 1. Botao "Sobre o Sistema" na Home (Configuracoes)
+## Problema
 
-### Arquivo: `src/pages/Home.tsx`
+O `Dialog` do formulario individual (linhas 101-131) **envolve** o `DropdownMenu`. Quando o usuario clica em "Adicionar em Lote (PDF)", o clique propaga para o `Dialog` pai, que intercepta o evento e abre o dialog do formulario individual em vez do dialog de importacao em lote. Os dois controles estao aninhados incorretamente.
 
-Adicionar um botao "Sobre o Sistema" na secao "Aplicativo" do Sheet de configuracoes. Ao clicar, abre um Dialog com todas as informacoes do sistema organizadas em topicos:
+## Solucao
 
-- Nome do sistema (EDUNEXUS)
-- Descricao geral
-- Modulos: Gestao de Alunos, Frequencia por QR Code, AEE, Mapeamento Escolar, Geracao de Horario com IA, Declaracoes, Notificacoes
-- Funcionalidades-chave de cada modulo (em acordeao ou lista)
-- Tecnologias (PWA, responsivo, etc.)
-- Creditos (Bruno Oliveira)
-- Versao
+Separar o `Dialog` do formulario individual do `DropdownMenu`, tornando-os componentes irmaos em vez de pai/filho.
 
-Componentes utilizados: `Dialog`, `ScrollArea`, `Accordion` para organizar os topicos de forma colapsavel.
+### `src/pages/mapping/MappingTeachers.tsx`
 
-### Novo componente: `src/components/AboutSystemDialog.tsx`
-
-Componente dedicado com todo o conteudo "Sobre o Sistema" usando Accordion para cada modulo. Importado no Home.tsx.
-
----
-
-## 2. Importacao de Professores em Lote via PDF
-
-### Arquivo: `src/pages/mapping/MappingTeachers.tsx`
-
-Substituir o botao "Adicionar" simples por um `DropdownMenu` com duas opcoes:
-- "Adicionar Professor" (abre o form individual existente)
-- "Adicionar em Lote (PDF)" (abre um novo dialog)
-
-### Novo componente: `src/components/mapping/TeacherBulkImportDialog.tsx`
-
-Dialog que:
-1. Solicita upload de um PDF
-2. Envia o PDF (base64) para uma Edge Function
-3. Exibe tabela de revisao com professores extraidos (nome, email, telefone, carga horaria)
-4. Permite selecionar/deselecionar professores individualmente
-5. Ao confirmar, insere todos os selecionados via `addTeacher` do contexto
-
-### Nova Edge Function: `supabase/functions/parse-teachers-pdf/index.ts`
-
-Baseada na `parse-students-pdf` existente, adaptada para extrair dados de professores:
-- Nome completo (obrigatorio)
-- E-mail (se disponivel)
-- Telefone (se disponivel)
-- Carga horaria semanal (se disponivel, default 20h)
-
-Usa o modelo `google/gemini-2.5-flash` via Lovable AI Gateway com tool calling para estruturar a resposta.
-
-### Config: `supabase/config.toml`
-
-Adicionar entrada para a nova funcao:
-```toml
-[functions.parse-teachers-pdf]
-verify_jwt = false
+**Antes (estrutura):**
+```
+<Dialog>          ← envolve tudo
+  <DropdownMenu>  ← trigger e menu dentro do Dialog
+    ...
+  </DropdownMenu>
+  <DialogContent> ← conteudo do form individual
+    ...
+  </DialogContent>
+</Dialog>
 ```
 
----
+**Depois (estrutura):**
+```
+<DropdownMenu>    ← independente
+  ...
+</DropdownMenu>
+<Dialog>          ← separado, so o form individual
+  <DialogContent>
+    ...
+  </DialogContent>
+</Dialog>
+```
 
-## Resumo de Arquivos
+Tambem corrigir o erro de build pre-existente em `usePushNotifications.ts` adicionando `// @ts-ignore` antes dos acessos a `pushManager`.
+
+## Resumo
 
 | Arquivo | Alteracao |
 |---------|-----------|
-| `src/pages/Home.tsx` | Adicionar botao "Sobre o Sistema" e dialog |
-| `src/components/AboutSystemDialog.tsx` | Novo componente com conteudo completo do sistema |
-| `src/pages/mapping/MappingTeachers.tsx` | DropdownMenu no botao Adicionar + dialog de importacao em lote |
-| `src/components/mapping/TeacherBulkImportDialog.tsx` | Novo componente para importacao em lote via PDF |
-| `supabase/functions/parse-teachers-pdf/index.ts` | Nova Edge Function para extrair professores de PDF |
+| `src/pages/mapping/MappingTeachers.tsx` | Separar Dialog e DropdownMenu em componentes irmaos |
+| `src/hooks/usePushNotifications.ts` | Adicionar `// @ts-ignore` nos 3 acessos a `pushManager` |
 
