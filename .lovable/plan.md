@@ -1,71 +1,73 @@
 
-# Plano: Corrigir Carga Horaria dos Professores
 
-## Problema Identificado
+# Plano: "Sobre o Sistema" + Importacao de Professores em Lote via PDF
 
-O campo `current_hours` na tabela `mapping_teachers` esta desatualizado para varios professores. Exemplos reais do banco:
+## 1. Botao "Sobre o Sistema" na Home (Configuracoes)
 
-| Professor     | current_hours (DB) | Calculado Real |
-|---------------|-------------------|----------------|
-| A. Francisco  | 6h                | 24h            |
-| Allison       | 10h               | 15h            |
-| Givanilson    | 7h                | 12h            |
-| Jorge         | 19h               | 21h            |
-| Keliane       | 10h               | 12h            |
+### Arquivo: `src/pages/Home.tsx`
 
-Isso acontece porque o `current_hours` e mantido manualmente via incrementos/decrementos nas funcoes `assignTeacher`, `unassignTeacher` e `batchSaveAssignments`. Qualquer falha, race condition ou operacao manual no banco causa a dessincronizacao.
+Adicionar um botao "Sobre o Sistema" na secao "Aplicativo" do Sheet de configuracoes. Ao clicar, abre um Dialog com todas as informacoes do sistema organizadas em topicos:
 
-## Solucao
+- Nome do sistema (EDUNEXUS)
+- Descricao geral
+- Modulos: Gestao de Alunos, Frequencia por QR Code, AEE, Mapeamento Escolar, Geracao de Horario com IA, Declaracoes, Notificacoes
+- Funcionalidades-chave de cada modulo (em acordeao ou lista)
+- Tecnologias (PWA, responsivo, etc.)
+- Creditos (Bruno Oliveira)
+- Versao
 
-Adotar o calculo dinamico de `current_hours` a partir dos dados reais de `mapping_class_subjects`, eliminando a dependencia do valor armazenado.
+Componentes utilizados: `Dialog`, `ScrollArea`, `Accordion` para organizar os topicos de forma colapsavel.
 
-### 1. `src/contexts/SchoolMappingContext.tsx`
+### Novo componente: `src/components/AboutSystemDialog.tsx`
 
-**Apos o `fetchData`**, recalcular `current_hours` de cada professor com base nos `classSubjects` reais e atualizar o estado local:
+Componente dedicado com todo o conteudo "Sobre o Sistema" usando Accordion para cada modulo. Importado no Home.tsx.
 
+---
+
+## 2. Importacao de Professores em Lote via PDF
+
+### Arquivo: `src/pages/mapping/MappingTeachers.tsx`
+
+Substituir o botao "Adicionar" simples por um `DropdownMenu` com duas opcoes:
+- "Adicionar Professor" (abre o form individual existente)
+- "Adicionar em Lote (PDF)" (abre um novo dialog)
+
+### Novo componente: `src/components/mapping/TeacherBulkImportDialog.tsx`
+
+Dialog que:
+1. Solicita upload de um PDF
+2. Envia o PDF (base64) para uma Edge Function
+3. Exibe tabela de revisao com professores extraidos (nome, email, telefone, carga horaria)
+4. Permite selecionar/deselecionar professores individualmente
+5. Ao confirmar, insere todos os selecionados via `addTeacher` do contexto
+
+### Nova Edge Function: `supabase/functions/parse-teachers-pdf/index.ts`
+
+Baseada na `parse-students-pdf` existente, adaptada para extrair dados de professores:
+- Nome completo (obrigatorio)
+- E-mail (se disponivel)
+- Telefone (se disponivel)
+- Carga horaria semanal (se disponivel, default 20h)
+
+Usa o modelo `google/gemini-2.5-flash` via Lovable AI Gateway com tool calling para estruturar a resposta.
+
+### Config: `supabase/config.toml`
+
+Adicionar entrada para a nova funcao:
+```toml
+[functions.parse-teachers-pdf]
+verify_jwt = false
 ```
-// Apos carregar os dados, recalcular current_hours
-const recalculatedTeachers = teachersData.map(teacher => {
-  const realHours = classSubjectsData
-    .filter(cs => cs.teacher_id === teacher.id)
-    .reduce((sum, cs) => sum + cs.weekly_classes, 0);
-  return { ...teacher, current_hours: realHours };
-});
-setTeachers(recalculatedTeachers);
-```
 
-Tambem sincronizar o banco quando houver divergencia (correcao silenciosa):
-
-```
-// Sincronizar banco quando houver divergencia
-for (const teacher of recalculatedTeachers) {
-  const original = teachersData.find(t => t.id === teacher.id);
-  if (original && original.current_hours !== teacher.current_hours) {
-    supabase.from('mapping_teachers')
-      .update({ current_hours: teacher.current_hours })
-      .eq('id', teacher.id);
-  }
-}
-```
-
-### 2. `src/components/mapping/TeacherSummarySheet.tsx`
-
-Substituir o uso de `teacher.current_hours` pelo calculo dinamico a partir dos `classSubjects` recebidos como prop:
-
-```
-// Calcular horas reais
-const realHours = classSubjects
-  .filter(cs => cs.teacher_id === teacher.id)
-  .reduce((sum, cs) => sum + cs.weekly_classes, 0);
-
-// Usar realHours em vez de teacher.current_hours
-const progressPercent = (realHours / teacher.max_weekly_hours) * 100;
-const isOverloaded = realHours >= teacher.max_weekly_hours * 0.8;
-```
+---
 
 ## Resumo de Arquivos
 
 | Arquivo | Alteracao |
 |---------|-----------|
-| `src/contexts/SchoolMappingContext.tsx` | Recalcular `current_hours` apos fetchData e sincronizar banco |
-| `src/components/mapping/TeacherSummarySheet.tsx` | Usar calculo dinamico em vez de `teacher.current_hours` |
+| `src/pages/Home.tsx` | Adicionar botao "Sobre o Sistema" e dialog |
+| `src/components/AboutSystemDialog.tsx` | Novo componente com conteudo completo do sistema |
+| `src/pages/mapping/MappingTeachers.tsx` | DropdownMenu no botao Adicionar + dialog de importacao em lote |
+| `src/components/mapping/TeacherBulkImportDialog.tsx` | Novo componente para importacao em lote via PDF |
+| `supabase/functions/parse-teachers-pdf/index.ts` | Nova Edge Function para extrair professores de PDF |
+
