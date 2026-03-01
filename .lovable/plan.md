@@ -1,47 +1,46 @@
 
 
-# Plano: Corrigir botao "Adicionar em Lote (PDF)"
+# Plano: Importar Professores com Turmas via PDF
 
 ## Problema
 
-O `Dialog` do formulario individual (linhas 101-131) **envolve** o `DropdownMenu`. Quando o usuario clica em "Adicionar em Lote (PDF)", o clique propaga para o `Dialog` pai, que intercepta o evento e abre o dialog do formulario individual em vez do dialog de importacao em lote. Os dois controles estao aninhados incorretamente.
+A Edge Function `parse-teachers-pdf` extrai apenas nome, email, telefone e carga horaria. Nao extrai as turmas associadas a cada professor. Apos importar, os professores ficam sem nenhuma atribuicao de turma.
 
 ## Solucao
 
-Separar o `Dialog` do formulario individual do `DropdownMenu`, tornando-os componentes irmaos em vez de pai/filho.
+### 1. Edge Function: `supabase/functions/parse-teachers-pdf/index.ts`
 
-### `src/pages/mapping/MappingTeachers.tsx`
+Atualizar o prompt da IA e o schema da tool call para extrair tambem um campo `classes` (array de nomes de turma) para cada professor:
 
-**Antes (estrutura):**
 ```
-<Dialog>          ← envolve tudo
-  <DropdownMenu>  ← trigger e menu dentro do Dialog
-    ...
-  </DropdownMenu>
-  <DialogContent> ← conteudo do form individual
-    ...
-  </DialogContent>
-</Dialog>
+// Novo campo no schema
+classes: { type: 'array', items: { type: 'string' }, description: 'Nomes das turmas (ex: 1A, 2B, 3C)' }
 ```
 
-**Depois (estrutura):**
-```
-<DropdownMenu>    ← independente
-  ...
-</DropdownMenu>
-<Dialog>          ← separado, so o form individual
-  <DialogContent>
-    ...
-  </DialogContent>
-</Dialog>
-```
+O prompt sera atualizado para instruir a IA a identificar as turmas/classes associadas a cada professor no PDF.
 
-Tambem corrigir o erro de build pre-existente em `usePushNotifications.ts` adicionando `// @ts-ignore` antes dos acessos a `pushManager`.
+O retorno incluira `classes: string[]` em cada professor.
+
+### 2. Dialog: `src/components/mapping/TeacherBulkImportDialog.tsx`
+
+- Adicionar campo `classes: string[]` na interface `ExtractedTeacher`
+- Exibir as turmas como Badges na tela de revisao de cada professor
+- No `handleSave`, apos adicionar o professor via `addTeacher`, buscar as turmas correspondentes em `mapping_classes` pelo nome e atribuir o professor a todas as disciplinas sem professor nessas turmas via `assignTeacher`
+
+Fluxo do save:
+1. `addTeacher(...)` retorna o `id` do novo professor
+2. Para cada turma extraida do PDF, buscar `mapping_classes` pelo nome
+3. Para cada classe encontrada, buscar `mapping_class_subjects` sem `teacher_id`
+4. Atribuir o professor a essas disciplinas
+
+### 3. Contexto: `src/contexts/SchoolMappingContext.tsx`
+
+A funcao `addTeacher` ja retorna `{ id: string }`, entao pode ser usada diretamente. Nenhuma alteracao necessaria no contexto.
 
 ## Resumo
 
 | Arquivo | Alteracao |
 |---------|-----------|
-| `src/pages/mapping/MappingTeachers.tsx` | Separar Dialog e DropdownMenu em componentes irmaos |
-| `src/hooks/usePushNotifications.ts` | Adicionar `// @ts-ignore` nos 3 acessos a `pushManager` |
+| `supabase/functions/parse-teachers-pdf/index.ts` | Adicionar extracao de turmas no prompt e schema |
+| `src/components/mapping/TeacherBulkImportDialog.tsx` | Mostrar turmas na revisao + atribuir disciplinas ao salvar |
 
