@@ -98,26 +98,26 @@ const MappingTeachersContent = () => {
             <p className="text-muted-foreground">{teachers.length} professores cadastrados</p>
           </div>
 
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button>
+                <Plus className="h-4 w-4 mr-2" />
+                Adicionar
+                <ChevronDown className="h-4 w-4 ml-1" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => { setEditingTeacher(null); setIsDialogOpen(true); }}>
+                <Plus className="h-4 w-4 mr-2" />
+                Adicionar Professor
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setIsBulkImportOpen(true)}>
+                <Upload className="h-4 w-4 mr-2" />
+                Adicionar em Lote (PDF)
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Adicionar
-                  <ChevronDown className="h-4 w-4 ml-1" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => { setEditingTeacher(null); setIsDialogOpen(true); }}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Adicionar Professor
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setIsBulkImportOpen(true)}>
-                  <Upload className="h-4 w-4 mr-2" />
-                  Adicionar em Lote (PDF)
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
             <DialogContent className="max-w-lg max-h-[90vh] overflow-hidden">
               <DialogHeader>
                 <DialogTitle>

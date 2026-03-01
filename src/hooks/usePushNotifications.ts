@@ -51,6 +51,7 @@ export const usePushNotifications = () => {
 
       try {
         const registration = await navigator.serviceWorker.ready;
+        // @ts-ignore
         const subscription = await registration.pushManager.getSubscription();
         
         if (subscription) {
@@ -98,6 +99,7 @@ export const usePushNotifications = () => {
 
       // Subscribe to push
       const applicationServerKey = urlBase64ToUint8Array(VAPID_PUBLIC_KEY);
+      // @ts-ignore
       const subscription = await registration.pushManager.subscribe({
         userVisibleOnly: true,
         applicationServerKey: applicationServerKey.buffer as ArrayBuffer
@@ -143,6 +145,7 @@ export const usePushNotifications = () => {
 
     try {
       const registration = await navigator.serviceWorker.ready;
+      // @ts-ignore
       const subscription = await registration.pushManager.getSubscription();
 
       if (subscription) {
