@@ -794,7 +794,7 @@ const Classes = () => {
           open={!!attendanceClass}
           onOpenChange={(open) => !open && setAttendanceClass(null)}
           className={attendanceClass || ''}
-          onSuccess={() => fetchStudentCounts()}
+          onSuccess={() => { fetchStudentCounts(); fetchAttendanceStatus(); }}
         />
       </div>
     </DashboardLayout>
