@@ -443,8 +443,9 @@ const Classes = () => {
             {filteredClasses.map((classItem, index) => (
               <Card
                 key={classItem.id}
-                className="card-hover animate-fade-in overflow-hidden"
+                className="card-hover animate-fade-in overflow-hidden cursor-pointer"
                 style={{ animationDelay: `${index * 30}ms` }}
+                onClick={() => setAttendanceClass(classItem.name)}
               >
                 <CardContent className="p-5">
                   <div className="flex items-start justify-between mb-4">
@@ -644,6 +645,13 @@ const Classes = () => {
             </div>
           </DialogContent>
         </Dialog>
+        {/* Attendance Dialog */}
+        <ClassAttendanceDialog
+          open={!!attendanceClass}
+          onOpenChange={(open) => !open && setAttendanceClass(null)}
+          className={attendanceClass || ''}
+          onSuccess={() => fetchStudentCounts()}
+        />
       </div>
     </DashboardLayout>
   );
