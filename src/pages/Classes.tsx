@@ -55,7 +55,7 @@ const Classes = () => {
   const [isProcessingPdf, setIsProcessingPdf] = useState(false);
   const [extractedStudents, setExtractedStudents] = useState<ExtractedStudent[]>([]);
   const [isSavingStudents, setIsSavingStudents] = useState(false);
-
+  const [attendanceClass, setAttendanceClass] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     name: '',
     shift: 'morning',
