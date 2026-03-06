@@ -202,7 +202,9 @@ const Classes = () => {
       name: classItem.name,
       shift: classItem.shift,
       description: classItem.description || '',
+      photo_url: classItem.photo_url || null,
     });
+    setPhotoPreview(null);
     setIsDialogOpen(true);
   };
 
