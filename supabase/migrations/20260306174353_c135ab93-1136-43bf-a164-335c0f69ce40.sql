@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX IF NOT EXISTS attendance_student_date_unique ON public.attendance (student_id, date);
