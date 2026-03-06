@@ -479,6 +479,40 @@ const Classes = () => {
                     placeholder="Ex: Sala 12"
                   />
                 </div>
+                {editingClass && (
+                  <div className="space-y-2">
+                    <Label>Foto da Turma</Label>
+                    <input
+                      type="file"
+                      ref={photoInputRef}
+                      accept="image/*"
+                      onChange={handlePhotoSelect}
+                      className="hidden"
+                    />
+                    <div className="flex items-center gap-3">
+                      {(photoPreview || formData.photo_url) && (
+                        <img
+                          src={photoPreview || ''}
+                          alt="Foto da turma"
+                          className="w-16 h-16 rounded-lg object-cover border"
+                        />
+                      )}
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => photoInputRef.current?.click()}
+                        disabled={uploadingPhoto}
+                      >
+                        {uploadingPhoto ? (
+                          <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Enviando...</>
+                        ) : (
+                          <><ImagePlus className="w-4 h-4 mr-2" />{formData.photo_url ? 'Trocar Foto' : 'Adicionar Foto'}</>
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                )}
                 <Button type="submit" className="w-full">
                   {editingClass ? 'Atualizar Turma' : 'Criar Turma'}
                 </Button>
