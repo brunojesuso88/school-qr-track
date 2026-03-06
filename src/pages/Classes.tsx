@@ -47,6 +47,7 @@ const Classes = () => {
   const canViewGuardianPhone = userRole === 'admin' || userRole === 'direction';
   const [classes, setClasses] = useState<ClassItem[]>([]);
   const [studentCounts, setStudentCounts] = useState<Record<string, number>>({});
+  const [classesWithAttendance, setClassesWithAttendance] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -59,10 +60,17 @@ const Classes = () => {
   const [extractedStudents, setExtractedStudents] = useState<ExtractedStudent[]>([]);
   const [isSavingStudents, setIsSavingStudents] = useState(false);
   const [attendanceClass, setAttendanceClass] = useState<string | null>(null);
+  
+  // Photo upload state
+  const photoInputRef = useRef<HTMLInputElement>(null);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  
   const [formData, setFormData] = useState({
     name: '',
     shift: 'morning',
     description: '',
+    photo_url: '' as string | null,
   });
 
   useEffect(() => {
