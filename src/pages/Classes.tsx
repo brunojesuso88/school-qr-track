@@ -6,15 +6,17 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { toast } from 'sonner';
-import { Plus, Edit2, Trash2, GraduationCap, Search, Users, Upload, FileText, Loader2 } from 'lucide-react';
+import { Plus, Edit2, Trash2, GraduationCap, Search, Users, Upload, FileText, Loader2, CheckCircle2, AlertCircle, ImagePlus } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Checkbox } from '@/components/ui/checkbox';
 import { classSchema } from '@/lib/validations';
 import { useAuth } from '@/contexts/AuthContext';
 import ClassAttendanceDialog from '@/components/ClassAttendanceDialog';
+import { format } from 'date-fns';
 
 const MAX_PDF_SIZE = 10 * 1024 * 1024; // 10MB
 
@@ -24,6 +26,7 @@ interface ClassItem {
   shift: string;
   description: string | null;
   status: string;
+  photo_url: string | null;
   created_at: string;
 }
 
@@ -37,6 +40,26 @@ interface ExtractedStudent {
   selected?: boolean;
 }
 
+const ClassPhoto = ({ photoUrl, className: name }: { photoUrl: string | null; className: string }) => {
+  const [signedUrl, setSignedUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!photoUrl) return;
+    supabase.storage.from('class-photos').createSignedUrl(photoUrl, 3600).then(({ data }) => {
+      if (data?.signedUrl) setSignedUrl(data.signedUrl);
+    });
+  }, [photoUrl]);
+
+  if (signedUrl) {
+    return <img src={signedUrl} alt={name} className="w-12 h-12 rounded-full object-cover border" />;
+  }
+  return (
+    <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
+      <GraduationCap className="w-6 h-6 text-primary" />
+    </div>
+  );
+};
+
 const Classes = () => {
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -44,6 +67,7 @@ const Classes = () => {
   const canViewGuardianPhone = userRole === 'admin' || userRole === 'direction';
   const [classes, setClasses] = useState<ClassItem[]>([]);
   const [studentCounts, setStudentCounts] = useState<Record<string, number>>({});
+  const [classesWithAttendance, setClassesWithAttendance] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -56,15 +80,23 @@ const Classes = () => {
   const [extractedStudents, setExtractedStudents] = useState<ExtractedStudent[]>([]);
   const [isSavingStudents, setIsSavingStudents] = useState(false);
   const [attendanceClass, setAttendanceClass] = useState<string | null>(null);
+  
+  // Photo upload state
+  const photoInputRef = useRef<HTMLInputElement>(null);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  
   const [formData, setFormData] = useState({
     name: '',
     shift: 'morning',
     description: '',
+    photo_url: '' as string | null,
   });
 
   useEffect(() => {
     fetchClasses();
     fetchStudentCounts();
+    fetchAttendanceStatus();
   }, []);
 
   const fetchClasses = async () => {
@@ -103,6 +135,26 @@ const Classes = () => {
     }
   };
 
+  const fetchAttendanceStatus = async () => {
+    const todayStr = format(new Date(), 'yyyy-MM-dd');
+    try {
+      const { data, error } = await supabase
+        .from('attendance')
+        .select('student_id, students!inner(class)')
+        .eq('date', todayStr);
+
+      if (error) throw error;
+
+      const classSet = new Set<string>();
+      data?.forEach((a: any) => {
+        if (a.students?.class) classSet.add(a.students.class);
+      });
+      setClassesWithAttendance(classSet);
+    } catch (error) {
+      console.error('Error fetching attendance status:', error);
+    }
+  };
+
   const handleViewStudents = (className: string) => {
     navigate(`/students?class=${encodeURIComponent(className)}`);
   };
@@ -132,6 +184,7 @@ const Classes = () => {
             name: validationData.name,
             shift: validationData.shift,
             description: validationData.description,
+            photo_url: formData.photo_url,
           })
           .eq('id', editingClass.id);
 
@@ -164,13 +217,21 @@ const Classes = () => {
     }
   };
 
-  const handleEdit = (classItem: ClassItem) => {
+  const handleEdit = async (classItem: ClassItem) => {
     setEditingClass(classItem);
     setFormData({
       name: classItem.name,
       shift: classItem.shift,
       description: classItem.description || '',
+      photo_url: classItem.photo_url || null,
     });
+    // Load existing photo preview
+    if (classItem.photo_url) {
+      const { data } = await supabase.storage.from('class-photos').createSignedUrl(classItem.photo_url, 3600);
+      setPhotoPreview(data?.signedUrl || null);
+    } else {
+      setPhotoPreview(null);
+    }
     setIsDialogOpen(true);
   };
 
@@ -193,7 +254,49 @@ const Classes = () => {
       name: '',
       shift: 'morning',
       description: '',
+      photo_url: null,
     });
+    setPhotoPreview(null);
+  };
+
+  const handlePhotoSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !editingClass) return;
+
+    if (!file.type.startsWith('image/')) {
+      toast.error('Selecione um arquivo de imagem');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Imagem muito grande. Máximo: 5MB');
+      return;
+    }
+
+    setUploadingPhoto(true);
+    try {
+      const ext = file.name.split('.').pop();
+      const fileName = `${editingClass.id}.${ext}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('class-photos')
+        .upload(fileName, file, { upsert: true });
+
+      if (uploadError) throw uploadError;
+
+      const { data: signedData } = await supabase.storage
+        .from('class-photos')
+        .createSignedUrl(fileName, 3600);
+
+      setPhotoPreview(signedData?.signedUrl || null);
+      setFormData(prev => ({ ...prev, photo_url: fileName }));
+      toast.success('Foto carregada');
+    } catch (err: any) {
+      console.error('Error uploading photo:', err);
+      toast.error('Erro ao enviar foto');
+    } finally {
+      setUploadingPhoto(false);
+      if (photoInputRef.current) photoInputRef.current.value = '';
+    }
   };
 
   const getShiftLabel = (shift: string) => {
@@ -402,6 +505,40 @@ const Classes = () => {
                     placeholder="Ex: Sala 12"
                   />
                 </div>
+                {editingClass && (
+                  <div className="space-y-2">
+                    <Label>Foto da Turma</Label>
+                    <input
+                      type="file"
+                      ref={photoInputRef}
+                      accept="image/*"
+                      onChange={handlePhotoSelect}
+                      className="hidden"
+                    />
+                    <div className="flex items-center gap-3">
+                      {(photoPreview || formData.photo_url) && (
+                        <img
+                          src={photoPreview || ''}
+                          alt="Foto da turma"
+                          className="w-16 h-16 rounded-lg object-cover border"
+                        />
+                      )}
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => photoInputRef.current?.click()}
+                        disabled={uploadingPhoto}
+                      >
+                        {uploadingPhoto ? (
+                          <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Enviando...</>
+                        ) : (
+                          <><ImagePlus className="w-4 h-4 mr-2" />{formData.photo_url ? 'Trocar Foto' : 'Adicionar Foto'}</>
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                )}
                 <Button type="submit" className="w-full">
                   {editingClass ? 'Atualizar Turma' : 'Criar Turma'}
                 </Button>
@@ -448,11 +585,9 @@ const Classes = () => {
                 onClick={() => setAttendanceClass(classItem.name)}
               >
                 <CardContent className="p-5">
-                  <div className="flex items-start justify-between mb-4">
+                  <div className="flex items-start justify-between mb-3">
                     <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
-                        <GraduationCap className="w-6 h-6 text-primary" />
-                      </div>
+                      <ClassPhoto photoUrl={classItem.photo_url} className={classItem.name} />
                       <div>
                         <h3 className="font-medium">{classItem.name}</h3>
                         <p className="text-xs text-muted-foreground">{getShiftLabel(classItem.shift)}</p>
@@ -460,8 +595,23 @@ const Classes = () => {
                     </div>
                   </div>
 
+                  {/* Attendance badge */}
+                  <div className="mb-3">
+                    {classesWithAttendance.has(classItem.name) ? (
+                      <Badge className="bg-emerald-600 hover:bg-emerald-700 text-white border-0 text-xs">
+                        <CheckCircle2 className="w-3 h-3 mr-1" />
+                        Frequência OK
+                      </Badge>
+                    ) : (
+                      <Badge variant="destructive" className="text-xs">
+                        <AlertCircle className="w-3 h-3 mr-1" />
+                        Frequência não realizada
+                      </Badge>
+                    )}
+                  </div>
+
                   {classItem.description && (
-                    <p className="text-sm text-muted-foreground mb-4">{classItem.description}</p>
+                    <p className="text-sm text-muted-foreground mb-3">{classItem.description}</p>
                   )}
 
                   <div className="flex gap-2 mb-3" onClick={(e) => e.stopPropagation()}>
@@ -650,7 +800,7 @@ const Classes = () => {
           open={!!attendanceClass}
           onOpenChange={(open) => !open && setAttendanceClass(null)}
           className={attendanceClass || ''}
-          onSuccess={() => fetchStudentCounts()}
+          onSuccess={() => { fetchStudentCounts(); fetchAttendanceStatus(); }}
         />
       </div>
     </DashboardLayout>
