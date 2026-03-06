@@ -227,7 +227,49 @@ const Classes = () => {
       name: '',
       shift: 'morning',
       description: '',
+      photo_url: null,
     });
+    setPhotoPreview(null);
+  };
+
+  const handlePhotoSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !editingClass) return;
+
+    if (!file.type.startsWith('image/')) {
+      toast.error('Selecione um arquivo de imagem');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Imagem muito grande. Máximo: 5MB');
+      return;
+    }
+
+    setUploadingPhoto(true);
+    try {
+      const ext = file.name.split('.').pop();
+      const fileName = `${editingClass.id}.${ext}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('class-photos')
+        .upload(fileName, file, { upsert: true });
+
+      if (uploadError) throw uploadError;
+
+      const { data: signedData } = await supabase.storage
+        .from('class-photos')
+        .createSignedUrl(fileName, 3600);
+
+      setPhotoPreview(signedData?.signedUrl || null);
+      setFormData(prev => ({ ...prev, photo_url: fileName }));
+      toast.success('Foto carregada');
+    } catch (err: any) {
+      console.error('Error uploading photo:', err);
+      toast.error('Erro ao enviar foto');
+    } finally {
+      setUploadingPhoto(false);
+      if (photoInputRef.current) photoInputRef.current.value = '';
+    }
   };
 
   const getShiftLabel = (shift: string) => {
