@@ -91,6 +91,7 @@ export type Database = {
           description: string | null
           id: string
           name: string
+          photo_url: string | null
           shift: string
           status: string | null
           updated_at: string | null
@@ -100,6 +101,7 @@ export type Database = {
           description?: string | null
           id?: string
           name: string
+          photo_url?: string | null
           shift?: string
           status?: string | null
           updated_at?: string | null
@@ -109,6 +111,7 @@ export type Database = {
           description?: string | null
           id?: string
           name?: string
+          photo_url?: string | null
           shift?: string
           status?: string | null
           updated_at?: string | null
