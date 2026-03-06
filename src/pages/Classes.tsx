@@ -115,6 +115,26 @@ const Classes = () => {
     }
   };
 
+  const fetchAttendanceStatus = async () => {
+    const todayStr = format(new Date(), 'yyyy-MM-dd');
+    try {
+      const { data, error } = await supabase
+        .from('attendance')
+        .select('student_id, students!inner(class)')
+        .eq('date', todayStr);
+
+      if (error) throw error;
+
+      const classSet = new Set<string>();
+      data?.forEach((a: any) => {
+        if (a.students?.class) classSet.add(a.students.class);
+      });
+      setClassesWithAttendance(classSet);
+    } catch (error) {
+      console.error('Error fetching attendance status:', error);
+    }
+  };
+
   const handleViewStudents = (className: string) => {
     navigate(`/students?class=${encodeURIComponent(className)}`);
   };
