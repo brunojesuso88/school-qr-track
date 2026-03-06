@@ -26,6 +26,7 @@ interface ClassItem {
   shift: string;
   description: string | null;
   status: string;
+  photo_url: string | null;
   created_at: string;
 }
 
