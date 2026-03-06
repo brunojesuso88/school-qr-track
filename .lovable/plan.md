@@ -1,32 +1,49 @@
 
 
-# Plano: Corrigir importacao em lote - salvar todos de uma vez + associar turmas
+# Plano: Foto da Turma + Indicador de Chamada Diaria
 
-## Problemas identificados
+## 1. Migração: adicionar coluna `photo_url` na tabela `classes`
 
-1. **Salvando um por um**: `handleSave` chama `addTeacher()` em loop. Cada `addTeacher` chama `fetchData()` internamente, causando N refetches para N professores - lento e com flickering.
+```sql
+ALTER TABLE public.classes ADD COLUMN photo_url text;
+```
 
-2. **Turmas nao associadas**: A associacao de turmas depende do `result.id` retornado por `addTeacher`, mas o `fetchData()` dentro de `addTeacher` pode causar race conditions. Alem disso, ao atribuir o professor a TODAS as disciplinas sem professor de uma turma, o comportamento e excessivo - deveria ser mais controlado.
+## 2. Storage: criar bucket `class-photos`
 
-## Solucao
+Bucket publico para fotos de turma (ou privado com signed URLs — seguir padrao do `student-photos` que é privado).
 
-### `src/components/mapping/TeacherBulkImportDialog.tsx`
+## 3. `src/pages/Classes.tsx`
 
-Reescrever `handleSave` para:
+### Foto da turma no formulário de edição
+- Adicionar campo `photo_url` ao `formData`
+- No dialog de criar/editar, adicionar input de upload de foto (visível ao editar)
+- Ao selecionar arquivo, fazer upload para bucket `class-photos`, salvar URL no campo `photo_url`
+- No card, substituir o ícone `GraduationCap` pela foto da turma quando existir
 
-1. **Inserir todos os professores de uma vez** usando `supabase.from('mapping_teachers').insert([...]).select()` - um unico request ao banco retornando todos os IDs
-2. **Associar turmas em batch**: Para cada professor com turmas, buscar `mapping_classes` pelo nome e atualizar `mapping_class_subjects` sem professor
-3. **Chamar `refreshData()` uma unica vez** no final
+### Indicador de chamada diária no card
+- Ao carregar as turmas, buscar da tabela `attendance` os registros do dia atual agrupados por classe dos alunos
+- Cruzar com a lista de turmas: se existe pelo menos 1 registro de attendance hoje para alunos daquela turma → "Frequência OK" (verde), senão → "Frequência não realizada" (vermelho)
+- Exibir badge/indicador no card de cada turma
 
-Nao usar `addTeacher` do contexto. Usar insert direto no Supabase para evitar os N `fetchData()`.
+Logica de busca:
+```typescript
+// Buscar attendance de hoje com a classe do aluno
+const { data } = await supabase
+  .from('attendance')
+  .select('student_id, students!inner(class)')
+  .eq('date', todayStr);
 
-### `src/contexts/SchoolMappingContext.tsx`
+// Construir set de turmas com chamada feita
+const classesWithAttendance = new Set(data?.map(a => a.students.class));
+```
 
-Expor `getNextColor` de forma que o dialog consiga calcular cores para N professores. Ja esta exposto, mas precisamos gerar N cores de uma vez. O dialog calculara as cores localmente usando a mesma logica.
+### Callback no `ClassAttendanceDialog`
+- Ao salvar chamada com sucesso (`onSuccess`), re-buscar o status de attendance para atualizar os badges sem reload completo
 
 ## Resumo
 
-| Arquivo | Alteracao |
+| Arquivo | Alteração |
 |---------|-----------|
-| `src/components/mapping/TeacherBulkImportDialog.tsx` | Insert em batch + associacao de turmas em batch + refreshData uma vez |
+| Migration SQL | Adicionar `photo_url` na tabela `classes` + bucket `class-photos` |
+| `src/pages/Classes.tsx` | Upload de foto no edit, exibir foto no card, badge de frequência diária |
 
