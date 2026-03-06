@@ -6,15 +6,17 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { toast } from 'sonner';
-import { Plus, Edit2, Trash2, GraduationCap, Search, Users, Upload, FileText, Loader2 } from 'lucide-react';
+import { Plus, Edit2, Trash2, GraduationCap, Search, Users, Upload, FileText, Loader2, CheckCircle2, AlertCircle, ImagePlus } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Checkbox } from '@/components/ui/checkbox';
 import { classSchema } from '@/lib/validations';
 import { useAuth } from '@/contexts/AuthContext';
 import ClassAttendanceDialog from '@/components/ClassAttendanceDialog';
+import { format } from 'date-fns';
 
 const MAX_PDF_SIZE = 10 * 1024 * 1024; // 10MB
 
