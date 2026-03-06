@@ -559,11 +559,9 @@ const Classes = () => {
                 onClick={() => setAttendanceClass(classItem.name)}
               >
                 <CardContent className="p-5">
-                  <div className="flex items-start justify-between mb-4">
+                  <div className="flex items-start justify-between mb-3">
                     <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
-                        <GraduationCap className="w-6 h-6 text-primary" />
-                      </div>
+                      <ClassPhoto photoUrl={classItem.photo_url} className={classItem.name} />
                       <div>
                         <h3 className="font-medium">{classItem.name}</h3>
                         <p className="text-xs text-muted-foreground">{getShiftLabel(classItem.shift)}</p>
@@ -571,8 +569,23 @@ const Classes = () => {
                     </div>
                   </div>
 
+                  {/* Attendance badge */}
+                  <div className="mb-3">
+                    {classesWithAttendance.has(classItem.name) ? (
+                      <Badge className="bg-emerald-600 hover:bg-emerald-700 text-white border-0 text-xs">
+                        <CheckCircle2 className="w-3 h-3 mr-1" />
+                        Frequência OK
+                      </Badge>
+                    ) : (
+                      <Badge variant="destructive" className="text-xs">
+                        <AlertCircle className="w-3 h-3 mr-1" />
+                        Frequência não realizada
+                      </Badge>
+                    )}
+                  </div>
+
                   {classItem.description && (
-                    <p className="text-sm text-muted-foreground mb-4">{classItem.description}</p>
+                    <p className="text-sm text-muted-foreground mb-3">{classItem.description}</p>
                   )}
 
                   <div className="flex gap-2 mb-3" onClick={(e) => e.stopPropagation()}>
