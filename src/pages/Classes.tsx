@@ -40,6 +40,26 @@ interface ExtractedStudent {
   selected?: boolean;
 }
 
+const ClassPhoto = ({ photoUrl, className: name }: { photoUrl: string | null; className: string }) => {
+  const [signedUrl, setSignedUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!photoUrl) return;
+    supabase.storage.from('class-photos').createSignedUrl(photoUrl, 3600).then(({ data }) => {
+      if (data?.signedUrl) setSignedUrl(data.signedUrl);
+    });
+  }, [photoUrl]);
+
+  if (signedUrl) {
+    return <img src={signedUrl} alt={name} className="w-12 h-12 rounded-full object-cover border" />;
+  }
+  return (
+    <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
+      <GraduationCap className="w-6 h-6 text-primary" />
+    </div>
+  );
+};
+
 const Classes = () => {
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
