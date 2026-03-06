@@ -464,7 +464,7 @@ const Classes = () => {
                     <p className="text-sm text-muted-foreground mb-4">{classItem.description}</p>
                   )}
 
-                  <div className="flex gap-2 mb-3">
+                  <div className="flex gap-2 mb-3" onClick={(e) => e.stopPropagation()}>
                     <Button
                       variant="secondary"
                       size="sm"
@@ -483,7 +483,7 @@ const Classes = () => {
                     </Button>
                   </div>
 
-                  <div className="flex gap-2">
+                  <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
                     <Button variant="outline" size="sm" className="flex-1" onClick={() => handleEdit(classItem)}>
                       <Edit2 className="w-3 h-3 mr-1" />
                       Editar
