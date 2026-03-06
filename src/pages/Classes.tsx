@@ -217,7 +217,7 @@ const Classes = () => {
     }
   };
 
-  const handleEdit = (classItem: ClassItem) => {
+  const handleEdit = async (classItem: ClassItem) => {
     setEditingClass(classItem);
     setFormData({
       name: classItem.name,
@@ -225,7 +225,13 @@ const Classes = () => {
       description: classItem.description || '',
       photo_url: classItem.photo_url || null,
     });
-    setPhotoPreview(null);
+    // Load existing photo preview
+    if (classItem.photo_url) {
+      const { data } = await supabase.storage.from('class-photos').createSignedUrl(classItem.photo_url, 3600);
+      setPhotoPreview(data?.signedUrl || null);
+    } else {
+      setPhotoPreview(null);
+    }
     setIsDialogOpen(true);
   };
 
