@@ -1,40 +1,32 @@
 
 
-# Plano: Chamada Diaria por Turma
+# Plano: Corrigir importacao em lote - salvar todos de uma vez + associar turmas
 
-## Objetivo
+## Problemas identificados
 
-Ao clicar no card de uma turma, abrir um dialog mostrando todos os alunos da turma com a data do dia, permitindo registrar presenca em lote (presente/ausente por aluno). Por padrao todos marcados como presente. Salvar somente ao clicar no botao "Salvar".
+1. **Salvando um por um**: `handleSave` chama `addTeacher()` em loop. Cada `addTeacher` chama `fetchData()` internamente, causando N refetches para N professores - lento e com flickering.
 
-## Alteracoes
+2. **Turmas nao associadas**: A associacao de turmas depende do `result.id` retornado por `addTeacher`, mas o `fetchData()` dentro de `addTeacher` pode causar race conditions. Alem disso, ao atribuir o professor a TODAS as disciplinas sem professor de uma turma, o comportamento e excessivo - deveria ser mais controlado.
 
-### 1. Novo componente: `src/components/ClassAttendanceDialog.tsx`
+## Solucao
 
-Dialog que recebe o nome da turma e exibe:
-- Header com nome da turma e data atual (formato brasileiro)
-- Lista de todos os alunos ativos da turma
-- Para cada aluno: nome + dois botoes (Presente verde / Ausente vermelho)
-- Por padrao, todos marcados como "present"
-- Botao "Salvar" no final que faz upsert em batch na tabela `attendance`
+### `src/components/mapping/TeacherBulkImportDialog.tsx`
 
-Logica do save:
-- Para cada aluno, verificar se ja existe registro no dia (`attendance` com `student_id` + `date`)
-- Se existe, atualizar o status
-- Se nao existe, inserir novo registro
-- Tudo em uma unica operacao batch
-- Chamar `onSuccess` callback apos salvar
+Reescrever `handleSave` para:
 
-### 2. `src/pages/Classes.tsx`
+1. **Inserir todos os professores de uma vez** usando `supabase.from('mapping_teachers').insert([...]).select()` - um unico request ao banco retornando todos os IDs
+2. **Associar turmas em batch**: Para cada professor com turmas, buscar `mapping_classes` pelo nome e atualizar `mapping_class_subjects` sem professor
+3. **Chamar `refreshData()` uma unica vez** no final
 
-- Adicionar estado para controlar o dialog de chamada (`attendanceClass` / `isAttendanceOpen`)
-- Tornar o card da turma clicavel (onClick no Card) para abrir o dialog de chamada
-- Importar e renderizar o novo `ClassAttendanceDialog`
+Nao usar `addTeacher` do contexto. Usar insert direto no Supabase para evitar os N `fetchData()`.
 
-## Fluxo do usuario
+### `src/contexts/SchoolMappingContext.tsx`
 
-1. Clica no card da turma
-2. Dialog abre com todos os alunos, data do dia, todos marcados como "Presente" (verde)
-3. Clica em "Ausente" (vermelho) nos alunos faltantes
-4. Clica em "Salvar" - sistema grava tudo de uma vez
-5. Toast de sucesso e dialog fecha
+Expor `getNextColor` de forma que o dialog consiga calcular cores para N professores. Ja esta exposto, mas precisamos gerar N cores de uma vez. O dialog calculara as cores localmente usando a mesma logica.
+
+## Resumo
+
+| Arquivo | Alteracao |
+|---------|-----------|
+| `src/components/mapping/TeacherBulkImportDialog.tsx` | Insert em batch + associacao de turmas em batch + refreshData uma vez |
 

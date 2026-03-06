@@ -14,6 +14,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { classSchema } from '@/lib/validations';
 import { useAuth } from '@/contexts/AuthContext';
+import ClassAttendanceDialog from '@/components/ClassAttendanceDialog';
 
 const MAX_PDF_SIZE = 10 * 1024 * 1024; // 10MB
 
@@ -54,7 +55,7 @@ const Classes = () => {
   const [isProcessingPdf, setIsProcessingPdf] = useState(false);
   const [extractedStudents, setExtractedStudents] = useState<ExtractedStudent[]>([]);
   const [isSavingStudents, setIsSavingStudents] = useState(false);
-
+  const [attendanceClass, setAttendanceClass] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     name: '',
     shift: 'morning',
@@ -442,8 +443,9 @@ const Classes = () => {
             {filteredClasses.map((classItem, index) => (
               <Card
                 key={classItem.id}
-                className="card-hover animate-fade-in overflow-hidden"
+                className="card-hover animate-fade-in overflow-hidden cursor-pointer"
                 style={{ animationDelay: `${index * 30}ms` }}
+                onClick={() => setAttendanceClass(classItem.name)}
               >
                 <CardContent className="p-5">
                   <div className="flex items-start justify-between mb-4">
@@ -462,7 +464,7 @@ const Classes = () => {
                     <p className="text-sm text-muted-foreground mb-4">{classItem.description}</p>
                   )}
 
-                  <div className="flex gap-2 mb-3">
+                  <div className="flex gap-2 mb-3" onClick={(e) => e.stopPropagation()}>
                     <Button
                       variant="secondary"
                       size="sm"
@@ -481,7 +483,7 @@ const Classes = () => {
                     </Button>
                   </div>
 
-                  <div className="flex gap-2">
+                  <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
                     <Button variant="outline" size="sm" className="flex-1" onClick={() => handleEdit(classItem)}>
                       <Edit2 className="w-3 h-3 mr-1" />
                       Editar
@@ -643,6 +645,13 @@ const Classes = () => {
             </div>
           </DialogContent>
         </Dialog>
+        {/* Attendance Dialog */}
+        <ClassAttendanceDialog
+          open={!!attendanceClass}
+          onOpenChange={(open) => !open && setAttendanceClass(null)}
+          className={attendanceClass || ''}
+          onSuccess={() => fetchStudentCounts()}
+        />
       </div>
     </DashboardLayout>
   );
