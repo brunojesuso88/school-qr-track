@@ -76,6 +76,7 @@ const Classes = () => {
   useEffect(() => {
     fetchClasses();
     fetchStudentCounts();
+    fetchAttendanceStatus();
   }, []);
 
   const fetchClasses = async () => {
