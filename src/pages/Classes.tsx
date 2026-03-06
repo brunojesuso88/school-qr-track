@@ -14,6 +14,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { classSchema } from '@/lib/validations';
 import { useAuth } from '@/contexts/AuthContext';
+import ClassAttendanceDialog from '@/components/ClassAttendanceDialog';
 
 const MAX_PDF_SIZE = 10 * 1024 * 1024; // 10MB
 
