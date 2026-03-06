@@ -164,6 +164,7 @@ const Classes = () => {
             name: validationData.name,
             shift: validationData.shift,
             description: validationData.description,
+            photo_url: formData.photo_url,
           })
           .eq('id', editingClass.id);
 
