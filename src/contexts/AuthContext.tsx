@@ -59,9 +59,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         fetchUserRole(session.user.id).then(role => {
           setUserRole(role);
           setLoading(false);
+          setInitialLoadDone(true);
         });
       } else {
         setLoading(false);
+        setInitialLoadDone(true);
       }
     });
 
