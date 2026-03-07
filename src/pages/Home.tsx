@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { QrCode, LayoutDashboard, Map, Settings, RefreshCw, Sun, Moon, Monitor, User, Lock, LogOut, Trash2, Clock, Download, Info } from "lucide-react";
+import { Navigate } from "react-router-dom";
+import { LayoutDashboard, Map, Settings, RefreshCw, Sun, Moon, Monitor, User, Lock, LogOut, Trash2, Clock, Download, Info } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
@@ -33,16 +34,12 @@ const Home = () => {
 
   const canAccessSchoolMapping = userRole === 'admin' || userRole === 'direction';
 
+  // Professores são redirecionados direto para o dashboard
+  if (userRole === 'teacher') {
+    return <Navigate to="/dashboard" replace />;
+  }
+
   const menuOptions = [
-    {
-      title: "QR Codes",
-      description: "Escanear presença dos alunos",
-      icon: QrCode,
-      path: "/scan",
-      gradient: "from-success/20 to-success/5",
-      iconColor: "text-success",
-      borderColor: "border-success/30",
-    },
     {
       title: "Sistema de Gestão de Alunos",
       description: "Painel de controle completo",
@@ -171,9 +168,9 @@ const Home = () => {
           <Button
             variant="outline"
             size="lg"
-            className="absolute top-4 right-4 rounded-full h-14 w-14 shadow-md hover:shadow-lg border-2"
+            className="absolute top-4 right-4 rounded-full h-20 w-20 shadow-md hover:shadow-lg border-2"
           >
-            <Settings className="h-7 w-7" />
+            <Settings className="h-10 w-10" />
           </Button>
         </SheetTrigger>
         <SheetContent>
