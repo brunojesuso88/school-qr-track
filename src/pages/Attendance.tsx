@@ -62,7 +62,7 @@ const Attendance = () => {
   const [selectedShift, setSelectedShift] = useState('all');
   const [selectedStudent, setSelectedStudent] = useState('all');
   const [selectedStatus, setSelectedStatus] = useState(urlStatus || 'all');
-  const [trendPeriod, setTrendPeriod] = useState<TrendPeriod>('6months');
+  const [trendPeriod, setTrendPeriod] = useState<TrendPeriod>('week');
   const [attendanceData, setAttendanceData] = useState<AttendanceRecord[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
   const [allStudents, setAllStudents] = useState<Student[]>([]);

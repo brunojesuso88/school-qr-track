@@ -18,7 +18,7 @@ const SplashScreen = () => {
 
   useEffect(() => {
     if (!showSplash && !loading) {
-      if (userRole === 'teacher') {
+      if (userRole === 'teacher' || userRole === null) {
         navigate("/dashboard");
       } else {
         navigate("/home");
