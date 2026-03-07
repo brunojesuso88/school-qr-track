@@ -27,6 +27,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const [userRole, setUserRole] = useState<AppRole | null>(null);
+  const [initialLoadDone, setInitialLoadDone] = useState(false);
 
   const fetchUserRole = async (userId: string) => {
     try {
@@ -58,9 +59,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         fetchUserRole(session.user.id).then(role => {
           setUserRole(role);
           setLoading(false);
+          setInitialLoadDone(true);
         });
       } else {
         setLoading(false);
+        setInitialLoadDone(true);
       }
     });
 
@@ -71,8 +74,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setUser(session?.user ?? null);
         
         if (session?.user) {
-          // Keep loading true until role is fetched
-          setLoading(true);
+          if (initialLoadDone) setLoading(true);
           // Use setTimeout to avoid deadlock
           setTimeout(() => {
             fetchUserRole(session.user.id).then(role => {
