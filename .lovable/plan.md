@@ -1,32 +1,57 @@
 
 
-# Plano: Corrigir importacao em lote - salvar todos de uma vez + associar turmas
+# Plano: Filtro de Ocorrencias, Remover Notificacoes, Zoom Foto Turma
 
-## Problemas identificados
+## 1. Filtro "Alunos com ocorrencia" na aba Alunos
 
-1. **Salvando um por um**: `handleSave` chama `addTeacher()` em loop. Cada `addTeacher` chama `fetchData()` internamente, causando N refetches para N professores - lento e com flickering.
+**Arquivo**: `src/pages/Students.tsx`
 
-2. **Turmas nao associadas**: A associacao de turmas depende do `result.id` retornado por `addTeacher`, mas o `fetchData()` dentro de `addTeacher` pode causar race conditions. Alem disso, ao atribuir o professor a TODAS as disciplinas sem professor de uma turma, o comportamento e excessivo - deveria ser mais controlado.
+- Adicionar estado `filterOccurrences` (boolean, default false)
+- Ao montar o componente, buscar todos os `student_id`s distintos da tabela `occurrences` e armazenar em um `Set<string>`
+- Adicionar um checkbox/toggle no bloco de filtros: "Alunos com ocorrencia"
+- Quando ativado, filtrar `filteredStudents` para mostrar apenas alunos cujo `id` esta no set de ocorrencias
+- Ordenar esses alunos pela data da ocorrencia mais recente (buscar tambem a data mais recente por aluno para usar como criterio de ordenacao)
 
-## Solucao
+Logica:
+```typescript
+// Buscar ocorrencias agrupadas
+const { data } = await supabase
+  .from('occurrences')
+  .select('student_id, date')
+  .order('date', { ascending: false });
 
-### `src/components/mapping/TeacherBulkImportDialog.tsx`
+// Map: student_id -> most recent date
+const occurrenceMap = new Map<string, string>();
+data?.forEach(o => {
+  if (!occurrenceMap.has(o.student_id)) occurrenceMap.set(o.student_id, o.date);
+});
+```
 
-Reescrever `handleSave` para:
+No filtro, quando `filterOccurrences` ativo, filtrar e ordenar por data mais recente.
 
-1. **Inserir todos os professores de uma vez** usando `supabase.from('mapping_teachers').insert([...]).select()` - um unico request ao banco retornando todos os IDs
-2. **Associar turmas em batch**: Para cada professor com turmas, buscar `mapping_classes` pelo nome e atualizar `mapping_class_subjects` sem professor
-3. **Chamar `refreshData()` uma unica vez** no final
+## 2. Remover "Notificacoes" do sidebar
 
-Nao usar `addTeacher` do contexto. Usar insert direto no Supabase para evitar os N `fetchData()`.
+**Arquivo**: `src/components/DashboardLayout.tsx`
 
-### `src/contexts/SchoolMappingContext.tsx`
+- Remover o item `{ name: 'Notificacoes', href: '/notifications', icon: Bell, roles: [...] }` do array `allNavigation` (linha 34)
 
-Expor `getNextColor` de forma que o dialog consiga calcular cores para N professores. Ja esta exposto, mas precisamos gerar N cores de uma vez. O dialog calculara as cores localmente usando a mesma logica.
+## 3. Turmas: Zoom na foto + botao de frequencia no card
+
+**Arquivo**: `src/pages/Classes.tsx`
+
+- **Remover** o `onClick={() => setAttendanceClass(classItem.name)}` do Card (linha 585)
+- **Adicionar** ao clicar no card: abrir um dialog/modal com a foto da turma em tamanho grande (zoom), similar ao zoom de foto de aluno. Se nao houver foto, nao abrir nada.
+- **Adicionar** um novo botao "Frequencia Diaria" na area de botoes do card:
+  - Se `classesWithAttendance.has(classItem.name)` → botao verde com texto "Frequencia Diaria"
+  - Senao → botao vermelho com texto "Frequencia Diaria"
+  - Ao clicar, abrir o `ClassAttendanceDialog` (setar `attendanceClass`)
+- Adicionar estado `zoomPhotoClass` para controlar o modal de zoom da foto da turma
 
 ## Resumo
 
 | Arquivo | Alteracao |
 |---------|-----------|
-| `src/components/mapping/TeacherBulkImportDialog.tsx` | Insert em batch + associacao de turmas em batch + refreshData uma vez |
+| `src/pages/Students.tsx` | Adicionar filtro "Alunos com ocorrencia" com ordenacao por data |
+| `src/components/DashboardLayout.tsx` | Remover item "Notificacoes" do sidebar |
+| `src/pages/Classes.tsx` | Card clica para zoom foto; botao colorido de frequencia diaria |
 
