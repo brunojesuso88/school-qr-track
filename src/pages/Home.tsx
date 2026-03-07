@@ -8,12 +8,12 @@ import { useAuth } from "@/contexts/AuthContext";
 
 const Home = () => {
   const navigate = useNavigate();
-  const { userRole } = useAuth();
+  const { userRole, loading } = useAuth();
 
   const canAccessSchoolMapping = userRole === 'admin' || userRole === 'direction';
 
   // Professores e novos usuários (sem role) são redirecionados direto para o dashboard
-  if (userRole === 'teacher' || userRole === null) {
+  if (!loading && (userRole === 'teacher' || userRole === null)) {
     return <Navigate to="/dashboard" replace />;
   }
 
