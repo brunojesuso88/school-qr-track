@@ -74,8 +74,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setUser(session?.user ?? null);
         
         if (session?.user) {
-          // Keep loading true until role is fetched
-          setLoading(true);
+          if (initialLoadDone) setLoading(true);
           // Use setTimeout to avoid deadlock
           setTimeout(() => {
             fetchUserRole(session.user.id).then(role => {
