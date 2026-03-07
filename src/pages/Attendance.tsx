@@ -600,6 +600,9 @@ const Attendance = () => {
           <ManualAttendanceModal onSuccess={() => { fetchData(); fetchTrendData(); }} />
         </div>
 
+        {/* Attendance Calendar - moved to top */}
+        <AttendanceCalendar />
+
         {/* Active Filters Banner */}
         {isFilteredByUrl && (
           <Card className="border-primary/50 bg-primary/5">
@@ -1074,8 +1077,7 @@ const Attendance = () => {
           </CardContent>
         </Card>
 
-        {/* Attendance Calendar */}
-        <AttendanceCalendar />
+        {/* Calendar was moved to top */}
       </div>
     </DashboardLayout>
   );
