@@ -13,6 +13,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Calendar } from '@/components/ui/calendar';
 import { toast } from 'sonner';
 import { Plus, Search, QrCode, Edit2, Trash2, Download, User, CalendarIcon, FileText, Upload, Camera } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
 import { QRCodeSVG } from 'qrcode.react';
 import { format, parse } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -86,8 +87,8 @@ const Students = () => {
   const [isOccurrenceDialogOpen, setIsOccurrenceDialogOpen] = useState(false);
   const [zoomPhotoStudent, setZoomPhotoStudent] = useState<Student | null>(null);
   const [reportStudent, setReportStudent] = useState<Student | null>(null);
-
-
+  const [filterOccurrences, setFilterOccurrences] = useState(false);
+  const [occurrenceMap, setOccurrenceMap] = useState<Map<string, string>>(new Map());
 
   const [formData, setFormData] = useState({
     full_name: '',
@@ -117,7 +118,25 @@ const Students = () => {
     fetchStudents();
     fetchClasses();
     fetchCurrentUserName();
+    fetchOccurrenceMap();
   }, []);
+
+  const fetchOccurrenceMap = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('occurrences')
+        .select('student_id, date')
+        .order('date', { ascending: false });
+      if (error) throw error;
+      const map = new Map<string, string>();
+      data?.forEach(o => {
+        if (!map.has(o.student_id)) map.set(o.student_id, o.date);
+      });
+      setOccurrenceMap(map);
+    } catch (error) {
+      console.error('Error fetching occurrences map:', error);
+    }
+  };
 
   const fetchCurrentUserName = async () => {
     try {
@@ -509,7 +528,13 @@ const Students = () => {
       student.student_id.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesClass = filterClass === 'all' || student.class === filterClass;
     const matchesShift = filterShift === 'all' || student.shift === filterShift;
-    return matchesSearch && matchesClass && matchesShift;
+    const matchesOccurrence = !filterOccurrences || occurrenceMap.has(student.id);
+    return matchesSearch && matchesClass && matchesShift && matchesOccurrence;
+  }).sort((a, b) => {
+    if (!filterOccurrences) return 0;
+    const dateA = occurrenceMap.get(a.id) || '';
+    const dateB = occurrenceMap.get(b.id) || '';
+    return dateB.localeCompare(dateA);
   });
 
   const uniqueClasses = [...new Set(students.map((s) => s.class))];
@@ -777,6 +802,16 @@ const Students = () => {
                   <SelectItem value="evening">Noite</SelectItem>
                 </SelectContent>
               </Select>
+              <div className="flex items-center gap-2 mt-3 sm:mt-0">
+                <Checkbox
+                  id="filterOccurrences"
+                  checked={filterOccurrences}
+                  onCheckedChange={(checked) => setFilterOccurrences(!!checked)}
+                />
+                <Label htmlFor="filterOccurrences" className="text-sm cursor-pointer whitespace-nowrap">
+                  Alunos com ocorrência
+                </Label>
+              </div>
             </div>
           </CardContent>
         </Card>

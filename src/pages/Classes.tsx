@@ -10,10 +10,11 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { toast } from 'sonner';
-import { Plus, Edit2, Trash2, GraduationCap, Search, Users, Upload, FileText, Loader2, CheckCircle2, AlertCircle, ImagePlus } from 'lucide-react';
+import { Plus, Edit2, Trash2, GraduationCap, Search, Users, Upload, FileText, Loader2, CheckCircle2, AlertCircle, ImagePlus, CalendarIcon } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Checkbox } from '@/components/ui/checkbox';
 import { classSchema } from '@/lib/validations';
+import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import ClassAttendanceDialog from '@/components/ClassAttendanceDialog';
 import { format } from 'date-fns';
@@ -80,6 +81,8 @@ const Classes = () => {
   const [extractedStudents, setExtractedStudents] = useState<ExtractedStudent[]>([]);
   const [isSavingStudents, setIsSavingStudents] = useState(false);
   const [attendanceClass, setAttendanceClass] = useState<string | null>(null);
+  const [zoomPhotoClass, setZoomPhotoClass] = useState<ClassItem | null>(null);
+  const [zoomSignedUrl, setZoomSignedUrl] = useState<string | null>(null);
   
   // Photo upload state
   const photoInputRef = useRef<HTMLInputElement>(null);
@@ -582,7 +585,13 @@ const Classes = () => {
                 key={classItem.id}
                 className="card-hover animate-fade-in overflow-hidden cursor-pointer"
                 style={{ animationDelay: `${index * 30}ms` }}
-                onClick={() => setAttendanceClass(classItem.name)}
+                onClick={async () => {
+                  if (classItem.photo_url) {
+                    const { data } = await supabase.storage.from('class-photos').createSignedUrl(classItem.photo_url, 3600);
+                    setZoomSignedUrl(data?.signedUrl || null);
+                    setZoomPhotoClass(classItem);
+                  }
+                }}
               >
                 <CardContent className="p-5">
                   <div className="flex items-start justify-between mb-3">
@@ -613,6 +622,22 @@ const Classes = () => {
                   {classItem.description && (
                     <p className="text-sm text-muted-foreground mb-3">{classItem.description}</p>
                   )}
+
+                  <div className="flex gap-2 mb-3" onClick={(e) => e.stopPropagation()}>
+                    <Button
+                      size="sm"
+                      className={cn(
+                        "flex-1",
+                        classesWithAttendance.has(classItem.name)
+                          ? "bg-emerald-600 hover:bg-emerald-700 text-white"
+                          : "bg-destructive hover:bg-destructive/90 text-destructive-foreground"
+                      )}
+                      onClick={() => setAttendanceClass(classItem.name)}
+                    >
+                      <CalendarIcon className="w-3 h-3 mr-2" />
+                      Frequência Diária
+                    </Button>
+                  </div>
 
                   <div className="flex gap-2 mb-3" onClick={(e) => e.stopPropagation()}>
                     <Button
@@ -795,6 +820,25 @@ const Classes = () => {
             </div>
           </DialogContent>
         </Dialog>
+        {/* Zoom Photo Dialog */}
+        <Dialog open={!!zoomPhotoClass} onOpenChange={(open) => { if (!open) { setZoomPhotoClass(null); setZoomSignedUrl(null); } }}>
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle>{zoomPhotoClass?.name}</DialogTitle>
+              <DialogDescription>{zoomPhotoClass && getShiftLabel(zoomPhotoClass.shift)}</DialogDescription>
+            </DialogHeader>
+            <div className="flex justify-center p-4">
+              {zoomSignedUrl ? (
+                <img src={zoomSignedUrl} alt={zoomPhotoClass?.name} className="max-w-full max-h-[60vh] rounded-lg object-contain" />
+              ) : (
+                <div className="w-48 h-48 bg-muted rounded-lg flex items-center justify-center">
+                  <GraduationCap className="w-16 h-16 text-muted-foreground" />
+                </div>
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
+
         {/* Attendance Dialog */}
         <ClassAttendanceDialog
           open={!!attendanceClass}

@@ -31,7 +31,7 @@ const allNavigation = [
   { name: 'Turmas', href: '/classes', icon: BookOpen, roles: ['admin', 'direction', 'teacher'] },
   { name: 'Frequência', href: '/attendance', icon: Calendar, roles: ['admin', 'direction', 'teacher'] },
   { name: 'Declarações', href: '/declarations', icon: FileText, roles: ['admin', 'direction'] },
-  { name: 'Notificações', href: '/notifications', icon: Bell, roles: ['admin', 'direction', 'teacher'] },
+  
   { name: 'Configurações', href: '/settings', icon: Settings, roles: ['admin', 'direction'] },
 ];
 
