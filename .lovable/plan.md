@@ -1,32 +1,74 @@
 
 
-# Plano: Corrigir importacao em lote - salvar todos de uma vez + associar turmas
+# Auditoria: Pagina Nao Carrega ao Acessar
 
-## Problemas identificados
+## Causa Raiz Identificada
 
-1. **Salvando um por um**: `handleSave` chama `addTeacher()` em loop. Cada `addTeacher` chama `fetchData()` internamente, causando N refetches para N professores - lento e com flickering.
+O problema esta no **SplashScreen.tsx** (rota `/`). Quando o usuario acessa a pagina, o fluxo e:
 
-2. **Turmas nao associadas**: A associacao de turmas depende do `result.id` retornado por `addTeacher`, mas o `fetchData()` dentro de `addTeacher` pode causar race conditions. Alem disso, ao atribuir o professor a TODAS as disciplinas sem professor de uma turma, o comportamento e excessivo - deveria ser mais controlado.
+1. SplashScreen espera 2 segundos (splash animation)
+2. Apos 2s, verifica `loading` e `userRole`
+3. **BUG**: Se `userRole === null`, navega para `/dashboard` — independente de o usuario estar logado ou nao
+
+Isso causa dois problemas:
+
+**Problema 1 — Cadeia de redirecionamentos desnecessaria:**
+```text
+/ (SplashScreen) → /dashboard (AdminRoute) → /auth
+```
+Em vez de ir direto para `/auth`, o usuario passa por 2 redirecionamentos, causando atraso e possivel tela branca.
+
+**Problema 2 — Race condition com token invalido:**
+Os logs de autenticacao mostram `"Refresh Token Not Found"` (token expirado). Quando o Supabase tenta renovar o token e falha, `getSession()` e `onAuthStateChange` podem competir: um seta `loading=false`, o outro seta `loading=true` novamente. Se `loading` ficar `true` indefinidamente, o SplashScreen fica preso na animacao para sempre.
+
+**Problema 3 — Home.tsx tambem redireciona userRole null:**
+Linha 16 de Home.tsx: `if (userRole === null) return <Navigate to="/dashboard" replace />`. Mesmo que o usuario logado chegue a Home sem role carregada, e redirecionado, criando outro bounce.
 
 ## Solucao
 
-### `src/components/mapping/TeacherBulkImportDialog.tsx`
+### 1. SplashScreen.tsx — Verificar `user` antes de redirecionar
 
-Reescrever `handleSave` para:
+```typescript
+useEffect(() => {
+  if (!showSplash && !loading) {
+    if (!user) {
+      navigate("/auth");  // Sem usuario → login direto
+      return;
+    }
+    // Usuario logado → rota baseada na role
+    if (userRole === 'admin' || userRole === 'direction') {
+      navigate("/home");
+    } else {
+      navigate("/dashboard");
+    }
+  }
+}, [showSplash, loading, user, userRole, navigate]);
+```
 
-1. **Inserir todos os professores de uma vez** usando `supabase.from('mapping_teachers').insert([...]).select()` - um unico request ao banco retornando todos os IDs
-2. **Associar turmas em batch**: Para cada professor com turmas, buscar `mapping_classes` pelo nome e atualizar `mapping_class_subjects` sem professor
-3. **Chamar `refreshData()` uma unica vez** no final
+### 2. AuthContext.tsx — Proteger contra race condition
 
-Nao usar `addTeacher` do contexto. Usar insert direto no Supabase para evitar os N `fetchData()`.
+Adicionar flag `initialLoadDone` para garantir que `onAuthStateChange` nao resete `loading=true` durante o carregamento inicial, evitando loop infinito:
 
-### `src/contexts/SchoolMappingContext.tsx`
+```typescript
+const [initialLoadDone, setInitialLoadDone] = useState(false);
 
-Expor `getNextColor` de forma que o dialog consiga calcular cores para N professores. Ja esta exposto, mas precisamos gerar N cores de uma vez. O dialog calculara as cores localmente usando a mesma logica.
+// No getSession callback:
+setInitialLoadDone(true);
 
-## Resumo
+// No onAuthStateChange:
+if (session?.user) {
+  if (initialLoadDone) setLoading(true); // So reseta se ja carregou uma vez
+  // ...
+}
+```
+
+### 3. Home.tsx — Nao redirecionar quando role ainda nao carregou
+
+Verificar `loading` antes de fazer redirect por `userRole === null`, para nao redirecionar prematuramente enquanto a role esta sendo buscada.
 
 | Arquivo | Alteracao |
 |---------|-----------|
-| `src/components/mapping/TeacherBulkImportDialog.tsx` | Insert em batch + associacao de turmas em batch + refreshData uma vez |
+| `src/pages/SplashScreen.tsx` | Verificar `user` antes de redirecionar; sem usuario → /auth |
+| `src/contexts/AuthContext.tsx` | Flag para evitar race condition no loading |
+| `src/pages/Home.tsx` | Nao redirecionar userRole null prematuramente |
 
