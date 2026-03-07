@@ -118,7 +118,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Permissões granulares baseadas na role
   // isDashboardUser: usuários com acesso ao dashboard completo (admin, direção, professor)
-  const isDashboardUser = userRole === 'admin' || userRole === 'direction' || userRole === 'teacher';
+  const isDashboardUser = userRole === 'admin' || userRole === 'direction' || userRole === 'teacher' || userRole === null;
   
   // isAdmin: mantido para compatibilidade - acesso ao sistema web
   const isAdmin = userRole === 'admin' || userRole === 'direction' || userRole === 'teacher' || userRole === 'staff';

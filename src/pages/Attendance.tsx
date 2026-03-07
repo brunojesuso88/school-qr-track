@@ -62,7 +62,7 @@ const Attendance = () => {
   const [selectedShift, setSelectedShift] = useState('all');
   const [selectedStudent, setSelectedStudent] = useState('all');
   const [selectedStatus, setSelectedStatus] = useState(urlStatus || 'all');
-  const [trendPeriod, setTrendPeriod] = useState<TrendPeriod>('6months');
+  const [trendPeriod, setTrendPeriod] = useState<TrendPeriod>('week');
   const [attendanceData, setAttendanceData] = useState<AttendanceRecord[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
   const [allStudents, setAllStudents] = useState<Student[]>([]);
@@ -600,6 +600,9 @@ const Attendance = () => {
           <ManualAttendanceModal onSuccess={() => { fetchData(); fetchTrendData(); }} />
         </div>
 
+        {/* Attendance Calendar - moved to top */}
+        <AttendanceCalendar />
+
         {/* Active Filters Banner */}
         {isFilteredByUrl && (
           <Card className="border-primary/50 bg-primary/5">
@@ -1074,8 +1077,7 @@ const Attendance = () => {
           </CardContent>
         </Card>
 
-        {/* Attendance Calendar */}
-        <AttendanceCalendar />
+        {/* Calendar was moved to top */}
       </div>
     </DashboardLayout>
   );

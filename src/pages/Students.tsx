@@ -86,34 +86,8 @@ const Students = () => {
   const [isOccurrenceDialogOpen, setIsOccurrenceDialogOpen] = useState(false);
   const [zoomPhotoStudent, setZoomPhotoStudent] = useState<Student | null>(null);
   const [reportStudent, setReportStudent] = useState<Student | null>(null);
-  const [birthDay, setBirthDay] = useState('');
-  const [birthMonth, setBirthMonth] = useState('');
-  const [birthYear, setBirthYear] = useState('');
 
-  const currentYear = new Date().getFullYear();
-  const years = Array.from({ length: 30 }, (_, i) => currentYear - 3 - i);
-  const months = [
-    { value: '01', label: 'Janeiro' },
-    { value: '02', label: 'Fevereiro' },
-    { value: '03', label: 'Março' },
-    { value: '04', label: 'Abril' },
-    { value: '05', label: 'Maio' },
-    { value: '06', label: 'Junho' },
-    { value: '07', label: 'Julho' },
-    { value: '08', label: 'Agosto' },
-    { value: '09', label: 'Setembro' },
-    { value: '10', label: 'Outubro' },
-    { value: '11', label: 'Novembro' },
-    { value: '12', label: 'Dezembro' },
-  ];
-  const days = Array.from({ length: 31 }, (_, i) => String(i + 1).padStart(2, '0'));
 
-  const getBirthDate = (): Date | undefined => {
-    if (birthDay && birthMonth && birthYear) {
-      return new Date(parseInt(birthYear), parseInt(birthMonth) - 1, parseInt(birthDay));
-    }
-    return undefined;
-  };
 
   const [formData, setFormData] = useState({
     full_name: '',
@@ -209,17 +183,11 @@ const Students = () => {
     }
   };
 
-  const generateStudentId = (fullName: string, birthDate: Date | undefined): string => {
-    if (!fullName || !birthDate) return '';
-    
-    const nameParts = fullName.trim().split(' ');
-    const initials = nameParts
-      .filter(part => part.length > 0)
-      .map(part => part[0].toUpperCase())
-      .join('');
-    
-    const dateStr = format(birthDate, 'ddMMyyyy');
-    return `${initials}${dateStr}`;
+  const generateStudentId = (fullName: string, className: string, shift: string): string => {
+    if (!fullName || !className) return '';
+    const initials = fullName.trim().split(' ').filter(p => p.length > 0).map(p => p[0].toUpperCase()).join('');
+    const shiftCode = shift === 'morning' ? 'M' : shift === 'afternoon' ? 'T' : 'N';
+    return `${initials}-${className}-${shiftCode}`;
   };
 
   const generateQRCode = () => {
@@ -267,12 +235,6 @@ const Students = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    const birthDate = getBirthDate();
-    if (!birthDate) {
-      toast.error('Data de nascimento é obrigatória');
-      return;
-    }
-
     // Validate form data with Zod
     const validationData = {
       full_name: formData.full_name.trim(),
@@ -292,7 +254,7 @@ const Students = () => {
       return;
     }
 
-    const studentId = generateStudentId(formData.full_name, birthDate);
+    const studentId = generateStudentId(formData.full_name, formData.class, formData.shift);
 
     try {
       setIsUploadingPhoto(true);
@@ -312,7 +274,7 @@ const Students = () => {
           guardian_phone: validationData.guardian_phone,
           status: validationData.status,
           student_id: studentId,
-          birth_date: format(birthDate, 'yyyy-MM-dd'),
+          
           has_medical_report: validationData.has_medical_report,
           medical_report_details: validationData.medical_report_details,
         };
@@ -342,7 +304,7 @@ const Students = () => {
             guardian_phone: validationData.guardian_phone,
             status: validationData.status,
             student_id: studentId,
-            birth_date: format(birthDate, 'yyyy-MM-dd'),
+            
             qr_code: qrCode,
             has_medical_report: validationData.has_medical_report,
             medical_report_details: validationData.medical_report_details,
@@ -468,16 +430,7 @@ const Students = () => {
     });
     setPhotoPreview(student.photo_url);
     setPhotoFile(null);
-    if (student.birth_date) {
-      const parsed = parse(student.birth_date, 'yyyy-MM-dd', new Date());
-      setBirthDay(String(parsed.getDate()).padStart(2, '0'));
-      setBirthMonth(String(parsed.getMonth() + 1).padStart(2, '0'));
-      setBirthYear(String(parsed.getFullYear()));
-    } else {
-      setBirthDay('');
-      setBirthMonth('');
-      setBirthYear('');
-    }
+    
     setIsDialogOpen(true);
   };
 
@@ -511,9 +464,7 @@ const Students = () => {
       has_medical_report: false,
       medical_report_details: '',
     });
-    setBirthDay('');
-    setBirthMonth('');
-    setBirthYear('');
+    
     setPhotoFile(null);
     setPhotoPreview(null);
   };
@@ -567,8 +518,8 @@ const Students = () => {
     return OCCURRENCE_TYPES.find(t => t.value === type)?.label || type;
   };
 
-  // Auto-generate student ID when name or birth date changes
-  const generatedStudentId = generateStudentId(formData.full_name, getBirthDate());
+  // Auto-generate student ID when name, class or shift changes
+  const generatedStudentId = generateStudentId(formData.full_name, formData.class, formData.shift);
 
   return (
     <DashboardLayout>
@@ -681,41 +632,6 @@ const Students = () => {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label>Data de Nascimento</Label>
-                  <div className="grid grid-cols-3 gap-2">
-                    <Select value={birthDay} onValueChange={setBirthDay}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Dia" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {days.map((day) => (
-                          <SelectItem key={day} value={day}>{day}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <Select value={birthMonth} onValueChange={setBirthMonth}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Mês" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {months.map((month) => (
-                          <SelectItem key={month.value} value={month.value}>{month.label}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <Select value={birthYear} onValueChange={setBirthYear}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Ano" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {years.map((year) => (
-                          <SelectItem key={year} value={String(year)}>{year}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-                <div className="space-y-2">
                   <Label htmlFor="student_id">ID do Aluno (gerado automaticamente)</Label>
                   <Input
                     id="student_id"
@@ -724,7 +640,7 @@ const Students = () => {
                     className="bg-muted"
                   />
                   <p className="text-xs text-muted-foreground">
-                    Gerado a partir do nome e data de nascimento
+                    Gerado a partir do nome, turma e turno
                   </p>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
