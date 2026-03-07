@@ -1,46 +1,32 @@
 
 
-# Auditoria: Redirecionamento de Novos Usuarios
+# Plano: Corrigir importacao em lote - salvar todos de uma vez + associar turmas
 
-## Causa Raiz
+## Problemas identificados
 
-O problema esta em **`src/pages/Auth.tsx` linha 49**: apos login ou cadastro, o `useEffect` redireciona **todos** os usuarios para `/home`, independentemente da role:
+1. **Salvando um por um**: `handleSave` chama `addTeacher()` em loop. Cada `addTeacher` chama `fetchData()` internamente, causando N refetches para N professores - lento e com flickering.
 
-```typescript
-useEffect(() => {
-  if (user) {
-    navigate('/home'); // ← SEMPRE vai para /home
-  }
-}, [user, navigate]);
-```
-
-Home.tsx tem a verificacao `if (userRole === null) return <Navigate to="/dashboard" />`, mas ha uma **condicao de corrida**: quando o `user` e setado, o `userRole` ainda pode estar sendo carregado. O usuario ve brevemente a tela Home antes do redirect acontecer, mostrando os cards (possivelmente uma versao em cache com QR Codes).
+2. **Turmas nao associadas**: A associacao de turmas depende do `result.id` retornado por `addTeacher`, mas o `fetchData()` dentro de `addTeacher` pode causar race conditions. Alem disso, ao atribuir o professor a TODAS as disciplinas sem professor de uma turma, o comportamento e excessivo - deveria ser mais controlado.
 
 ## Solucao
 
-**`src/pages/Auth.tsx`**: Alterar o useEffect para considerar `loading` e `userRole` antes de redirecionar:
+### `src/components/mapping/TeacherBulkImportDialog.tsx`
 
-```typescript
-const { signIn, signUp, user, loading, userRole } = useAuth();
+Reescrever `handleSave` para:
 
-useEffect(() => {
-  if (user && !loading) {
-    if (userRole === 'admin' || userRole === 'direction') {
-      navigate('/home');
-    } else {
-      navigate('/dashboard'); // teacher, staff, null (novo usuario)
-    }
-  }
-}, [user, loading, userRole, navigate]);
-```
+1. **Inserir todos os professores de uma vez** usando `supabase.from('mapping_teachers').insert([...]).select()` - um unico request ao banco retornando todos os IDs
+2. **Associar turmas em batch**: Para cada professor com turmas, buscar `mapping_classes` pelo nome e atualizar `mapping_class_subjects` sem professor
+3. **Chamar `refreshData()` uma unica vez** no final
 
-Isso garante que:
-- O redirecionamento so ocorre apos a role ser carregada
-- Novos usuarios (role null) e professores vao direto para `/dashboard`
-- Apenas admin e direcao veem a tela Home
-- Elimina o flash da Home para usuarios nao autorizados
+Nao usar `addTeacher` do contexto. Usar insert direto no Supabase para evitar os N `fetchData()`.
+
+### `src/contexts/SchoolMappingContext.tsx`
+
+Expor `getNextColor` de forma que o dialog consiga calcular cores para N professores. Ja esta exposto, mas precisamos gerar N cores de uma vez. O dialog calculara as cores localmente usando a mesma logica.
+
+## Resumo
 
 | Arquivo | Alteracao |
 |---------|-----------|
-| `src/pages/Auth.tsx` | Redirecionar baseado na role apos loading |
+| `src/components/mapping/TeacherBulkImportDialog.tsx` | Insert em batch + associacao de turmas em batch + refreshData uma vez |
 
