@@ -94,6 +94,10 @@ const ClassAttendanceDialog = ({ open, onOpenChange, className, onSuccess }: Cla
   };
 
   const handleSave = async () => {
+    if ([0, 6].includes(new Date().getDay())) {
+      toast.error('Não é possível registrar frequência nos finais de semana.');
+      return;
+    }
     setSaving(true);
     try {
       const records = students.map(s => ({
