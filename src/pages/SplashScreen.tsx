@@ -5,7 +5,7 @@ import edunexusLogo from "@/assets/edunexus-logo.png";
 
 const SplashScreen = () => {
   const navigate = useNavigate();
-  const { user, loading } = useAuth();
+  const { user, loading, userRole } = useAuth();
   const [showSplash, setShowSplash] = useState(true);
 
   useEffect(() => {
@@ -18,9 +18,13 @@ const SplashScreen = () => {
 
   useEffect(() => {
     if (!showSplash && !loading) {
-      navigate("/home");
+      if (userRole === 'teacher') {
+        navigate("/dashboard");
+      } else {
+        navigate("/home");
+      }
     }
-  }, [showSplash, loading, user, navigate]);
+  }, [showSplash, loading, user, userRole, navigate]);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary/10 via-background to-accent/10">

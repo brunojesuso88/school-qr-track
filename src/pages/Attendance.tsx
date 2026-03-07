@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import DashboardLayout from '@/components/DashboardLayout';
 import ManualAttendanceModal from '@/components/ManualAttendanceModal';
+import AttendanceCalendar from '@/components/AttendanceCalendar';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { format, startOfMonth, endOfMonth, subMonths, subWeeks, subDays, startOfYear, startOfWeek, endOfWeek } from 'date-fns';
@@ -1072,6 +1073,9 @@ const Attendance = () => {
             )}
           </CardContent>
         </Card>
+
+        {/* Attendance Calendar */}
+        <AttendanceCalendar />
       </div>
     </DashboardLayout>
   );
