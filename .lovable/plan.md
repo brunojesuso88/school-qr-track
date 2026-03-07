@@ -1,32 +1,51 @@
 
 
-# Plano: Corrigir importacao em lote - salvar todos de uma vez + associar turmas
+# Plano: 4 Alteracoes na Home, Rotas e Frequencia
 
-## Problemas identificados
+## 1. Remover botao "QR Codes" da Home
 
-1. **Salvando um por um**: `handleSave` chama `addTeacher()` em loop. Cada `addTeacher` chama `fetchData()` internamente, causando N refetches para N professores - lento e com flickering.
+**Arquivo**: `src/pages/Home.tsx`
+- Remover o item `QR Codes` do array `menuOptions` (linhas 37-45)
 
-2. **Turmas nao associadas**: A associacao de turmas depende do `result.id` retornado por `addTeacher`, mas o `fetchData()` dentro de `addTeacher` pode causar race conditions. Alem disso, ao atribuir o professor a TODAS as disciplinas sem professor de uma turma, o comportamento e excessivo - deveria ser mais controlado.
+## 2. Aumentar botao de configuracoes na Home
 
-## Solucao
+**Arquivo**: `src/pages/Home.tsx`
+- Alterar o botao de engrenagem (linha 171-176) para ser maior: `h-16 w-16` e icone `h-8 w-8`
 
-### `src/components/mapping/TeacherBulkImportDialog.tsx`
+## 3. Professor acessa apenas Sistema de Gestao de Alunos (sem Home)
 
-Reescrever `handleSave` para:
+**Arquivo**: `src/components/AdminRoute.tsx`
+- Adicionar verificacao: se `userRole === 'teacher'` e a rota atual e `/home`, redirecionar para `/dashboard`
 
-1. **Inserir todos os professores de uma vez** usando `supabase.from('mapping_teachers').insert([...]).select()` - um unico request ao banco retornando todos os IDs
-2. **Associar turmas em batch**: Para cada professor com turmas, buscar `mapping_classes` pelo nome e atualizar `mapping_class_subjects` sem professor
-3. **Chamar `refreshData()` uma unica vez** no final
+**Arquivo**: `src/pages/Home.tsx`
+- Nenhuma mudanca necessaria (professor simplesmente nao acessa a Home)
 
-Nao usar `addTeacher` do contexto. Usar insert direto no Supabase para evitar os N `fetchData()`.
+Dessa forma, professores ao tentar acessar `/home` serao redirecionados automaticamente para `/dashboard`. O `AdminRoute` que protege `/home` fara essa verificacao.
 
-### `src/contexts/SchoolMappingContext.tsx`
+Na pratica, precisamos de uma abordagem diferente: o `AdminRoute` nao sabe a rota. Melhor criar logica no proprio componente Home ou usar um wrapper especifico.
 
-Expor `getNextColor` de forma que o dialog consiga calcular cores para N professores. Ja esta exposto, mas precisamos gerar N cores de uma vez. O dialog calculara as cores localmente usando a mesma logica.
+**Abordagem**: No `src/pages/Home.tsx`, verificar no inicio se `userRole === 'teacher'` e redirecionar com `Navigate` para `/dashboard`.
+
+Tambem no `SplashScreen` ou onde o login redireciona, garantir que professor va direto para `/dashboard` ao inves de `/home`.
+
+## 4. Calendario de frequencia diaria + relatorio por dia
+
+**Arquivo**: `src/pages/Attendance.tsx`
+- Adicionar uma nova secao com um componente `Calendar` (shadcn) que mostra o mes atual
+- Ao selecionar um dia no calendario, exibir a frequencia de todas as turmas naquele dia
+- Marcar visualmente no calendario os dias que tem registros de frequencia (dots ou cores)
+- Adicionar botao "Gerar Relatorio" que gera PDF da frequencia do dia selecionado, mostrando por turma: lista de alunos com status presente/ausente
+
+Logica:
+1. Buscar datas com registros no mes: `SELECT DISTINCT date FROM attendance WHERE date BETWEEN start AND end`
+2. Ao clicar em um dia, buscar attendance daquele dia com dados dos alunos
+3. Agrupar por turma e exibir em tabela
+4. Botao para gerar relatorio HTML/PDF do dia
 
 ## Resumo
 
 | Arquivo | Alteracao |
 |---------|-----------|
-| `src/components/mapping/TeacherBulkImportDialog.tsx` | Insert em batch + associacao de turmas em batch + refreshData uma vez |
+| `src/pages/Home.tsx` | Remover QR Codes, aumentar botao config, redirecionar professor |
+| `src/pages/Attendance.tsx` | Adicionar calendario com frequencia diaria e geracao de relatorio por dia |
 
