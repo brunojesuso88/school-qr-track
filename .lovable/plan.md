@@ -1,35 +1,32 @@
 
 
-# Plano: Bloquear Frequencia no Final de Semana + Remover Relatorio
+# Plano: Corrigir importacao em lote - salvar todos de uma vez + associar turmas
 
-## 1. Bloquear frequencia diaria nos finais de semana (Classes.tsx)
+## Problemas identificados
 
-**Arquivo**: `src/pages/Classes.tsx`
+1. **Salvando um por um**: `handleSave` chama `addTeacher()` em loop. Cada `addTeacher` chama `fetchData()` internamente, causando N refetches para N professores - lento e com flickering.
 
-- Verificar se `new Date().getDay()` e 0 (domingo) ou 6 (sabado)
-- Se for final de semana:
-  - Desabilitar o botao "Frequencia Diaria" em todos os cards
-  - Mudar o texto/badge para "Frequencia indisponivel: final de semana"
-  - Mudar a cor do badge de status para cinza/neutro
-  - Impedir abertura do `ClassAttendanceDialog`
+2. **Turmas nao associadas**: A associacao de turmas depende do `result.id` retornado por `addTeacher`, mas o `fetchData()` dentro de `addTeacher` pode causar race conditions. Alem disso, ao atribuir o professor a TODAS as disciplinas sem professor de uma turma, o comportamento e excessivo - deveria ser mais controlado.
 
-**Arquivo**: `src/components/ClassAttendanceDialog.tsx`
+## Solucao
 
-- Adicionar verificacao de seguranca: se for final de semana, mostrar toast de erro e nao abrir/salvar
+### `src/components/mapping/TeacherBulkImportDialog.tsx`
 
-## 2. Remover "Relatorio de Frequencia" da aba Frequencia
+Reescrever `handleSave` para:
 
-**Arquivo**: `src/pages/Attendance.tsx`
+1. **Inserir todos os professores de uma vez** usando `supabase.from('mapping_teachers').insert([...]).select()` - um unico request ao banco retornando todos os IDs
+2. **Associar turmas em batch**: Para cada professor com turmas, buscar `mapping_classes` pelo nome e atualizar `mapping_class_subjects` sem professor
+3. **Chamar `refreshData()` uma unica vez** no final
 
-- Remover o Card "Relatorio de Frequencia" (linhas 862-976) que contem a tabela de alunos com presencas/faltas/percentual e acoes de exportar/excluir
-- Remover a funcao `generatePDF` e `handleDeleteAttendance` se ficarem orfas (verificar se sao usadas em outro lugar)
-- Manter os "Registros Individuais" e o "Calendario de Frequencia Diaria"
+Nao usar `addTeacher` do contexto. Usar insert direto no Supabase para evitar os N `fetchData()`.
+
+### `src/contexts/SchoolMappingContext.tsx`
+
+Expor `getNextColor` de forma que o dialog consiga calcular cores para N professores. Ja esta exposto, mas precisamos gerar N cores de uma vez. O dialog calculara as cores localmente usando a mesma logica.
 
 ## Resumo
 
 | Arquivo | Alteracao |
 |---------|-----------|
-| `src/pages/Classes.tsx` | Desabilitar frequencia diaria nos finais de semana |
-| `src/components/ClassAttendanceDialog.tsx` | Seguranca extra contra registro no fim de semana |
-| `src/pages/Attendance.tsx` | Remover card "Relatorio de Frequencia" |
+| `src/components/mapping/TeacherBulkImportDialog.tsx` | Insert em batch + associacao de turmas em batch + refreshData uma vez |
 

@@ -606,36 +606,50 @@ const Classes = () => {
 
                   {/* Attendance badge */}
                   <div className="mb-3">
-                    {classesWithAttendance.has(classItem.name) ? (
-                      <Badge className="bg-emerald-600 hover:bg-emerald-700 text-white border-0 text-xs">
-                        <CheckCircle2 className="w-3 h-3 mr-1" />
-                        Frequência OK
-                      </Badge>
-                    ) : (
-                      <Badge variant="destructive" className="text-xs">
-                        <AlertCircle className="w-3 h-3 mr-1" />
-                        Frequência não realizada
-                      </Badge>
-                    )}
+                    {(() => {
+                      const isWeekend = [0, 6].includes(new Date().getDay());
+                      if (isWeekend) {
+                        return (
+                          <Badge variant="secondary" className="text-xs">
+                            <AlertCircle className="w-3 h-3 mr-1" />
+                            Frequência indisponível: final de semana
+                          </Badge>
+                        );
+                      }
+                      return classesWithAttendance.has(classItem.name) ? (
+                        <Badge className="bg-emerald-600 hover:bg-emerald-700 text-white border-0 text-xs">
+                          <CheckCircle2 className="w-3 h-3 mr-1" />
+                          Frequência OK
+                        </Badge>
+                      ) : (
+                        <Badge variant="destructive" className="text-xs">
+                          <AlertCircle className="w-3 h-3 mr-1" />
+                          Frequência não realizada
+                        </Badge>
+                      );
+                    })()}
                   </div>
-
-                  {classItem.description && (
-                    <p className="text-sm text-muted-foreground mb-3">{classItem.description}</p>
-                  )}
 
                   <div className="flex gap-2 mb-3" onClick={(e) => e.stopPropagation()}>
                     <Button
                       size="sm"
+                      disabled={[0, 6].includes(new Date().getDay())}
                       className={cn(
                         "flex-1",
-                        classesWithAttendance.has(classItem.name)
-                          ? "bg-emerald-600 hover:bg-emerald-700 text-white"
-                          : "bg-destructive hover:bg-destructive/90 text-destructive-foreground"
+                        [0, 6].includes(new Date().getDay())
+                          ? "bg-muted text-muted-foreground"
+                          : classesWithAttendance.has(classItem.name)
+                            ? "bg-emerald-600 hover:bg-emerald-700 text-white"
+                            : "bg-destructive hover:bg-destructive/90 text-destructive-foreground"
                       )}
-                      onClick={() => setAttendanceClass(classItem.name)}
+                      onClick={() => {
+                        if (![0, 6].includes(new Date().getDay())) {
+                          setAttendanceClass(classItem.name);
+                        }
+                      }}
                     >
                       <CalendarIcon className="w-3 h-3 mr-2" />
-                      Frequência Diária
+                      {[0, 6].includes(new Date().getDay()) ? 'Indisponível: final de semana' : 'Frequência Diária'}
                     </Button>
                   </div>
 
