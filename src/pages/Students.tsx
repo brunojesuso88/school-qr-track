@@ -87,7 +87,7 @@ const Students = () => {
   const [zoomPhotoStudent, setZoomPhotoStudent] = useState<Student | null>(null);
   const [reportStudent, setReportStudent] = useState<Student | null>(null);
 
-  const currentYear = new Date().getFullYear();
+
 
   const [formData, setFormData] = useState({
     full_name: '',
