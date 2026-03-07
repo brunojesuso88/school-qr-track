@@ -274,7 +274,7 @@ const Students = () => {
           guardian_phone: validationData.guardian_phone,
           status: validationData.status,
           student_id: studentId,
-          birth_date: format(birthDate, 'yyyy-MM-dd'),
+          
           has_medical_report: validationData.has_medical_report,
           medical_report_details: validationData.medical_report_details,
         };
@@ -304,7 +304,7 @@ const Students = () => {
             guardian_phone: validationData.guardian_phone,
             status: validationData.status,
             student_id: studentId,
-            birth_date: format(birthDate, 'yyyy-MM-dd'),
+            
             qr_code: qrCode,
             has_medical_report: validationData.has_medical_report,
             medical_report_details: validationData.medical_report_details,
@@ -430,16 +430,7 @@ const Students = () => {
     });
     setPhotoPreview(student.photo_url);
     setPhotoFile(null);
-    if (student.birth_date) {
-      const parsed = parse(student.birth_date, 'yyyy-MM-dd', new Date());
-      setBirthDay(String(parsed.getDate()).padStart(2, '0'));
-      setBirthMonth(String(parsed.getMonth() + 1).padStart(2, '0'));
-      setBirthYear(String(parsed.getFullYear()));
-    } else {
-      setBirthDay('');
-      setBirthMonth('');
-      setBirthYear('');
-    }
+    
     setIsDialogOpen(true);
   };
 
@@ -473,9 +464,7 @@ const Students = () => {
       has_medical_report: false,
       medical_report_details: '',
     });
-    setBirthDay('');
-    setBirthMonth('');
-    setBirthYear('');
+    
     setPhotoFile(null);
     setPhotoPreview(null);
   };
@@ -529,8 +518,8 @@ const Students = () => {
     return OCCURRENCE_TYPES.find(t => t.value === type)?.label || type;
   };
 
-  // Auto-generate student ID when name or birth date changes
-  const generatedStudentId = generateStudentId(formData.full_name, getBirthDate());
+  // Auto-generate student ID when name, class or shift changes
+  const generatedStudentId = generateStudentId(formData.full_name, formData.class, formData.shift);
 
   return (
     <DashboardLayout>
@@ -643,41 +632,6 @@ const Students = () => {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label>Data de Nascimento</Label>
-                  <div className="grid grid-cols-3 gap-2">
-                    <Select value={birthDay} onValueChange={setBirthDay}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Dia" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {days.map((day) => (
-                          <SelectItem key={day} value={day}>{day}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <Select value={birthMonth} onValueChange={setBirthMonth}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Mês" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {months.map((month) => (
-                          <SelectItem key={month.value} value={month.value}>{month.label}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <Select value={birthYear} onValueChange={setBirthYear}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Ano" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {years.map((year) => (
-                          <SelectItem key={year} value={String(year)}>{year}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-                <div className="space-y-2">
                   <Label htmlFor="student_id">ID do Aluno (gerado automaticamente)</Label>
                   <Input
                     id="student_id"
@@ -686,7 +640,7 @@ const Students = () => {
                     className="bg-muted"
                   />
                   <p className="text-xs text-muted-foreground">
-                    Gerado a partir do nome e data de nascimento
+                    Gerado a partir do nome, turma e turno
                   </p>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
