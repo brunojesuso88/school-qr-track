@@ -14,6 +14,7 @@ import { Plus, Edit2, Trash2, GraduationCap, Search, Users, Upload, FileText, Lo
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Checkbox } from '@/components/ui/checkbox';
 import { classSchema } from '@/lib/validations';
+import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import ClassAttendanceDialog from '@/components/ClassAttendanceDialog';
 import { format } from 'date-fns';
