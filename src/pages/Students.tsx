@@ -302,6 +302,8 @@ const Students = () => {
 
         if (photoUrl) {
           updateData.photo_url = photoUrl;
+        } else if (removePhoto) {
+          updateData.photo_url = null;
         }
 
         const { error } = await supabase
