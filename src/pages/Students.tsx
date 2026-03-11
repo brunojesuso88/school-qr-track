@@ -604,18 +604,37 @@ const Students = () => {
                         onChange={handlePhotoSelect}
                         className="hidden"
                       />
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => photoInputRef.current?.click()}
-                      >
-                        <Upload className="w-4 h-4 mr-2" />
-                        {photoPreview ? 'Alterar Foto' : 'Upload Foto'}
-                      </Button>
+                      <div className="flex gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => photoInputRef.current?.click()}
+                        >
+                          <Upload className="w-4 h-4 mr-1" />
+                          Upload
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setIsCameraOpen(true)}
+                        >
+                          <Camera className="w-4 h-4 mr-1" />
+                          Tirar Foto
+                        </Button>
+                      </div>
                       <p className="text-xs text-muted-foreground mt-1">
                         JPG, PNG ou GIF. Máximo 5MB.
                       </p>
+                      <CameraPhotoCapture
+                        open={isCameraOpen}
+                        onOpenChange={setIsCameraOpen}
+                        onCapture={(file, previewUrl) => {
+                          setPhotoFile(file);
+                          setPhotoPreview(previewUrl);
+                        }}
+                      />
                     </div>
                   </div>
                 </div>
