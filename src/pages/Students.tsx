@@ -454,6 +454,7 @@ const Students = () => {
     });
     setPhotoPreview(student.photo_url);
     setPhotoFile(null);
+    setRemovePhoto(false);
     
     setIsDialogOpen(true);
   };
