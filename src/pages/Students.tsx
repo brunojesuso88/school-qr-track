@@ -490,6 +490,7 @@ const Students = () => {
     
     setPhotoFile(null);
     setPhotoPreview(null);
+    setRemovePhoto(false);
   };
 
   const downloadQRCode = (student: Student) => {
