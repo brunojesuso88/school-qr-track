@@ -12,7 +12,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { toast } from 'sonner';
-import { Plus, Search, QrCode, Edit2, Trash2, Download, User, CalendarIcon, FileText, Upload, Camera } from 'lucide-react';
+import { Plus, Search, QrCode, Edit2, Trash2, Download, User, CalendarIcon, FileText, Upload, Camera, X } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { QRCodeSVG } from 'qrcode.react';
 import { format, parse } from 'date-fns';
