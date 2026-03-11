@@ -46,8 +46,8 @@ export const CameraPhotoCapture = ({ open, onOpenChange, onCapture }: CameraPhot
   useEffect(() => {
     if (open) {
       setCapturedImage(null);
-      setFacingMode('user');
-      startCamera('user');
+      setFacingMode('environment');
+      startCamera('environment');
     } else {
       stopCamera();
     }

@@ -628,6 +628,22 @@ const Students = () => {
                           <Camera className="w-4 h-4 mr-1" />
                           Tirar Foto
                         </Button>
+                        {(photoPreview || (editingStudent?.photo_url && !removePhoto)) && (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="text-destructive hover:text-destructive"
+                            onClick={() => {
+                              setPhotoFile(null);
+                              setPhotoPreview(null);
+                              setRemovePhoto(true);
+                            }}
+                          >
+                            <X className="w-4 h-4 mr-1" />
+                            Remover
+                          </Button>
+                        )}
                       </div>
                       <p className="text-xs text-muted-foreground mt-1">
                         JPG, PNG ou GIF. Máximo 5MB.
