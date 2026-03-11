@@ -1,30 +1,32 @@
 
 
-# Plano: Trocar Câmera + Moldura Circular
+# Plano: Corrigir importacao em lote - salvar todos de uma vez + associar turmas
 
-## Alterações em `src/components/CameraPhotoCapture.tsx`
+## Problemas identificados
 
-### 1. Botão para trocar câmera (frontal/traseira)
-- Adicionar estado `facingMode` (`'user'` | `'environment'`), default `'user'`
-- Função `toggleCamera`: para a câmera atual, inverte `facingMode`, reinicia com `startCamera`
-- Passar `facingMode` como parâmetro no `getUserMedia`
-- Adicionar botão com ícone `SwitchCamera` (lucide) ao lado do botão Capturar, visível quando câmera está ativa
-- Remover `transform: scaleX(-1)` quando `facingMode === 'environment'` (câmera traseira não deve espelhar)
+1. **Salvando um por um**: `handleSave` chama `addTeacher()` em loop. Cada `addTeacher` chama `fetchData()` internamente, causando N refetches para N professores - lento e com flickering.
 
-### 2. Moldura circular
-- Substituir a moldura retangular 3x4 por uma moldura circular usando `border-radius: 50%` e `boxShadow: 0 0 0 9999px` para o overlay escuro
-- Remover os corner markers (não fazem sentido em moldura circular)
-- Atualizar o texto guia para "Enquadre o rosto na moldura"
-- Na captura (canvas), recortar em proporção 1:1 (quadrado) para alinhar com a moldura circular — output 400x400
-- A imagem resultante será quadrada; a visualização circular fica por conta do CSS no avatar
+2. **Turmas nao associadas**: A associacao de turmas depende do `result.id` retornado por `addTeacher`, mas o `fetchData()` dentro de `addTeacher` pode causar race conditions. Alem disso, ao atribuir o professor a TODAS as disciplinas sem professor de uma turma, o comportamento e excessivo - deveria ser mais controlado.
 
-### Resumo
+## Solucao
 
-| O quê | Como |
-|-------|------|
-| Trocar câmera | Estado `facingMode` + botão `SwitchCamera` |
-| Moldura circular | `border-radius: 50%` + overlay + crop 1:1 no canvas |
-| Espelhamento | `scaleX(-1)` só na câmera frontal |
+### `src/components/mapping/TeacherBulkImportDialog.tsx`
 
-Arquivo único alterado: `src/components/CameraPhotoCapture.tsx`
+Reescrever `handleSave` para:
+
+1. **Inserir todos os professores de uma vez** usando `supabase.from('mapping_teachers').insert([...]).select()` - um unico request ao banco retornando todos os IDs
+2. **Associar turmas em batch**: Para cada professor com turmas, buscar `mapping_classes` pelo nome e atualizar `mapping_class_subjects` sem professor
+3. **Chamar `refreshData()` uma unica vez** no final
+
+Nao usar `addTeacher` do contexto. Usar insert direto no Supabase para evitar os N `fetchData()`.
+
+### `src/contexts/SchoolMappingContext.tsx`
+
+Expor `getNextColor` de forma que o dialog consiga calcular cores para N professores. Ja esta exposto, mas precisamos gerar N cores de uma vez. O dialog calculara as cores localmente usando a mesma logica.
+
+## Resumo
+
+| Arquivo | Alteracao |
+|---------|-----------|
+| `src/components/mapping/TeacherBulkImportDialog.tsx` | Insert em batch + associacao de turmas em batch + refreshData uma vez |
 

@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Camera, RotateCcw, Check, X } from 'lucide-react';
+import { Camera, RotateCcw, Check, X, SwitchCamera } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface CameraPhotoCaptureProps {
@@ -16,6 +16,7 @@ export const CameraPhotoCapture = ({ open, onOpenChange, onCapture }: CameraPhot
   const streamRef = useRef<MediaStream | null>(null);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [cameraActive, setCameraActive] = useState(false);
+  const [facingMode, setFacingMode] = useState<'user' | 'environment'>('user');
 
   const stopCamera = useCallback(() => {
     if (streamRef.current) {
@@ -25,10 +26,10 @@ export const CameraPhotoCapture = ({ open, onOpenChange, onCapture }: CameraPhot
     setCameraActive(false);
   }, []);
 
-  const startCamera = useCallback(async () => {
+  const startCamera = useCallback(async (mode: 'user' | 'environment') => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'user', width: { ideal: 720 }, height: { ideal: 960 } }
+        video: { facingMode: mode, width: { ideal: 720 }, height: { ideal: 720 } }
       });
       streamRef.current = stream;
       if (videoRef.current) {
@@ -45,43 +46,49 @@ export const CameraPhotoCapture = ({ open, onOpenChange, onCapture }: CameraPhot
   useEffect(() => {
     if (open) {
       setCapturedImage(null);
-      startCamera();
+      setFacingMode('user');
+      startCamera('user');
     } else {
       stopCamera();
     }
     return () => stopCamera();
   }, [open, startCamera, stopCamera]);
 
+  const toggleCamera = useCallback(() => {
+    stopCamera();
+    const newMode = facingMode === 'user' ? 'environment' : 'user';
+    setFacingMode(newMode);
+    startCamera(newMode);
+  }, [facingMode, stopCamera, startCamera]);
+
   const handleCapture = () => {
     const video = videoRef.current;
     const canvas = canvasRef.current;
     if (!video || !canvas) return;
 
-    // Output size 3x4 ratio
-    const outW = 300;
-    const outH = 400;
-    canvas.width = outW;
-    canvas.height = outH;
+    const outSize = 400;
+    canvas.width = outSize;
+    canvas.height = outSize;
 
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    // Calculate crop area from video to maintain 3:4 ratio
+    // Crop to 1:1 square from center
     const vw = video.videoWidth;
     const vh = video.videoHeight;
-    const targetRatio = 3 / 4;
-    const videoRatio = vw / vh;
+    const side = Math.min(vw, vh);
+    const sx = (vw - side) / 2;
+    const sy = (vh - side) / 2;
 
-    let sx = 0, sy = 0, sw = vw, sh = vh;
-    if (videoRatio > targetRatio) {
-      sw = vh * targetRatio;
-      sx = (vw - sw) / 2;
-    } else {
-      sh = vw / targetRatio;
-      sy = (vh - sh) / 2;
+    // Mirror for front camera
+    if (facingMode === 'user') {
+      ctx.translate(outSize, 0);
+      ctx.scale(-1, 1);
     }
 
-    ctx.drawImage(video, sx, sy, sw, sh, 0, 0, outW, outH);
+    ctx.drawImage(video, sx, sy, side, side, 0, 0, outSize, outSize);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+
     const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
     setCapturedImage(dataUrl);
     stopCamera();
@@ -89,12 +96,11 @@ export const CameraPhotoCapture = ({ open, onOpenChange, onCapture }: CameraPhot
 
   const handleRetake = () => {
     setCapturedImage(null);
-    startCamera();
+    startCamera(facingMode);
   };
 
   const handleConfirm = () => {
     if (!capturedImage) return;
-    // Convert data URL to File
     fetch(capturedImage)
       .then(r => r.blob())
       .then(blob => {
@@ -114,8 +120,7 @@ export const CameraPhotoCapture = ({ open, onOpenChange, onCapture }: CameraPhot
           </DialogTitle>
         </DialogHeader>
 
-        <div className="relative w-full" style={{ aspectRatio: '3/4' }}>
-          {/* Video feed */}
+        <div className="relative w-full" style={{ aspectRatio: '1/1' }}>
           {!capturedImage && (
             <video
               ref={videoRef}
@@ -123,57 +128,31 @@ export const CameraPhotoCapture = ({ open, onOpenChange, onCapture }: CameraPhot
               playsInline
               muted
               className="w-full h-full object-cover"
-              style={{ transform: 'scaleX(-1)' }}
+              style={{ transform: facingMode === 'user' ? 'scaleX(-1)' : 'none' }}
             />
           )}
 
-          {/* Captured preview */}
           {capturedImage && (
             <img src={capturedImage} alt="Foto capturada" className="w-full h-full object-cover" />
           )}
 
-          {/* 3x4 frame overlay - only when camera is active */}
+          {/* Circular frame overlay */}
           {!capturedImage && cameraActive && (
             <div className="absolute inset-0 pointer-events-none">
-              {/* Semi-transparent overlay */}
-              <div className="absolute inset-0 bg-black/40" />
-
-              {/* Clear center window (3x4 ratio) */}
               <div
-                className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 border-2 border-white/80 rounded-lg"
+                className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white/80"
                 style={{
-                  width: '70%',
-                  aspectRatio: '3/4',
-                  boxShadow: '0 0 0 9999px rgba(0,0,0,0.4)',
+                  width: '75%',
+                  aspectRatio: '1/1',
+                  boxShadow: '0 0 0 9999px rgba(0,0,0,0.5)',
                 }}
               />
-
-              {/* Corner markers */}
-              {/* Top-left */}
-              <div className="absolute left-[15%] top-[calc(50%-35%*4/3/2)]" style={{ top: 'calc(50% - 46.67%)' }}>
-                <div className="w-5 h-5 border-t-3 border-l-3 border-white rounded-tl-md" style={{ borderWidth: '3px 0 0 3px' }} />
-              </div>
-              {/* Top-right */}
-              <div className="absolute right-[15%]" style={{ top: 'calc(50% - 46.67%)' }}>
-                <div className="w-5 h-5 border-white rounded-tr-md" style={{ borderWidth: '3px 3px 0 0', borderStyle: 'solid' }} />
-              </div>
-              {/* Bottom-left */}
-              <div className="absolute left-[15%]" style={{ bottom: 'calc(50% - 46.67%)' }}>
-                <div className="w-5 h-5 border-white rounded-bl-md" style={{ borderWidth: '0 0 3px 3px', borderStyle: 'solid' }} />
-              </div>
-              {/* Bottom-right */}
-              <div className="absolute right-[15%]" style={{ bottom: 'calc(50% - 46.67%)' }}>
-                <div className="w-5 h-5 border-white rounded-br-md" style={{ borderWidth: '0 3px 3px 0', borderStyle: 'solid' }} />
-              </div>
-
-              {/* Guide text */}
-              <p className="absolute bottom-4 left-0 right-0 text-center text-white/80 text-xs font-medium">
-                Enquadre o rosto na moldura 3x4
+              <p className="absolute bottom-3 left-0 right-0 text-center text-white/80 text-xs font-medium">
+                Enquadre o rosto na moldura
               </p>
             </div>
           )}
 
-          {/* Loading state */}
           {!capturedImage && !cameraActive && (
             <div className="absolute inset-0 flex items-center justify-center bg-muted">
               <div className="text-center text-muted-foreground">
@@ -184,13 +163,16 @@ export const CameraPhotoCapture = ({ open, onOpenChange, onCapture }: CameraPhot
           )}
         </div>
 
-        {/* Action buttons */}
         <div className="p-4 pt-2 flex gap-2 justify-center">
           {!capturedImage ? (
             <>
               <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>
                 <X className="w-4 h-4 mr-1" />
                 Cancelar
+              </Button>
+              <Button variant="outline" size="sm" onClick={toggleCamera} disabled={!cameraActive}>
+                <SwitchCamera className="w-4 h-4 mr-1" />
+                Trocar
               </Button>
               <Button size="sm" onClick={handleCapture} disabled={!cameraActive}>
                 <Camera className="w-4 h-4 mr-1" />
