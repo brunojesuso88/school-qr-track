@@ -12,7 +12,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { toast } from 'sonner';
-import { Plus, Search, QrCode, Edit2, Trash2, Download, User, CalendarIcon, FileText, Upload, Camera } from 'lucide-react';
+import { Plus, Search, QrCode, Edit2, Trash2, Download, User, CalendarIcon, FileText, Upload, Camera, X } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { QRCodeSVG } from 'qrcode.react';
 import { format, parse } from 'date-fns';
@@ -106,6 +106,7 @@ const Students = () => {
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [isCameraOpen, setIsCameraOpen] = useState(false);
+  const [removePhoto, setRemovePhoto] = useState(false);
   const photoInputRef = useRef<HTMLInputElement>(null);
 
   const [occurrenceForm, setOccurrenceForm] = useState({
@@ -302,6 +303,8 @@ const Students = () => {
 
         if (photoUrl) {
           updateData.photo_url = photoUrl;
+        } else if (removePhoto) {
+          updateData.photo_url = null;
         }
 
         const { error } = await supabase
@@ -451,6 +454,7 @@ const Students = () => {
     });
     setPhotoPreview(student.photo_url);
     setPhotoFile(null);
+    setRemovePhoto(false);
     
     setIsDialogOpen(true);
   };
@@ -488,6 +492,7 @@ const Students = () => {
     
     setPhotoFile(null);
     setPhotoPreview(null);
+    setRemovePhoto(false);
   };
 
   const downloadQRCode = (student: Student) => {
@@ -623,6 +628,22 @@ const Students = () => {
                           <Camera className="w-4 h-4 mr-1" />
                           Tirar Foto
                         </Button>
+                        {(photoPreview || (editingStudent?.photo_url && !removePhoto)) && (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="text-destructive hover:text-destructive"
+                            onClick={() => {
+                              setPhotoFile(null);
+                              setPhotoPreview(null);
+                              setRemovePhoto(true);
+                            }}
+                          >
+                            <X className="w-4 h-4 mr-1" />
+                            Remover
+                          </Button>
+                        )}
                       </div>
                       <p className="text-xs text-muted-foreground mt-1">
                         JPG, PNG ou GIF. Máximo 5MB.

@@ -1,26 +1,32 @@
 
 
-## Plano: Remover Foto + Câmera Traseira Padrão
+# Plano: Corrigir importacao em lote - salvar todos de uma vez + associar turmas
 
-### Alterações em `src/pages/Students.tsx`
+## Problemas identificados
 
-1. **Adicionar estado para remover foto:**
-   - Adicionar `removePhoto` state (boolean)
-   - Quando editar aluno com foto existente, mostrar botão "Remover Foto" ao lado dos botões de Upload/Tirar Foto
-   - Ao clicar em Remover: limpa `photoPreview`, `photoFile`, seta `removePhoto=true`
-   - No `handleSubmit`: se `removePhoto=true`, seta `photo_url: null` no update
+1. **Salvando um por um**: `handleSave` chama `addTeacher()` em loop. Cada `addTeacher` chama `fetchData()` internamente, causando N refetches para N professores - lento e com flickering.
 
-2. **Lógica de update com remoção:**
-   - Se `editingStudent && removePhoto`: incluir `photo_url: null` no `updateData`
+2. **Turmas nao associadas**: A associacao de turmas depende do `result.id` retornado por `addTeacher`, mas o `fetchData()` dentro de `addTeacher` pode causar race conditions. Alem disso, ao atribuir o professor a TODAS as disciplinas sem professor de uma turma, o comportamento e excessivo - deveria ser mais controlado.
 
-### Alterações em `src/components/CameraPhotoCapture.tsx`
+## Solucao
 
-1. **Câmera traseira como padrão:**
-   - Alterar estado inicial de `facingMode` de `'user'` para `'environment'`
-   - Alterar `startCamera('user')` para `startCamera('environment')` no `useEffect`
+### `src/components/mapping/TeacherBulkImportDialog.tsx`
 
-| Arquivo | Alteração |
+Reescrever `handleSave` para:
+
+1. **Inserir todos os professores de uma vez** usando `supabase.from('mapping_teachers').insert([...]).select()` - um unico request ao banco retornando todos os IDs
+2. **Associar turmas em batch**: Para cada professor com turmas, buscar `mapping_classes` pelo nome e atualizar `mapping_class_subjects` sem professor
+3. **Chamar `refreshData()` uma unica vez** no final
+
+Nao usar `addTeacher` do contexto. Usar insert direto no Supabase para evitar os N `fetchData()`.
+
+### `src/contexts/SchoolMappingContext.tsx`
+
+Expor `getNextColor` de forma que o dialog consiga calcular cores para N professores. Ja esta exposto, mas precisamos gerar N cores de uma vez. O dialog calculara as cores localmente usando a mesma logica.
+
+## Resumo
+
+| Arquivo | Alteracao |
 |---------|-----------|
-| `src/pages/Students.tsx` | Botão "Remover Foto" + lógica de remoção no submit |
-| `src/components/CameraPhotoCapture.tsx` | Câmera traseira (`environment`) como padrão |
+| `src/components/mapping/TeacherBulkImportDialog.tsx` | Insert em batch + associacao de turmas em batch + refreshData uma vez |
 

@@ -16,7 +16,7 @@ export const CameraPhotoCapture = ({ open, onOpenChange, onCapture }: CameraPhot
   const streamRef = useRef<MediaStream | null>(null);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [cameraActive, setCameraActive] = useState(false);
-  const [facingMode, setFacingMode] = useState<'user' | 'environment'>('user');
+  const [facingMode, setFacingMode] = useState<'user' | 'environment'>('environment');
 
   const stopCamera = useCallback(() => {
     if (streamRef.current) {
@@ -46,8 +46,8 @@ export const CameraPhotoCapture = ({ open, onOpenChange, onCapture }: CameraPhot
   useEffect(() => {
     if (open) {
       setCapturedImage(null);
-      setFacingMode('user');
-      startCamera('user');
+      setFacingMode('environment');
+      startCamera('environment');
     } else {
       stopCamera();
     }
