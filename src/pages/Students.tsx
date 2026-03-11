@@ -23,6 +23,7 @@ import { studentSchema, occurrenceSchema, formatPhone } from '@/lib/validations'
 import { useAuth } from '@/contexts/AuthContext';
 import { StudentPhoto } from '@/components/StudentPhoto';
 import { useSignedPhotoUrl, clearPhotoUrlCache } from '@/hooks/useSignedPhotoUrl';
+import { CameraPhotoCapture } from '@/components/CameraPhotoCapture';
 
 interface Student {
   id: string;
