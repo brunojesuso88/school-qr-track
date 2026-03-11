@@ -1,32 +1,45 @@
 
 
-# Plano: Corrigir importacao em lote - salvar todos de uma vez + associar turmas
+# Plano: Adicionar "Tirar Foto" com Câmera e Moldura 3x4
 
-## Problemas identificados
+## Contexto Atual
 
-1. **Salvando um por um**: `handleSave` chama `addTeacher()` em loop. Cada `addTeacher` chama `fetchData()` internamente, causando N refetches para N professores - lento e com flickering.
+Em `src/pages/Students.tsx` (linhas 578-618), o upload de foto do aluno só permite selecionar um arquivo do dispositivo via `<input type="file">`. Não há opção de capturar foto diretamente pela câmera.
 
-2. **Turmas nao associadas**: A associacao de turmas depende do `result.id` retornado por `addTeacher`, mas o `fetchData()` dentro de `addTeacher` pode causar race conditions. Alem disso, ao atribuir o professor a TODAS as disciplinas sem professor de uma turma, o comportamento e excessivo - deveria ser mais controlado.
+## Solução
 
-## Solucao
+### 1. Criar componente `CameraPhotoCapture`
 
-### `src/components/mapping/TeacherBulkImportDialog.tsx`
+**Novo arquivo**: `src/components/CameraPhotoCapture.tsx`
 
-Reescrever `handleSave` para:
+- Um Dialog/modal que abre a câmera do dispositivo via `navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } })`
+- Exibe o feed da câmera em um `<video>` element
+- Sobrepõe uma **moldura 3x4** (proporção 3:4) centralizada com bordas arredondadas e cantos destacados, simulando o enquadramento de foto de documento
+- A área fora da moldura fica semi-transparente (overlay escuro) para guiar o enquadramento
+- Botões: "Capturar" (tira a foto via `<canvas>`) e "Cancelar" (fecha e para a câmera)
+- Após captura, mostra preview com opções "Usar esta foto" e "Tirar novamente"
+- A foto capturada é recortada na proporção 3x4 e convertida para `File` (blob JPEG) para ser usada no upload existente
 
-1. **Inserir todos os professores de uma vez** usando `supabase.from('mapping_teachers').insert([...]).select()` - um unico request ao banco retornando todos os IDs
-2. **Associar turmas em batch**: Para cada professor com turmas, buscar `mapping_classes` pelo nome e atualizar `mapping_class_subjects` sem professor
-3. **Chamar `refreshData()` uma unica vez** no final
+### 2. Atualizar o formulário de aluno em `Students.tsx`
 
-Nao usar `addTeacher` do contexto. Usar insert direto no Supabase para evitar os N `fetchData()`.
+**Arquivo**: `src/pages/Students.tsx` (linhas 596-618)
 
-### `src/contexts/SchoolMappingContext.tsx`
+- Adicionar um segundo botão ao lado do "Upload Foto": **"Tirar Foto"** com ícone `Camera`
+- Ao clicar, abre o `CameraPhotoCapture` dialog
+- Quando a foto é capturada, seta `photoFile` e `photoPreview` com o resultado (mesmo fluxo do upload existente)
+- O restante do fluxo de upload para o storage permanece inalterado
 
-Expor `getNextColor` de forma que o dialog consiga calcular cores para N professores. Ja esta exposto, mas precisamos gerar N cores de uma vez. O dialog calculara as cores localmente usando a mesma logica.
+### Layout dos botões de foto
+
+```text
+[Preview circular]  |  [Upload Foto]
+                    |  [Tirar Foto]   ← NOVO
+```
 
 ## Resumo
 
-| Arquivo | Alteracao |
+| Arquivo | Alteração |
 |---------|-----------|
-| `src/components/mapping/TeacherBulkImportDialog.tsx` | Insert em batch + associacao de turmas em batch + refreshData uma vez |
+| `src/components/CameraPhotoCapture.tsx` | Novo componente com câmera + moldura 3x4 |
+| `src/pages/Students.tsx` | Adicionar botão "Tirar Foto" que abre o componente de câmera |
 
