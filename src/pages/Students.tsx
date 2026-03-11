@@ -106,6 +106,7 @@ const Students = () => {
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [isCameraOpen, setIsCameraOpen] = useState(false);
+  const [removePhoto, setRemovePhoto] = useState(false);
   const photoInputRef = useRef<HTMLInputElement>(null);
 
   const [occurrenceForm, setOccurrenceForm] = useState({
