@@ -1,32 +1,49 @@
 
 
-# Plano: Corrigir importacao em lote - salvar todos de uma vez + associar turmas
+# Plano: Campos Opcionais no Cadastro + Download de Alunos Faltosos
 
-## Problemas identificados
+## 1. Tornar `guardian_name` e `guardian_phone` opcionais no cadastro de alunos
 
-1. **Salvando um por um**: `handleSave` chama `addTeacher()` em loop. Cada `addTeacher` chama `fetchData()` internamente, causando N refetches para N professores - lento e com flickering.
+### Problema atual
+Em `src/lib/validations.ts`, o `studentSchema` exige `guardian_name` (min 3 chars) e `guardian_phone` (regex obrigatoria). Isso bloqueia o cadastro se esses campos estiverem vazios.
 
-2. **Turmas nao associadas**: A associacao de turmas depende do `result.id` retornado por `addTeacher`, mas o `fetchData()` dentro de `addTeacher` pode causar race conditions. Alem disso, ao atribuir o professor a TODAS as disciplinas sem professor de uma turma, o comportamento e excessivo - deveria ser mais controlado.
+Em `src/pages/Students.tsx`, o `handleSubmit` passa esses valores pela validacao Zod, que falha se vazios.
 
-## Solucao
+### Solucao
 
-### `src/components/mapping/TeacherBulkImportDialog.tsx`
+**Arquivo `src/lib/validations.ts`** (linhas 15-20):
+- Alterar `guardian_name` para: `z.string().max(100).regex(nameRegex).optional().or(z.literal(''))`
+- Alterar `guardian_phone` para: `z.string().regex(phoneRegex).optional().or(z.literal(''))`
+- Ou seja, aceitar string vazia ou valor valido
 
-Reescrever `handleSave` para:
+**Arquivo `src/pages/Students.tsx`** (linhas 261-264):
+- No `validationData`, passar `guardian_name` e `guardian_phone` como strings que podem ser vazias
+- Ajustar para nao aplicar `formatPhone` em string vazia
 
-1. **Inserir todos os professores de uma vez** usando `supabase.from('mapping_teachers').insert([...]).select()` - um unico request ao banco retornando todos os IDs
-2. **Associar turmas em batch**: Para cada professor com turmas, buscar `mapping_classes` pelo nome e atualizar `mapping_class_subjects` sem professor
-3. **Chamar `refreshData()` uma unica vez** no final
+## 2. Botao "Alunos Faltosos" no card da turma + download JPEG
 
-Nao usar `addTeacher` do contexto. Usar insert direto no Supabase para evitar os N `fetchData()`.
+### Comportamento
+- Apos a frequencia diaria ser realizada (`classesWithAttendance.has(classItem.name)`), exibir um botao "Alunos Faltosos" no card
+- Ao clicar, o sistema busca os alunos ausentes daquela turma no dia atual
+- Gera uma imagem JPEG usando `<canvas>` com as informacoes: nome da turma, data, lista de alunos faltosos (nome e turma)
+- Faz download automatico do arquivo JPEG
 
-### `src/contexts/SchoolMappingContext.tsx`
+### Implementacao
 
-Expor `getNextColor` de forma que o dialog consiga calcular cores para N professores. Ja esta exposto, mas precisamos gerar N cores de uma vez. O dialog calculara as cores localmente usando a mesma logica.
+**Arquivo `src/pages/Classes.tsx`**:
+- Adicionar funcao `handleDownloadAbsentStudents(className: string)`:
+  1. Consultar `attendance` com status `absent` e data de hoje, filtrando pelo `class` do aluno via join com `students`
+  2. Criar um `<canvas>` off-screen com fundo branco
+  3. Desenhar titulo (turma + data), e listar cada aluno faltoso com seu nome
+  4. Converter para JPEG via `canvas.toDataURL('image/jpeg')` e disparar download
+- Adicionar botao "Alunos Faltosos" (com icone `Download`) no card, visivel apenas quando a frequencia ja foi realizada e nao e final de semana
+- O botao fica entre o botao de frequencia e o de ver alunos
 
 ## Resumo
 
 | Arquivo | Alteracao |
 |---------|-----------|
-| `src/components/mapping/TeacherBulkImportDialog.tsx` | Insert em batch + associacao de turmas em batch + refreshData uma vez |
+| `src/lib/validations.ts` | `guardian_name` e `guardian_phone` opcionais |
+| `src/pages/Students.tsx` | Ajustar validacao para campos vazios |
+| `src/pages/Classes.tsx` | Botao "Alunos Faltosos" + geracao e download de JPEG via canvas |
 
