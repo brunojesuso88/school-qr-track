@@ -10,7 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { toast } from 'sonner';
-import { Plus, Edit2, Trash2, GraduationCap, Search, Users, Upload, FileText, Loader2, CheckCircle2, AlertCircle, ImagePlus, CalendarIcon } from 'lucide-react';
+import { Plus, Edit2, Trash2, GraduationCap, Search, Users, Upload, FileText, Loader2, CheckCircle2, AlertCircle, ImagePlus, CalendarIcon, Download } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Checkbox } from '@/components/ui/checkbox';
 import { classSchema } from '@/lib/validations';
@@ -18,6 +18,7 @@ import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import ClassAttendanceDialog from '@/components/ClassAttendanceDialog';
 import { format } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 
 const MAX_PDF_SIZE = 10 * 1024 * 1024; // 10MB
 
@@ -443,6 +444,82 @@ const Classes = () => {
     }
   };
 
+  const handleDownloadAbsentStudents = async (className: string) => {
+    const todayStr = format(new Date(), 'yyyy-MM-dd');
+    const todayDisplay = format(new Date(), "dd 'de' MMMM 'de' yyyy", { locale: ptBR });
+
+    try {
+      const { data, error } = await supabase
+        .from('attendance')
+        .select('student_id, students!inner(full_name, class)')
+        .eq('date', todayStr)
+        .eq('status', 'absent');
+
+      if (error) throw error;
+
+      const absentStudents = (data || [])
+        .filter((a: any) => a.students?.class === className)
+        .map((a: any) => a.students.full_name as string);
+
+      if (absentStudents.length === 0) {
+        toast.info('Nenhum aluno faltoso nesta turma hoje');
+        return;
+      }
+
+      // Generate JPEG via canvas
+      const lineHeight = 32;
+      const padding = 40;
+      const headerHeight = 100;
+      const canvasHeight = headerHeight + absentStudents.length * lineHeight + padding * 2;
+      const canvasWidth = 600;
+
+      const canvas = document.createElement('canvas');
+      canvas.width = canvasWidth;
+      canvas.height = canvasHeight;
+      const ctx = canvas.getContext('2d')!;
+
+      // Background
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+
+      // Title
+      ctx.fillStyle = '#1a1a1a';
+      ctx.font = 'bold 22px sans-serif';
+      ctx.fillText(`Alunos Faltosos - ${className}`, padding, padding + 24);
+
+      // Date
+      ctx.fillStyle = '#666666';
+      ctx.font = '14px sans-serif';
+      ctx.fillText(todayDisplay, padding, padding + 50);
+
+      // Separator
+      ctx.strokeStyle = '#e0e0e0';
+      ctx.beginPath();
+      ctx.moveTo(padding, headerHeight);
+      ctx.lineTo(canvasWidth - padding, headerHeight);
+      ctx.stroke();
+
+      // Student list
+      ctx.fillStyle = '#333333';
+      ctx.font = '16px sans-serif';
+      absentStudents.forEach((name, i) => {
+        const y = headerHeight + 20 + i * lineHeight;
+        ctx.fillText(`${i + 1}. ${name}`, padding, y + 16);
+      });
+
+      // Download
+      const link = document.createElement('a');
+      link.download = `faltosos_${className.replace(/\s/g, '_')}_${todayStr}.jpg`;
+      link.href = canvas.toDataURL('image/jpeg', 0.95);
+      link.click();
+
+      toast.success(`${absentStudents.length} aluno(s) faltoso(s) exportado(s)`);
+    } catch (err) {
+      console.error('Error downloading absent students:', err);
+      toast.error('Erro ao gerar lista de faltosos');
+    }
+  };
+
   return (
     <DashboardLayout>
       <div className="space-y-6">
@@ -652,6 +729,21 @@ const Classes = () => {
                       {[0, 6].includes(new Date().getDay()) ? 'Indisponível: final de semana' : 'Frequência Diária'}
                     </Button>
                   </div>
+
+                  {/* Absent students download */}
+                  {!([0, 6].includes(new Date().getDay())) && classesWithAttendance.has(classItem.name) && (
+                    <div className="flex gap-2 mb-3" onClick={(e) => e.stopPropagation()}>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="flex-1 text-destructive border-destructive/30 hover:bg-destructive/10"
+                        onClick={() => handleDownloadAbsentStudents(classItem.name)}
+                      >
+                        <Download className="w-3 h-3 mr-2" />
+                        Alunos Faltosos
+                      </Button>
+                    </div>
+                  )}
 
                   <div className="flex gap-2 mb-3" onClick={(e) => e.stopPropagation()}>
                     <Button
