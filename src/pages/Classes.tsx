@@ -18,6 +18,7 @@ import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import ClassAttendanceDialog from '@/components/ClassAttendanceDialog';
 import { format } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 
 const MAX_PDF_SIZE = 10 * 1024 * 1024; // 10MB
 
@@ -652,6 +653,21 @@ const Classes = () => {
                       {[0, 6].includes(new Date().getDay()) ? 'Indisponível: final de semana' : 'Frequência Diária'}
                     </Button>
                   </div>
+
+                  {/* Absent students download */}
+                  {!([0, 6].includes(new Date().getDay())) && classesWithAttendance.has(classItem.name) && (
+                    <div className="flex gap-2 mb-3" onClick={(e) => e.stopPropagation()}>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="flex-1 text-destructive border-destructive/30 hover:bg-destructive/10"
+                        onClick={() => handleDownloadAbsentStudents(classItem.name)}
+                      >
+                        <Download className="w-3 h-3 mr-2" />
+                        Alunos Faltosos
+                      </Button>
+                    </div>
+                  )}
 
                   <div className="flex gap-2 mb-3" onClick={(e) => e.stopPropagation()}>
                     <Button
