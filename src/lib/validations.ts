@@ -12,12 +12,18 @@ export const studentSchema = z.object({
     .min(3, 'Nome deve ter pelo menos 3 caracteres')
     .max(100, 'Nome muito longo (máximo 100 caracteres)')
     .regex(nameRegex, 'Nome deve conter apenas letras'),
-  guardian_name: z.string()
-    .min(3, 'Nome do responsável deve ter pelo menos 3 caracteres')
-    .max(100, 'Nome muito longo (máximo 100 caracteres)')
-    .regex(nameRegex, 'Nome deve conter apenas letras'),
-  guardian_phone: z.string()
-    .regex(phoneRegex, 'Telefone deve ter 10 ou 11 dígitos'),
+  guardian_name: z.union([
+    z.literal(''),
+    z.string()
+      .min(3, 'Nome do responsável deve ter pelo menos 3 caracteres')
+      .max(100, 'Nome muito longo (máximo 100 caracteres)')
+      .regex(nameRegex, 'Nome deve conter apenas letras'),
+  ]),
+  guardian_phone: z.union([
+    z.literal(''),
+    z.string()
+      .regex(phoneRegex, 'Telefone deve ter 10 ou 11 dígitos'),
+  ]),
   class: z.string()
     .min(1, 'Turma é obrigatória')
     .max(50, 'Nome da turma muito longo'),

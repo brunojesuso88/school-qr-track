@@ -261,7 +261,7 @@ const Students = () => {
     const validationData = {
       full_name: formData.full_name.trim(),
       guardian_name: formData.guardian_name.trim(),
-      guardian_phone: formatPhone(formData.guardian_phone),
+      guardian_phone: formData.guardian_phone.trim() ? formatPhone(formData.guardian_phone) : '',
       class: formData.class,
       shift: formData.shift as 'morning' | 'afternoon' | 'evening',
       status: formData.status,
