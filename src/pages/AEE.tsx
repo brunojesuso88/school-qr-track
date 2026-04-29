@@ -373,6 +373,99 @@ const AEE = () => {
     }
   };
 
+  const loadPEI = async (student: Student) => {
+    setPeiLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('student_pei')
+        .select('*')
+        .eq('student_id', student.id)
+        .maybeSingle();
+      if (error) throw error;
+
+      if (data) {
+        setPeiData({
+          enrollment_number: data.enrollment_number || '',
+          aee_teacher: data.aee_teacher || '',
+          coordination: data.coordination || '',
+          elaboration_date: data.elaboration_date || new Date().toISOString().split('T')[0],
+          legal_guardian: data.legal_guardian || student.guardian_name || '',
+          contact: data.contact || '',
+          email: data.email || '',
+          phone: data.phone || student.guardian_phone || '',
+          functional_profile: data.functional_profile || '',
+          potentialities: data.potentialities || '',
+          learning_barriers: data.learning_barriers || '',
+          evaluation_criteria: data.evaluation_criteria || '',
+          performance_levels: {
+            linguagem: ((data.performance_levels as any)?.linguagem || '') as PerformanceLevel,
+            matematica: ((data.performance_levels as any)?.matematica || '') as PerformanceLevel,
+            ciencias_natureza: ((data.performance_levels as any)?.ciencias_natureza || '') as PerformanceLevel,
+            ciencias_humanas: ((data.performance_levels as any)?.ciencias_humanas || '') as PerformanceLevel,
+          },
+          intervention_plan: Array.isArray(data.intervention_plan)
+            ? (data.intervention_plan as unknown as InterventionRow[])
+            : [],
+          discipline_adaptations: {
+            portugues_humanas: (data.discipline_adaptations as any)?.portugues_humanas || '',
+            matematica_exatas: (data.discipline_adaptations as any)?.matematica_exatas || '',
+            ciencias_humanas: (data.discipline_adaptations as any)?.ciencias_humanas || '',
+          },
+        });
+      } else {
+        setPeiData({
+          ...emptyPEI,
+          enrollment_number: student.student_id,
+          legal_guardian: student.guardian_name || '',
+          phone: student.guardian_phone || '',
+        });
+      }
+    } catch (error) {
+      console.error('Error loading PEI:', error);
+      toast.error('Falha ao carregar PEI');
+    } finally {
+      setPeiLoading(false);
+    }
+  };
+
+  const handleSavePEI = async () => {
+    if (!selectedStudent) return;
+    setPeiSaving(true);
+    try {
+      const payload = {
+        student_id: selectedStudent.id,
+        birth_date_snapshot: selectedStudent.birth_date,
+        shift_snapshot: selectedStudent.shift,
+        enrollment_number: peiData.enrollment_number || null,
+        aee_teacher: peiData.aee_teacher || null,
+        coordination: peiData.coordination || null,
+        elaboration_date: peiData.elaboration_date || null,
+        legal_guardian: peiData.legal_guardian || null,
+        contact: peiData.contact || null,
+        email: peiData.email || null,
+        phone: peiData.phone || null,
+        functional_profile: peiData.functional_profile || null,
+        potentialities: peiData.potentialities || null,
+        learning_barriers: peiData.learning_barriers || null,
+        evaluation_criteria: peiData.evaluation_criteria || null,
+        performance_levels: peiData.performance_levels as any,
+        intervention_plan: peiData.intervention_plan as any,
+        discipline_adaptations: peiData.discipline_adaptations as any,
+      };
+
+      const { error } = await supabase
+        .from('student_pei')
+        .upsert(payload, { onConflict: 'student_id' });
+      if (error) throw error;
+      toast.success('PEI salvo com sucesso');
+    } catch (error) {
+      console.error('Error saving PEI:', error);
+      toast.error('Falha ao salvar PEI');
+    } finally {
+      setPeiSaving(false);
+    }
+  };
+
   const exportAEEReport = (student: Student) => {
     const printWindow = window.open('', '_blank');
     if (!printWindow) {
