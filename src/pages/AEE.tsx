@@ -17,6 +17,7 @@ import { StudentPhoto } from '@/components/StudentPhoto';
 import { Badge } from '@/components/ui/badge';
 import { differenceInYears, parse } from 'date-fns';
 import { useSchoolName } from '@/hooks/useSchoolName';
+import { PEIForm, PEIData, emptyPEI, InterventionRow, PerformanceLevel } from '@/components/aee/PEIForm';
 
 interface Student {
   id: string;
@@ -36,6 +37,8 @@ interface Student {
   aee_adapted_activities: boolean;
   aee_adaptation_suggestions: string | null;
   aee_laudo_attachment_url: string | null;
+  guardian_name?: string | null;
+  guardian_phone?: string | null;
 }
 
 interface TeacherInfo {
@@ -77,6 +80,10 @@ const AEE = () => {
     aee_adaptation_suggestions: '',
   });
 
+  const [peiData, setPeiData] = useState<PEIData>(emptyPEI);
+  const [peiLoading, setPeiLoading] = useState(false);
+  const [peiSaving, setPeiSaving] = useState(false);
+
   useEffect(() => {
     fetchStudents();
   }, []);
@@ -85,7 +92,7 @@ const AEE = () => {
     try {
       const { data, error } = await supabase
         .from('students')
-        .select('id, full_name, student_id, class, shift, photo_url, status, birth_date, has_medical_report, aee_cid_code, aee_cid_description, aee_uses_medication, aee_medication_name, aee_literacy_status, aee_adapted_activities, aee_adaptation_suggestions, aee_laudo_attachment_url')
+        .select('id, full_name, student_id, class, shift, photo_url, status, birth_date, has_medical_report, aee_cid_code, aee_cid_description, aee_uses_medication, aee_medication_name, aee_literacy_status, aee_adapted_activities, aee_adaptation_suggestions, aee_laudo_attachment_url, guardian_name, guardian_phone')
         .eq('has_medical_report', true)
         .order('full_name');
 
