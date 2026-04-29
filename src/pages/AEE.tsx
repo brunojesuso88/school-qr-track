@@ -249,7 +249,7 @@ const AEE = () => {
     setTeachers([]);
     setLaudoFile(null);
     setLaudoSignedUrl(null);
-    setActiveTab('laudo');
+    setActiveTab('pei');
     setIsDialogOpen(true);
     
     // Fetch teachers for this student's class
@@ -259,6 +259,9 @@ const AEE = () => {
     if (student.aee_laudo_attachment_url) {
       fetchLaudoSignedUrl(student.aee_laudo_attachment_url);
     }
+
+    // Load PEI data
+    loadPEI(student);
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
