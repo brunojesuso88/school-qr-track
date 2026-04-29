@@ -416,6 +416,89 @@ export type Database = {
         }
         Relationships: []
       }
+      student_pei: {
+        Row: {
+          aee_teacher: string | null
+          birth_date_snapshot: string | null
+          contact: string | null
+          coordination: string | null
+          created_at: string
+          created_by: string | null
+          discipline_adaptations: Json
+          elaboration_date: string | null
+          email: string | null
+          enrollment_number: string | null
+          evaluation_criteria: string | null
+          functional_profile: string | null
+          id: string
+          intervention_plan: Json
+          learning_barriers: string | null
+          legal_guardian: string | null
+          performance_levels: Json
+          phone: string | null
+          potentialities: string | null
+          shift_snapshot: string | null
+          student_id: string
+          updated_at: string
+        }
+        Insert: {
+          aee_teacher?: string | null
+          birth_date_snapshot?: string | null
+          contact?: string | null
+          coordination?: string | null
+          created_at?: string
+          created_by?: string | null
+          discipline_adaptations?: Json
+          elaboration_date?: string | null
+          email?: string | null
+          enrollment_number?: string | null
+          evaluation_criteria?: string | null
+          functional_profile?: string | null
+          id?: string
+          intervention_plan?: Json
+          learning_barriers?: string | null
+          legal_guardian?: string | null
+          performance_levels?: Json
+          phone?: string | null
+          potentialities?: string | null
+          shift_snapshot?: string | null
+          student_id: string
+          updated_at?: string
+        }
+        Update: {
+          aee_teacher?: string | null
+          birth_date_snapshot?: string | null
+          contact?: string | null
+          coordination?: string | null
+          created_at?: string
+          created_by?: string | null
+          discipline_adaptations?: Json
+          elaboration_date?: string | null
+          email?: string | null
+          enrollment_number?: string | null
+          evaluation_criteria?: string | null
+          functional_profile?: string | null
+          id?: string
+          intervention_plan?: Json
+          learning_barriers?: string | null
+          legal_guardian?: string | null
+          performance_levels?: Json
+          phone?: string | null
+          potentialities?: string | null
+          shift_snapshot?: string | null
+          student_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "student_pei_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: true
+            referencedRelation: "students"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       students: {
         Row: {
           aee_adaptation_suggestions: string | null
