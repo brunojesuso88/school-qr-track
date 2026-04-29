@@ -1150,6 +1150,66 @@ const AEE = () => {
                     </div>
                   )}
                 </TabsContent>
+
+                {/* PEI Tab */}
+                <TabsContent value="pei" className="mt-4">
+                  {peiLoading ? (
+                    <div className="space-y-3">
+                      {[1, 2, 3, 4].map((i) => (
+                        <div key={i} className="h-16 bg-muted animate-pulse rounded-lg" />
+                      ))}
+                    </div>
+                  ) : isEditMode ? (
+                    <div className="space-y-4">
+                      <PEIForm
+                        student={{
+                          full_name: selectedStudent.full_name,
+                          student_id: selectedStudent.student_id,
+                          class: selectedStudent.class,
+                          shift: selectedStudent.shift,
+                          birth_date: selectedStudent.birth_date,
+                        }}
+                        data={peiData}
+                        onChange={setPeiData}
+                      />
+                      <div className="flex justify-end pt-4 border-t">
+                        <Button onClick={handleSavePEI} disabled={peiSaving}>
+                          {peiSaving ? 'Salvando PEI...' : 'Salvar PEI'}
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-4 text-sm">
+                      <p className="text-muted-foreground">
+                        Visualização somente leitura do PEI. Para editar, clique em "Editar" no card do aluno.
+                      </p>
+                      {peiData.functional_profile && (
+                        <div>
+                          <Label className="text-muted-foreground">Perfil Funcional</Label>
+                          <p className="whitespace-pre-wrap">{peiData.functional_profile}</p>
+                        </div>
+                      )}
+                      {peiData.potentialities && (
+                        <div>
+                          <Label className="text-muted-foreground">Potencialidades</Label>
+                          <p className="whitespace-pre-wrap">{peiData.potentialities}</p>
+                        </div>
+                      )}
+                      {peiData.learning_barriers && (
+                        <div>
+                          <Label className="text-muted-foreground">Barreiras de Aprendizagem</Label>
+                          <p className="whitespace-pre-wrap">{peiData.learning_barriers}</p>
+                        </div>
+                      )}
+                      {peiData.evaluation_criteria && (
+                        <div>
+                          <Label className="text-muted-foreground">Avaliação e Critérios</Label>
+                          <p className="whitespace-pre-wrap">{peiData.evaluation_criteria}</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </TabsContent>
               </Tabs>
 
               <DialogFooter className="mt-6">
