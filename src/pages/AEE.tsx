@@ -232,6 +232,8 @@ const AEE = () => {
     if (student.aee_laudo_attachment_url) {
       fetchLaudoSignedUrl(student.aee_laudo_attachment_url);
     }
+
+    loadPEI(student);
   };
 
   const openEditMode = (student: Student) => {
