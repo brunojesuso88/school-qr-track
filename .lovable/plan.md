@@ -1,49 +1,114 @@
 
+# Plano: Substituir aba "Informações do Laudo" pelo PEI (Plano Educacional Individualizado)
 
-# Plano: Campos Opcionais no Cadastro + Download de Alunos Faltosos
+## Objetivo
+Na seção **Sistema AEE**, ao clicar em **Editar** um aluno, a aba "Informações do Laudo" será substituída pela aba **PEI**, contendo um formulário estruturado com 9 seções para construção do Plano Educacional Individualizado.
 
-## 1. Tornar `guardian_name` e `guardian_phone` opcionais no cadastro de alunos
+A aba "Professores" e o upload de documento do laudo permanecem inalterados.
 
-### Problema atual
-Em `src/lib/validations.ts`, o `studentSchema` exige `guardian_name` (min 3 chars) e `guardian_phone` (regex obrigatoria). Isso bloqueia o cadastro se esses campos estiverem vazios.
+---
 
-Em `src/pages/Students.tsx`, o `handleSubmit` passa esses valores pela validacao Zod, que falha se vazios.
+## 1. Banco de Dados
 
-### Solucao
+### Nova tabela `student_pei`
+Armazena o PEI completo do aluno (1 PEI ativo por aluno, mas mantemos histórico com `version`).
 
-**Arquivo `src/lib/validations.ts`** (linhas 15-20):
-- Alterar `guardian_name` para: `z.string().max(100).regex(nameRegex).optional().or(z.literal(''))`
-- Alterar `guardian_phone` para: `z.string().regex(phoneRegex).optional().or(z.literal(''))`
-- Ou seja, aceitar string vazia ou valor valido
+Colunas principais:
+- `id` (uuid, PK)
+- `student_id` (uuid, FK → students.id, ON DELETE CASCADE)
+- **Identificação:** `birth_date_snapshot`, `shift_snapshot`, `enrollment_number`, `aee_teacher`, `coordination`, `elaboration_date`, `legal_guardian`, `contact`, `email`, `phone`
+- **Texto livre:** `functional_profile`, `potentialities`, `learning_barriers`, `evaluation_criteria` (todos `text`)
+- **JSON estruturados:**
+  - `performance_levels` (jsonb) — ex: `{ "linguagem": "Independente", "matematica": "Com apoio", "ciencias_natureza": "Não realiza", "ciencias_humanas": "Independente" }`
+  - `intervention_plan` (jsonb) — array de `{ objetivo, estrategia, frequencia, responsavel, recurso }`
+  - `discipline_adaptations` (jsonb) — `{ portugues_humanas: "...", matematica_exatas: "...", ciencias_humanas: "..." }`
+- `created_at`, `updated_at` (timestamptz, default `now()`)
+- `created_by` (uuid)
 
-**Arquivo `src/pages/Students.tsx`** (linhas 261-264):
-- No `validationData`, passar `guardian_name` e `guardian_phone` como strings que podem ser vazias
-- Ajustar para nao aplicar `formatPhone` em string vazia
+### RLS (mesmo padrão de `students`)
+- SELECT: admin, direction, teacher, staff
+- INSERT/UPDATE: admin, direction, teacher
+- DELETE: admin, direction
 
-## 2. Botao "Alunos Faltosos" no card da turma + download JPEG
+### Trigger
+- `update_updated_at_column` em `BEFORE UPDATE`.
 
-### Comportamento
-- Apos a frequencia diaria ser realizada (`classesWithAttendance.has(classItem.name)`), exibir um botao "Alunos Faltosos" no card
-- Ao clicar, o sistema busca os alunos ausentes daquela turma no dia atual
-- Gera uma imagem JPEG usando `<canvas>` com as informacoes: nome da turma, data, lista de alunos faltosos (nome e turma)
-- Faz download automatico do arquivo JPEG
+---
 
-### Implementacao
+## 2. Frontend — `src/pages/AEE.tsx`
 
-**Arquivo `src/pages/Classes.tsx`**:
-- Adicionar funcao `handleDownloadAbsentStudents(className: string)`:
-  1. Consultar `attendance` com status `absent` e data de hoje, filtrando pelo `class` do aluno via join com `students`
-  2. Criar um `<canvas>` off-screen com fundo branco
-  3. Desenhar titulo (turma + data), e listar cada aluno faltoso com seu nome
-  4. Converter para JPEG via `canvas.toDataURL('image/jpeg')` e disparar download
-- Adicionar botao "Alunos Faltosos" (com icone `Download`) no card, visivel apenas quando a frequencia ja foi realizada e nao e final de semana
-- O botao fica entre o botao de frequencia e o de ver alunos
+### Mudanças nas abas (apenas em modo edição)
+```
+TabsList:
+  [ Professores ]  [ PEI ]              ← antes: "Informações do Laudo"
+```
 
-## Resumo
+Em **modo visualização**, mantém a aba "Informações do Laudo" como está (read-only do laudo médico já existente). A aba PEI aparece apenas em **modo edição** (e também em modo visualização como uma terceira aba "PEI" para consultar o plano salvo).
 
-| Arquivo | Alteracao |
-|---------|-----------|
-| `src/lib/validations.ts` | `guardian_name` e `guardian_phone` opcionais |
-| `src/pages/Students.tsx` | Ajustar validacao para campos vazios |
-| `src/pages/Classes.tsx` | Botao "Alunos Faltosos" + geracao e download de JPEG via canvas |
+> Decisão: 3 abas no total → **Professores | Laudo (read-only) | PEI**. O conteúdo de "Laudo" continua existindo (CID, medicação, alfabetização, etc.) — apenas o **título da aba** muda quando entrar em **modo edição** para "PEI", e o conteúdo de edição passa a ser o formulário PEI. Os campos do laudo (CID, medicação) continuam editáveis dentro da seção 1 do PEI ou são acessíveis pelo cadastro do aluno.
 
+**Recomendação final (mais clara):** manter 3 abas sempre visíveis: `Professores | Laudo | PEI`. Edição do laudo médico passa para a aba "Laudo", e a aba "PEI" tem seu próprio formulário com botão Salvar independente.
+
+### Novo componente: `src/components/aee/PEIForm.tsx`
+Formulário com as 9 seções, em accordion ou seções empilhadas:
+
+**1. Identificação** (grid 2 colunas)
+- Nome Completo (auto, readOnly do `selectedStudent.full_name`)
+- Data de nascimento (auto do `selectedStudent.birth_date`)
+- Idade (calculada, readOnly)
+- Turma (auto do `selectedStudent.class`, readOnly)
+- Turno (auto, readOnly)
+- Nº matrícula (auto do `selectedStudent.student_id`, readOnly)
+- Professor(a) AEE — Input
+- Coordenação — Input
+- Data de elaboração — Input type=date (default hoje)
+- Responsável legal — Input (preenche com `guardian_name` do aluno se vazio)
+- Contato — Input
+- E-mail — Input type=email
+- Telefone — Input (preenche com `guardian_phone` do aluno se vazio)
+
+**2. Perfil Funcional de Aprendizagem** — Textarea (`functional_profile`)
+
+**3. Potencialidades** — Textarea (`potentialities`)
+
+**4. Barreiras de Aprendizagem** — Textarea (`learning_barriers`)
+
+**5. Nível Atual de Desempenho** — tabela com 4 linhas fixas (Linguagem, Matemática, Ciências da Natureza, Ciências Humanas), cada uma com `<Select>` com opções: "Nível Independente", "Com apoio", "Não realiza".
+
+**7. Plano de Intervenção Pedagógica** — tabela dinâmica (array em `intervention_plan`):
+- Colunas: Objetivo | Estratégia | Frequência | Responsável | Recurso
+- Botão "+ Adicionar linha" e ícone de lixeira por linha.
+
+**8. Adaptações por Disciplina** — 3 textareas:
+- Língua Portuguesa e Humanas
+- Matemática e Exatas
+- Ciências Humanas
+
+**9. Avaliação e Critérios** — Textarea (`evaluation_criteria`) com placeholder explicando instrumentos, critérios de sucesso e tipo de adaptação.
+
+### Lógica de carregamento
+- Ao abrir edição (`openEditMode`): se existe registro em `student_pei` para o `student_id`, carrega; senão, inicializa formulário vazio com campos auto-preenchidos a partir do `selectedStudent`.
+- Botão **Salvar PEI**: faz `upsert` em `student_pei` por `student_id` (UNIQUE constraint).
+
+### Integração com export PDF
+- Atualizar `exportAEEReport` para incluir uma seção "PEI" no relatório quando existir, renderizando as 9 seções (ficará para iteração futura se preferir; mantém nesta entrega o export atual + nova função `exportPEIReport(student)` acionada por botão na aba PEI).
+
+---
+
+## Arquivos afetados
+
+| Arquivo | Alteração |
+|---|---|
+| Migration SQL nova | Criar tabela `student_pei` com RLS e trigger |
+| `src/pages/AEE.tsx` | Adicionar 3ª aba "PEI", lógica de carregar/salvar PEI, botão de exportar PEI |
+| `src/components/aee/PEIForm.tsx` (novo) | Formulário completo das 9 seções |
+| `src/lib/validations.ts` | Schema Zod `peiSchema` para validação |
+
+---
+
+## Detalhes técnicos
+
+- Tipos em `src/integrations/supabase/types.ts` serão regenerados automaticamente após a migration.
+- Os campos JSON (`performance_levels`, `intervention_plan`, `discipline_adaptations`) usam estados tipados no React e são serializados no save.
+- O formulário PEI fica em `<ScrollArea>` dentro do dialog para não estourar a altura.
+- Permissões: igual ao restante do AEE (admin, direction, teacher podem editar).
