@@ -17,6 +17,7 @@ import { StudentPhoto } from '@/components/StudentPhoto';
 import { Badge } from '@/components/ui/badge';
 import { differenceInYears, parse } from 'date-fns';
 import { useSchoolName } from '@/hooks/useSchoolName';
+import { PEIForm, PEIData, emptyPEI, InterventionRow, PerformanceLevel } from '@/components/aee/PEIForm';
 
 interface Student {
   id: string;
@@ -36,6 +37,8 @@ interface Student {
   aee_adapted_activities: boolean;
   aee_adaptation_suggestions: string | null;
   aee_laudo_attachment_url: string | null;
+  guardian_name?: string | null;
+  guardian_phone?: string | null;
 }
 
 interface TeacherInfo {
@@ -77,6 +80,10 @@ const AEE = () => {
     aee_adaptation_suggestions: '',
   });
 
+  const [peiData, setPeiData] = useState<PEIData>(emptyPEI);
+  const [peiLoading, setPeiLoading] = useState(false);
+  const [peiSaving, setPeiSaving] = useState(false);
+
   useEffect(() => {
     fetchStudents();
   }, []);
@@ -85,7 +92,7 @@ const AEE = () => {
     try {
       const { data, error } = await supabase
         .from('students')
-        .select('id, full_name, student_id, class, shift, photo_url, status, birth_date, has_medical_report, aee_cid_code, aee_cid_description, aee_uses_medication, aee_medication_name, aee_literacy_status, aee_adapted_activities, aee_adaptation_suggestions, aee_laudo_attachment_url')
+        .select('id, full_name, student_id, class, shift, photo_url, status, birth_date, has_medical_report, aee_cid_code, aee_cid_description, aee_uses_medication, aee_medication_name, aee_literacy_status, aee_adapted_activities, aee_adaptation_suggestions, aee_laudo_attachment_url, guardian_name, guardian_phone')
         .eq('has_medical_report', true)
         .order('full_name');
 
@@ -225,6 +232,8 @@ const AEE = () => {
     if (student.aee_laudo_attachment_url) {
       fetchLaudoSignedUrl(student.aee_laudo_attachment_url);
     }
+
+    loadPEI(student);
   };
 
   const openEditMode = (student: Student) => {
@@ -242,7 +251,7 @@ const AEE = () => {
     setTeachers([]);
     setLaudoFile(null);
     setLaudoSignedUrl(null);
-    setActiveTab('laudo');
+    setActiveTab('pei');
     setIsDialogOpen(true);
     
     // Fetch teachers for this student's class
@@ -252,6 +261,9 @@ const AEE = () => {
     if (student.aee_laudo_attachment_url) {
       fetchLaudoSignedUrl(student.aee_laudo_attachment_url);
     }
+
+    // Load PEI data
+    loadPEI(student);
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -363,6 +375,99 @@ const AEE = () => {
       toast.error('Falha ao salvar informações');
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const loadPEI = async (student: Student) => {
+    setPeiLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('student_pei')
+        .select('*')
+        .eq('student_id', student.id)
+        .maybeSingle();
+      if (error) throw error;
+
+      if (data) {
+        setPeiData({
+          enrollment_number: data.enrollment_number || '',
+          aee_teacher: data.aee_teacher || '',
+          coordination: data.coordination || '',
+          elaboration_date: data.elaboration_date || new Date().toISOString().split('T')[0],
+          legal_guardian: data.legal_guardian || student.guardian_name || '',
+          contact: data.contact || '',
+          email: data.email || '',
+          phone: data.phone || student.guardian_phone || '',
+          functional_profile: data.functional_profile || '',
+          potentialities: data.potentialities || '',
+          learning_barriers: data.learning_barriers || '',
+          evaluation_criteria: data.evaluation_criteria || '',
+          performance_levels: {
+            linguagem: ((data.performance_levels as any)?.linguagem || '') as PerformanceLevel,
+            matematica: ((data.performance_levels as any)?.matematica || '') as PerformanceLevel,
+            ciencias_natureza: ((data.performance_levels as any)?.ciencias_natureza || '') as PerformanceLevel,
+            ciencias_humanas: ((data.performance_levels as any)?.ciencias_humanas || '') as PerformanceLevel,
+          },
+          intervention_plan: Array.isArray(data.intervention_plan)
+            ? (data.intervention_plan as unknown as InterventionRow[])
+            : [],
+          discipline_adaptations: {
+            portugues_humanas: (data.discipline_adaptations as any)?.portugues_humanas || '',
+            matematica_exatas: (data.discipline_adaptations as any)?.matematica_exatas || '',
+            ciencias_humanas: (data.discipline_adaptations as any)?.ciencias_humanas || '',
+          },
+        });
+      } else {
+        setPeiData({
+          ...emptyPEI,
+          enrollment_number: student.student_id,
+          legal_guardian: student.guardian_name || '',
+          phone: student.guardian_phone || '',
+        });
+      }
+    } catch (error) {
+      console.error('Error loading PEI:', error);
+      toast.error('Falha ao carregar PEI');
+    } finally {
+      setPeiLoading(false);
+    }
+  };
+
+  const handleSavePEI = async () => {
+    if (!selectedStudent) return;
+    setPeiSaving(true);
+    try {
+      const payload = {
+        student_id: selectedStudent.id,
+        birth_date_snapshot: selectedStudent.birth_date,
+        shift_snapshot: selectedStudent.shift,
+        enrollment_number: peiData.enrollment_number || null,
+        aee_teacher: peiData.aee_teacher || null,
+        coordination: peiData.coordination || null,
+        elaboration_date: peiData.elaboration_date || null,
+        legal_guardian: peiData.legal_guardian || null,
+        contact: peiData.contact || null,
+        email: peiData.email || null,
+        phone: peiData.phone || null,
+        functional_profile: peiData.functional_profile || null,
+        potentialities: peiData.potentialities || null,
+        learning_barriers: peiData.learning_barriers || null,
+        evaluation_criteria: peiData.evaluation_criteria || null,
+        performance_levels: peiData.performance_levels as any,
+        intervention_plan: peiData.intervention_plan as any,
+        discipline_adaptations: peiData.discipline_adaptations as any,
+      };
+
+      const { error } = await supabase
+        .from('student_pei')
+        .upsert(payload, { onConflict: 'student_id' });
+      if (error) throw error;
+      toast.success('PEI salvo com sucesso');
+    } catch (error) {
+      console.error('Error saving PEI:', error);
+      toast.error('Falha ao salvar PEI');
+    } finally {
+      setPeiSaving(false);
     }
   };
 
@@ -721,9 +826,10 @@ const AEE = () => {
 
               {/* Tabs */}
               <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-4">
-                <TabsList className="grid w-full grid-cols-2">
+                <TabsList className="grid w-full grid-cols-3">
                   <TabsTrigger value="teachers">Professores</TabsTrigger>
-                  <TabsTrigger value="laudo">Informações do Laudo</TabsTrigger>
+                  <TabsTrigger value="laudo">{isEditMode ? 'Laudo' : 'Informações do Laudo'}</TabsTrigger>
+                  <TabsTrigger value="pei">PEI</TabsTrigger>
                 </TabsList>
 
                 {/* Teachers Tab */}
@@ -1046,6 +1152,66 @@ const AEE = () => {
                     </div>
                   )}
                 </TabsContent>
+
+                {/* PEI Tab */}
+                <TabsContent value="pei" className="mt-4">
+                  {peiLoading ? (
+                    <div className="space-y-3">
+                      {[1, 2, 3, 4].map((i) => (
+                        <div key={i} className="h-16 bg-muted animate-pulse rounded-lg" />
+                      ))}
+                    </div>
+                  ) : isEditMode ? (
+                    <div className="space-y-4">
+                      <PEIForm
+                        student={{
+                          full_name: selectedStudent.full_name,
+                          student_id: selectedStudent.student_id,
+                          class: selectedStudent.class,
+                          shift: selectedStudent.shift,
+                          birth_date: selectedStudent.birth_date,
+                        }}
+                        data={peiData}
+                        onChange={setPeiData}
+                      />
+                      <div className="flex justify-end pt-4 border-t">
+                        <Button onClick={handleSavePEI} disabled={peiSaving}>
+                          {peiSaving ? 'Salvando PEI...' : 'Salvar PEI'}
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-4 text-sm">
+                      <p className="text-muted-foreground">
+                        Visualização somente leitura do PEI. Para editar, clique em "Editar" no card do aluno.
+                      </p>
+                      {peiData.functional_profile && (
+                        <div>
+                          <Label className="text-muted-foreground">Perfil Funcional</Label>
+                          <p className="whitespace-pre-wrap">{peiData.functional_profile}</p>
+                        </div>
+                      )}
+                      {peiData.potentialities && (
+                        <div>
+                          <Label className="text-muted-foreground">Potencialidades</Label>
+                          <p className="whitespace-pre-wrap">{peiData.potentialities}</p>
+                        </div>
+                      )}
+                      {peiData.learning_barriers && (
+                        <div>
+                          <Label className="text-muted-foreground">Barreiras de Aprendizagem</Label>
+                          <p className="whitespace-pre-wrap">{peiData.learning_barriers}</p>
+                        </div>
+                      )}
+                      {peiData.evaluation_criteria && (
+                        <div>
+                          <Label className="text-muted-foreground">Avaliação e Critérios</Label>
+                          <p className="whitespace-pre-wrap">{peiData.evaluation_criteria}</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </TabsContent>
               </Tabs>
 
               <DialogFooter className="mt-6">
@@ -1058,9 +1224,11 @@ const AEE = () => {
                     <Button variant="outline" onClick={() => setIsEditMode(false)}>
                       Cancelar
                     </Button>
-                    <Button onClick={handleSave} disabled={isSaving || isUploadingLaudo}>
-                      {isSaving || isUploadingLaudo ? 'Salvando...' : 'Salvar'}
-                    </Button>
+                    {activeTab !== 'pei' && (
+                      <Button onClick={handleSave} disabled={isSaving || isUploadingLaudo}>
+                        {isSaving || isUploadingLaudo ? 'Salvando...' : 'Salvar Laudo'}
+                      </Button>
+                    )}
                   </>
                 )}
               </DialogFooter>
