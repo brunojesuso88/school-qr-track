@@ -1224,9 +1224,11 @@ const AEE = () => {
                     <Button variant="outline" onClick={() => setIsEditMode(false)}>
                       Cancelar
                     </Button>
-                    <Button onClick={handleSave} disabled={isSaving || isUploadingLaudo}>
-                      {isSaving || isUploadingLaudo ? 'Salvando...' : 'Salvar'}
-                    </Button>
+                    {activeTab !== 'pei' && (
+                      <Button onClick={handleSave} disabled={isSaving || isUploadingLaudo}>
+                        {isSaving || isUploadingLaudo ? 'Salvando...' : 'Salvar Laudo'}
+                      </Button>
+                    )}
                   </>
                 )}
               </DialogFooter>
