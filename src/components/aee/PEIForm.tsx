@@ -241,13 +241,6 @@ export const PEIForm = ({ student, data, onChange }: PEIFormProps) => {
             <Input value={shiftLabels[student.shift] || student.shift} readOnly className="bg-muted" />
           </div>
           <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">Nº matrícula</Label>
-            <Input
-              value={data.enrollment_number || student.student_id}
-              onChange={(e) => update('enrollment_number', e.target.value)}
-            />
-          </div>
-          <div className="space-y-1.5">
             <Label className="text-xs text-muted-foreground">Data de elaboração</Label>
             <Input
               type="date"
@@ -288,14 +281,6 @@ export const PEIForm = ({ student, data, onChange }: PEIFormProps) => {
             <Input
               value={data.phone}
               onChange={(e) => update('phone', e.target.value)}
-            />
-          </div>
-          <div className="space-y-1.5 sm:col-span-2">
-            <Label className="text-xs text-muted-foreground">E-mail</Label>
-            <Input
-              type="email"
-              value={data.email}
-              onChange={(e) => update('email', e.target.value)}
             />
           </div>
         </div>
@@ -510,7 +495,7 @@ export const PEIForm = ({ student, data, onChange }: PEIFormProps) => {
           </div>
           <div>
             <div className="flex items-center justify-between mb-1">
-              <Label className="text-sm">Matemática e Exatas</Label>
+              <Label className="text-sm">Matemática e Natureza</Label>
               <SuggestionPicker
                 options={ADAPTATION_MATEMATICA_EXATAS_SUGGESTIONS}
                 onPick={(t) =>
