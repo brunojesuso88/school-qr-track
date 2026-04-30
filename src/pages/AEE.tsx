@@ -973,9 +973,9 @@ const AEE = () => {
                       size="icon"
                       onClick={(e) => { 
                         e.stopPropagation(); 
-                        fetchStudentTeachers(student.class).then(() => exportAEEReport(student));
+                        fetchStudentTeachers(student.class).then(() => exportPEIReport(student));
                       }}
-                      title="Exportar PDF"
+                      title="Exportar PEI"
                     >
                       <FileDown className="w-4 h-4" />
                     </Button>
