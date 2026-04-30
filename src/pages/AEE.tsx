@@ -598,8 +598,8 @@ const AEE = () => {
             margin-bottom: 6px;
           }
           .institutional-header img {
-            width: 84px;
-            height: 84px;
+            width: 130px;
+            height: 130px;
             object-fit: contain;
           }
           .institutional-header .info {
@@ -791,7 +791,7 @@ const AEE = () => {
           <h3>8. Adaptações por Disciplina</h3>
           <table>
             <tr><th style="width:30%">Área</th><th>Adaptações</th></tr>
-            <tr><td>Língua Portuguesa e Humanas</td><td>${pei.discipline_adaptations.portugues_humanas ? escapeHtml(pei.discipline_adaptations.portugues_humanas) : '<span class="empty">—</span>'}</td></tr>
+            <tr><td>Língua Portuguesa</td><td>${pei.discipline_adaptations.portugues_humanas ? escapeHtml(pei.discipline_adaptations.portugues_humanas) : '<span class="empty">—</span>'}</td></tr>
             <tr><td>Matemática e Exatas</td><td>${pei.discipline_adaptations.matematica_exatas ? escapeHtml(pei.discipline_adaptations.matematica_exatas) : '<span class="empty">—</span>'}</td></tr>
             <tr><td>Ciências Humanas</td><td>${pei.discipline_adaptations.ciencias_humanas ? escapeHtml(pei.discipline_adaptations.ciencias_humanas) : '<span class="empty">—</span>'}</td></tr>
           </table>
@@ -817,11 +817,6 @@ const AEE = () => {
           <div class="signature"><div class="line">Coordenação Pedagógica</div></div>
           <div class="signature"><div class="line">Responsável Legal</div></div>
         </div>
-
-        <p class="footer">
-          PEI gerado em ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-          ${schoolName ? ` &middot; ${escapeHtml(schoolName)}` : ''}
-        </p>
 
         <script>
           window.onload = function() {
