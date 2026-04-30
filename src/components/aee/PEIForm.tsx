@@ -494,7 +494,7 @@ export const PEIForm = ({ student, data, onChange }: PEIFormProps) => {
         <div className="space-y-3">
           <div>
             <div className="flex items-center justify-between mb-1">
-              <Label className="text-sm">Língua Portuguesa e Humanas</Label>
+              <Label className="text-sm">Língua Portuguesa</Label>
               <SuggestionPicker
                 options={ADAPTATION_PORTUGUES_HUMANAS_SUGGESTIONS}
                 onPick={(t) =>
