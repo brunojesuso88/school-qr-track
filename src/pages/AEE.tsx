@@ -564,14 +564,12 @@ const AEE = () => {
       ['Idade', age !== null ? `${age} anos` : 'Não informada'],
       ['Turma', escapeHtml(student.class)],
       ['Turno', getShiftLabel(student.shift)],
-      ['Nº Matrícula', escapeHtml(pei.enrollment_number || student.student_id)],
       ['Data de Elaboração', formatDate(pei.elaboration_date)],
       ['Professor(a) AEE', escapeHtml(pei.aee_teacher) || '—'],
       ['Coordenação', escapeHtml(pei.coordination) || '—'],
       ['Responsável Legal', escapeHtml(pei.legal_guardian) || '—'],
       ['Contato', escapeHtml(pei.contact) || '—'],
       ['Telefone', escapeHtml(pei.phone) || '—'],
-      ['E-mail', escapeHtml(pei.email) || '—'],
     ];
 
     const html = `
@@ -792,7 +790,7 @@ const AEE = () => {
           <table>
             <tr><th style="width:30%">Área</th><th>Adaptações</th></tr>
             <tr><td>Língua Portuguesa</td><td>${pei.discipline_adaptations.portugues_humanas ? escapeHtml(pei.discipline_adaptations.portugues_humanas) : '<span class="empty">—</span>'}</td></tr>
-            <tr><td>Matemática e Exatas</td><td>${pei.discipline_adaptations.matematica_exatas ? escapeHtml(pei.discipline_adaptations.matematica_exatas) : '<span class="empty">—</span>'}</td></tr>
+            <tr><td>Matemática e Natureza</td><td>${pei.discipline_adaptations.matematica_exatas ? escapeHtml(pei.discipline_adaptations.matematica_exatas) : '<span class="empty">—</span>'}</td></tr>
             <tr><td>Ciências Humanas</td><td>${pei.discipline_adaptations.ciencias_humanas ? escapeHtml(pei.discipline_adaptations.ciencias_humanas) : '<span class="empty">—</span>'}</td></tr>
           </table>
         </div>
