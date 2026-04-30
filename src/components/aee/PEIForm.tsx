@@ -3,8 +3,21 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Plus, Trash2 } from 'lucide-react';
+import { Plus, Trash2, Sparkles } from 'lucide-react';
 import { differenceInYears, parse } from 'date-fns';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
+import { useState } from 'react';
+import {
+  FUNCTIONAL_PROFILE_SUGGESTIONS,
+  POTENTIALITIES_SUGGESTIONS,
+  LEARNING_BARRIERS_SUGGESTIONS,
+  INTERVENTION_PLAN_SUGGESTIONS,
+  ADAPTATION_PORTUGUES_HUMANAS_SUGGESTIONS,
+  ADAPTATION_MATEMATICA_EXATAS_SUGGESTIONS,
+  ADAPTATION_CIENCIAS_HUMANAS_SUGGESTIONS,
+  EVALUATION_CRITERIA_SUGGESTIONS,
+} from './peiSuggestions';
 
 export type PerformanceLevel = 'independente' | 'com_apoio' | 'nao_realiza' | '';
 
@@ -68,6 +81,54 @@ export const emptyPEI: PEIData = {
     matematica_exatas: '',
     ciencias_humanas: '',
   },
+};
+
+interface SuggestionPickerProps {
+  options: string[];
+  onPick: (text: string) => void;
+  label?: string;
+}
+
+const SuggestionPicker = ({ options, onPick, label = 'Sugestões' }: SuggestionPickerProps) => {
+  const [open, setOpen] = useState(false);
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button type="button" variant="outline" size="sm" className="h-7 gap-1.5">
+          <Sparkles className="w-3.5 h-3.5" />
+          {label}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[min(420px,90vw)] p-0" align="end">
+        <Command>
+          <CommandInput placeholder="Buscar sugestão..." />
+          <CommandList className="max-h-72">
+            <CommandEmpty>Nenhuma sugestão.</CommandEmpty>
+            <CommandGroup>
+              {options.map((opt, i) => (
+                <CommandItem
+                  key={i}
+                  value={opt}
+                  onSelect={() => {
+                    onPick(opt);
+                    setOpen(false);
+                  }}
+                  className="text-sm items-start"
+                >
+                  <span className="leading-snug">{opt}</span>
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+};
+
+const appendText = (current: string, addition: string): string => {
+  if (!current.trim()) return addition;
+  return `${current.trimEnd()}\n${addition}`;
 };
 
 interface StudentInfo {
@@ -135,6 +196,22 @@ export const PEIForm = ({ student, data, onChange }: PEIFormProps) => {
     const next = [...data.intervention_plan];
     next[idx] = { ...next[idx], [field]: value };
     onChange({ ...data, intervention_plan: next });
+  };
+
+  const addInterventionFromSuggestion = (s: typeof INTERVENTION_PLAN_SUGGESTIONS[number]) => {
+    onChange({
+      ...data,
+      intervention_plan: [
+        ...data.intervention_plan,
+        {
+          objetivo: s.objetivo,
+          estrategia: s.estrategia,
+          frequencia: s.frequencia || '',
+          responsavel: s.responsavel || '',
+          recurso: s.recurso || '',
+        },
+      ],
+    });
   };
 
   return (
@@ -226,7 +303,13 @@ export const PEIForm = ({ student, data, onChange }: PEIFormProps) => {
 
       {/* 2. Perfil Funcional */}
       <section className="space-y-2">
-        <h3 className="text-base font-semibold border-b pb-2">2. Perfil Funcional de Aprendizagem</h3>
+        <div className="flex items-center justify-between border-b pb-2">
+          <h3 className="text-base font-semibold">2. Perfil Funcional de Aprendizagem</h3>
+          <SuggestionPicker
+            options={FUNCTIONAL_PROFILE_SUGGESTIONS}
+            onPick={(t) => update('functional_profile', appendText(data.functional_profile, t))}
+          />
+        </div>
         <Textarea
           placeholder="Descreva como o estudante aprende, formas de comunicação, atenção, autonomia e estilo cognitivo."
           value={data.functional_profile}
@@ -237,7 +320,13 @@ export const PEIForm = ({ student, data, onChange }: PEIFormProps) => {
 
       {/* 3. Potencialidades */}
       <section className="space-y-2">
-        <h3 className="text-base font-semibold border-b pb-2">3. Potencialidades</h3>
+        <div className="flex items-center justify-between border-b pb-2">
+          <h3 className="text-base font-semibold">3. Potencialidades</h3>
+          <SuggestionPicker
+            options={POTENTIALITIES_SUGGESTIONS}
+            onPick={(t) => update('potentialities', appendText(data.potentialities, t))}
+          />
+        </div>
         <Textarea
           placeholder="Descreva habilidades, interesses e pontos fortes relevantes."
           value={data.potentialities}
@@ -248,7 +337,13 @@ export const PEIForm = ({ student, data, onChange }: PEIFormProps) => {
 
       {/* 4. Barreiras */}
       <section className="space-y-2">
-        <h3 className="text-base font-semibold border-b pb-2">4. Barreiras de Aprendizagem</h3>
+        <div className="flex items-center justify-between border-b pb-2">
+          <h3 className="text-base font-semibold">4. Barreiras de Aprendizagem</h3>
+          <SuggestionPicker
+            options={LEARNING_BARRIERS_SUGGESTIONS}
+            onPick={(t) => update('learning_barriers', appendText(data.learning_barriers, t))}
+          />
+        </div>
         <Textarea
           placeholder="Descreva dificuldades acadêmicas, comportamentais, sensoriais e de organização."
           value={data.learning_barriers}
@@ -356,10 +451,41 @@ export const PEIForm = ({ student, data, onChange }: PEIFormProps) => {
             </div>
           ))}
         </div>
-        <Button type="button" variant="outline" size="sm" onClick={addInterventionRow}>
-          <Plus className="w-4 h-4 mr-2" />
-          Adicionar linha
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" variant="outline" size="sm" onClick={addInterventionRow}>
+            <Plus className="w-4 h-4 mr-2" />
+            Adicionar linha
+          </Button>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button type="button" variant="outline" size="sm">
+                <Sparkles className="w-4 h-4 mr-2" />
+                Adicionar a partir de sugestão
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-[min(520px,90vw)] p-0" align="start">
+              <Command>
+                <CommandInput placeholder="Buscar objetivo/estratégia..." />
+                <CommandList className="max-h-80">
+                  <CommandEmpty>Nenhuma sugestão.</CommandEmpty>
+                  <CommandGroup>
+                    {INTERVENTION_PLAN_SUGGESTIONS.map((s, i) => (
+                      <CommandItem
+                        key={i}
+                        value={`${s.objetivo} ${s.estrategia}`}
+                        onSelect={() => addInterventionFromSuggestion(s)}
+                        className="flex flex-col items-start gap-1 py-2"
+                      >
+                        <span className="text-sm font-medium">{s.objetivo}</span>
+                        <span className="text-xs text-muted-foreground">{s.estrategia}</span>
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
+                </CommandList>
+              </Command>
+            </PopoverContent>
+          </Popover>
+        </div>
       </section>
 
       {/* 8. Adaptações por Disciplina */}
@@ -367,7 +493,15 @@ export const PEIForm = ({ student, data, onChange }: PEIFormProps) => {
         <h3 className="text-base font-semibold border-b pb-2">8. Adaptações por Disciplina</h3>
         <div className="space-y-3">
           <div>
-            <Label className="text-sm">Língua Portuguesa e Humanas</Label>
+            <div className="flex items-center justify-between mb-1">
+              <Label className="text-sm">Língua Portuguesa e Humanas</Label>
+              <SuggestionPicker
+                options={ADAPTATION_PORTUGUES_HUMANAS_SUGGESTIONS}
+                onPick={(t) =>
+                  updateAdaptation('portugues_humanas', appendText(data.discipline_adaptations.portugues_humanas, t))
+                }
+              />
+            </div>
             <Textarea
               rows={3}
               value={data.discipline_adaptations.portugues_humanas}
@@ -375,7 +509,15 @@ export const PEIForm = ({ student, data, onChange }: PEIFormProps) => {
             />
           </div>
           <div>
-            <Label className="text-sm">Matemática e Exatas</Label>
+            <div className="flex items-center justify-between mb-1">
+              <Label className="text-sm">Matemática e Exatas</Label>
+              <SuggestionPicker
+                options={ADAPTATION_MATEMATICA_EXATAS_SUGGESTIONS}
+                onPick={(t) =>
+                  updateAdaptation('matematica_exatas', appendText(data.discipline_adaptations.matematica_exatas, t))
+                }
+              />
+            </div>
             <Textarea
               rows={3}
               value={data.discipline_adaptations.matematica_exatas}
@@ -383,7 +525,15 @@ export const PEIForm = ({ student, data, onChange }: PEIFormProps) => {
             />
           </div>
           <div>
-            <Label className="text-sm">Ciências Humanas</Label>
+            <div className="flex items-center justify-between mb-1">
+              <Label className="text-sm">Ciências Humanas</Label>
+              <SuggestionPicker
+                options={ADAPTATION_CIENCIAS_HUMANAS_SUGGESTIONS}
+                onPick={(t) =>
+                  updateAdaptation('ciencias_humanas', appendText(data.discipline_adaptations.ciencias_humanas, t))
+                }
+              />
+            </div>
             <Textarea
               rows={3}
               value={data.discipline_adaptations.ciencias_humanas}
@@ -395,7 +545,13 @@ export const PEIForm = ({ student, data, onChange }: PEIFormProps) => {
 
       {/* 9. Avaliação e Critérios */}
       <section className="space-y-2">
-        <h3 className="text-base font-semibold border-b pb-2">9. Avaliação e Critérios</h3>
+        <div className="flex items-center justify-between border-b pb-2">
+          <h3 className="text-base font-semibold">9. Avaliação e Critérios</h3>
+          <SuggestionPicker
+            options={EVALUATION_CRITERIA_SUGGESTIONS}
+            onPick={(t) => update('evaluation_criteria', appendText(data.evaluation_criteria, t))}
+          />
+        </div>
         <Textarea
           placeholder="Defina instrumentos, critérios de sucesso e tipo de adaptação."
           value={data.evaluation_criteria}
