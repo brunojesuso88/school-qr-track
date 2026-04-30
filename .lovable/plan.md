@@ -1,114 +1,149 @@
 
-# Plano: Substituir aba "Informações do Laudo" pelo PEI (Plano Educacional Individualizado)
+# Plano: Exportar PEI em PDF + Sugestões Pré-prontas
 
-## Objetivo
-Na seção **Sistema AEE**, ao clicar em **Editar** um aluno, a aba "Informações do Laudo" será substituída pela aba **PEI**, contendo um formulário estruturado com 9 seções para construção do Plano Educacional Individualizado.
+## 1. Logo institucional
 
-A aba "Professores" e o upload de documento do laudo permanecem inalterados.
+- Copiar `user-uploads://Logo_Nonato_Novo.png` para `src/assets/logo-cepans.png`.
+- Importar o logo no `AEE.tsx` para uso no cabeçalho do PDF (convertido em base64 via `import` do Vite, que já gera a URL pronta para usar em `<img src>`).
 
----
+## 2. Substituir "Exportar PDF" por "Exportar PEI"
 
-## 1. Banco de Dados
+Em `src/pages/AEE.tsx`:
 
-### Nova tabela `student_pei`
-Armazena o PEI completo do aluno (1 PEI ativo por aluno, mas mantemos histórico com `version`).
+- Renomear o botão `FileDown` no card do aluno: `title="Exportar PEI"`.
+- Trocar a chamada `fetchStudentTeachers(...).then(() => exportAEEReport(student))` por `exportPEIReport(student)`.
+- Manter `exportAEEReport` removido (não é mais necessário).
 
-Colunas principais:
-- `id` (uuid, PK)
-- `student_id` (uuid, FK → students.id, ON DELETE CASCADE)
-- **Identificação:** `birth_date_snapshot`, `shift_snapshot`, `enrollment_number`, `aee_teacher`, `coordination`, `elaboration_date`, `legal_guardian`, `contact`, `email`, `phone`
-- **Texto livre:** `functional_profile`, `potentialities`, `learning_barriers`, `evaluation_criteria` (todos `text`)
-- **JSON estruturados:**
-  - `performance_levels` (jsonb) — ex: `{ "linguagem": "Independente", "matematica": "Com apoio", "ciencias_natureza": "Não realiza", "ciencias_humanas": "Independente" }`
-  - `intervention_plan` (jsonb) — array de `{ objetivo, estrategia, frequencia, responsavel, recurso }`
-  - `discipline_adaptations` (jsonb) — `{ portugues_humanas: "...", matematica_exatas: "...", ciencias_humanas: "..." }`
-- `created_at`, `updated_at` (timestamptz, default `now()`)
-- `created_by` (uuid)
+### Nova função `exportPEIReport(student)`
 
-### RLS (mesmo padrão de `students`)
-- SELECT: admin, direction, teacher, staff
-- INSERT/UPDATE: admin, direction, teacher
-- DELETE: admin, direction
+- Carrega o PEI do aluno via `supabase.from('student_pei').select('*').eq('student_id', student.id).maybeSingle()`.
+- Carrega os professores da turma (igual ao fluxo atual).
+- Abre `window.open('', '_blank')` e injeta um HTML formatado para impressão (mesma estratégia já usada hoje, evitando dependências novas).
+- Aciona `window.print()` no `onload`, gerando um PDF via "Salvar como PDF" do navegador.
 
-### Trigger
-- `update_updated_at_column` em `BEFORE UPDATE`.
+### Cabeçalho institucional do PDF
 
----
-
-## 2. Frontend — `src/pages/AEE.tsx`
-
-### Mudanças nas abas (apenas em modo edição)
-```
-TabsList:
-  [ Professores ]  [ PEI ]              ← antes: "Informações do Laudo"
+```text
++----------------------------------------------------------+
+| [LOGO]   CENTRO DE ENSINO PROF° ANTÔNIO NONATO SAMPAIO  |
+|          Coelho Neto - MA                                |
+|          Plano Educacional Individualizado (PEI)         |
++----------------------------------------------------------+
 ```
 
-Em **modo visualização**, mantém a aba "Informações do Laudo" como está (read-only do laudo médico já existente). A aba PEI aparece apenas em **modo edição** (e também em modo visualização como uma terceira aba "PEI" para consultar o plano salvo).
+- Logo à esquerda (80px), texto institucional à direita.
+- Cores: azul institucional (`#1e3a8a`) e vermelho do brasão (`#dc2626`) como detalhes (linhas, títulos).
+- Nome da escola pode usar `useSchoolName()` como fallback, mas o título oficial vem fixo conforme solicitação.
 
-> Decisão: 3 abas no total → **Professores | Laudo (read-only) | PEI**. O conteúdo de "Laudo" continua existindo (CID, medicação, alfabetização, etc.) — apenas o **título da aba** muda quando entrar em **modo edição** para "PEI", e o conteúdo de edição passa a ser o formulário PEI. Os campos do laudo (CID, medicação) continuam editáveis dentro da seção 1 do PEI ou são acessíveis pelo cadastro do aluno.
+### Conteúdo do PDF (espelhando as 9 seções do PEI)
 
-**Recomendação final (mais clara):** manter 3 abas sempre visíveis: `Professores | Laudo | PEI`. Edição do laudo médico passa para a aba "Laudo", e a aba "PEI" tem seu próprio formulário com botão Salvar independente.
+1. Identificação (tabela 2 colunas: nome, data nasc., idade, turma, turno, matrícula, data elaboração, prof. AEE, coordenação, responsável legal, contato, telefone, e-mail)
+2. Perfil Funcional de Aprendizagem
+3. Potencialidades
+4. Barreiras de Aprendizagem
+5. Nível Atual de Desempenho (tabela)
+6. (reservado — segue numeração do form)
+7. Plano de Intervenção Pedagógica (tabela com Objetivo, Estratégia, Frequência, Responsável, Recurso)
+8. Adaptações por Disciplina (Português/Humanas, Matemática/Exatas, Ciências Humanas)
+9. Avaliação e Critérios
+10. Professores da turma (tabela)
+11. Rodapé com data de geração e linhas de assinatura (Prof. AEE / Coordenação / Responsável)
 
-### Novo componente: `src/components/aee/PEIForm.tsx`
-Formulário com as 9 seções, em accordion ou seções empilhadas:
+## 3. Sugestões pré-prontas nos campos do PEI
 
-**1. Identificação** (grid 2 colunas)
-- Nome Completo (auto, readOnly do `selectedStudent.full_name`)
-- Data de nascimento (auto do `selectedStudent.birth_date`)
-- Idade (calculada, readOnly)
-- Turma (auto do `selectedStudent.class`, readOnly)
-- Turno (auto, readOnly)
-- Nº matrícula (auto do `selectedStudent.student_id`, readOnly)
-- Professor(a) AEE — Input
-- Coordenação — Input
-- Data de elaboração — Input type=date (default hoje)
-- Responsável legal — Input (preenche com `guardian_name` do aluno se vazio)
-- Contato — Input
-- E-mail — Input type=email
-- Telefone — Input (preenche com `guardian_phone` do aluno se vazio)
+Em `src/components/aee/PEIForm.tsx`, criar um componente reutilizável `SuggestionPicker`:
 
-**2. Perfil Funcional de Aprendizagem** — Textarea (`functional_profile`)
+- Para campos textarea (Perfil Funcional, Potencialidades, Barreiras, Avaliação, Adaptações por Disciplina): botão "Sugestões" abre um `Popover` com `Command` (lista pesquisável). Ao clicar em um item, ele é **anexado** ao texto atual (separado por `\n`), permitindo combinar várias sugestões + edição manual.
+- Para o Plano de Intervenção: além do botão "Adicionar linha" manual, adicionar "Adicionar a partir de sugestão" que insere uma nova linha já preenchida com Objetivo + Estratégia sugeridos (editáveis).
 
-**3. Potencialidades** — Textarea (`potentialities`)
+### Banco de sugestões (arquivo novo `src/components/aee/peiSuggestions.ts`)
 
-**4. Barreiras de Aprendizagem** — Textarea (`learning_barriers`)
+Curado a partir de referências da Educação Especial (BNCC, Política Nacional de Educação Especial, manuais do AEE/MEC). Categorias por transtorno mais comuns (TEA, TDAH, DI, deficiência sensorial) com itens genéricos suficientes para reuso.
 
-**5. Nível Atual de Desempenho** — tabela com 4 linhas fixas (Linguagem, Matemática, Ciências da Natureza, Ciências Humanas), cada uma com `<Select>` com opções: "Nível Independente", "Com apoio", "Não realiza".
+**Perfil Funcional de Aprendizagem** (~12 opções):
+- "Apresenta atenção sustentada por períodos curtos, beneficiando-se de pausas frequentes."
+- "Demonstra preferência por aprendizagem visual, com apoio de imagens e pictogramas."
+- "Comunica-se predominantemente por linguagem oral funcional, com vocabulário restrito."
+- "Utiliza comunicação alternativa (gestos, pranchas, PECS) para expressar necessidades."
+- "Apresenta hipersensibilidade auditiva, reagindo a ruídos intensos."
+- "Demonstra autonomia nas atividades de vida diária dentro do ambiente escolar."
+- "Necessita de mediação constante para iniciar e concluir tarefas."
+- "Aprende melhor por meio de atividades concretas e manipuláveis."
+- "Apresenta ritmo de aprendizagem mais lento, exigindo repetição e revisão."
+- "Demonstra raciocínio lógico preservado em situações estruturadas."
+- "Tem dificuldade em generalizar conceitos para novos contextos."
+- "Apresenta boa memória visual e auditiva para temas de interesse."
 
-**7. Plano de Intervenção Pedagógica** — tabela dinâmica (array em `intervention_plan`):
-- Colunas: Objetivo | Estratégia | Frequência | Responsável | Recurso
-- Botão "+ Adicionar linha" e ícone de lixeira por linha.
+**Potencialidades** (~12 opções):
+- "Demonstra interesse por música e atividades rítmicas."
+- "Possui boa memória para informações de seu interesse."
+- "Apresenta habilidade artística (desenho, pintura, modelagem)."
+- "Participa com entusiasmo de atividades em grupo quando bem mediadas."
+- "Demonstra empatia e cuidado com colegas."
+- "Apresenta facilidade com tecnologia e recursos digitais."
+- "Realiza atividades motoras amplas com destreza."
+- "Demonstra raciocínio matemático em situações concretas."
+- "Reconhece e nomeia letras/números (alfabetização inicial)."
+- "Demonstra criatividade na resolução de problemas práticos."
+- "Tem boa coordenação motora fina."
+- "Apresenta vocabulário rico em temas de interesse específico."
 
-**8. Adaptações por Disciplina** — 3 textareas:
-- Língua Portuguesa e Humanas
-- Matemática e Exatas
-- Ciências Humanas
+**Barreiras de Aprendizagem** (~12 opções):
+- "Dificuldade na manutenção da atenção em atividades longas."
+- "Dificuldade em interpretação de enunciados textuais."
+- "Dificuldade em interação social com pares e adultos."
+- "Resistência a mudanças de rotina e atividades não previstas."
+- "Dificuldade na coordenação motora fina (escrita, recorte)."
+- "Dificuldade na organização espacial e temporal."
+- "Comportamento desafiador em situações de frustração."
+- "Dificuldade na compreensão de regras sociais implícitas."
+- "Limitação no vocabulário expressivo."
+- "Dificuldade em abstração e raciocínio simbólico."
+- "Hipersensibilidade sensorial (sons, luzes, texturas)."
+- "Dificuldade em copiar do quadro / atividades visuais distantes."
 
-**9. Avaliação e Critérios** — Textarea (`evaluation_criteria`) com placeholder explicando instrumentos, critérios de sucesso e tipo de adaptação.
+**Plano de Intervenção** (~10 templates de Objetivo + Estratégia):
+- Obj: "Ampliar o tempo de atenção em atividades dirigidas." / Est: "Uso de cronômetro visual e divisão da atividade em pequenas etapas."
+- Obj: "Desenvolver a comunicação funcional." / Est: "Uso de pranchas de comunicação alternativa e modelagem verbal."
+- Obj: "Avançar no processo de alfabetização." / Est: "Atividades com método fônico e materiais concretos (alfabeto móvel)."
+- Obj: "Desenvolver autonomia nas atividades de vida diária." / Est: "Rotina visual com pictogramas e reforço positivo."
+- Obj: "Ampliar o repertório de interação social." / Est: "Histórias sociais e jogos cooperativos mediados."
+- Obj: "Desenvolver coordenação motora fina." / Est: "Atividades de recorte, pinça, traçado e modelagem com massinha."
+- Obj: "Compreender enunciados de problemas matemáticos." / Est: "Leitura compartilhada e uso de material dourado/concreto."
+- Obj: "Reduzir comportamentos disruptivos em sala." / Est: "Antecipação de rotina, espaço de auto-regulação e reforço positivo."
+- Obj: "Ampliar a leitura e interpretação textual." / Est: "Textos curtos com apoio de imagens e perguntas guiadas."
+- Obj: "Desenvolver raciocínio lógico-matemático." / Est: "Jogos de tabuleiro adaptados e situações-problema concretas."
 
-### Lógica de carregamento
-- Ao abrir edição (`openEditMode`): se existe registro em `student_pei` para o `student_id`, carrega; senão, inicializa formulário vazio com campos auto-preenchidos a partir do `selectedStudent`.
-- Botão **Salvar PEI**: faz `upsert` em `student_pei` por `student_id` (UNIQUE constraint).
+**Adaptações por Disciplina** (~6 por área):
+- Língua Portuguesa/Humanas: textos curtos, fonte ampliada (14-16pt), apoio de imagens, leitura compartilhada, redução do número de questões, uso de áudio-livros.
+- Matemática/Exatas: material concreto (material dourado, ábaco), calculadora quando necessário, tempo ampliado, uso de cores para destacar operações, problemas contextualizados, redução da quantidade de exercícios.
+- Ciências Humanas: linha do tempo visual, mapas com cores, vídeos curtos como apoio, vocabulário simplificado, atividades práticas, sínteses em mapa mental.
 
-### Integração com export PDF
-- Atualizar `exportAEEReport` para incluir uma seção "PEI" no relatório quando existir, renderizando as 9 seções (ficará para iteração futura se preferir; mantém nesta entrega o export atual + nova função `exportPEIReport(student)` acionada por botão na aba PEI).
+**Avaliação e Critérios** (~10 opções):
+- "Avaliação processual e contínua, considerando avanços individuais."
+- "Provas adaptadas com fonte ampliada e enunciados simplificados."
+- "Tempo adicional (50%) para realização das atividades avaliativas."
+- "Avaliação oral como complemento à escrita."
+- "Uso de portfólio de produções como instrumento avaliativo."
+- "Critério de sucesso: realização da atividade com apoio do mediador."
+- "Critério de sucesso: realização da atividade de forma independente."
+- "Avaliação por meio de registros fotográficos e relatórios descritivos."
+- "Considerar participação, esforço e evolução em relação a si mesmo."
+- "Adaptação significativa do conteúdo (currículo funcional)."
 
----
+**Nível de Desempenho**: já é select fechado, sem mudança.
 
-## Arquivos afetados
+## 4. Ajuste de UX no PEIForm
+
+- Botão "Sugestões" pequeno (`variant="outline" size="sm"`) ao lado do label de cada textarea.
+- Popover com `Command` + `CommandInput` (busca) + `CommandList` com as opções.
+- Nada substitui o conteúdo digitado: todas as opções são **adicionadas** no fim do texto.
+
+## Resumo de arquivos
 
 | Arquivo | Alteração |
-|---|---|
-| Migration SQL nova | Criar tabela `student_pei` com RLS e trigger |
-| `src/pages/AEE.tsx` | Adicionar 3ª aba "PEI", lógica de carregar/salvar PEI, botão de exportar PEI |
-| `src/components/aee/PEIForm.tsx` (novo) | Formulário completo das 9 seções |
-| `src/lib/validations.ts` | Schema Zod `peiSchema` para validação |
-
----
-
-## Detalhes técnicos
-
-- Tipos em `src/integrations/supabase/types.ts` serão regenerados automaticamente após a migration.
-- Os campos JSON (`performance_levels`, `intervention_plan`, `discipline_adaptations`) usam estados tipados no React e são serializados no save.
-- O formulário PEI fica em `<ScrollArea>` dentro do dialog para não estourar a altura.
-- Permissões: igual ao restante do AEE (admin, direction, teacher podem editar).
+|---------|-----------|
+| `src/assets/logo-cepans.png` | Novo (copiado do upload) |
+| `src/components/aee/peiSuggestions.ts` | Novo - banco de sugestões por seção |
+| `src/components/aee/PEIForm.tsx` | Adicionar `SuggestionPicker` em todos os campos textuais e linhas de intervenção |
+| `src/pages/AEE.tsx` | Renomear botão para "Exportar PEI"; nova função `exportPEIReport` com cabeçalho institucional + logo; remover `exportAEEReport` |

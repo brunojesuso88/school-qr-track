@@ -18,6 +18,7 @@ import { Badge } from '@/components/ui/badge';
 import { differenceInYears, parse } from 'date-fns';
 import { useSchoolName } from '@/hooks/useSchoolName';
 import { PEIForm, PEIData, emptyPEI, InterventionRow, PerformanceLevel } from '@/components/aee/PEIForm';
+import logoCepans from '@/assets/logo-cepans.png';
 
 interface Student {
   id: string;
@@ -203,6 +204,25 @@ const AEE = () => {
       in_process: 'Em processo',
     };
     return labels[status || 'no'] || 'Não informado';
+  };
+
+  const performanceLabel = (v: string) => {
+    const map: Record<string, string> = {
+      independente: 'Nível Independente',
+      com_apoio: 'Com apoio',
+      nao_realiza: 'Não realiza',
+    };
+    return map[v] || 'Não avaliado';
+  };
+
+  const escapeHtml = (str: string | null | undefined) => {
+    if (!str) return '';
+    return str
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/\n/g, '<br>');
   };
 
   const uniqueClasses = [...new Set(students.map(s => s.class))].filter(c => c && c.trim() !== '').sort();
@@ -471,159 +491,354 @@ const AEE = () => {
     }
   };
 
-  const exportAEEReport = (student: Student) => {
+  const exportPEIReport = async (student: Student) => {
+    // Load PEI from DB (latest persisted version)
+    let pei: PEIData = emptyPEI;
+    try {
+      const { data } = await supabase
+        .from('student_pei')
+        .select('*')
+        .eq('student_id', student.id)
+        .maybeSingle();
+      if (data) {
+        pei = {
+          enrollment_number: data.enrollment_number || '',
+          aee_teacher: data.aee_teacher || '',
+          coordination: data.coordination || '',
+          elaboration_date: data.elaboration_date || new Date().toISOString().split('T')[0],
+          legal_guardian: data.legal_guardian || student.guardian_name || '',
+          contact: data.contact || '',
+          email: data.email || '',
+          phone: data.phone || student.guardian_phone || '',
+          functional_profile: data.functional_profile || '',
+          potentialities: data.potentialities || '',
+          learning_barriers: data.learning_barriers || '',
+          evaluation_criteria: data.evaluation_criteria || '',
+          performance_levels: {
+            linguagem: ((data.performance_levels as any)?.linguagem || '') as PerformanceLevel,
+            matematica: ((data.performance_levels as any)?.matematica || '') as PerformanceLevel,
+            ciencias_natureza: ((data.performance_levels as any)?.ciencias_natureza || '') as PerformanceLevel,
+            ciencias_humanas: ((data.performance_levels as any)?.ciencias_humanas || '') as PerformanceLevel,
+          },
+          intervention_plan: Array.isArray(data.intervention_plan)
+            ? (data.intervention_plan as unknown as InterventionRow[])
+            : [],
+          discipline_adaptations: {
+            portugues_humanas: (data.discipline_adaptations as any)?.portugues_humanas || '',
+            matematica_exatas: (data.discipline_adaptations as any)?.matematica_exatas || '',
+            ciencias_humanas: (data.discipline_adaptations as any)?.ciencias_humanas || '',
+          },
+        };
+      } else {
+        pei = {
+          ...emptyPEI,
+          enrollment_number: student.student_id,
+          legal_guardian: student.guardian_name || '',
+          phone: student.guardian_phone || '',
+        };
+      }
+    } catch (e) {
+      console.error('Error loading PEI for export:', e);
+    }
+
     const printWindow = window.open('', '_blank');
     if (!printWindow) {
-      toast.error('Popup bloqueado. Permita popups para exportar o relatório.');
+      toast.error('Popup bloqueado. Permita popups para exportar o PEI.');
       return;
     }
+
+    const age = calculateAge(student.birth_date);
+    const formatDate = (d: string | null | undefined) => {
+      if (!d) return 'Não informada';
+      try {
+        const [y, m, day] = d.split('-');
+        return `${day}/${m}/${y}`;
+      } catch {
+        return d;
+      }
+    };
+
+    const idRows: Array<[string, string]> = [
+      ['Nome Completo', escapeHtml(student.full_name)],
+      ['Data de Nascimento', formatDate(student.birth_date)],
+      ['Idade', age !== null ? `${age} anos` : 'Não informada'],
+      ['Turma', escapeHtml(student.class)],
+      ['Turno', getShiftLabel(student.shift)],
+      ['Nº Matrícula', escapeHtml(pei.enrollment_number || student.student_id)],
+      ['Data de Elaboração', formatDate(pei.elaboration_date)],
+      ['Professor(a) AEE', escapeHtml(pei.aee_teacher) || '—'],
+      ['Coordenação', escapeHtml(pei.coordination) || '—'],
+      ['Responsável Legal', escapeHtml(pei.legal_guardian) || '—'],
+      ['Contato', escapeHtml(pei.contact) || '—'],
+      ['Telefone', escapeHtml(pei.phone) || '—'],
+      ['E-mail', escapeHtml(pei.email) || '—'],
+    ];
 
     const html = `
       <!DOCTYPE html>
       <html lang="pt-BR">
       <head>
         <meta charset="UTF-8">
-        <title>Relatório AEE - ${student.full_name}</title>
+        <title>PEI - ${escapeHtml(student.full_name)}</title>
         <style>
           * { margin: 0; padding: 0; box-sizing: border-box; }
-          body { 
-            font-family: Arial, sans-serif; 
-            padding: 40px; 
-            max-width: 800px; 
+          body {
+            font-family: Arial, Helvetica, sans-serif;
+            padding: 32px 40px;
+            max-width: 820px;
             margin: 0 auto;
-            color: #333;
+            color: #1f2937;
           }
-          .header { 
-            text-align: center; 
-            margin-bottom: 30px; 
-            padding-bottom: 20px;
-            border-bottom: 2px solid #eee;
+          .institutional-header {
+            display: flex;
+            align-items: center;
+            gap: 18px;
+            padding-bottom: 14px;
+            border-bottom: 3px solid #1e3a8a;
+            margin-bottom: 6px;
           }
-          .header h1 { 
-            font-size: 24px;
-            color: #d97706;
-            margin-bottom: 5px;
+          .institutional-header img {
+            width: 84px;
+            height: 84px;
+            object-fit: contain;
           }
-          .header h2 { 
-            font-size: 20px;
-            margin-bottom: 10px;
+          .institutional-header .info {
+            flex: 1;
+            text-align: center;
           }
-          .header p { 
-            font-size: 14px;
-            color: #666;
+          .institutional-header .info .school {
+            font-size: 15px;
+            font-weight: bold;
+            color: #1e3a8a;
+            line-height: 1.25;
+            letter-spacing: 0.3px;
           }
-          .section { 
-            margin-bottom: 25px; 
+          .institutional-header .info .city {
+            font-size: 12px;
+            color: #475569;
+            margin-top: 2px;
           }
-          .section h3 { 
+          .institutional-header .info .doc {
+            margin-top: 8px;
             font-size: 16px;
-            border-bottom: 1px solid #ccc; 
-            padding-bottom: 8px; 
-            margin-bottom: 15px;
-            color: #444;
+            font-weight: bold;
+            color: #dc2626;
+            text-transform: uppercase;
+            letter-spacing: 1px;
           }
-          .section p { 
+          .accent-bar {
+            height: 4px;
+            background: linear-gradient(90deg, #1e3a8a 0%, #1e3a8a 60%, #dc2626 60%, #dc2626 100%);
+            margin-bottom: 22px;
+          }
+          .student-strip {
+            background: #f1f5f9;
+            border-left: 4px solid #1e3a8a;
+            padding: 10px 14px;
+            margin-bottom: 22px;
+            font-size: 13px;
+          }
+          .student-strip strong {
+            color: #1e3a8a;
+          }
+          .section {
+            margin-bottom: 22px;
+            page-break-inside: avoid;
+          }
+          .section h3 {
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            background: #1e3a8a;
+            color: #fff;
+            padding: 7px 12px;
+            margin-bottom: 12px;
+            border-radius: 3px;
+          }
+          .section p, .section .content {
             margin-bottom: 8px;
-            font-size: 14px;
+            font-size: 13px;
             line-height: 1.6;
+            white-space: pre-wrap;
+            text-align: justify;
           }
-          .section p strong { 
-            color: #333;
-          }
-          table { 
-            width: 100%; 
-            border-collapse: collapse; 
+          table {
+            width: 100%;
+            border-collapse: collapse;
             margin-top: 10px;
+            font-size: 12px;
           }
-          td, th { 
-            border: 1px solid #ddd; 
-            padding: 10px; 
+          td, th {
+            border: 1px solid #cbd5e1;
+            padding: 7px 9px;
             text-align: left;
-            font-size: 14px;
+            vertical-align: top;
           }
-          th { 
-            background-color: #f5f5f5; 
+          th {
+            background-color: #e0e7ff;
+            color: #1e3a8a;
             font-weight: bold;
           }
-          .footer { 
-            margin-top: 40px; 
+          .id-table td:first-child {
+            background: #f8fafc;
+            font-weight: bold;
+            color: #1e3a8a;
+            width: 35%;
+          }
+          .empty {
+            color: #94a3b8;
+            font-style: italic;
+          }
+          .signatures {
+            margin-top: 50px;
+            display: flex;
+            justify-content: space-around;
+            gap: 20px;
+            page-break-inside: avoid;
+          }
+          .signature {
+            flex: 1;
             text-align: center;
             font-size: 12px;
-            color: #888;
-            padding-top: 20px;
-            border-top: 1px solid #eee;
           }
-          .suggestions-box {
-            background-color: #fef3c7;
-            border: 1px solid #fcd34d;
-            border-radius: 8px;
-            padding: 15px;
-            margin-top: 10px;
+          .signature .line {
+            border-top: 1px solid #1f2937;
+            margin-bottom: 4px;
+            padding-top: 4px;
           }
-          .school-name {
-            font-size: 18px;
-            font-weight: bold;
-            color: #333;
-            margin-bottom: 10px;
+          .footer {
+            margin-top: 30px;
+            text-align: center;
+            font-size: 11px;
+            color: #64748b;
+            padding-top: 12px;
+            border-top: 1px solid #e2e8f0;
           }
           @media print {
-            body { padding: 20px; }
+            body { padding: 16px 24px; }
             .no-print { display: none; }
           }
         </style>
       </head>
       <body>
-        <div class="header">
-          <p class="school-name">${schoolName || 'EDUNEXUS'}</p>
-          <h1>Relatório AEE</h1>
-          <h2>${student.full_name}</h2>
-          <p>Turma: ${student.class} | Turno: ${getShiftLabel(student.shift)} | ID: ${student.student_id}</p>
-        </div>
-        
-        <div class="section">
-          <h3>Informações do Aluno</h3>
-          <p><strong>Idade:</strong> ${calculateAge(student.birth_date) !== null ? `${calculateAge(student.birth_date)} anos` : 'Não informada'}</p>
-          <p><strong>Status:</strong> ${student.status === 'active' ? 'Ativo' : 'Inativo'}</p>
-        </div>
-        
-        <div class="section">
-          <h3>Informações do Laudo</h3>
-          <p><strong>CID:</strong> ${student.aee_cid_code || 'Não informado'}${student.aee_cid_description ? ` - ${student.aee_cid_description}` : ''}</p>
-          <p><strong>Medicação:</strong> ${student.aee_uses_medication ? `Sim - ${student.aee_medication_name || 'Nome não informado'}` : 'Não'}</p>
-          <p><strong>Alfabetizado:</strong> ${getLiteracyLabel(student.aee_literacy_status)}</p>
-          <p><strong>Atividades Adaptadas:</strong> ${student.aee_adapted_activities ? 'Sim' : 'Não'}</p>
-        </div>
-        
-        ${student.aee_adaptation_suggestions ? `
-        <div class="section">
-          <h3>Sugestões de Adaptações</h3>
-          <div class="suggestions-box">
-            <p>${student.aee_adaptation_suggestions.replace(/\n/g, '<br>')}</p>
+        <div class="institutional-header">
+          <img src="${logoCepans}" alt="Brasão CEPANS" />
+          <div class="info">
+            <div class="school">CENTRO DE ENSINO PROF° ANTÔNIO NONATO SAMPAIO</div>
+            <div class="city">Coelho Neto - MA</div>
+            <div class="doc">Plano Educacional Individualizado — PEI</div>
           </div>
         </div>
-        ` : ''}
-        
+        <div class="accent-bar"></div>
+
+        <div class="student-strip">
+          <strong>Aluno(a):</strong> ${escapeHtml(student.full_name)} &nbsp;|&nbsp;
+          <strong>Turma:</strong> ${escapeHtml(student.class)} &nbsp;|&nbsp;
+          <strong>Turno:</strong> ${getShiftLabel(student.shift)} &nbsp;|&nbsp;
+          <strong>Matrícula:</strong> ${escapeHtml(student.student_id)}
+        </div>
+
         <div class="section">
-          <h3>Professores da Turma ${student.class}</h3>
+          <h3>1. Identificação</h3>
+          <table class="id-table">
+            ${idRows.map(([k, v]) => `<tr><td>${k}</td><td>${v || '<span class="empty">—</span>'}</td></tr>`).join('')}
+          </table>
+        </div>
+
+        <div class="section">
+          <h3>2. Perfil Funcional de Aprendizagem</h3>
+          <div class="content">${pei.functional_profile ? escapeHtml(pei.functional_profile) : '<span class="empty">Não preenchido.</span>'}</div>
+        </div>
+
+        <div class="section">
+          <h3>3. Potencialidades</h3>
+          <div class="content">${pei.potentialities ? escapeHtml(pei.potentialities) : '<span class="empty">Não preenchido.</span>'}</div>
+        </div>
+
+        <div class="section">
+          <h3>4. Barreiras de Aprendizagem</h3>
+          <div class="content">${pei.learning_barriers ? escapeHtml(pei.learning_barriers) : '<span class="empty">Não preenchido.</span>'}</div>
+        </div>
+
+        <div class="section">
+          <h3>5. Nível Atual de Desempenho</h3>
+          <table>
+            <tr><th>Área</th><th>Nível</th></tr>
+            <tr><td>Linguagem</td><td>${performanceLabel(pei.performance_levels.linguagem)}</td></tr>
+            <tr><td>Matemática</td><td>${performanceLabel(pei.performance_levels.matematica)}</td></tr>
+            <tr><td>Ciências da Natureza</td><td>${performanceLabel(pei.performance_levels.ciencias_natureza)}</td></tr>
+            <tr><td>Ciências Humanas</td><td>${performanceLabel(pei.performance_levels.ciencias_humanas)}</td></tr>
+          </table>
+        </div>
+
+        <div class="section">
+          <h3>7. Plano de Intervenção Pedagógica</h3>
+          ${pei.intervention_plan.length > 0 ? `
+          <table>
+            <tr><th>Objetivo</th><th>Estratégia</th><th>Frequência</th><th>Responsável</th><th>Recurso</th></tr>
+            ${pei.intervention_plan.map(r => `<tr>
+              <td>${escapeHtml(r.objetivo)}</td>
+              <td>${escapeHtml(r.estrategia)}</td>
+              <td>${escapeHtml(r.frequencia)}</td>
+              <td>${escapeHtml(r.responsavel)}</td>
+              <td>${escapeHtml(r.recurso)}</td>
+            </tr>`).join('')}
+          </table>
+          ` : '<div class="content"><span class="empty">Nenhuma intervenção registrada.</span></div>'}
+        </div>
+
+        <div class="section">
+          <h3>8. Adaptações por Disciplina</h3>
+          <table>
+            <tr><th style="width:30%">Área</th><th>Adaptações</th></tr>
+            <tr><td>Língua Portuguesa e Humanas</td><td>${pei.discipline_adaptations.portugues_humanas ? escapeHtml(pei.discipline_adaptations.portugues_humanas) : '<span class="empty">—</span>'}</td></tr>
+            <tr><td>Matemática e Exatas</td><td>${pei.discipline_adaptations.matematica_exatas ? escapeHtml(pei.discipline_adaptations.matematica_exatas) : '<span class="empty">—</span>'}</td></tr>
+            <tr><td>Ciências Humanas</td><td>${pei.discipline_adaptations.ciencias_humanas ? escapeHtml(pei.discipline_adaptations.ciencias_humanas) : '<span class="empty">—</span>'}</td></tr>
+          </table>
+        </div>
+
+        <div class="section">
+          <h3>9. Avaliação e Critérios</h3>
+          <div class="content">${pei.evaluation_criteria ? escapeHtml(pei.evaluation_criteria) : '<span class="empty">Não preenchido.</span>'}</div>
+        </div>
+
+        <div class="section">
+          <h3>Professores da Turma ${escapeHtml(student.class)}</h3>
           ${teachers.length > 0 ? `
           <table>
             <tr><th>Professor</th><th>Disciplina(s)</th></tr>
-            ${teachers.map(t => `<tr><td>${t.name}</td><td>${t.subject}</td></tr>`).join('')}
+            ${teachers.map(t => `<tr><td>${escapeHtml(t.name)}</td><td>${escapeHtml(t.subject)}</td></tr>`).join('')}
           </table>
-          ` : '<p>Nenhum professor vinculado à turma no mapeamento escolar.</p>'}
+          ` : '<div class="content"><span class="empty">Nenhum professor vinculado à turma no mapeamento escolar.</span></div>'}
         </div>
-        
+
+        <div class="signatures">
+          <div class="signature"><div class="line">Professor(a) AEE</div></div>
+          <div class="signature"><div class="line">Coordenação Pedagógica</div></div>
+          <div class="signature"><div class="line">Responsável Legal</div></div>
+        </div>
+
         <p class="footer">
-          Relatório gerado em: ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+          PEI gerado em ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+          ${schoolName ? ` &middot; ${escapeHtml(schoolName)}` : ''}
         </p>
-        
+
         <script>
-          window.onload = function() { window.print(); }
+          window.onload = function() {
+            // Wait for the logo to render before printing
+            const img = document.querySelector('img');
+            if (img && !img.complete) {
+              img.onload = () => setTimeout(() => window.print(), 200);
+              img.onerror = () => setTimeout(() => window.print(), 200);
+            } else {
+              setTimeout(() => window.print(), 200);
+            }
+          }
         </script>
       </body>
       </html>
     `;
-    
+
     printWindow.document.write(html);
     printWindow.document.close();
   };
@@ -758,9 +973,9 @@ const AEE = () => {
                       size="icon"
                       onClick={(e) => { 
                         e.stopPropagation(); 
-                        fetchStudentTeachers(student.class).then(() => exportAEEReport(student));
+                        fetchStudentTeachers(student.class).then(() => exportPEIReport(student));
                       }}
-                      title="Exportar PDF"
+                      title="Exportar PEI"
                     >
                       <FileDown className="w-4 h-4" />
                     </Button>
