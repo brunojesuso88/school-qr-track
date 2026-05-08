@@ -168,14 +168,13 @@ const StaffScanQR = () => {
     setScanResult('');
 
     try {
-      // Find student by QR code
-      const { data: student, error: studentError } = await supabase
-        .from('students')
-        .select('*')
-        .eq('qr_code', qrCode.trim())
-        .maybeSingle();
+      // Find student by QR code using restricted RPC (no medical/PII data)
+      const { data: students, error: studentError } = await supabase
+        .rpc('get_student_basic_by_qr', { _qr_code: qrCode.trim() });
 
       if (studentError) throw studentError;
+
+      const student = students && students.length > 0 ? students[0] : null;
 
       if (!student) {
         toast.error('Aluno não encontrado');
