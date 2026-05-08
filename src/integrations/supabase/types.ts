@@ -395,6 +395,72 @@ export type Database = {
         }
         Relationships: []
       }
+      school_events: {
+        Row: {
+          acoes_estrategicas: Json
+          created_at: string
+          created_by: string | null
+          enfoque: string | null
+          id: string
+          images: Json
+          is_continuous: boolean
+          metas: string | null
+          pdf_original: string | null
+          pontos_atencao: string | null
+          prazo_fim: string | null
+          prazo_inicio: string | null
+          procedimentos: Json
+          responsaveis: Json
+          resumo_ia: string | null
+          status: string
+          tags: string[]
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          acoes_estrategicas?: Json
+          created_at?: string
+          created_by?: string | null
+          enfoque?: string | null
+          id?: string
+          images?: Json
+          is_continuous?: boolean
+          metas?: string | null
+          pdf_original?: string | null
+          pontos_atencao?: string | null
+          prazo_fim?: string | null
+          prazo_inicio?: string | null
+          procedimentos?: Json
+          responsaveis?: Json
+          resumo_ia?: string | null
+          status?: string
+          tags?: string[]
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          acoes_estrategicas?: Json
+          created_at?: string
+          created_by?: string | null
+          enfoque?: string | null
+          id?: string
+          images?: Json
+          is_continuous?: boolean
+          metas?: string | null
+          pdf_original?: string | null
+          pontos_atencao?: string | null
+          prazo_fim?: string | null
+          prazo_inicio?: string | null
+          procedimentos?: Json
+          responsaveis?: Json
+          resumo_ia?: string | null
+          status?: string
+          tags?: string[]
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       settings: {
         Row: {
           id: string
