@@ -801,6 +801,18 @@ export type Database = {
         Args: { _role: Database["public"]["Enums"]["app_role"] }
         Returns: boolean
       }
+      get_student_basic_by_qr: {
+        Args: { _qr_code: string }
+        Returns: {
+          class: string
+          full_name: string
+          id: string
+          photo_url: string
+          shift: string
+          status: string
+          student_id: string
+        }[]
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
