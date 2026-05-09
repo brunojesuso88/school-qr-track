@@ -21,12 +21,12 @@ export default function EventCard({ event, onView, onEdit, onExport, onDelete }:
   const [thumb, setThumb] = useState<string | null>(null);
 
   useEffect(() => {
-    const first = event.images?.[0];
-    if (!first) { setThumb(null); return; }
-    supabase.storage.from('school-events').createSignedUrl(first, 3600).then(({ data }) => {
+    const path = event.cover_image || event.images?.[0];
+    if (!path) { setThumb(null); return; }
+    supabase.storage.from('school-events').createSignedUrl(path, 3600).then(({ data }) => {
       setThumb(data?.signedUrl ?? null);
     });
-  }, [event.images]);
+  }, [event.cover_image, event.images]);
 
   const dateLabel = event.is_continuous
     ? 'Evento contínuo'
