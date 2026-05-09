@@ -92,7 +92,7 @@ export default function EventFormDialog({ open, onOpenChange, event, onSaved }: 
       const { data: res, error } = await supabase.functions.invoke('event-ai-fill', { body: { draft: data } });
       if (error || !res?.success) throw new Error(res?.error || error?.message || 'Falha');
       setData(d => ({ ...d, ...res.event }));
-      toast.success('Evento preenchido pela IA');
+      toast.success('Projeto preenchido pela IA');
     } catch (e: any) {
       toast.error(e.message || 'Erro na IA');
     } finally {
@@ -281,7 +281,7 @@ export default function EventFormDialog({ open, onOpenChange, event, onSaved }: 
               </div>
               <div className="flex items-end gap-3 pb-1">
                 <Switch id="continuous" checked={data.is_continuous} onCheckedChange={v => update('is_continuous', v)} />
-                <Label htmlFor="continuous" className="cursor-pointer">Evento contínuo</Label>
+                <Label htmlFor="continuous" className="cursor-pointer">Projeto contínuo</Label>
               </div>
             </div>
             {!data.is_continuous && (
@@ -298,14 +298,14 @@ export default function EventFormDialog({ open, onOpenChange, event, onSaved }: 
             )}
             <div>
               <div className="flex items-center justify-between"><Label>Resumo institucional</Label><AiBtn field="resumo_ia" /></div>
-              <Textarea rows={3} value={data.resumo_ia} onChange={e => update('resumo_ia', e.target.value)} placeholder="Breve descrição institucional do evento" />
+              <Textarea rows={3} value={data.resumo_ia} onChange={e => update('resumo_ia', e.target.value)} placeholder="Breve descrição institucional do projeto" />
             </div>
           </TabsContent>
 
           <TabsContent value="conteudo" className="space-y-4 pt-4">
             <div>
               <div className="flex items-center justify-between"><Label>1. Enfoque</Label><AiBtn field="enfoque" /></div>
-              <Textarea rows={3} value={data.enfoque} onChange={e => update('enfoque', e.target.value)} placeholder="Indicador educacional relacionado ao evento" />
+              <Textarea rows={3} value={data.enfoque} onChange={e => update('enfoque', e.target.value)} placeholder="Indicador educacional relacionado ao projeto" />
             </div>
             <div>
               <div className="flex items-center justify-between"><Label>2. Metas</Label><AiBtn field="metas" /></div>
@@ -388,7 +388,7 @@ export default function EventFormDialog({ open, onOpenChange, event, onSaved }: 
               </div>
             </div>
             <div>
-              <Label className="flex items-center gap-2"><ImageIcon className="w-4 h-4" /> Fotos do Evento</Label>
+              <Label className="flex items-center gap-2"><ImageIcon className="w-4 h-4" /> Fotos do Projeto</Label>
               <div
                 className="mt-2 border-2 border-dashed rounded-lg p-6 text-center hover:border-primary/50 transition-colors cursor-pointer"
                 onClick={() => fileImgRef.current?.click()}
