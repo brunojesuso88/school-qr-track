@@ -45,7 +45,7 @@ export default function EventDetailDialog({ open, onOpenChange, event }: { open:
           {event.resumo_ia && <p className="italic text-muted-foreground border-l-2 border-primary pl-3">{event.resumo_ia}</p>}
 
           <div className="text-xs text-muted-foreground">
-            {event.is_continuous ? 'Evento contínuo' : (
+            {event.is_continuous ? 'Projeto contínuo' : (
               event.prazo_inicio ? `${format(new Date(event.prazo_inicio + 'T12:00'), "dd/MM/yyyy", { locale: ptBR })}${event.prazo_fim ? ` → ${format(new Date(event.prazo_fim + 'T12:00'), 'dd/MM/yyyy', { locale: ptBR })}` : ''}` : '—'
             )}
           </div>
