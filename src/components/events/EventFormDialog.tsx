@@ -29,8 +29,11 @@ export default function EventFormDialog({ open, onOpenChange, event, onSaved }: 
   const [imageBusy, setImageBusy] = useState(false);
   const [pdfBusy, setPdfBusy] = useState(false);
   const [thumbs, setThumbs] = useState<Record<string, string>>({});
+  const [coverThumb, setCoverThumb] = useState<string | null>(null);
+  const [coverBusy, setCoverBusy] = useState(false);
   const fileImgRef = useRef<HTMLInputElement>(null);
   const filePdfRef = useRef<HTMLInputElement>(null);
+  const fileCoverRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (open) {
@@ -50,6 +53,13 @@ export default function EventFormDialog({ open, onOpenChange, event, onSaved }: 
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data.images]);
+
+  useEffect(() => {
+    if (!data.cover_image) { setCoverThumb(null); return; }
+    supabase.storage.from('school-events').createSignedUrl(data.cover_image, 3600).then(({ data: s }) => {
+      setCoverThumb(s?.signedUrl ?? null);
+    });
+  }, [data.cover_image]);
 
   const update = <K extends keyof EventDraft>(k: K, v: EventDraft[K]) => setData(d => ({ ...d, [k]: v }));
 
@@ -140,6 +150,32 @@ export default function EventFormDialog({ open, onOpenChange, event, onSaved }: 
     update('images', data.images.filter(p => p !== path));
   };
 
+  const uploadCover = async (file: File | undefined) => {
+    if (!file || !file.type.startsWith('image/')) return;
+    setCoverBusy(true);
+    try {
+      const ext = file.name.split('.').pop() || 'jpg';
+      const path = `covers/${crypto.randomUUID()}.${ext}`;
+      const { error } = await supabase.storage.from('school-events').upload(path, file, { upsert: false });
+      if (error) throw error;
+      if (data.cover_image) {
+        await supabase.storage.from('school-events').remove([data.cover_image]);
+      }
+      update('cover_image', path);
+      toast.success('Capa atualizada');
+    } catch (e: any) {
+      toast.error(e.message || 'Erro no upload da capa');
+    } finally {
+      setCoverBusy(false);
+    }
+  };
+
+  const removeCover = async () => {
+    if (!data.cover_image) return;
+    await supabase.storage.from('school-events').remove([data.cover_image]);
+    update('cover_image', null);
+  };
+
   const addItem = (key: 'acoes_estrategicas' | 'procedimentos' | 'responsaveis' | 'tags') => {
     update(key, [...(data[key] as string[]), '']);
   };
@@ -173,6 +209,7 @@ export default function EventFormDialog({ open, onOpenChange, event, onSaved }: 
         resumo_ia: data.resumo_ia || '',
         images: data.images,
         pdf_original: data.pdf_original,
+        cover_image: data.cover_image,
       };
       if (event?.id) {
         const { error } = await supabase.from('school_events').update(payload).eq('id', event.id);
@@ -181,7 +218,7 @@ export default function EventFormDialog({ open, onOpenChange, event, onSaved }: 
         const { error } = await supabase.from('school_events').insert({ ...payload, created_by: user?.id });
         if (error) throw error;
       }
-      toast.success('Evento salvo');
+      toast.success('Projeto salvo');
       onSaved();
       onOpenChange(false);
     } catch (e: any) {
@@ -201,8 +238,8 @@ export default function EventFormDialog({ open, onOpenChange, event, onSaved }: 
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto" onInteractOutside={e => e.preventDefault()}>
         <DialogHeader>
-          <DialogTitle>{event ? 'Editar evento' : 'Novo evento'}</DialogTitle>
-          <DialogDescription>Preencha as informações do evento ou use a IA para acelerar.</DialogDescription>
+          <DialogTitle>{event ? 'Editar projeto' : 'Novo projeto'}</DialogTitle>
+          <DialogDescription>Preencha as informações do projeto ou use a IA para acelerar.</DialogDescription>
         </DialogHeader>
 
         <div className="flex flex-wrap gap-2 mb-4 p-3 bg-muted/40 rounded-lg">
@@ -326,6 +363,31 @@ export default function EventFormDialog({ open, onOpenChange, event, onSaved }: 
 
           <TabsContent value="midia" className="space-y-4 pt-4">
             <div>
+              <Label className="flex items-center gap-2"><ImageIcon className="w-4 h-4" /> Capa do projeto</Label>
+              <p className="text-xs text-muted-foreground mt-1">Imagem principal exibida no card do projeto.</p>
+              <div className="mt-3 flex items-start gap-4">
+                <div className="w-40 h-28 rounded-md overflow-hidden bg-muted border flex items-center justify-center shrink-0">
+                  {coverThumb ? (
+                    <img src={coverThumb} alt="Capa" className="w-full h-full object-cover" />
+                  ) : (
+                    <ImageIcon className="w-8 h-8 text-muted-foreground/50" />
+                  )}
+                </div>
+                <div className="flex flex-col gap-2">
+                  <Button type="button" variant="outline" size="sm" onClick={() => fileCoverRef.current?.click()} disabled={coverBusy}>
+                    {coverBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                    {data.cover_image ? 'Trocar capa' : 'Enviar capa'}
+                  </Button>
+                  {data.cover_image && (
+                    <Button type="button" variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={removeCover}>
+                      <Trash2 className="w-4 h-4" /> Remover capa
+                    </Button>
+                  )}
+                  <input ref={fileCoverRef} type="file" accept="image/*" className="hidden" onChange={e => uploadCover(e.target.files?.[0])} />
+                </div>
+              </div>
+            </div>
+            <div>
               <Label className="flex items-center gap-2"><ImageIcon className="w-4 h-4" /> Fotos do Evento</Label>
               <div
                 className="mt-2 border-2 border-dashed rounded-lg p-6 text-center hover:border-primary/50 transition-colors cursor-pointer"
@@ -358,7 +420,7 @@ export default function EventFormDialog({ open, onOpenChange, event, onSaved }: 
 
         <div className="flex justify-end gap-2 pt-4 border-t mt-4">
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
-          <Button onClick={save} disabled={saving}>{saving ? <Loader2 className="w-4 h-4 animate-spin" /> : null}Salvar evento</Button>
+          <Button onClick={save} disabled={saving}>{saving ? <Loader2 className="w-4 h-4 animate-spin" /> : null}Salvar projeto</Button>
         </div>
       </DialogContent>
     </Dialog>
