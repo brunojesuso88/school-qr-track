@@ -2,7 +2,7 @@ import { motion } from 'framer-motion';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Eye, Pencil, FileDown, Trash2, Calendar, Users } from 'lucide-react';
+import { Eye, Pencil, FileDown, Trash2, Calendar, Users, Target, ListChecks, Workflow, AlertTriangle, Paperclip } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { SchoolEvent, STATUS_COLORS, STATUS_LABELS } from './types';
@@ -61,6 +61,25 @@ export default function EventCard({ event, onView, onEdit, onExport, onDelete }:
             {event.resumo_ia && (
               <p className="text-sm text-muted-foreground line-clamp-2 italic">{event.resumo_ia}</p>
             )}
+
+            {event.metas && (
+              <p className="text-xs text-foreground/80 line-clamp-1"><span className="font-medium">Metas:</span> {event.metas}</p>
+            )}
+
+            <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+              {event.acoes_estrategicas.length > 0 && (
+                <span className="inline-flex items-center gap-1"><Target className="w-3.5 h-3.5" />{event.acoes_estrategicas.length} ações</span>
+              )}
+              {event.procedimentos.length > 0 && (
+                <span className="inline-flex items-center gap-1"><Workflow className="w-3.5 h-3.5" />{event.procedimentos.length} procedimentos</span>
+              )}
+              {event.pontos_atencao && (
+                <span className="inline-flex items-center gap-1 text-amber-600 dark:text-amber-400"><AlertTriangle className="w-3.5 h-3.5" />Pontos de atenção</span>
+              )}
+              {event.pdf_original && (
+                <span className="inline-flex items-center gap-1"><Paperclip className="w-3.5 h-3.5" />PDF importado</span>
+              )}
+            </div>
 
             <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
               <span className="inline-flex items-center gap-1"><Calendar className="w-3.5 h-3.5" />{dateLabel}</span>
