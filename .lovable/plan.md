@@ -1,87 +1,82 @@
-## Eventos e Atas
+# Auditoria — Importação de PDF em "Eventos e Atas"
 
-Nova área completa para registrar eventos do plano escolar (reuniões, projetos, formações, feiras, atas) com auxílio de IA, importação de PDF, galeria de fotos e exportação institucional.
+Fiz uma auditoria completa do fluxo: **PDF → IA (parse-event-pdf) → formulário → banco → card/detalhe**. Encontrei **9 falhas** que explicam por que algumas informações do evento não aparecem no card.
 
-### 1. Banco de dados (migration)
+---
 
-Tabela `school_events`:
-- `id`, `created_at`, `updated_at`
-- `title` (text)
-- `enfoque` (text)
-- `metas` (text)
-- `pontos_atencao` (text)
-- `acoes_estrategicas` (jsonb — array de strings)
-- `procedimentos` (jsonb — array de strings)
-- `responsaveis` (jsonb — array de strings)
-- `prazo_inicio` (date), `prazo_fim` (date), `is_continuous` (bool)
-- `status` (text: planejado | em_andamento | concluido | arquivado)
-- `tags` (text[])
-- `resumo_ia` (text)
-- `images` (jsonb — array de paths no storage)
-- `pdf_original` (text — path no storage)
-- `created_by` (uuid)
+## Diagnóstico
 
-RLS: admin/direction/teacher podem CRUD; staff somente leitura.
+### A. Problemas no extrator de IA (`supabase/functions/parse-event-pdf/index.ts`)
 
-Bucket de Storage privado `school-events` com policies por role; subpastas `images/` e `pdfs/`.
+1. **Schema permissivo demais** — apenas `title` e `resumo_ia` são obrigatórios. A IA pode (e frequentemente faz) omitir `enfoque`, `metas`, `pontos_atencao`, `acoes_estrategicas`, `procedimentos`, `responsaveis`, `prazo_inicio`, `prazo_fim`, `tags` — ficando vazios no card.
+2. **Prompt genérico** — "Analise o documento e preencha os campos" não orienta o modelo a procurar cada seção (Enfoque, Metas SMART, Pontos de atenção, Ações no infinitivo, Procedimentos no gerúndio, Responsáveis, Datas). Sem few-shot ou descrição clara, o Gemini extrai pouco.
+3. **Status e modalidade ausentes do schema** — `status` e `is_continuous` não são extraídos; todo evento importado nasce como "planejado / pontual" mesmo quando a ata diz o contrário.
+4. **Datas inválidas viram string vazia** — quando a IA devolve `prazo_inicio: ""`, o `save()` envia `""` para uma coluna `date`, gerando erro silencioso ou data nula. Falta normalizar `""` → `null`.
+5. **Forçar gerúndio/infinitivo distorce o original** — o prompt manda transformar verbos. Em extração de PDF, deveria preservar a redação original e só normalizar quando o usuário clicar em "Preencher com IA".
 
-### 2. Edge functions (Lovable AI Gateway, modelo `google/gemini-3-flash-preview`)
+### B. Problemas no merge do formulário (`EventFormDialog.tsx` → `importPdf`)
 
-- `event-ai-suggest` — recebe `{ field, context }` e devolve sugestões para os campos: enfoque, metas, pontos_atencao, ações estratégicas (verbos infinitivo), procedimentos (gerúndio), tags, resumo institucional. Usa tool calling para JSON estruturado.
-- `event-ai-fill` — “✨ Preencher com IA”: recebe rascunho parcial e devolve evento completo melhorado em linguagem institucional.
-- `parse-event-pdf` — recebe PDF (base64), extrai texto (pdfjs no edge ou envio direto p/ Gemini multimodal) e devolve JSON com todos os campos preenchidos + resumo. Loading: “Analisando documento com IA...”.
+6. **Spread sem normalização** — `setData(d => ({ ...d, ...res.event }))` aceita campos `null`/`""` da IA e sobrescreve, mas arrays ausentes ficam vazios sem aviso. Não há feedback de "X campos preenchidos / Y vazios".
+7. **Sem fallback** — se o Gemini falhar em ler o PDF (vision), não há extração de texto via `pdftotext` ou segunda tentativa. O usuário recebe sucesso mas o formulário fica vazio.
 
-### 3. Frontend
+### C. Problemas de exibição no card (`EventCard.tsx`)
 
-Rotas (`src/App.tsx`) protegidas por `AdminRoute` para admin/direction/teacher:
-- `/events` — lista/timeline
-- `/events/new` e `/events/:id/edit` — formulário (modal grande dentro da lista, não rota separada, para fluxo mais rápido)
+8. **Card oculta dados importados** — mesmo quando a importação funciona, o card mostra apenas: título, enfoque (1 linha), resumo (2 linhas), datas, responsáveis (3) e tags (6). Não há indicadores de:
+   - quantidade de ações estratégicas / procedimentos
+   - presença de metas / pontos de atenção
+   - anexo PDF original
+   
+   Resultado: usuário pensa que "as informações não foram importadas", quando na verdade estão no banco mas escondidas no card.
 
-Sidebar (`src/components/DashboardLayout.tsx`): adicionar item “Eventos e Atas” (ícone `ClipboardList`) entre “Frequência” e “Declarações”.
+### D. Problema de tipo (`types.ts`)
 
-#### Página principal `src/pages/Events.tsx`
-- Cabeçalho com título, subtítulo e botão **➕ Novo Evento**
-- Dashboard de métricas no topo (4 cards): total, do mês, em andamento, concluídos + mini gráfico de responsáveis mais ativos (recharts)
-- Barra de busca inteligente (filtra por título, enfoque, responsáveis, tags, texto)
-- Filtros: data, responsável, status, tag
-- **Timeline vertical** com cards (mais recentes primeiro), animados via framer-motion
+9. **`EventStatus` sem `'cancelado'`** — caso a IA retorne um status fora do enum, o `STATUS_COLORS[event.status]` retorna `undefined` e quebra o badge.
 
-#### Card do evento `src/components/events/EventCard.tsx`
-- Miniatura da primeira imagem
-- Título, resumo IA, badge de status colorido, badge de enfoque
-- Datas e responsáveis
-- Ações: visualizar, editar, exportar PDF, excluir
+---
 
-#### Formulário `src/components/events/EventFormDialog.tsx`
-Modal grande, multi-seção com tabs ou acordeon:
-1. Identificação (título, status, prazos)
-2. Enfoque / Metas / Pontos de Atenção (textareas com botão ✨ ao lado para sugerir via IA)
-3. Ações Estratégicas (lista dinâmica + IA sugere)
-4. Procedimentos (lista dinâmica + IA converte ações → gerúndio)
-5. Responsáveis (multi-select de usuários da `profiles` + adicionar manual)
-6. Fotos do Evento (drag-and-drop, preview, compressão `browser-image-compression`, upload múltiplo p/ storage)
-7. Botões topo: **📄 Importar PDF** e **✨ Preencher com IA** (preenche todo o formulário)
+## Plano de correção
 
-Tags geradas automaticamente pela IA ao salvar; usuário pode editar.
+### 1. Reforçar `parse-event-pdf` (edge function)
+- Schema com **todos os campos obrigatórios** (com defaults vazios permitidos por array, mas o modelo é instruído a preencher).
+- Prompt detalhado em PT-BR descrevendo cada seção esperada em uma ata escolar brasileira (com exemplos).
+- Adicionar `is_continuous` e `status` ao schema (com inferência: ex. "projeto anual" → contínuo).
+- Trocar modelo para `google/gemini-2.5-pro` (melhor em extração estruturada de PDF longo) com fallback para `2.5-flash` em caso de 429.
+- Instruir a IA a **preservar a redação original** do documento em vez de reformular.
 
-#### Visualização e exportação
-- `src/components/events/EventDetailDialog.tsx` — visualização completa estilo ata
-- Exportar PDF institucional via `jspdf` + `html2canvas` (já presentes no projeto pelos PEIs/declarações) com cabeçalho da escola, todas as seções e galeria
+### 2. Normalizar resposta no `importPdf` (frontend)
+- Função `normalizeEventFromAI(raw)` que:
+  - Converte `""` em `null` para datas
+  - Converte strings tipo "março de 2026" → `YYYY-MM-DD` quando possível
+  - Garante arrays (`acoes_estrategicas`, etc.) sempre presentes
+  - Aplica defaults seguros (`status: 'planejado'`, `is_continuous: false`)
+- Toast de feedback contando campos preenchidos: *"PDF analisado: 8 de 11 campos preenchidos"*.
+- Botão "Revisar campos vazios" rolando para a primeira aba com pendência.
 
-### 4. Notas técnicas
-- Reutilizar padrões do AEE (PEIForm + Edge Functions Gemini) para consistência.
-- Validações com Zod no client e nos edge functions.
-- Realtime opcional não incluído (fora de escopo).
-- Tratar 429/402 da Lovable AI Gateway com toast amigável.
+### 3. Enriquecer o `EventCard`
+- Linha de "métricas rápidas": `📌 4 ações · 6 procedimentos · 3 responsáveis · 📎 PDF`
+- Mostrar trecho de `metas` quando existir (1 linha truncada).
+- Ícone discreto indicando "Importado de PDF" quando `pdf_original` estiver presente, com link para baixar o original.
 
-### Arquivos a criar/editar
-- Migration `school_events` + bucket `school-events` + RLS
-- Edge functions: `event-ai-suggest`, `event-ai-fill`, `parse-event-pdf`
-- `src/pages/Events.tsx`
-- `src/components/events/EventCard.tsx`
-- `src/components/events/EventFormDialog.tsx`
-- `src/components/events/EventDetailDialog.tsx`
-- `src/components/events/EventMetrics.tsx`
-- `src/components/events/EventTimeline.tsx`
-- `src/components/events/PdfImportButton.tsx`
-- Editar: `src/App.tsx` (rota), `src/components/DashboardLayout.tsx` (sidebar)
+### 4. Sanitizar `save()` no `EventFormDialog`
+- Converter `prazo_inicio`/`prazo_fim` `""` → `null` antes do insert/update.
+- Validar `status` contra o enum, caindo para `'planejado'` se inválido.
+
+### 5. (Opcional) Indicador visual durante upload
+- Mostrar quais campos foram preenchidos pela IA com um pequeno ✨ ao lado do label, removível ao editar.
+
+---
+
+## Arquivos afetados
+
+- `supabase/functions/parse-event-pdf/index.ts` — schema + prompt + modelo
+- `src/components/events/EventFormDialog.tsx` — `importPdf`, normalização, `save()`
+- `src/components/events/EventCard.tsx` — exibir mais campos importados
+- `src/components/events/types.ts` — defaults + helper `normalizeEventFromAI`
+
+Sem alterações de banco — todos os campos já existem na tabela `school_events`.
+
+---
+
+## Resultado esperado
+
+Após aplicar: ao importar uma ata em PDF, **todos os campos extraíveis aparecem** no formulário e no card (enfoque, metas, pontos de atenção, contagem de ações/procedimentos, responsáveis, datas, tags, status). O usuário vê claramente o que foi importado e o que ficou vazio.
