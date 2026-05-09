@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Sparkles, Plus, Trash2, FileUp, Upload, X, Loader2, Image as ImageIcon } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
-import { SchoolEvent, EventStatus, STATUS_LABELS, emptyEvent } from './types';
+import { SchoolEvent, EventStatus, STATUS_LABELS, emptyEvent, normalizeEventFromAI, countFilled } from './types';
 
 type EventDraft = Omit<SchoolEvent, 'id' | 'created_at' | 'updated_at' | 'created_by'> & { id?: string };
 
@@ -103,8 +103,11 @@ export default function EventFormDialog({ open, onOpenChange, event, onSaved }: 
       // upload pdf
       const path = `pdfs/${crypto.randomUUID()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
       await supabase.storage.from('school-events').upload(path, file, { upsert: false });
-      setData(d => ({ ...d, ...res.event, pdf_original: path }));
-      toast.success('PDF analisado e campos preenchidos');
+      const normalized = normalizeEventFromAI(res.event);
+      setData(d => ({ ...d, ...normalized, pdf_original: path }));
+      const { filled, total } = countFilled({ ...emptyEvent, ...normalized });
+      toast.success(`PDF analisado: ${filled} de ${total} campos preenchidos`);
+      if (filled < total) toast.info('Revise os campos vazios antes de salvar.');
     } catch (e: any) {
       toast.error(e.message || 'Erro ao processar PDF');
     } finally {
@@ -152,6 +155,8 @@ export default function EventFormDialog({ open, onOpenChange, event, onSaved }: 
     setSaving(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
+      const validStatus: EventStatus[] = ['planejado', 'em_andamento', 'concluido', 'arquivado'];
+      const normDate = (v: any) => (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v.trim())) ? v.trim() : null;
       const payload: any = {
         title: data.title,
         enfoque: data.enfoque || '',
@@ -160,10 +165,10 @@ export default function EventFormDialog({ open, onOpenChange, event, onSaved }: 
         acoes_estrategicas: (data.acoes_estrategicas || []).filter(s => s.trim()),
         procedimentos: (data.procedimentos || []).filter(s => s.trim()),
         responsaveis: (data.responsaveis || []).filter(s => s.trim()),
-        prazo_inicio: data.is_continuous ? null : data.prazo_inicio,
-        prazo_fim: data.is_continuous ? null : data.prazo_fim,
+        prazo_inicio: data.is_continuous ? null : normDate(data.prazo_inicio),
+        prazo_fim: data.is_continuous ? null : normDate(data.prazo_fim),
         is_continuous: data.is_continuous,
-        status: data.status,
+        status: validStatus.includes(data.status) ? data.status : 'planejado',
         tags: (data.tags || []).filter(s => s.trim()),
         resumo_ia: data.resumo_ia || '',
         images: data.images,
