@@ -50,12 +50,16 @@ export default function EventDetailDialog({ open, onOpenChange, event }: { open:
             )}
           </div>
 
-          {event.enfoque && <Section title="1. Enfoque">{event.enfoque}</Section>}
-          {event.metas && <Section title="2. Metas">{event.metas}</Section>}
-          {event.pontos_atencao && <Section title="3. Pontos de atenção">{event.pontos_atencao}</Section>}
-          {event.acoes_estrategicas.length > 0 && <Section title="4. Ações estratégicas"><ul className="list-disc pl-5">{event.acoes_estrategicas.map((a, i) => <li key={i}>{a}</li>)}</ul></Section>}
-          {event.procedimentos.length > 0 && <Section title="5. Procedimentos"><ul className="list-disc pl-5">{event.procedimentos.map((a, i) => <li key={i}>{a}</li>)}</ul></Section>}
-          {event.responsaveis.length > 0 && <Section title="6. Responsáveis">{event.responsaveis.join(', ')}</Section>}
+          {event.responsaveis.length > 0 && <Section title="Responsáveis">{event.responsaveis.join(', ')}</Section>}
+          {event.justificativa && <Section title="1. Justificativa">{event.justificativa}</Section>}
+          {event.objetivo_geral && <Section title="2. Objetivo geral">{event.objetivo_geral}</Section>}
+          {event.objetivos_especificos?.length > 0 && <Section title="3. Objetivos específicos"><ul className="list-disc pl-5">{event.objetivos_especificos.map((a, i) => <li key={i}>{a}</li>)}</ul></Section>}
+          {event.acoes_estrategicas.length > 0 && <Section title="4. Plano estratégico do projeto"><ul className="list-disc pl-5">{event.acoes_estrategicas.map((a, i) => <li key={i}>{a}</li>)}</ul></Section>}
+          {event.metodologia && <Section title="5. Metodologia">{event.metodologia}</Section>}
+          {event.cronograma?.length > 0 && <Section title="6. Cronograma (sugestão)"><ul className="list-disc pl-5">{event.cronograma.map((c, i) => <li key={i}>{c.etapa}{c.periodo ? ` — ${c.periodo}` : ''}</li>)}</ul></Section>}
+          {event.recursos?.length > 0 && <Section title="7. Recursos necessários"><ul className="list-disc pl-5">{event.recursos.map((a, i) => <li key={i}>{a}</li>)}</ul></Section>}
+          {event.culminancia && <Section title="8. Culminância">{event.culminancia}</Section>}
+          {event.avaliacao && <Section title="9. Avaliação">{event.avaliacao}</Section>}
 
           {event.images.length > 0 && (
             <Section title="Fotos">

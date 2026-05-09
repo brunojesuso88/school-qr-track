@@ -6,14 +6,17 @@ const corsHeaders = {
 };
 
 const FIELD_PROMPTS: Record<string, string> = {
-  enfoque: 'Sugira um ENFOQUE educacional institucional curto (1-2 frases) para o evento.',
-  metas: 'Sugira METAS SMART mensuráveis (2-3 frases) para o evento, com indicadores quantitativos.',
-  pontos_atencao: 'Liste 3-5 PONTOS DE ATENÇÃO críticos relacionados ao evento, em frases curtas.',
-  acoes_estrategicas: 'Liste 4-6 AÇÕES ESTRATÉGICAS começando com verbo no INFINITIVO.',
-  procedimentos: 'Converta as ações estratégicas em PROCEDIMENTOS executáveis começando com verbo no GERÚNDIO.',
-  tags: 'Gere 3-6 tags curtas (1-2 palavras) categorizando o evento.',
-  resumo_ia: 'Gere um RESUMO institucional curto (1-2 frases) profissional para descrever o evento.',
-  title: 'Sugira um título institucional curto e claro para o evento.',
+  justificativa: 'Escreva a JUSTIFICATIVA institucional do projeto (1 parágrafo de 4-6 frases): contexto, problema, relevância pedagógica e fundamentação.',
+  objetivo_geral: 'Escreva um OBJETIVO GERAL em uma única frase iniciada por verbo no infinitivo, amplo e alinhado à justificativa.',
+  objetivos_especificos: 'Liste 4-6 OBJETIVOS ESPECÍFICOS, cada um iniciando por verbo no infinitivo, desdobrando o objetivo geral.',
+  acoes_estrategicas: 'Liste 4-8 itens do PLANO ESTRATÉGICO DO PROJETO (ações iniciando por verbo no infinitivo).',
+  metodologia: 'Descreva a METODOLOGIA (1 parágrafo de 4-6 frases): abordagem pedagógica, etapas, dinâmicas, materiais e parcerias.',
+  recursos: 'Liste 4-8 RECURSOS NECESSÁRIOS organizados por categoria (humanos, materiais, financeiros, espaços).',
+  culminancia: 'Descreva a CULMINÂNCIA do projeto (2-4 frases): evento ou produto final que encerra e celebra o projeto.',
+  avaliacao: 'Descreva a AVALIAÇÃO do projeto (3-5 frases): critérios, instrumentos, indicadores e momentos avaliativos.',
+  tags: 'Gere 3-6 tags curtas (1-2 palavras) categorizando o projeto.',
+  resumo_ia: 'Gere um RESUMO institucional curto (1-2 frases) profissional para descrever o projeto.',
+  title: 'Sugira um título institucional curto e claro para o projeto.',
 };
 
 serve(async (req) => {
@@ -34,7 +37,7 @@ serve(async (req) => {
       });
     }
 
-    const isList = ['acoes_estrategicas', 'procedimentos', 'tags', 'pontos_atencao'].includes(field);
+    const isList = ['acoes_estrategicas', 'objetivos_especificos', 'recursos', 'tags'].includes(field);
 
     const tool = {
       type: 'function',
