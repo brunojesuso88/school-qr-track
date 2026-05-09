@@ -11,8 +11,8 @@ export default function EventMetrics({ events }: { events: SchoolEvent[] }) {
   const done = events.filter(e => e.status === 'concluido').length;
 
   const cards = [
-    { label: 'Total de eventos', value: total, icon: CalendarDays, color: 'text-primary bg-primary/10' },
-    { label: 'Eventos do mês', value: monthCount, icon: CalendarCheck, color: 'text-blue-500 bg-blue-500/10' },
+    { label: 'Total de projetos', value: total, icon: CalendarDays, color: 'text-primary bg-primary/10' },
+    { label: 'Projetos do mês', value: monthCount, icon: CalendarCheck, color: 'text-blue-500 bg-blue-500/10' },
     { label: 'Em andamento', value: inProgress, icon: Clock, color: 'text-amber-500 bg-amber-500/10' },
     { label: 'Concluídos', value: done, icon: ListChecks, color: 'text-emerald-500 bg-emerald-500/10' },
   ];
