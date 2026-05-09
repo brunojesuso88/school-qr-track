@@ -12,6 +12,7 @@ import EventFormDialog from '@/components/events/EventFormDialog';
 import EventDetailDialog from '@/components/events/EventDetailDialog';
 import { SchoolEvent, STATUS_LABELS, EventStatus } from '@/components/events/types';
 import jsPDF from 'jspdf';
+import logoCepans from '@/assets/logo-cepans.png';
 
 export default function Events() {
   const [events, setEvents] = useState<SchoolEvent[]>([]);
@@ -21,6 +22,20 @@ export default function Events() {
   const [formOpen, setFormOpen] = useState(false);
   const [detailOpen, setDetailOpen] = useState(false);
   const [active, setActive] = useState<SchoolEvent | null>(null);
+  const [logoDataUrl, setLogoDataUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch(logoCepans)
+      .then(r => r.blob())
+      .then(b => new Promise<string>((res, rej) => {
+        const reader = new FileReader();
+        reader.onload = () => res(reader.result as string);
+        reader.onerror = rej;
+        reader.readAsDataURL(b);
+      }))
+      .then(setLogoDataUrl)
+      .catch(() => {});
+  }, []);
 
   const load = async () => {
     setLoading(true);
@@ -47,27 +62,53 @@ export default function Events() {
   const onView = (e: SchoolEvent) => { setActive(e); setDetailOpen(true); };
 
   const onDelete = async (e: SchoolEvent) => {
-    if (!window.confirm(`Excluir "${e.title}"?`)) return;
+    if (!window.confirm(`Excluir o projeto "${e.title}"?`)) return;
     const { error } = await supabase.from('school_events').delete().eq('id', e.id);
     if (error) toast.error('Erro ao excluir');
-    else { toast.success('Evento excluído'); load(); }
+    else { toast.success('Projeto excluído'); load(); }
   };
 
   const onExport = (e: SchoolEvent) => {
     const doc = new jsPDF({ unit: 'pt', format: 'a4' });
     const margin = 40;
-    let y = margin;
     const pageW = doc.internal.pageSize.getWidth();
+    const pageH = doc.internal.pageSize.getHeight();
+    const headerH = 110;
+    let y = headerH + 10;
+
+    const drawHeader = () => {
+      if (logoDataUrl) {
+        try { doc.addImage(logoDataUrl, 'PNG', margin, 24, 64, 64); } catch {}
+      }
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(13);
+      doc.text('CENTRO DE ENSINO PROF. ANTÔNIO NONATO SAMPAIO', margin + 78, 44);
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(10);
+      doc.text('Coelho Neto – MA', margin + 78, 60);
+      doc.setFontSize(9); doc.setTextColor(120);
+      doc.text('Plano de Ação Escolar — Projetos e Atas', margin + 78, 74);
+      doc.setTextColor(0);
+      doc.setDrawColor(180); doc.setLineWidth(0.8);
+      doc.line(margin, headerH - 10, pageW - margin, headerH - 10);
+    };
+
+    const drawFooter = (page: number, total: number) => {
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(140);
+      doc.text(`Página ${page} de ${total}`, pageW / 2, pageH - 20, { align: 'center' });
+      doc.setTextColor(0);
+    };
+
     const wrap = (text: string, size = 11, bold = false) => {
       doc.setFont('helvetica', bold ? 'bold' : 'normal'); doc.setFontSize(size);
       const lines = doc.splitTextToSize(text || '—', pageW - margin * 2);
       lines.forEach((l: string) => {
-        if (y > 780) { doc.addPage(); y = margin; }
+        if (y > pageH - 50) { doc.addPage(); drawHeader(); y = headerH + 10; }
         doc.text(l, margin, y); y += size + 4;
       });
       y += 4;
     };
-    wrap(e.title, 18, true);
+
+    drawHeader();
+    wrap(`PROJETO: ${e.title}`, 16, true);
     wrap(`Status: ${STATUS_LABELS[e.status]}`, 10);
     if (e.is_continuous) wrap('Período: contínuo', 10);
     else if (e.prazo_inicio) wrap(`Período: ${e.prazo_inicio}${e.prazo_fim ? ' a ' + e.prazo_fim : ''}`, 10);
@@ -79,6 +120,9 @@ export default function Events() {
     if (e.procedimentos.length) { wrap('5. Procedimentos', 12, true); e.procedimentos.forEach(a => wrap('• ' + a)); }
     if (e.responsaveis.length) { wrap('6. Responsáveis', 12, true); wrap(e.responsaveis.join(', ')); }
     if (e.tags.length) { wrap('Tags: ' + e.tags.join(', '), 10); }
+
+    const total = doc.getNumberOfPages();
+    for (let i = 1; i <= total; i++) { doc.setPage(i); drawFooter(i, total); }
     doc.save(`${e.title.replace(/[^a-zA-Z0-9-_]/g, '_')}.pdf`);
   };
 
@@ -87,10 +131,10 @@ export default function Events() {
       <div className="p-6 space-y-6 max-w-6xl mx-auto">
         <header className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-bold flex items-center gap-2"><ClipboardList className="w-7 h-7 text-primary" /> Eventos e Atas</h1>
-            <p className="text-muted-foreground mt-1">Registro inteligente de ações e eventos do plano escolar</p>
+            <h1 className="text-3xl font-bold flex items-center gap-2"><ClipboardList className="w-7 h-7 text-primary" /> Projetos</h1>
+            <p className="text-muted-foreground mt-1">Registro inteligente de projetos e ações do plano escolar</p>
           </div>
-          <Button onClick={onNew}><Plus className="w-4 h-4" /> Novo Evento</Button>
+          <Button onClick={onNew}><Plus className="w-4 h-4" /> Novo Projeto</Button>
         </header>
 
         <EventMetrics events={events} />
@@ -114,8 +158,8 @@ export default function Events() {
         ) : filtered.length === 0 ? (
           <div className="text-center py-12 border-2 border-dashed rounded-lg">
             <ClipboardList className="w-12 h-12 mx-auto text-muted-foreground/50" />
-            <p className="mt-3 text-muted-foreground">Nenhum evento encontrado</p>
-            <Button variant="outline" className="mt-4" onClick={onNew}><Plus className="w-4 h-4" /> Criar primeiro evento</Button>
+            <p className="mt-3 text-muted-foreground">Nenhum projeto encontrado</p>
+            <Button variant="outline" className="mt-4" onClick={onNew}><Plus className="w-4 h-4" /> Criar primeiro projeto</Button>
           </div>
         ) : (
           <div className="space-y-4">

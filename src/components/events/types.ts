@@ -17,6 +17,7 @@ export interface SchoolEvent {
   resumo_ia: string;
   images: string[]; // storage paths
   pdf_original: string | null;
+  cover_image: string | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;
@@ -38,6 +39,7 @@ export const emptyEvent: Omit<SchoolEvent, 'id' | 'created_at' | 'updated_at' | 
   resumo_ia: '',
   images: [],
   pdf_original: null,
+  cover_image: null,
 };
 
 export const STATUS_LABELS: Record<EventStatus, string> = {

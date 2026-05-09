@@ -30,7 +30,7 @@ const allNavigation = [
   { name: 'Sistema AEE', href: '/aee', icon: Heart, roles: ['admin', 'direction', 'teacher'] },
   { name: 'Turmas', href: '/classes', icon: BookOpen, roles: ['admin', 'direction', 'teacher'] },
   { name: 'Frequência', href: '/attendance', icon: Calendar, roles: ['admin', 'direction', 'teacher'] },
-  { name: 'Eventos e Atas', href: '/events', icon: ClipboardList, roles: ['admin', 'direction', 'teacher'] },
+  { name: 'Projetos', href: '/events', icon: ClipboardList, roles: ['admin', 'direction', 'teacher'] },
   { name: 'Declarações', href: '/declarations', icon: FileText, roles: ['admin', 'direction'] },
   
   { name: 'Configurações', href: '/settings', icon: Settings, roles: ['admin', 'direction'] },

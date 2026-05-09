@@ -398,6 +398,7 @@ export type Database = {
       school_events: {
         Row: {
           acoes_estrategicas: Json
+          cover_image: string | null
           created_at: string
           created_by: string | null
           enfoque: string | null
@@ -419,6 +420,7 @@ export type Database = {
         }
         Insert: {
           acoes_estrategicas?: Json
+          cover_image?: string | null
           created_at?: string
           created_by?: string | null
           enfoque?: string | null
@@ -440,6 +442,7 @@ export type Database = {
         }
         Update: {
           acoes_estrategicas?: Json
+          cover_image?: string | null
           created_at?: string
           created_by?: string | null
           enfoque?: string | null
