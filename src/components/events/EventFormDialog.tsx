@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Sparkles, Plus, Trash2, FileUp, Upload, X, Loader2, Image as ImageIcon } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
-import { SchoolEvent, EventStatus, STATUS_LABELS, emptyEvent, normalizeEventFromAI, countFilled } from './types';
+import { SchoolEvent, EventStatus, STATUS_LABELS, emptyEvent, normalizeEventFromAI, countFilled, CronogramaItem } from './types';
 
 type EventDraft = Omit<SchoolEvent, 'id' | 'created_at' | 'updated_at' | 'created_by'> & { id?: string };
 
@@ -73,8 +73,8 @@ export default function EventFormDialog({ open, onOpenChange, event, onSaved }: 
       if (Array.isArray(res.items)) {
         if (field === 'tags') update('tags', Array.from(new Set([...(data.tags || []), ...res.items])));
         else if (field === 'acoes_estrategicas') update('acoes_estrategicas', [...(data.acoes_estrategicas || []), ...res.items]);
-        else if (field === 'procedimentos') update('procedimentos', [...(data.procedimentos || []), ...res.items]);
-        else if (field === 'pontos_atencao') update('pontos_atencao', [data.pontos_atencao, ...res.items.map((x: string) => `• ${x}`)].filter(Boolean).join('\n'));
+        else if (field === 'objetivos_especificos') update('objetivos_especificos', [...(data.objetivos_especificos || []), ...res.items]);
+        else if (field === 'recursos') update('recursos', [...(data.recursos || []), ...res.items]);
       } else if (res.text) {
         update(field as any, res.text);
       }
@@ -186,6 +186,19 @@ export default function EventFormDialog({ open, onOpenChange, event, onSaved }: 
     update(key, (data[key] as string[]).filter((_, idx) => idx !== i));
   };
 
+  type StringListKey = 'acoes_estrategicas' | 'procedimentos' | 'responsaveis' | 'tags' | 'objetivos_especificos' | 'recursos';
+  const addStr = (key: StringListKey) => update(key, [...((data[key] as string[]) || []), '']);
+  const updStr = (key: StringListKey, i: number, v: string) => {
+    const arr = [...((data[key] as string[]) || [])]; arr[i] = v; update(key, arr);
+  };
+  const rmStr = (key: StringListKey, i: number) => update(key, ((data[key] as string[]) || []).filter((_, idx) => idx !== i));
+
+  const addCron = () => update('cronograma', [...(data.cronograma || []), { etapa: '', periodo: '' }]);
+  const updCron = (i: number, patch: Partial<CronogramaItem>) => {
+    const arr = [...(data.cronograma || [])]; arr[i] = { ...arr[i], ...patch }; update('cronograma', arr);
+  };
+  const rmCron = (i: number) => update('cronograma', (data.cronograma || []).filter((_, idx) => idx !== i));
+
   const save = async () => {
     if (!data.title.trim()) { toast.error('Título é obrigatório'); return; }
     setSaving(true);
@@ -195,11 +208,15 @@ export default function EventFormDialog({ open, onOpenChange, event, onSaved }: 
       const normDate = (v: any) => (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v.trim())) ? v.trim() : null;
       const payload: any = {
         title: data.title,
-        enfoque: data.enfoque || '',
-        metas: data.metas || '',
-        pontos_atencao: data.pontos_atencao || '',
+        justificativa: data.justificativa || '',
+        objetivo_geral: data.objetivo_geral || '',
+        objetivos_especificos: (data.objetivos_especificos || []).filter(s => s.trim()),
+        metodologia: data.metodologia || '',
+        cronograma: (data.cronograma || []).filter(c => (c.etapa || '').trim() || (c.periodo || '').trim()),
+        recursos: (data.recursos || []).filter(s => s.trim()),
+        culminancia: data.culminancia || '',
+        avaliacao: data.avaliacao || '',
         acoes_estrategicas: (data.acoes_estrategicas || []).filter(s => s.trim()),
-        procedimentos: (data.procedimentos || []).filter(s => s.trim()),
         responsaveis: (data.responsaveis || []).filter(s => s.trim()),
         prazo_inicio: data.is_continuous ? null : normDate(data.prazo_inicio),
         prazo_fim: data.is_continuous ? null : normDate(data.prazo_fim),
@@ -300,48 +317,12 @@ export default function EventFormDialog({ open, onOpenChange, event, onSaved }: 
               <div className="flex items-center justify-between"><Label>Resumo institucional</Label><AiBtn field="resumo_ia" /></div>
               <Textarea rows={3} value={data.resumo_ia} onChange={e => update('resumo_ia', e.target.value)} placeholder="Breve descrição institucional do projeto" />
             </div>
-          </TabsContent>
-
-          <TabsContent value="conteudo" className="space-y-4 pt-4">
-            <div>
-              <div className="flex items-center justify-between"><Label>1. Enfoque</Label><AiBtn field="enfoque" /></div>
-              <Textarea rows={3} value={data.enfoque} onChange={e => update('enfoque', e.target.value)} placeholder="Indicador educacional relacionado ao projeto" />
-            </div>
-            <div>
-              <div className="flex items-center justify-between"><Label>2. Metas</Label><AiBtn field="metas" /></div>
-              <Textarea rows={3} value={data.metas} onChange={e => update('metas', e.target.value)} placeholder="Resultados mensuráveis esperados (SMART)" />
-            </div>
-            <div>
-              <div className="flex items-center justify-between"><Label>3. Pontos de atenção</Label><AiBtn field="pontos_atencao" /></div>
-              <Textarea rows={4} value={data.pontos_atencao} onChange={e => update('pontos_atencao', e.target.value)} placeholder="Problemas críticos identificados" />
-            </div>
-          </TabsContent>
-
-          <TabsContent value="execucao" className="space-y-4 pt-4">
             <ListEditor
-              label="4. Ações estratégicas (verbo no infinitivo)"
-              items={data.acoes_estrategicas}
-              onAdd={() => addItem('acoes_estrategicas')}
-              onUpdate={(i, v) => updateItem('acoes_estrategicas', i, v)}
-              onRemove={i => removeItem('acoes_estrategicas', i)}
-              ai={<AiBtn field="acoes_estrategicas" />}
-              placeholder="Promover, Realizar, Implementar..."
-            />
-            <ListEditor
-              label="5. Procedimentos (verbo no gerúndio)"
-              items={data.procedimentos}
-              onAdd={() => addItem('procedimentos')}
-              onUpdate={(i, v) => updateItem('procedimentos', i, v)}
-              onRemove={i => removeItem('procedimentos', i)}
-              ai={<AiBtn field="procedimentos" />}
-              placeholder="Realizando, Aplicando, Desenvolvendo..."
-            />
-            <ListEditor
-              label="6. Responsáveis"
+              label="Responsáveis"
               items={data.responsaveis}
-              onAdd={() => addItem('responsaveis')}
-              onUpdate={(i, v) => updateItem('responsaveis', i, v)}
-              onRemove={i => removeItem('responsaveis', i)}
+              onAdd={() => addStr('responsaveis')}
+              onUpdate={(i, v) => updStr('responsaveis', i, v)}
+              onRemove={i => rmStr('responsaveis', i)}
               placeholder="Nome do responsável"
             />
             <div>
@@ -350,7 +331,7 @@ export default function EventFormDialog({ open, onOpenChange, event, onSaved }: 
                 {data.tags.map((t, i) => (
                   <Badge key={i} variant="secondary" className="gap-1">
                     {t}
-                    <button type="button" onClick={() => removeItem('tags', i)} className="ml-1 hover:text-destructive"><X className="w-3 h-3" /></button>
+                    <button type="button" onClick={() => rmStr('tags', i)} className="ml-1 hover:text-destructive"><X className="w-3 h-3" /></button>
                   </Badge>
                 ))}
                 <Button type="button" size="sm" variant="outline" onClick={() => {
@@ -358,6 +339,72 @@ export default function EventFormDialog({ open, onOpenChange, event, onSaved }: 
                   if (v?.trim()) update('tags', [...data.tags, v.trim()]);
                 }}><Plus className="w-3 h-3" /> Tag</Button>
               </div>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="conteudo" className="space-y-4 pt-4">
+            <div>
+              <div className="flex items-center justify-between"><Label>1. Justificativa</Label><AiBtn field="justificativa" /></div>
+              <Textarea rows={5} value={data.justificativa} onChange={e => update('justificativa', e.target.value)} placeholder="Por que este projeto é necessário? Contexto, problema, relevância pedagógica." />
+            </div>
+            <div>
+              <div className="flex items-center justify-between"><Label>2. Objetivo geral</Label><AiBtn field="objetivo_geral" /></div>
+              <Textarea rows={3} value={data.objetivo_geral} onChange={e => update('objetivo_geral', e.target.value)} placeholder="Propósito amplo do projeto, em uma frase iniciada por verbo no infinitivo." />
+            </div>
+            <ListEditor
+              label="3. Objetivos específicos"
+              items={data.objetivos_especificos}
+              onAdd={() => addStr('objetivos_especificos')}
+              onUpdate={(i, v) => updStr('objetivos_especificos', i, v)}
+              onRemove={i => rmStr('objetivos_especificos', i)}
+              ai={<AiBtn field="objetivos_especificos" />}
+              placeholder="Identificar..., Promover..., Desenvolver..."
+            />
+            <div>
+              <div className="flex items-center justify-between"><Label>5. Metodologia</Label><AiBtn field="metodologia" /></div>
+              <Textarea rows={5} value={data.metodologia} onChange={e => update('metodologia', e.target.value)} placeholder="Como o projeto será conduzido: abordagem pedagógica, etapas, dinâmicas, parcerias." />
+            </div>
+          </TabsContent>
+
+          <TabsContent value="execucao" className="space-y-4 pt-4">
+            <ListEditor
+              label="4. Plano estratégico do projeto"
+              items={data.acoes_estrategicas}
+              onAdd={() => addStr('acoes_estrategicas')}
+              onUpdate={(i, v) => updStr('acoes_estrategicas', i, v)}
+              onRemove={i => rmStr('acoes_estrategicas', i)}
+              ai={<AiBtn field="acoes_estrategicas" />}
+              placeholder="Ação estratégica iniciada por verbo no infinitivo"
+            />
+            <div>
+              <Label>6. Cronograma (sugestão)</Label>
+              <div className="space-y-2 mt-2">
+                {(data.cronograma || []).map((c, i) => (
+                  <div key={i} className="flex gap-2">
+                    <Input className="flex-1" value={c.etapa} onChange={e => updCron(i, { etapa: e.target.value })} placeholder="Etapa / atividade" />
+                    <Input className="w-48" value={c.periodo} onChange={e => updCron(i, { periodo: e.target.value })} placeholder="Período (ex.: mar/2026)" />
+                    <Button type="button" variant="ghost" size="icon" onClick={() => rmCron(i)}><Trash2 className="w-4 h-4 text-destructive" /></Button>
+                  </div>
+                ))}
+                <Button type="button" variant="outline" size="sm" onClick={addCron}><Plus className="w-4 h-4" /> Adicionar etapa</Button>
+              </div>
+            </div>
+            <ListEditor
+              label="7. Recursos necessários"
+              items={data.recursos}
+              onAdd={() => addStr('recursos')}
+              onUpdate={(i, v) => updStr('recursos', i, v)}
+              onRemove={i => rmStr('recursos', i)}
+              ai={<AiBtn field="recursos" />}
+              placeholder="Materiais, humanos, financeiros, espaços..."
+            />
+            <div>
+              <div className="flex items-center justify-between"><Label>8. Culminância</Label><AiBtn field="culminancia" /></div>
+              <Textarea rows={4} value={data.culminancia} onChange={e => update('culminancia', e.target.value)} placeholder="Evento/produto final que encerra o projeto (apresentação, mostra, publicação)." />
+            </div>
+            <div>
+              <div className="flex items-center justify-between"><Label>9. Avaliação</Label><AiBtn field="avaliacao" /></div>
+              <Textarea rows={4} value={data.avaliacao} onChange={e => update('avaliacao', e.target.value)} placeholder="Como o projeto será avaliado: critérios, instrumentos, indicadores." />
             </div>
           </TabsContent>
 

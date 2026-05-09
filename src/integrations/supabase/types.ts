@@ -398,19 +398,27 @@ export type Database = {
       school_events: {
         Row: {
           acoes_estrategicas: Json
+          avaliacao: string | null
           cover_image: string | null
           created_at: string
           created_by: string | null
+          cronograma: Json
+          culminancia: string | null
           enfoque: string | null
           id: string
           images: Json
           is_continuous: boolean
+          justificativa: string | null
           metas: string | null
+          metodologia: string | null
+          objetivo_geral: string | null
+          objetivos_especificos: Json
           pdf_original: string | null
           pontos_atencao: string | null
           prazo_fim: string | null
           prazo_inicio: string | null
           procedimentos: Json
+          recursos: Json
           responsaveis: Json
           resumo_ia: string | null
           status: string
@@ -420,19 +428,27 @@ export type Database = {
         }
         Insert: {
           acoes_estrategicas?: Json
+          avaliacao?: string | null
           cover_image?: string | null
           created_at?: string
           created_by?: string | null
+          cronograma?: Json
+          culminancia?: string | null
           enfoque?: string | null
           id?: string
           images?: Json
           is_continuous?: boolean
+          justificativa?: string | null
           metas?: string | null
+          metodologia?: string | null
+          objetivo_geral?: string | null
+          objetivos_especificos?: Json
           pdf_original?: string | null
           pontos_atencao?: string | null
           prazo_fim?: string | null
           prazo_inicio?: string | null
           procedimentos?: Json
+          recursos?: Json
           responsaveis?: Json
           resumo_ia?: string | null
           status?: string
@@ -442,19 +458,27 @@ export type Database = {
         }
         Update: {
           acoes_estrategicas?: Json
+          avaliacao?: string | null
           cover_image?: string | null
           created_at?: string
           created_by?: string | null
+          cronograma?: Json
+          culminancia?: string | null
           enfoque?: string | null
           id?: string
           images?: Json
           is_continuous?: boolean
+          justificativa?: string | null
           metas?: string | null
+          metodologia?: string | null
+          objetivo_geral?: string | null
+          objetivos_especificos?: Json
           pdf_original?: string | null
           pontos_atencao?: string | null
           prazo_fim?: string | null
           prazo_inicio?: string | null
           procedimentos?: Json
+          recursos?: Json
           responsaveis?: Json
           resumo_ia?: string | null
           status?: string

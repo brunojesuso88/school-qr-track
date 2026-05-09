@@ -9,17 +9,21 @@ const eventSchema = {
   type: 'object',
   properties: {
     title: { type: 'string' },
-    enfoque: { type: 'string' },
-    metas: { type: 'string' },
-    pontos_atencao: { type: 'string' },
+    justificativa: { type: 'string' },
+    objetivo_geral: { type: 'string' },
+    objetivos_especificos: { type: 'array', items: { type: 'string' } },
     acoes_estrategicas: { type: 'array', items: { type: 'string' } },
-    procedimentos: { type: 'array', items: { type: 'string' } },
+    metodologia: { type: 'string' },
+    cronograma: { type: 'array', items: { type: 'object', properties: { etapa: { type: 'string' }, periodo: { type: 'string' } }, required: ['etapa', 'periodo'] } },
+    recursos: { type: 'array', items: { type: 'string' } },
+    culminancia: { type: 'string' },
+    avaliacao: { type: 'string' },
     responsaveis: { type: 'array', items: { type: 'string' } },
     status: { type: 'string', enum: ['planejado', 'em_andamento', 'concluido', 'arquivado'] },
     tags: { type: 'array', items: { type: 'string' } },
     resumo_ia: { type: 'string' },
   },
-  required: ['title', 'enfoque', 'metas', 'acoes_estrategicas', 'procedimentos', 'resumo_ia']
+  required: ['title', 'justificativa', 'objetivo_geral', 'objetivos_especificos', 'acoes_estrategicas', 'metodologia', 'cronograma', 'recursos', 'culminancia', 'avaliacao', 'resumo_ia']
 };
 
 serve(async (req) => {
@@ -36,8 +40,8 @@ serve(async (req) => {
       body: JSON.stringify({
         model: 'google/gemini-2.5-flash',
         messages: [
-          { role: 'system', content: 'Você é um assistente pedagógico institucional brasileiro. Receba o rascunho de um evento escolar e devolva a versão completa, profissional e em linguagem institucional. Preencha os campos faltantes coerentemente. Ações estratégicas começam com verbo no INFINITIVO; procedimentos no GERÚNDIO. O resumo deve ter 1-2 frases.' },
-          { role: 'user', content: `Rascunho do evento:\n${JSON.stringify(draft || {}, null, 2)}` },
+          { role: 'system', content: 'Você é um assistente pedagógico institucional brasileiro. Receba o rascunho de um projeto escolar e devolva a versão completa em linguagem institucional, com a estrutura padrão: 1. JUSTIFICATIVA, 2. OBJETIVO GERAL (verbo no infinitivo), 3. OBJETIVOS ESPECÍFICOS (lista, verbos no infinitivo), 4. PLANO ESTRATÉGICO DO PROJETO (acoes_estrategicas, lista, verbos no infinitivo), 5. METODOLOGIA, 6. CRONOGRAMA (lista de {etapa, periodo}), 7. RECURSOS NECESSÁRIOS, 8. CULMINÂNCIA, 9. AVALIAÇÃO. Preencha campos faltantes coerentemente; resumo_ia em 1-2 frases.' },
+          { role: 'user', content: `Rascunho do projeto:\n${JSON.stringify(draft || {}, null, 2)}` },
         ],
         tools: [{ type: 'function', function: { name: 'fill_event', description: 'Preenche evento institucional', parameters: eventSchema } }],
         tool_choice: { type: 'function', function: { name: 'fill_event' } },

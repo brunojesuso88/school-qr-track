@@ -2,7 +2,7 @@ import { motion } from 'framer-motion';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Eye, Pencil, FileDown, Trash2, Target, Workflow, Paperclip, ClipboardList } from 'lucide-react';
+import { Eye, Pencil, FileDown, Trash2, Target, ListChecks, Paperclip, ClipboardList } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -77,11 +77,11 @@ export default function EventCard({ event, onView, onEdit, onExport, onDelete }:
               )}
 
               <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                {event.objetivos_especificos?.length > 0 && (
+                  <span className="inline-flex items-center gap-1"><ListChecks className="w-3.5 h-3.5" />{event.objetivos_especificos.length} objetivos</span>
+                )}
                 {event.acoes_estrategicas.length > 0 && (
                   <span className="inline-flex items-center gap-1"><Target className="w-3.5 h-3.5" />{event.acoes_estrategicas.length} ações</span>
-                )}
-                {event.procedimentos.length > 0 && (
-                  <span className="inline-flex items-center gap-1"><Workflow className="w-3.5 h-3.5" />{event.procedimentos.length} procedimentos</span>
                 )}
                 {event.pdf_original && (
                   <span className="inline-flex items-center gap-1"><Paperclip className="w-3.5 h-3.5" />PDF</span>

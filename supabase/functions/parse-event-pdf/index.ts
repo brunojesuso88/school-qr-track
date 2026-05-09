@@ -11,21 +11,25 @@ const MAX_PDF_SIZE_BYTES = MAX_PDF_SIZE_MB * 1024 * 1024;
 const eventSchema = {
   type: 'object',
   properties: {
-    title: { type: 'string', description: 'Título do evento/ata, claro e curto' },
-    enfoque: { type: 'string', description: 'Indicador, eixo, tema ou foco pedagógico do evento. Ex.: "Fluxo escolar", "Aprendizagem em Matemática"' },
-    metas: { type: 'string', description: 'Resultados mensuráveis esperados (formato SMART). Preserve a redação do documento.' },
-    pontos_atencao: { type: 'string', description: 'Problemas, riscos, dificuldades ou desafios identificados no documento.' },
-    acoes_estrategicas: { type: 'array', items: { type: 'string' }, description: 'Ações/estratégias listadas no documento. Preserve a redação original.' },
-    procedimentos: { type: 'array', items: { type: 'string' }, description: 'Procedimentos, etapas operacionais, atividades específicas. Preserve a redação original.' },
-    responsaveis: { type: 'array', items: { type: 'string' }, description: 'Nomes ou cargos das pessoas/equipes responsáveis citados no documento.' },
-    prazo_inicio: { type: 'string', description: 'Data de início no formato YYYY-MM-DD. Use string vazia "" se não houver.' },
-    prazo_fim: { type: 'string', description: 'Data de término no formato YYYY-MM-DD. Use string vazia "" se não houver.' },
-    is_continuous: { type: 'boolean', description: 'true quando o documento descreve um evento/ação contínua, projeto anual ou sem data fim definida.' },
-    status: { type: 'string', enum: ['planejado', 'em_andamento', 'concluido', 'arquivado'], description: 'Inferir do documento: ata de planejamento → planejado; relatório em curso → em_andamento; relatório final → concluido.' },
-    tags: { type: 'array', items: { type: 'string' }, description: 'Palavras-chave que classifiquem o evento (ex.: "BNCC", "Avaliação", "Reunião", "Formação").' },
-    resumo_ia: { type: 'string', description: 'Resumo institucional de 2 a 3 frases sobre o documento.' },
+    title: { type: 'string', description: 'Título do projeto, claro e curto.' },
+    justificativa: { type: 'string', description: 'JUSTIFICATIVA: contexto, problema, relevância e fundamentação do projeto.' },
+    objetivo_geral: { type: 'string', description: 'OBJETIVO GERAL em uma única frase, iniciada por verbo no infinitivo.' },
+    objetivos_especificos: { type: 'array', items: { type: 'string' }, description: 'OBJETIVOS ESPECÍFICOS — itens iniciados por verbo no infinitivo.' },
+    acoes_estrategicas: { type: 'array', items: { type: 'string' }, description: 'PLANO ESTRATÉGICO DO PROJETO — lista de ações iniciadas por verbo no infinitivo.' },
+    metodologia: { type: 'string', description: 'METODOLOGIA: abordagem pedagógica, etapas, dinâmicas, parcerias.' },
+    cronograma: { type: 'array', items: { type: 'object', properties: { etapa: { type: 'string' }, periodo: { type: 'string' } }, required: ['etapa', 'periodo'] }, description: 'CRONOGRAMA: lista de etapas/atividades com seu período (mês/ano ou datas).' },
+    recursos: { type: 'array', items: { type: 'string' }, description: 'RECURSOS NECESSÁRIOS: humanos, materiais, financeiros, espaços.' },
+    culminancia: { type: 'string', description: 'CULMINÂNCIA: evento ou produto final que encerra o projeto.' },
+    avaliacao: { type: 'string', description: 'AVALIAÇÃO: critérios, instrumentos e indicadores avaliativos.' },
+    responsaveis: { type: 'array', items: { type: 'string' }, description: 'Nomes ou cargos dos responsáveis citados.' },
+    prazo_inicio: { type: 'string', description: 'Data de início YYYY-MM-DD. Use "" se não houver.' },
+    prazo_fim: { type: 'string', description: 'Data de término YYYY-MM-DD. Use "" se não houver.' },
+    is_continuous: { type: 'boolean', description: 'true se o projeto é contínuo/anual sem data fim definida.' },
+    status: { type: 'string', enum: ['planejado', 'em_andamento', 'concluido', 'arquivado'] },
+    tags: { type: 'array', items: { type: 'string' }, description: '3 a 8 palavras-chave classificatórias.' },
+    resumo_ia: { type: 'string', description: 'Resumo institucional curto (2-3 frases).' },
   },
-  required: ['title', 'enfoque', 'metas', 'pontos_atencao', 'acoes_estrategicas', 'procedimentos', 'responsaveis', 'prazo_inicio', 'prazo_fim', 'is_continuous', 'status', 'tags', 'resumo_ia']
+  required: ['title', 'justificativa', 'objetivo_geral', 'objetivos_especificos', 'acoes_estrategicas', 'metodologia', 'cronograma', 'recursos', 'culminancia', 'avaliacao', 'responsaveis', 'prazo_inicio', 'prazo_fim', 'is_continuous', 'status', 'tags', 'resumo_ia']
 };
 
 serve(async (req) => {
@@ -51,25 +55,24 @@ serve(async (req) => {
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
     if (!LOVABLE_API_KEY) return new Response(JSON.stringify({ success: false, error: 'IA não configurada' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
-    const systemPrompt = `Você é um assistente especialista em análise de documentos escolares brasileiros (atas, relatórios, projetos pedagógicos, planos de ação).
+    const systemPrompt = `Você é um assistente especialista em análise de projetos pedagógicos escolares brasileiros.
 
-Sua tarefa: extrair de forma EXAUSTIVA todas as informações do documento e preencher TODOS os campos do schema. Não invente — se algo não estiver no documento, deixe vazio (string vazia ou array vazio), mas SEMPRE retorne todos os campos.
+Sua tarefa: extrair de forma EXAUSTIVA todas as informações do documento e preencher TODOS os campos do schema seguindo a estrutura institucional padrão. Não invente — se algo não estiver no documento, deixe vazio (string vazia ou array vazio), mas SEMPRE retorne todos os campos.
 
-Como mapear cada campo:
-- title: nome do evento, ata, projeto ou reunião descrito.
-- enfoque: tema/eixo/indicador pedagógico principal (ex.: "Fluxo escolar", "Combate à evasão", "BNCC – Linguagens").
-- metas: objetivos e metas mensuráveis (SMART). Procure por "Meta:", "Objetivo:", "Espera-se".
-- pontos_atencao: problemas, dificuldades, riscos, desafios, observações críticas.
-- acoes_estrategicas: lista de ações/estratégias previstas. Procure por "Ações:", "Estratégias:", listas numeradas.
-- procedimentos: passos operacionais, etapas, atividades específicas. Procure por "Procedimentos:", "Como fazer:", "Etapas:".
-- responsaveis: nomes próprios ou cargos citados como responsáveis/coordenadores.
-- prazo_inicio / prazo_fim: datas no formato YYYY-MM-DD. Converta "março de 2026" → "2026-03-01". Se nada for citado, use "".
-- is_continuous: true se for "projeto anual", "ação permanente", "atividade contínua", sem data fim clara.
-- status: planejado (planejamento futuro), em_andamento (já iniciado), concluido (relatório final), arquivado.
-- tags: 3 a 8 palavras-chave classificatórias.
-- resumo_ia: resumo institucional curto (2-3 frases) do que o documento trata.
+Mapeamento (estrutura institucional do projeto):
+- title: nome do projeto.
+- IDENTIFICAÇÃO: responsaveis, prazo_inicio/prazo_fim (YYYY-MM-DD; converta "março de 2026" → "2026-03-01"), is_continuous, status, tags, resumo_ia.
+- 1. justificativa: contexto, problema, relevância, fundamentação.
+- 2. objetivo_geral: frase única iniciada por verbo no infinitivo.
+- 3. objetivos_especificos: lista; cada item começando por verbo no infinitivo.
+- 4. acoes_estrategicas (Plano Estratégico do Projeto): lista de ações no infinitivo.
+- 5. metodologia: abordagem, etapas, dinâmicas, parcerias.
+- 6. cronograma: lista [{etapa, periodo}]. Capture nome da etapa e o período (ex.: "mar/2026", "1ª semana de abril").
+- 7. recursos: humanos, materiais, financeiros, espaços.
+- 8. culminancia: evento/produto final.
+- 9. avaliacao: critérios, instrumentos, indicadores.
 
-IMPORTANTE: PRESERVE a redação original do documento sempre que possível. Não reformule frases. Datas no formato YYYY-MM-DD obrigatoriamente.`;
+IMPORTANTE: PRESERVE a redação original do documento sempre que possível. Datas em YYYY-MM-DD obrigatoriamente.`;
 
     const callModel = async (model: string) => fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',

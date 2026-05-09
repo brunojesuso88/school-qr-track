@@ -1,8 +1,20 @@
 export type EventStatus = 'planejado' | 'em_andamento' | 'concluido' | 'arquivado';
 
+export interface CronogramaItem { etapa: string; periodo: string }
+
 export interface SchoolEvent {
   id: string;
   title: string;
+  // Novos campos institucionais (estrutura atual)
+  justificativa: string;
+  objetivo_geral: string;
+  objetivos_especificos: string[];
+  metodologia: string;
+  cronograma: CronogramaItem[];
+  recursos: string[];
+  culminancia: string;
+  avaliacao: string;
+  // Legado (mantidos no banco para compatibilidade — só `acoes_estrategicas` continua em uso, como Plano Estratégico)
   enfoque: string;
   metas: string;
   pontos_atencao: string;
@@ -25,6 +37,14 @@ export interface SchoolEvent {
 
 export const emptyEvent: Omit<SchoolEvent, 'id' | 'created_at' | 'updated_at' | 'created_by'> = {
   title: '',
+  justificativa: '',
+  objetivo_geral: '',
+  objetivos_especificos: [],
+  metodologia: '',
+  cronograma: [],
+  recursos: [],
+  culminancia: '',
+  avaliacao: '',
   enfoque: '',
   metas: '',
   pontos_atencao: '',
@@ -75,6 +95,20 @@ function asArray(v: any): string[] {
   return [];
 }
 
+function asCronograma(v: any): CronogramaItem[] {
+  if (!Array.isArray(v)) return [];
+  return v.map((it: any) => {
+    if (it && typeof it === 'object') {
+      return { etapa: String(it.etapa ?? '').trim(), periodo: String(it.periodo ?? '').trim() };
+    }
+    if (typeof it === 'string') {
+      const [etapa, ...rest] = it.split('—');
+      return { etapa: (etapa || '').trim(), periodo: rest.join('—').trim() };
+    }
+    return { etapa: '', periodo: '' };
+  }).filter(x => x.etapa || x.periodo);
+}
+
 /**
  * Normalizes raw AI/PDF extraction output into a safe partial event draft.
  * Guarantees: arrays present, dates null or YYYY-MM-DD, status valid.
@@ -84,11 +118,15 @@ export function normalizeEventFromAI(raw: any): Partial<Omit<SchoolEvent, 'id' |
   const status = VALID_STATUS.includes(raw.status) ? raw.status : undefined;
   const out: any = {
     title: typeof raw.title === 'string' ? raw.title.trim() : undefined,
-    enfoque: typeof raw.enfoque === 'string' ? raw.enfoque.trim() : '',
-    metas: typeof raw.metas === 'string' ? raw.metas.trim() : '',
-    pontos_atencao: typeof raw.pontos_atencao === 'string' ? raw.pontos_atencao.trim() : '',
+    justificativa: typeof raw.justificativa === 'string' ? raw.justificativa.trim() : '',
+    objetivo_geral: typeof raw.objetivo_geral === 'string' ? raw.objetivo_geral.trim() : '',
+    objetivos_especificos: asArray(raw.objetivos_especificos),
+    metodologia: typeof raw.metodologia === 'string' ? raw.metodologia.trim() : '',
+    cronograma: asCronograma(raw.cronograma),
+    recursos: asArray(raw.recursos),
+    culminancia: typeof raw.culminancia === 'string' ? raw.culminancia.trim() : '',
+    avaliacao: typeof raw.avaliacao === 'string' ? raw.avaliacao.trim() : '',
     acoes_estrategicas: asArray(raw.acoes_estrategicas),
-    procedimentos: asArray(raw.procedimentos),
     responsaveis: asArray(raw.responsaveis),
     tags: asArray(raw.tags),
     resumo_ia: typeof raw.resumo_ia === 'string' ? raw.resumo_ia.trim() : '',
@@ -103,9 +141,9 @@ export function normalizeEventFromAI(raw: any): Partial<Omit<SchoolEvent, 'id' |
 }
 
 export const FILLABLE_KEYS: (keyof SchoolEvent)[] = [
-  'title', 'enfoque', 'metas', 'pontos_atencao',
-  'acoes_estrategicas', 'procedimentos', 'responsaveis',
-  'prazo_inicio', 'tags', 'resumo_ia',
+  'title', 'justificativa', 'objetivo_geral', 'objetivos_especificos',
+  'acoes_estrategicas', 'metodologia', 'cronograma', 'recursos',
+  'culminancia', 'avaliacao', 'responsaveis', 'prazo_inicio', 'tags', 'resumo_ia',
 ];
 
 export function countFilled(ev: Partial<SchoolEvent>): { filled: number; total: number } {

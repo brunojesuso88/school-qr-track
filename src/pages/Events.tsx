@@ -109,17 +109,22 @@ export default function Events() {
 
     drawHeader();
     wrap(`PROJETO: ${e.title}`, 16, true);
+    wrap('IDENTIFICAÇÃO DO PROJETO', 12, true);
     wrap(`Status: ${STATUS_LABELS[e.status]}`, 10);
     if (e.is_continuous) wrap('Período: contínuo', 10);
     else if (e.prazo_inicio) wrap(`Período: ${e.prazo_inicio}${e.prazo_fim ? ' a ' + e.prazo_fim : ''}`, 10);
-    if (e.resumo_ia) { wrap('Resumo', 12, true); wrap(e.resumo_ia); }
-    if (e.enfoque) { wrap('1. Enfoque', 12, true); wrap(e.enfoque); }
-    if (e.metas) { wrap('2. Metas', 12, true); wrap(e.metas); }
-    if (e.pontos_atencao) { wrap('3. Pontos de atenção', 12, true); wrap(e.pontos_atencao); }
-    if (e.acoes_estrategicas.length) { wrap('4. Ações estratégicas', 12, true); e.acoes_estrategicas.forEach(a => wrap('• ' + a)); }
-    if (e.procedimentos.length) { wrap('5. Procedimentos', 12, true); e.procedimentos.forEach(a => wrap('• ' + a)); }
-    if (e.responsaveis.length) { wrap('6. Responsáveis', 12, true); wrap(e.responsaveis.join(', ')); }
-    if (e.tags.length) { wrap('Tags: ' + e.tags.join(', '), 10); }
+    if (e.responsaveis.length) wrap('Responsáveis: ' + e.responsaveis.join(', '), 10);
+    if (e.tags.length) wrap('Tags: ' + e.tags.join(', '), 10);
+    if (e.resumo_ia) wrap(e.resumo_ia);
+    if (e.justificativa) { wrap('1. JUSTIFICATIVA', 12, true); wrap(e.justificativa); }
+    if (e.objetivo_geral) { wrap('2. OBJETIVO GERAL', 12, true); wrap(e.objetivo_geral); }
+    if (e.objetivos_especificos?.length) { wrap('3. OBJETIVOS ESPECÍFICOS', 12, true); e.objetivos_especificos.forEach(a => wrap('• ' + a)); }
+    if (e.acoes_estrategicas.length) { wrap('4. PLANO ESTRATÉGICO DO PROJETO', 12, true); e.acoes_estrategicas.forEach(a => wrap('• ' + a)); }
+    if (e.metodologia) { wrap('5. METODOLOGIA', 12, true); wrap(e.metodologia); }
+    if (e.cronograma?.length) { wrap('6. CRONOGRAMA (Sugestão)', 12, true); e.cronograma.forEach(c => wrap('• ' + c.etapa + (c.periodo ? ' — ' + c.periodo : ''))); }
+    if (e.recursos?.length) { wrap('7. RECURSOS NECESSÁRIOS', 12, true); e.recursos.forEach(a => wrap('• ' + a)); }
+    if (e.culminancia) { wrap('8. CULMINÂNCIA', 12, true); wrap(e.culminancia); }
+    if (e.avaliacao) { wrap('9. AVALIAÇÃO', 12, true); wrap(e.avaliacao); }
 
     const total = doc.getNumberOfPages();
     for (let i = 1; i <= total; i++) { doc.setPage(i); drawFooter(i, total); }
