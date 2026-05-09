@@ -1,0 +1,1 @@
+ALTER TABLE public.school_events ADD COLUMN IF NOT EXISTS cover_image text;
