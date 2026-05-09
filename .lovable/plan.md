@@ -1,64 +1,51 @@
-## Mudanças solicitadas
+## Plano: refinar aba Projetos
 
-### 1. Renomear "Eventos e Atas" → "Projetos"
-- `src/components/DashboardLayout.tsx`: trocar label do item de menu para "Projetos" (ícone mantido).
-- `src/pages/Events.tsx`: título da página passa a ser "Projetos", subtítulo ajustado para "Registro inteligente de projetos e ações do plano escolar".
-- Buscas/placeholders e textos vazios ("Nenhum evento encontrado" → "Nenhum projeto encontrado", "Criar primeiro evento" → "Criar primeiro projeto", confirmação de exclusão).
-- Não renomeio rota (`/events`), tabela (`school_events`) nem componentes internos — apenas a UI visível, para evitar quebra de URLs salvas e migrações desnecessárias.
+### 1. Substituir "evento(s)" por "projeto(s)" em toda a aba
+Trocar em strings visíveis ao usuário (mantendo nomes de tabela/rotas/components):
+- `src/pages/Events.tsx` → toast "Erro ao carregar eventos" → "Erro ao carregar projetos".
+- `src/components/events/EventMetrics.tsx` → "Total de eventos" → "Total de projetos"; "Eventos do mês" → "Projetos do mês".
+- `src/components/events/EventDetailDialog.tsx` → "Evento contínuo" → "Projeto contínuo".
+- `src/components/events/EventCard.tsx` → "Evento contínuo" → "Projeto contínuo".
+- `src/components/events/EventFormDialog.tsx` →
+  - "Evento preenchido pela IA" → "Projeto preenchido pela IA"
+  - "Evento contínuo" → "Projeto contínuo"
+  - placeholder "...do evento" → "...do projeto"
+  - "...relacionado ao evento" → "...relacionado ao projeto"
+  - "Fotos do Evento" → "Fotos do Projeto"
 
-### 2. Botão "Novo Evento" → "Novo Projeto"
-- Botão primário no header de `Events.tsx` e botão do estado vazio.
-- Título do `EventFormDialog` ajustado de "Novo evento / Editar evento" para "Novo projeto / Editar projeto".
+### 2. Card mais profissional e técnico (`EventCard.tsx`)
 
-### 3. Capa do card (upload dedicado)
-Abordagem escolhida: **campo `cover_image` separado da galeria** — mais simples para o usuário e independente das imagens internas do projeto.
+**Visual da capa (quadrada):**
+- Substituir o bloco lateral atual (`md:w-48 h-40 md:h-auto`) por uma capa **quadrada fixa** de 160x160px (`w-40 h-40`), alinhada ao topo, com `object-cover` e `rounded-md`.
+- Quando não houver capa: placeholder discreto (ícone `ClipboardList` centralizado em fundo `bg-muted`) mantendo a mesma área quadrada — evita cards sem imagem ficarem inconsistentes.
+- Layout: `flex gap-4 p-4` (capa à esquerda + conteúdo à direita). Em mobile (<sm): capa no topo, full-width, ainda quadrada via `aspect-square` limitada a `max-w-[200px]`.
 
-- Migração: adicionar coluna `cover_image text` em `public.school_events` (nullable). Reaproveita o bucket privado `school-events` (mesmo padrão das imagens já existentes).
-- `src/components/events/types.ts`: adicionar `cover_image?: string | null` ao tipo `SchoolEvent` e ao `normalizeEventFromAI`.
-- `EventFormDialog.tsx` (aba "Mídia"): nova seção "Capa do projeto" no topo, com:
-  - Preview circular/retangular da capa atual (signed URL).
-  - Botão "Enviar capa" (input file, aceita imagens), upload para `school-events/covers/{uuid}.{ext}`.
-  - Botão "Remover capa".
-  - Salvar `cover_image` no `save()` junto com os outros campos.
-- `EventCard.tsx`: a thumbnail lateral passa a usar `cover_image` quando existir; cai para `images[0]` como fallback (compatibilidade com projetos antigos). Tamanho atual (md:w-48 h-40) mantido.
+**Aspecto profissional/técnico:**
+- Reduzir borda lateral colorida (`border-l-4`) para uma faixa mais sutil (`border-l-2`) e usar tipografia mais densa.
+- Título em `text-base font-semibold tracking-tight` (em vez de `text-lg`) e adicionar pequena linha de metadados acima do título: status + período em fonte mono-like (`text-[11px] uppercase tracking-wider text-muted-foreground`).
+- Padding interno consistente, sem gradientes; manter paleta semântica do design system.
+- Botões de ação compactados em `size="sm" variant="ghost"` apenas com ícones + tooltip (Visualizar/Editar/PDF/Excluir), reduzindo poluição visual. Ações ficam no rodapé direito.
 
-### 4. PDF profissional com cabeçalho institucional
-Função `onExport` em `src/pages/Events.tsx` recebe um cabeçalho fixo no topo de toda página:
+### 3. Auditoria de informações exibidas no card
+Manter **apenas o essencial**, mover detalhes para o modal de visualização:
 
-```text
-+--------------------------------------------------+
-| [LOGO]   CENTRO DE ENSINO PROF. ANTÔNIO NONATO   |
-|          SAMPAIO                                 |
-|          Coelho Neto - MA                        |
-|          ─────────────────────────────────────── |
-+--------------------------------------------------+
-|  PROJETO: <título>                               |
-|  Status • Período                                |
-|  ...                                             |
-```
+**Manter:**
+- Título do projeto.
+- Badge de status.
+- Período / "Projeto contínuo" (1 linha).
+- Resumo IA (`line-clamp-2`) — é o "pitch" do projeto.
+- Linha de métricas compactas: nº de ações, nº de procedimentos, indicador "PDF" (se houver).
+- Até 3 tags (resto colapsa em `+N`).
+- Ações (ícones).
 
-Implementação:
-- Copiar a logo enviada para `src/assets/logo-cepans.png` e importá-la no `Events.tsx`.
-- Converter a imagem para dataURL no carregamento do componente (via `fetch` + `FileReader`) para uso em `doc.addImage()` do jsPDF.
-- Helper `drawHeader(doc)` chamado no início e em cada `addPage()`:
-  - Logo no canto superior esquerdo (~60×60pt).
-  - Nome da escola em negrito ao lado, segunda linha "Coelho Neto – MA".
-  - Linha separadora horizontal abaixo.
-  - Ajustar `y` inicial para abaixo do cabeçalho (~110pt).
-- Rodapé simples com numeração "Página X" centralizada.
-- Substituir wrap de paginação manual pelo controle via `drawHeader` em quebras automáticas.
+**Remover do card** (ainda visíveis no Detail/Edit):
+- Linha "Enfoque: ..."
+- Linha "Metas: ..."
+- Indicador "Pontos de atenção" (já vai no detail)
+- Lista de responsáveis (move para o detail)
 
-## Arquivos afetados
+Isso reduz o card de ~7 linhas de texto para 3-4, ficando limpo e escaneável.
 
-- `supabase/migrations/<novo>.sql` — adicionar coluna `cover_image` em `school_events`.
-- `src/components/DashboardLayout.tsx` — label do menu.
-- `src/pages/Events.tsx` — textos, botões, PDF com cabeçalho/logo.
-- `src/components/events/EventFormDialog.tsx` — upload de capa e título do dialog.
-- `src/components/events/EventCard.tsx` — usar `cover_image` com fallback.
-- `src/components/events/types.ts` — campo `cover_image`.
-- `src/assets/logo-cepans.png` — logo institucional (do upload).
-
-## Fora do escopo
-
-- Renomear a rota `/events`, a tabela `school_events` ou as edge functions.
-- Alterar lógica de IA, importação de PDF ou outros campos do projeto.
+### Fora do escopo
+- Sem mudanças em rotas, tabela `school_events`, edge functions, lógica de IA ou PDF.
+- Sem alterações no `EventFormDialog` além das trocas de termo da seção 1.

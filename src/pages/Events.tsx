@@ -40,7 +40,7 @@ export default function Events() {
   const load = async () => {
     setLoading(true);
     const { data, error } = await supabase.from('school_events').select('*').order('created_at', { ascending: false });
-    if (error) toast.error('Erro ao carregar eventos');
+    if (error) toast.error('Erro ao carregar projetos');
     else setEvents((data || []) as any);
     setLoading(false);
   };
