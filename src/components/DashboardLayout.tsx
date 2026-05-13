@@ -1,6 +1,6 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
-import { LayoutDashboard, Users, Calendar, Bell, Settings, Menu, X, BookOpen, LogOut, ChevronRight, ArrowLeft, Heart, FileText, Lock, RefreshCw, Download, Info, Trash2, Sun, Moon, Monitor, ClipboardList } from 'lucide-react';
+import { LayoutDashboard, Users, Calendar, Bell, Settings, Menu, X, BookOpen, LogOut, ChevronRight, ArrowLeft, Heart, FileText, Lock, RefreshCw, Download, Info, Trash2, Sun, Moon, Monitor, ClipboardList, CalendarDays } from 'lucide-react';
 import { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/components/ThemeProvider';
@@ -31,6 +31,7 @@ const allNavigation = [
   { name: 'Turmas', href: '/classes', icon: BookOpen, roles: ['admin', 'direction', 'teacher'] },
   { name: 'Frequência', href: '/attendance', icon: Calendar, roles: ['admin', 'direction', 'teacher'] },
   { name: 'Projetos', href: '/events', icon: ClipboardList, roles: ['admin', 'direction', 'teacher'] },
+  { name: 'Eventos', href: '/school-events', icon: CalendarDays, roles: ['admin', 'direction', 'teacher'] },
   { name: 'Declarações', href: '/declarations', icon: FileText, roles: ['admin', 'direction'] },
   
   { name: 'Configurações', href: '/settings', icon: Settings, roles: ['admin', 'direction'] },

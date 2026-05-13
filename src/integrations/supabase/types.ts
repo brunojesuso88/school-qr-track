@@ -395,6 +395,42 @@ export type Database = {
         }
         Relationships: []
       }
+      school_event_simple: {
+        Row: {
+          cover_image: string | null
+          created_at: string
+          created_by: string | null
+          description: string | null
+          event_date: string | null
+          id: string
+          images: Json
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          cover_image?: string | null
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          event_date?: string | null
+          id?: string
+          images?: Json
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          cover_image?: string | null
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          event_date?: string | null
+          id?: string
+          images?: Json
+          name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       school_events: {
         Row: {
           acoes_estrategicas: Json

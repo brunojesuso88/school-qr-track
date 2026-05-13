@@ -1,73 +1,50 @@
-## Reestruturar projetos com nova estrutura institucional
+## Nova aba "Eventos" na sidebar
 
-Substituir os tópicos atuais (Enfoque, Metas, Pontos de atenção, Ações, Procedimentos, Responsáveis) pelos 9 tópicos solicitados, mantendo a Identificação como cabeçalho do projeto.
+Criar uma seção nova chamada **Eventos** ao lado de "Projetos", reaproveitando o padrão visual já utilizado na aba de projetos, mas com estrutura simplificada (sem os 9 tópicos institucionais — apenas dados básicos do evento + galeria de mídia).
 
-### 1. Banco de dados (`school_events`)
-Adicionar colunas novas (nullable, sem quebrar registros existentes):
+### O que será criado
 
-- `justificativa` text
-- `objetivo_geral` text
-- `objetivos_especificos` jsonb (array de strings)
-- `metodologia` text
-- `cronograma` jsonb (array de `{ etapa: string, periodo: string }`)
-- `recursos` jsonb (array de strings)
-- `culminancia` text
-- `avaliacao` text
+**1. Banco de dados — nova tabela `school_event_simple`**
+Campos:
+- `name` (texto, obrigatório) — nome do evento
+- `event_date` (data) — data do evento
+- `description` (texto) — descrição
+- `cover_image` (texto) — URL da capa
+- `images` (jsonb) — fotos do evento
+- `created_by`, `created_at`, `updated_at`
 
-As colunas antigas (`enfoque`, `metas`, `pontos_atencao`, `acoes_estrategicas`, `procedimentos`, `responsaveis`) **permanecem na tabela** para preservar projetos já cadastrados, mas deixam de ser editáveis/exibidas. Apenas `acoes_estrategicas` continua sendo usado, agora rotulado como **"4. Plano estratégico do projeto"** (mesma semântica de lista de ações).
+RLS idêntica à `school_events`:
+- Admin/Direção/Professor podem inserir/editar/excluir
+- Admin/Direção/Professor/Funcionário podem visualizar
 
-### 2. Tipos (`src/components/events/types.ts`)
+Armazenamento de imagens reaproveita o bucket privado existente `school-events`.
 
-- Adicionar os novos campos em `SchoolEvent` e `emptyEvent`.
-- Remover dos formulários (mas não do tipo) os campos legados não utilizados; o tipo manterá os legados como opcionais para compatibilidade de leitura.
-- Atualizar `normalizeEventFromAI` e `FILLABLE_KEYS` para refletir os novos campos.
+**2. Sidebar (`DashboardLayout.tsx`)**
+Adicionar item logo abaixo de "Projetos":
+- Nome: **Eventos**
+- Rota: `/school-events`
+- Ícone: `Calendar` (ou `PartyPopper`)
+- Roles: admin, direction, teacher
 
-### 3. Formulário (`EventFormDialog.tsx`)
-Reorganizar abas:
+**3. Nova rota e página**
+- Rota `/school-events` em `App.tsx` (protegida por `AdminRoute`)
+- Página `src/pages/SchoolEvents.tsx` com layout no mesmo estilo de `Events.tsx`:
+  - Header com título "Eventos" e botão "Novo Evento"
+  - Campo de busca por nome
+  - Lista de cards de eventos
 
-- **Identificação** — Título, status, datas/contínuo, responsáveis (movido para cá), tags, resumo institucional.
-- **Conteúdo** — 1. Justificativa, 2. Objetivo geral, 3. Objetivos específicos (lista), 5. Metodologia.
-- **Execução** — 4. Plano estratégico (lista, reaproveita `acoes_estrategicas`), 6. Cronograma (lista de etapa + período), 7. Recursos necessários (lista), 8. Culminância, 9. Avaliação.
-- **Mídia** — capa + imagens + PDF (sem mudanças).
-
-Botões de IA por campo (`event-ai-suggest`) atualizados para os novos nomes de campo.
-
-### 4. Modal de detalhes (`EventDetailDialog.tsx`)
-Renderizar as novas seções na ordem:
-
-1. Justificativa, 2. Objetivo geral, 3. Objetivos específicos (bullets), 4. Plano estratégico (bullets), 5. Metodologia, 6. Cronograma (lista etapa — período), 7. Recursos necessários (bullets), 8. Culminância, 9. Avaliação.
-
-Cabeçalho continua com título, status, período, tags, responsáveis e resumo.
-
-### 5. Exportação PDF (`Events.tsx`)
-Reescrever o corpo do PDF abaixo do cabeçalho institucional (que já tem logo CEPANS) para emitir:
-
-```
-PROJETO: <título>
-IDENTIFICAÇÃO DO PROJETO
-  - Status, Período, Responsáveis, Tags, Resumo
-1. JUSTIFICATIVA
-2. OBJETIVO GERAL
-3. OBJETIVOS ESPECÍFICOS  (• item)
-4. PLANO ESTRATÉGICO DO PROJETO  (• item)
-5. METODOLOGIA
-6. CRONOGRAMA  (• etapa — período)
-7. RECURSOS NECESSÁRIOS  (• item)
-8. CULMINÂNCIA
-9. AVALIAÇÃO
-```
-
-### 6. Edge Functions de IA
-Atualizar prompts e schemas em:
-
-- `supabase/functions/event-ai-fill/index.ts` — `eventSchema` passa a exigir `justificativa`, `objetivo_geral`, `objetivos_especificos`, `metodologia`, `cronograma`, `recursos`, `culminancia`, `avaliacao` (mantendo `acoes_estrategicas` para o plano estratégico). Instrução do sistema atualizada para gerar conteúdo institucional nesses 9 tópicos.
-- `supabase/functions/event-ai-suggest/index.ts` — mapear os novos nomes de campo para sugestões.
-- `supabase/functions/parse-event-pdf/index.ts` — schema/prompt de extração PDF passa a buscar os novos campos.
-
-### 7. Card (`EventCard.tsx`)
-Sem mudança estrutural. Apenas garantir que continua exibindo título, status, período, resumo e tags (campos que se mantêm).
+**4. Componentes (em `src/components/school-events/`)**
+- `SchoolEventCard.tsx` — card visual com capa quadrada, nome, data e descrição resumida; ações Visualizar / Editar / Excluir
+- `SchoolEventFormDialog.tsx` — dialog com 2 abas:
+  - **Informações**: Nome, Data, Descrição
+  - **Mídia**: Capa do evento + galeria de fotos (upload múltiplo)
+- `SchoolEventDetailDialog.tsx` — visualização completa (capa, dados, galeria em grid)
+- `types.ts` — tipo `SchoolEventSimple`
 
 ### Fora do escopo
-- Não migrar dados antigos para os novos campos automaticamente (projetos antigos abrirão com seções novas em branco; usuário pode preencher ou usar IA).
-- Não remover colunas antigas do banco.
-- Sem mudanças em rotas, RLS ou storage.
+- Geração de PDF (não solicitado para esta aba)
+- Integração com IA (não solicitada)
+- Tópicos institucionais (Justificativa, Objetivos, etc. — esses ficam na aba "Projetos")
+
+### Observação
+A aba existente **"Projetos"** (rota `/events`, tabela `school_events`) permanece intocada. A nova aba é totalmente independente para evitar misturar projetos institucionais com simples registros de eventos.

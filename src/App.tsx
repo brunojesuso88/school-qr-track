@@ -23,6 +23,7 @@ import InstallPWA from "./pages/InstallPWA";
 import NotFound from "./pages/NotFound";
 import AEE from "./pages/AEE";
 import Events from "./pages/Events";
+import SchoolEvents from "./pages/SchoolEvents";
 import Declarations from "./pages/Declarations";
 import SchoolMapping from "./pages/SchoolMapping";
 import MappingTeachers from "./pages/mapping/MappingTeachers";
@@ -69,6 +70,7 @@ const App = () => (
               <Route path="/scan" element={<AdminRoute><QRCodes /></AdminRoute>} />
               <Route path="/attendance" element={<AdminRoute><Attendance /></AdminRoute>} />
               <Route path="/events" element={<AdminRoute><Events /></AdminRoute>} />
+              <Route path="/school-events" element={<AdminRoute><SchoolEvents /></AdminRoute>} />
               <Route path="/declarations" element={<AdminRoute><Declarations /></AdminRoute>} />
               <Route path="/notifications" element={<AdminRoute><Notifications /></AdminRoute>} />
               <Route path="/settings" element={<AdminRoute><Settings /></AdminRoute>} />
