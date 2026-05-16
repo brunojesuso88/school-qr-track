@@ -19,7 +19,7 @@ const Home = () => {
 
   const menuOptions = [
     {
-      title: "Sistema de Gestão de Alunos",
+      title: "Sistema de Gestão",
       description: "Painel de controle completo",
       icon: LayoutDashboard,
       path: "/dashboard",
