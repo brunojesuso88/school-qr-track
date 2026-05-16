@@ -523,13 +523,13 @@ const Classes = () => {
       const ops: Promise<any>[] = [];
       if (toAdd.length) {
         const studentsToInsert = toAdd.map(r => ({
-          full_name: r.pdf!.full_name,
+          full_name: r.full_name, // use edited name
           birth_date: r.pdf!.birth_date || null,
           guardian_name: r.pdf!.guardian_name || 'Responsável',
           guardian_phone: r.pdf!.guardian_phone || '00000000000',
           class: r.pdf!.class,
           shift: r.pdf!.shift as 'morning' | 'afternoon' | 'evening',
-          student_id: generateStudentId(r.pdf!.full_name, r.pdf!.birth_date),
+          student_id: generateStudentId(r.full_name, r.pdf!.birth_date),
           status: 'active' as const,
         }));
         ops.push(Promise.resolve(supabase.from('students').insert(studentsToInsert)));
