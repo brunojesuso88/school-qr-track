@@ -41,15 +41,20 @@ interface ExtractedStudent {
   class: string;
   shift: string;
   selected?: boolean;
+  confidence?: number;
 }
 
 type ReconcileAction = 'keep' | 'add' | 'remove';
+type ReconcileSource = 'pdf_active' | 'pdf_struck' | 'db_only';
 interface ReconciledStudent {
   action: ReconcileAction;
   full_name: string;
   existing_id?: string;
   pdf?: ExtractedStudent;
   selected: boolean;
+  source: ReconcileSource;
+  reason: string;
+  confidence?: number;
 }
 
 const normalizeName = (s: string) =>
