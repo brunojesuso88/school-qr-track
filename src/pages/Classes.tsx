@@ -969,6 +969,21 @@ const Classes = () => {
                     </Button>
                   </div>
 
+                  {reconciled.some(r => r.source === 'pdf_struck') && (
+                    <div className="border border-destructive/30 bg-destructive/5 rounded-md p-3 text-xs flex items-start gap-2">
+                      <AlertCircle className="w-4 h-4 text-destructive mt-0.5 shrink-0" />
+                      <div>
+                        <strong>{reconciled.filter(r => r.source === 'pdf_struck').length} aluno(s)</strong> foram detectados como <em>tachados/riscados</em> no PDF e serão removidos da turma.
+                      </div>
+                    </div>
+                  )}
+                  {reconciled.some(r => r.action === 'add' && (r.confidence ?? 1) < 0.8) && (
+                    <div className="border border-amber-500/30 bg-amber-500/5 rounded-md p-3 text-xs flex items-start gap-2">
+                      <AlertCircle className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
+                      <div>Alguns nomes têm <strong>baixa confiança</strong> de leitura. Revise e edite-os antes de aplicar.</div>
+                    </div>
+                  )}
+
                   <div className="border rounded-lg overflow-hidden">
                     <Table>
                       <TableHeader>
@@ -976,6 +991,7 @@ const Classes = () => {
                           <TableHead className="w-10"></TableHead>
                           <TableHead className="w-28">Ação</TableHead>
                           <TableHead>Nome</TableHead>
+                          <TableHead className="w-56">Motivo</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -994,12 +1010,37 @@ const Classes = () => {
                               {r.action === 'add' && <Badge className="bg-blue-600 hover:bg-blue-600">Adicionar</Badge>}
                               {r.action === 'remove' && <Badge variant="destructive">Remover</Badge>}
                             </TableCell>
-                            <TableCell className={cn(
-                              "font-medium",
-                              r.action === 'remove' && "line-through text-destructive",
-                              r.action === 'add' && "text-blue-600",
-                              r.action === 'keep' && "text-emerald-700"
-                            )}>{r.full_name}</TableCell>
+                            <TableCell>
+                              {r.action === 'add' ? (
+                                <Input
+                                  value={r.full_name}
+                                  onChange={(e) => {
+                                    const v = e.target.value;
+                                    setReconciled(prev => prev.map((s, i) => i === index ? { ...s, full_name: v } : s));
+                                  }}
+                                  className={cn(
+                                    "h-8 text-sm font-medium",
+                                    (r.confidence ?? 1) < 0.8 && "border-amber-500"
+                                  )}
+                                />
+                              ) : (
+                                <span className={cn(
+                                  "font-medium text-sm",
+                                  r.action === 'remove' && "line-through text-destructive",
+                                  r.action === 'keep' && "text-emerald-700"
+                                )}>{r.full_name}</span>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-xs text-muted-foreground">
+                              {r.source === 'pdf_struck' && <span className="text-destructive">🚫 {r.reason}</span>}
+                              {r.source === 'db_only' && <span>📋 {r.reason}</span>}
+                              {r.source === 'pdf_active' && r.action === 'add' && (
+                                <span className={cn((r.confidence ?? 1) < 0.8 && "text-amber-600")}>
+                                  ✨ {r.reason}{r.confidence != null && ` (${Math.round(r.confidence * 100)}%)`}
+                                </span>
+                              )}
+                              {r.source === 'pdf_active' && r.action === 'keep' && <span className="text-emerald-700">✓ {r.reason}</span>}
+                            </TableCell>
                           </TableRow>
                         ))}
                       </TableBody>
