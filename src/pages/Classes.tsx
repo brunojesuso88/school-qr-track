@@ -17,6 +17,7 @@ import { classSchema } from '@/lib/validations';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import ClassAttendanceDialog from '@/components/ClassAttendanceDialog';
+import ClassSummaryDialog from '@/components/ClassSummaryDialog';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
@@ -41,6 +42,18 @@ interface ExtractedStudent {
   shift: string;
   selected?: boolean;
 }
+
+type ReconcileAction = 'keep' | 'add' | 'remove';
+interface ReconciledStudent {
+  action: ReconcileAction;
+  full_name: string;
+  existing_id?: string;
+  pdf?: ExtractedStudent;
+  selected: boolean;
+}
+
+const normalizeName = (s: string) =>
+  s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
 
 const ClassPhoto = ({ photoUrl, className: name }: { photoUrl: string | null; className: string }) => {
   const [signedUrl, setSignedUrl] = useState<string | null>(null);
@@ -80,10 +93,10 @@ const Classes = () => {
   const [importingClass, setImportingClass] = useState<ClassItem | null>(null);
   const [isProcessingPdf, setIsProcessingPdf] = useState(false);
   const [extractedStudents, setExtractedStudents] = useState<ExtractedStudent[]>([]);
+  const [reconciled, setReconciled] = useState<ReconciledStudent[]>([]);
   const [isSavingStudents, setIsSavingStudents] = useState(false);
   const [attendanceClass, setAttendanceClass] = useState<string | null>(null);
-  const [zoomPhotoClass, setZoomPhotoClass] = useState<ClassItem | null>(null);
-  const [zoomSignedUrl, setZoomSignedUrl] = useState<string | null>(null);
+  const [summaryClass, setSummaryClass] = useState<string | null>(null);
   
   // Photo upload state
   const photoInputRef = useRef<HTMLInputElement>(null);
@@ -319,6 +332,7 @@ const Classes = () => {
   const handleImportClick = (classItem: ClassItem) => {
     setImportingClass(classItem);
     setExtractedStudents([]);
+    setReconciled([]);
     setIsImportDialogOpen(true);
   };
 
@@ -360,8 +374,41 @@ const Classes = () => {
           if (error) throw error;
           
           if (data.success && data.students?.length > 0) {
-            setExtractedStudents(data.students.map((s: ExtractedStudent) => ({ ...s, selected: true })));
-            toast.success(`${data.count} aluno(s) encontrado(s) no documento`);
+            const pdfList: ExtractedStudent[] = data.students;
+            setExtractedStudents(pdfList);
+            // Build reconciliation against existing active students of this class
+            const { data: existing } = await supabase
+              .from('students')
+              .select('id, full_name')
+              .eq('class', importingClass.name)
+              .eq('status', 'active');
+            const existingMap = new Map<string, { id: string; full_name: string }>();
+            (existing || []).forEach(e => existingMap.set(normalizeName(e.full_name), e));
+            const pdfMap = new Map<string, ExtractedStudent>();
+            pdfList.forEach(p => pdfMap.set(normalizeName(p.full_name), p));
+
+            const result: ReconciledStudent[] = [];
+            // keep + add from PDF
+            pdfList.forEach(p => {
+              const key = normalizeName(p.full_name);
+              const ex = existingMap.get(key);
+              if (ex) {
+                result.push({ action: 'keep', full_name: ex.full_name, existing_id: ex.id, pdf: p, selected: false });
+              } else {
+                result.push({ action: 'add', full_name: p.full_name, pdf: p, selected: true });
+              }
+            });
+            // remove: existing but not in PDF
+            (existing || []).forEach(e => {
+              if (!pdfMap.has(normalizeName(e.full_name))) {
+                result.push({ action: 'remove', full_name: e.full_name, existing_id: e.id, selected: true });
+              }
+            });
+            setReconciled(result);
+            const adds = result.filter(r => r.action === 'add').length;
+            const rems = result.filter(r => r.action === 'remove').length;
+            const keeps = result.filter(r => r.action === 'keep').length;
+            toast.success(`${data.count} no PDF — ${adds} novo(s), ${rems} a remover, ${keeps} mantido(s)`);
           } else {
             toast.error(data.error || 'Nenhum aluno encontrado no documento');
           }
@@ -385,13 +432,11 @@ const Classes = () => {
   };
 
   const toggleStudentSelection = (index: number) => {
-    setExtractedStudents(prev => 
-      prev.map((s, i) => i === index ? { ...s, selected: !s.selected } : s)
-    );
+    setReconciled(prev => prev.map((s, i) => i === index ? { ...s, selected: !s.selected } : s));
   };
 
   const toggleAllStudents = (selected: boolean) => {
-    setExtractedStudents(prev => prev.map(s => ({ ...s, selected })));
+    setReconciled(prev => prev.map(s => s.action === 'keep' ? s : { ...s, selected }));
   };
 
   const generateStudentId = (fullName: string, birthDate: string | null) => {
@@ -409,36 +454,45 @@ const Classes = () => {
   };
 
   const handleSaveStudents = async () => {
-    const selectedStudents = extractedStudents.filter(s => s.selected);
-    if (selectedStudents.length === 0) {
-      toast.error('Selecione pelo menos um aluno para cadastrar');
+    const toAdd = reconciled.filter(r => r.action === 'add' && r.selected);
+    const toRemove = reconciled.filter(r => r.action === 'remove' && r.selected);
+    if (toAdd.length === 0 && toRemove.length === 0) {
+      toast.error('Nenhuma alteração selecionada');
       return;
     }
 
     setIsSavingStudents(true);
     try {
-      const studentsToInsert = selectedStudents.map(student => ({
-        full_name: student.full_name,
-        birth_date: student.birth_date || null,
-        guardian_name: student.guardian_name || 'Responsável',
-        guardian_phone: student.guardian_phone || '00000000000',
-        class: student.class,
-        shift: student.shift as 'morning' | 'afternoon' | 'evening',
-        student_id: generateStudentId(student.full_name, student.birth_date),
-        status: 'active'
-      }));
+      const ops: Promise<any>[] = [];
+      if (toAdd.length) {
+        const studentsToInsert = toAdd.map(r => ({
+          full_name: r.pdf!.full_name,
+          birth_date: r.pdf!.birth_date || null,
+          guardian_name: r.pdf!.guardian_name || 'Responsável',
+          guardian_phone: r.pdf!.guardian_phone || '00000000000',
+          class: r.pdf!.class,
+          shift: r.pdf!.shift as 'morning' | 'afternoon' | 'evening',
+          student_id: generateStudentId(r.pdf!.full_name, r.pdf!.birth_date),
+          status: 'active' as const,
+        }));
+        ops.push(Promise.resolve(supabase.from('students').insert(studentsToInsert)));
+      }
+      if (toRemove.length) {
+        const ids = toRemove.map(r => r.existing_id!).filter(Boolean);
+        ops.push(Promise.resolve(supabase.from('students').update({ status: 'inactive' }).in('id', ids)));
+      }
+      const results = await Promise.all(ops);
+      const err = results.find((r: any) => r?.error)?.error;
+      if (err) throw err;
 
-      const { error } = await supabase.from('students').insert(studentsToInsert);
-      
-      if (error) throw error;
-      
-      toast.success(`${selectedStudents.length} aluno(s) cadastrado(s) com sucesso!`);
+      toast.success(`${toAdd.length} adicionado(s), ${toRemove.length} removido(s)`);
       setIsImportDialogOpen(false);
       setExtractedStudents([]);
+      setReconciled([]);
       fetchStudentCounts();
     } catch (err: any) {
       console.error('Error saving students:', err);
-      toast.error(err.message || 'Erro ao cadastrar alunos');
+      toast.error(err.message || 'Erro ao aplicar alterações');
     } finally {
       setIsSavingStudents(false);
     }
@@ -662,13 +716,7 @@ const Classes = () => {
                 key={classItem.id}
                 className="card-hover animate-fade-in overflow-hidden cursor-pointer"
                 style={{ animationDelay: `${index * 30}ms` }}
-                onClick={async () => {
-                  if (classItem.photo_url) {
-                    const { data } = await supabase.storage.from('class-photos').createSignedUrl(classItem.photo_url, 3600);
-                    setZoomSignedUrl(data?.signedUrl || null);
-                    setZoomPhotoClass(classItem);
-                  }
-                }}
+                onClick={() => setSummaryClass(classItem.name)}
               >
                 <CardContent className="p-5">
                   <div className="flex items-start justify-between mb-3">
@@ -795,6 +843,7 @@ const Classes = () => {
           if (!open) {
             setImportingClass(null);
             setExtractedStudents([]);
+            setReconciled([]);
           }
         }}>
           <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
@@ -817,12 +866,15 @@ const Classes = () => {
                 className="hidden"
               />
 
-              {extractedStudents.length === 0 ? (
+              {reconciled.length === 0 ? (
                 <div className="border-2 border-dashed border-muted-foreground/25 rounded-lg p-8 text-center">
                   <Upload className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
                   <h3 className="font-medium mb-2">Selecione um arquivo PDF</h3>
                   <p className="text-sm text-muted-foreground mb-4">
-                    O sistema irá utilizar IA para identificar e extrair os dados dos alunos
+                    O sistema irá comparar os alunos do PDF com a turma atual: <br/>
+                    <span className="text-emerald-600">verde</span> = mantido •
+                    <span className="text-blue-600"> azul</span> = novo a adicionar •
+                    <span className="text-destructive line-through"> vermelho</span> = remover da turma
                   </p>
                   <Button 
                     onClick={() => fileInputRef.current?.click()}
@@ -844,14 +896,10 @@ const Classes = () => {
               ) : (
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Checkbox
-                        checked={extractedStudents.every(s => s.selected)}
-                        onCheckedChange={(checked) => toggleAllStudents(!!checked)}
-                      />
-                      <span className="text-sm font-medium">
-                        {extractedStudents.filter(s => s.selected).length} de {extractedStudents.length} selecionado(s)
-                      </span>
+                    <div className="flex flex-wrap items-center gap-2 text-xs">
+                      <Badge className="bg-emerald-600 hover:bg-emerald-600">Manter: {reconciled.filter(r => r.action === 'keep').length}</Badge>
+                      <Badge className="bg-blue-600 hover:bg-blue-600">Adicionar: {reconciled.filter(r => r.action === 'add' && r.selected).length}</Badge>
+                      <Badge variant="destructive">Remover: {reconciled.filter(r => r.action === 'remove' && r.selected).length}</Badge>
                     </div>
                     <Button
                       variant="outline"
@@ -869,25 +917,32 @@ const Classes = () => {
                       <TableHeader>
                         <TableRow>
                           <TableHead className="w-10"></TableHead>
+                          <TableHead className="w-28">Ação</TableHead>
                           <TableHead>Nome</TableHead>
-                          <TableHead>Data Nasc.</TableHead>
-                          <TableHead>Responsável</TableHead>
-                          {canViewGuardianPhone && <TableHead>Telefone</TableHead>}
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {extractedStudents.map((student, index) => (
+                        {reconciled.map((r, index) => (
                           <TableRow key={index}>
                             <TableCell>
-                              <Checkbox
-                                checked={student.selected}
-                                onCheckedChange={() => toggleStudentSelection(index)}
-                              />
+                              {r.action !== 'keep' ? (
+                                <Checkbox
+                                  checked={r.selected}
+                                  onCheckedChange={() => toggleStudentSelection(index)}
+                                />
+                              ) : <span className="text-muted-foreground text-xs">—</span>}
                             </TableCell>
-                            <TableCell className="font-medium">{student.full_name}</TableCell>
-                            <TableCell>{student.birth_date || '-'}</TableCell>
-                            <TableCell>{student.guardian_name || '-'}</TableCell>
-                            {canViewGuardianPhone && <TableCell>{student.guardian_phone || '-'}</TableCell>}
+                            <TableCell>
+                              {r.action === 'keep' && <Badge className="bg-emerald-600 hover:bg-emerald-600">Manter</Badge>}
+                              {r.action === 'add' && <Badge className="bg-blue-600 hover:bg-blue-600">Adicionar</Badge>}
+                              {r.action === 'remove' && <Badge variant="destructive">Remover</Badge>}
+                            </TableCell>
+                            <TableCell className={cn(
+                              "font-medium",
+                              r.action === 'remove' && "line-through text-destructive",
+                              r.action === 'add' && "text-blue-600",
+                              r.action === 'keep' && "text-emerald-700"
+                            )}>{r.full_name}</TableCell>
                           </TableRow>
                         ))}
                       </TableBody>
@@ -900,23 +955,24 @@ const Classes = () => {
                       onClick={() => {
                         setIsImportDialogOpen(false);
                         setExtractedStudents([]);
+                        setReconciled([]);
                       }}
                     >
                       Cancelar
                     </Button>
                     <Button
                       onClick={handleSaveStudents}
-                      disabled={isSavingStudents || extractedStudents.filter(s => s.selected).length === 0}
+                      disabled={isSavingStudents || reconciled.filter(r => r.action !== 'keep' && r.selected).length === 0}
                     >
                       {isSavingStudents ? (
                         <>
                           <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                          Cadastrando...
+                          Aplicando...
                         </>
                       ) : (
                         <>
                           <Plus className="w-4 h-4 mr-2" />
-                          Cadastrar Selecionados
+                          Aplicar Alterações
                         </>
                       )}
                     </Button>
@@ -926,24 +982,12 @@ const Classes = () => {
             </div>
           </DialogContent>
         </Dialog>
-        {/* Zoom Photo Dialog */}
-        <Dialog open={!!zoomPhotoClass} onOpenChange={(open) => { if (!open) { setZoomPhotoClass(null); setZoomSignedUrl(null); } }}>
-          <DialogContent className="max-w-lg">
-            <DialogHeader>
-              <DialogTitle>{zoomPhotoClass?.name}</DialogTitle>
-              <DialogDescription>{zoomPhotoClass && getShiftLabel(zoomPhotoClass.shift)}</DialogDescription>
-            </DialogHeader>
-            <div className="flex justify-center p-4">
-              {zoomSignedUrl ? (
-                <img src={zoomSignedUrl} alt={zoomPhotoClass?.name} className="max-w-full max-h-[60vh] rounded-lg object-contain" />
-              ) : (
-                <div className="w-48 h-48 bg-muted rounded-lg flex items-center justify-center">
-                  <GraduationCap className="w-16 h-16 text-muted-foreground" />
-                </div>
-              )}
-            </div>
-          </DialogContent>
-        </Dialog>
+        {/* Class Summary Dialog */}
+        <ClassSummaryDialog
+          open={!!summaryClass}
+          onOpenChange={(open) => !open && setSummaryClass(null)}
+          className={summaryClass}
+        />
 
         {/* Attendance Dialog */}
         <ClassAttendanceDialog

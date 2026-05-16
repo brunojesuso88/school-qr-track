@@ -2,13 +2,14 @@ import { motion } from 'framer-motion';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Eye, Pencil, FileDown, Trash2, Target, ListChecks, Paperclip, ClipboardList } from 'lucide-react';
+import { Eye, Pencil, FileDown, Trash2, Target, ListChecks, Paperclip, ClipboardList, Link2 } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { SchoolEvent, STATUS_COLORS, STATUS_LABELS } from './types';
 import { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 
 interface Props {
   event: SchoolEvent;
@@ -20,6 +21,16 @@ interface Props {
 
 export default function EventCard({ event, onView, onEdit, onExport, onDelete }: Props) {
   const [thumb, setThumb] = useState<string | null>(null);
+
+  const handleShare = async () => {
+    const url = `${window.location.origin}/events?id=${event.id}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      toast.success('Link copiado para a área de transferência');
+    } catch {
+      toast.error('Não foi possível copiar o link');
+    }
+  };
 
   useEffect(() => {
     const path = event.cover_image || event.images?.[0];
@@ -105,6 +116,7 @@ export default function EventCard({ event, onView, onEdit, onExport, onDelete }:
                 <IconBtn label="Visualizar" onClick={onView} icon={Eye} />
                 <IconBtn label="Editar" onClick={onEdit} icon={Pencil} />
                 <IconBtn label="Exportar PDF" onClick={onExport} icon={FileDown} />
+                <IconBtn label="Compartilhar link" onClick={handleShare} icon={Link2} />
                 <IconBtn label="Excluir" onClick={onDelete} icon={Trash2} danger />
               </TooltipProvider>
             </div>
