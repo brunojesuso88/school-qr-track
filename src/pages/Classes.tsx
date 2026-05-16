@@ -17,6 +17,7 @@ import { classSchema } from '@/lib/validations';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import ClassAttendanceDialog from '@/components/ClassAttendanceDialog';
+import ClassSummaryDialog from '@/components/ClassSummaryDialog';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
@@ -41,6 +42,18 @@ interface ExtractedStudent {
   shift: string;
   selected?: boolean;
 }
+
+type ReconcileAction = 'keep' | 'add' | 'remove';
+interface ReconciledStudent {
+  action: ReconcileAction;
+  full_name: string;
+  existing_id?: string;
+  pdf?: ExtractedStudent;
+  selected: boolean;
+}
+
+const normalizeName = (s: string) =>
+  s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
 
 const ClassPhoto = ({ photoUrl, className: name }: { photoUrl: string | null; className: string }) => {
   const [signedUrl, setSignedUrl] = useState<string | null>(null);
@@ -80,10 +93,10 @@ const Classes = () => {
   const [importingClass, setImportingClass] = useState<ClassItem | null>(null);
   const [isProcessingPdf, setIsProcessingPdf] = useState(false);
   const [extractedStudents, setExtractedStudents] = useState<ExtractedStudent[]>([]);
+  const [reconciled, setReconciled] = useState<ReconciledStudent[]>([]);
   const [isSavingStudents, setIsSavingStudents] = useState(false);
   const [attendanceClass, setAttendanceClass] = useState<string | null>(null);
-  const [zoomPhotoClass, setZoomPhotoClass] = useState<ClassItem | null>(null);
-  const [zoomSignedUrl, setZoomSignedUrl] = useState<string | null>(null);
+  const [summaryClass, setSummaryClass] = useState<string | null>(null);
   
   // Photo upload state
   const photoInputRef = useRef<HTMLInputElement>(null);
@@ -360,8 +373,41 @@ const Classes = () => {
           if (error) throw error;
           
           if (data.success && data.students?.length > 0) {
-            setExtractedStudents(data.students.map((s: ExtractedStudent) => ({ ...s, selected: true })));
-            toast.success(`${data.count} aluno(s) encontrado(s) no documento`);
+            const pdfList: ExtractedStudent[] = data.students;
+            setExtractedStudents(pdfList);
+            // Build reconciliation against existing active students of this class
+            const { data: existing } = await supabase
+              .from('students')
+              .select('id, full_name')
+              .eq('class', importingClass.name)
+              .eq('status', 'active');
+            const existingMap = new Map<string, { id: string; full_name: string }>();
+            (existing || []).forEach(e => existingMap.set(normalizeName(e.full_name), e));
+            const pdfMap = new Map<string, ExtractedStudent>();
+            pdfList.forEach(p => pdfMap.set(normalizeName(p.full_name), p));
+
+            const result: ReconciledStudent[] = [];
+            // keep + add from PDF
+            pdfList.forEach(p => {
+              const key = normalizeName(p.full_name);
+              const ex = existingMap.get(key);
+              if (ex) {
+                result.push({ action: 'keep', full_name: ex.full_name, existing_id: ex.id, pdf: p, selected: false });
+              } else {
+                result.push({ action: 'add', full_name: p.full_name, pdf: p, selected: true });
+              }
+            });
+            // remove: existing but not in PDF
+            (existing || []).forEach(e => {
+              if (!pdfMap.has(normalizeName(e.full_name))) {
+                result.push({ action: 'remove', full_name: e.full_name, existing_id: e.id, selected: true });
+              }
+            });
+            setReconciled(result);
+            const adds = result.filter(r => r.action === 'add').length;
+            const rems = result.filter(r => r.action === 'remove').length;
+            const keeps = result.filter(r => r.action === 'keep').length;
+            toast.success(`${data.count} no PDF — ${adds} novo(s), ${rems} a remover, ${keeps} mantido(s)`);
           } else {
             toast.error(data.error || 'Nenhum aluno encontrado no documento');
           }
@@ -385,13 +431,11 @@ const Classes = () => {
   };
 
   const toggleStudentSelection = (index: number) => {
-    setExtractedStudents(prev => 
-      prev.map((s, i) => i === index ? { ...s, selected: !s.selected } : s)
-    );
+    setReconciled(prev => prev.map((s, i) => i === index ? { ...s, selected: !s.selected } : s));
   };
 
   const toggleAllStudents = (selected: boolean) => {
-    setExtractedStudents(prev => prev.map(s => ({ ...s, selected })));
+    setReconciled(prev => prev.map(s => s.action === 'keep' ? s : { ...s, selected }));
   };
 
   const generateStudentId = (fullName: string, birthDate: string | null) => {
@@ -409,36 +453,45 @@ const Classes = () => {
   };
 
   const handleSaveStudents = async () => {
-    const selectedStudents = extractedStudents.filter(s => s.selected);
-    if (selectedStudents.length === 0) {
-      toast.error('Selecione pelo menos um aluno para cadastrar');
+    const toAdd = reconciled.filter(r => r.action === 'add' && r.selected);
+    const toRemove = reconciled.filter(r => r.action === 'remove' && r.selected);
+    if (toAdd.length === 0 && toRemove.length === 0) {
+      toast.error('Nenhuma alteração selecionada');
       return;
     }
 
     setIsSavingStudents(true);
     try {
-      const studentsToInsert = selectedStudents.map(student => ({
-        full_name: student.full_name,
-        birth_date: student.birth_date || null,
-        guardian_name: student.guardian_name || 'Responsável',
-        guardian_phone: student.guardian_phone || '00000000000',
-        class: student.class,
-        shift: student.shift as 'morning' | 'afternoon' | 'evening',
-        student_id: generateStudentId(student.full_name, student.birth_date),
-        status: 'active'
-      }));
+      const ops: Promise<any>[] = [];
+      if (toAdd.length) {
+        const studentsToInsert = toAdd.map(r => ({
+          full_name: r.pdf!.full_name,
+          birth_date: r.pdf!.birth_date || null,
+          guardian_name: r.pdf!.guardian_name || 'Responsável',
+          guardian_phone: r.pdf!.guardian_phone || '00000000000',
+          class: r.pdf!.class,
+          shift: r.pdf!.shift as 'morning' | 'afternoon' | 'evening',
+          student_id: generateStudentId(r.pdf!.full_name, r.pdf!.birth_date),
+          status: 'active' as const,
+        }));
+        ops.push(supabase.from('students').insert(studentsToInsert));
+      }
+      if (toRemove.length) {
+        const ids = toRemove.map(r => r.existing_id!).filter(Boolean);
+        ops.push(supabase.from('students').update({ status: 'inactive' }).in('id', ids));
+      }
+      const results = await Promise.all(ops);
+      const err = results.find((r: any) => r?.error)?.error;
+      if (err) throw err;
 
-      const { error } = await supabase.from('students').insert(studentsToInsert);
-      
-      if (error) throw error;
-      
-      toast.success(`${selectedStudents.length} aluno(s) cadastrado(s) com sucesso!`);
+      toast.success(`${toAdd.length} adicionado(s), ${toRemove.length} removido(s)`);
       setIsImportDialogOpen(false);
       setExtractedStudents([]);
+      setReconciled([]);
       fetchStudentCounts();
     } catch (err: any) {
       console.error('Error saving students:', err);
-      toast.error(err.message || 'Erro ao cadastrar alunos');
+      toast.error(err.message || 'Erro ao aplicar alterações');
     } finally {
       setIsSavingStudents(false);
     }
