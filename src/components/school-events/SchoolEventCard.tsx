@@ -1,9 +1,10 @@
-import { Calendar, Eye, Pencil, Trash2, ImageIcon } from 'lucide-react';
+import { Calendar, Eye, Pencil, Trash2, ImageIcon, Link2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { SchoolEventSimple } from './types';
+import { toast } from 'sonner';
 
 interface Props {
   event: SchoolEventSimple;
@@ -20,6 +21,16 @@ const formatDate = (d: string | null) => {
 
 export default function SchoolEventCard({ event, onView, onEdit, onDelete }: Props) {
   const [cover, setCover] = useState<string | null>(null);
+
+  const handleShare = async () => {
+    const url = `${window.location.origin}/school-events?id=${event.id}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      toast.success('Link copiado para a área de transferência');
+    } catch {
+      toast.error('Não foi possível copiar o link');
+    }
+  };
 
   useEffect(() => {
     if (!event.cover_image) { setCover(null); return; }
@@ -55,6 +66,7 @@ export default function SchoolEventCard({ event, onView, onEdit, onDelete }: Pro
             <TooltipProvider delayDuration={200}>
               <IconBtn label="Visualizar" onClick={onView}><Eye className="w-4 h-4" /></IconBtn>
               <IconBtn label="Editar" onClick={onEdit}><Pencil className="w-4 h-4" /></IconBtn>
+              <IconBtn label="Compartilhar link" onClick={handleShare}><Link2 className="w-4 h-4" /></IconBtn>
               <IconBtn label="Excluir" onClick={onDelete} danger><Trash2 className="w-4 h-4" /></IconBtn>
             </TooltipProvider>
           </div>
