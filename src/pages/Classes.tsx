@@ -379,41 +379,93 @@ const Classes = () => {
           if (error) throw error;
           
           if (data.success && data.students?.length > 0) {
-            const pdfList: ExtractedStudent[] = data.students;
-            setExtractedStudents(pdfList);
+            const pdfActive: ExtractedStudent[] = data.active || data.students || [];
+            const pdfStruck: Array<{ full_name: string; reason?: string; confidence?: number }> = data.struck || [];
+            setExtractedStudents(pdfActive);
+
             // Build reconciliation against existing active students of this class
             const { data: existing } = await supabase
               .from('students')
               .select('id, full_name')
               .eq('class', importingClass.name)
               .eq('status', 'active');
+
             const existingMap = new Map<string, { id: string; full_name: string }>();
             (existing || []).forEach(e => existingMap.set(normalizeName(e.full_name), e));
-            const pdfMap = new Map<string, ExtractedStudent>();
-            pdfList.forEach(p => pdfMap.set(normalizeName(p.full_name), p));
+
+            const activeKeys = new Set(pdfActive.map(p => normalizeName(p.full_name)));
+            const struckKeys = new Set(pdfStruck.map(s => normalizeName(s.full_name)));
 
             const result: ReconciledStudent[] = [];
-            // keep + add from PDF
-            pdfList.forEach(p => {
+
+            // 1. PDF active → keep or add
+            pdfActive.forEach(p => {
               const key = normalizeName(p.full_name);
               const ex = existingMap.get(key);
               if (ex) {
-                result.push({ action: 'keep', full_name: ex.full_name, existing_id: ex.id, pdf: p, selected: false });
+                result.push({
+                  action: 'keep',
+                  full_name: ex.full_name,
+                  existing_id: ex.id,
+                  pdf: p,
+                  selected: false,
+                  source: 'pdf_active',
+                  reason: 'Já cadastrado e presente no PDF',
+                  confidence: p.confidence,
+                });
               } else {
-                result.push({ action: 'add', full_name: p.full_name, pdf: p, selected: true });
+                result.push({
+                  action: 'add',
+                  full_name: p.full_name,
+                  pdf: p,
+                  selected: true,
+                  source: 'pdf_active',
+                  reason: 'Novo no PDF',
+                  confidence: p.confidence,
+                });
               }
             });
-            // remove: existing but not in PDF
+
+            // 2. PDF struck → remove existing (skip if not in DB)
+            pdfStruck.forEach(s => {
+              const key = normalizeName(s.full_name);
+              const ex = existingMap.get(key);
+              if (ex) {
+                result.push({
+                  action: 'remove',
+                  full_name: ex.full_name,
+                  existing_id: ex.id,
+                  selected: true,
+                  source: 'pdf_struck',
+                  reason: s.reason || 'Tachado/riscado no PDF',
+                  confidence: s.confidence,
+                });
+              }
+            });
+
+            // 3. Existing not in PDF at all → remove
             (existing || []).forEach(e => {
-              if (!pdfMap.has(normalizeName(e.full_name))) {
-                result.push({ action: 'remove', full_name: e.full_name, existing_id: e.id, selected: true });
+              const key = normalizeName(e.full_name);
+              if (!activeKeys.has(key) && !struckKeys.has(key)) {
+                result.push({
+                  action: 'remove',
+                  full_name: e.full_name,
+                  existing_id: e.id,
+                  selected: true,
+                  source: 'db_only',
+                  reason: 'Ausente no PDF',
+                });
               }
             });
+
             setReconciled(result);
             const adds = result.filter(r => r.action === 'add').length;
             const rems = result.filter(r => r.action === 'remove').length;
             const keeps = result.filter(r => r.action === 'keep').length;
-            toast.success(`${data.count} no PDF — ${adds} novo(s), ${rems} a remover, ${keeps} mantido(s)`);
+            const struckCount = pdfStruck.length;
+            toast.success(
+              `${pdfActive.length} ativo(s) no PDF, ${struckCount} tachado(s) — ${adds} a adicionar, ${rems} a remover, ${keeps} mantido(s)`
+            );
           } else {
             toast.error(data.error || 'Nenhum aluno encontrado no documento');
           }
