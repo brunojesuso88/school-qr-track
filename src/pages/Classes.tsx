@@ -332,6 +332,7 @@ const Classes = () => {
   const handleImportClick = (classItem: ClassItem) => {
     setImportingClass(classItem);
     setExtractedStudents([]);
+    setReconciled([]);
     setIsImportDialogOpen(true);
   };
 
@@ -842,6 +843,7 @@ const Classes = () => {
           if (!open) {
             setImportingClass(null);
             setExtractedStudents([]);
+            setReconciled([]);
           }
         }}>
           <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
