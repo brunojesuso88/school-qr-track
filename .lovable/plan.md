@@ -1,54 +1,76 @@
-## 1. Home: renomear título
+## Diagnóstico atual
 
-- `src/pages/Home.tsx`: alterar "Sistema de Gestão de Alunos" para "Sistema de Gestão" no card principal.
+A importação de PDF em `src/pages/Classes.tsx` envia o arquivo para a edge function `parse-students-pdf`, que usa `google/gemini-2.5-flash` em **uma única passada** com prompt curto. Problemas identificados:
 
-## 2. Cards de Projetos e Eventos: link de compartilhamento
+1. **Leitura imprecisa** — modelo `flash` em chamada única tende a confundir letras, juntar sobrenomes ou pular alunos em listas densas.
+2. **Sem detecção de tachado** — alunos riscados de vermelho no PDF são lidos como ativos e acabam mantidos na turma.
+3. **Sem dupla verificação** — qualquer alucinação do modelo entra direto na tela de reconciliação.
+4. **Revisão sem edição** — o usuário só pode marcar/desmarcar, não consegue corrigir um nome lido errado antes de salvar.
+5. **Reconciliação atual** trata "ausente no PDF" como remover, mas ignora completamente nomes tachados quando o modelo decide incluí-los.
 
-Adicionar um botão "Compartilhar link" (ícone `Link2` / `Share2`) nos cards:
+## Mudanças propostas
 
-- `src/components/events/EventCard.tsx` (Projetos)
-- `src/components/school-events/SchoolEventCard.tsx` (Eventos)
+### 1. Edge function `parse-students-pdf` — leitura em duas passadas
 
-Comportamento: copia para a área de transferência uma URL pública contendo o ID do projeto/evento (`/events?id=<id>` e `/school-events?id=<id>`). Mostra toast "Link copiado".
+- Trocar modelo principal para `google/gemini-2.5-pro` (mais preciso em OCR de listas).
+- **Passada 1 — extração**: prompt reforçado pedindo para retornar **dois arrays**:
+  - `active_students`: nomes legíveis e **não** tachados/riscados.
+  - `struck_students`: nomes **tachados, riscados em vermelho, com linha horizontal cortando o nome, ou marcados como removidos/desistentes**.
+  - Para cada item: `full_name`, `birth_date?`, `guardian_name?`, `guardian_phone?`, mais `confidence` (0–1).
+- **Passada 2 — verificação**: nova chamada ao mesmo modelo enviando o PDF + a lista da passada 1, pedindo para revisar nome a nome ("este nome está escrito exatamente assim no documento? algum está tachado e foi classificado como ativo?"). Retorna correções e reclassificações.
+- Mesclar resultado: aplicar correções, mover reclassificados de `active` ↔ `struck`, deduplicar por nome normalizado.
+- Resposta da função passa a ser `{ success, active: [...], struck: [...], count }` (mantém compatibilidade adicionando também `students` = active).
+- Schema tool calling atualizado para refletir os dois arrays + `confidence`.
+- Logs detalhados de cada passada para auditoria.
 
-Nas páginas `Events.tsx` e `SchoolEvents.tsx`: ler `?id=` na URL no `useEffect` e abrir automaticamente o `DetailDialog` correspondente, permitindo que qualquer pessoa com acesso ao sistema veja diretamente aquele projeto/evento ao abrir o link.
+### 2. `src/pages/Classes.tsx` — reconciliação de 3 fontes
 
-> Observação: os dados continuam protegidos por RLS (apenas usuários autenticados com role válido conseguem ver). O link é um deep-link interno, não acesso público anônimo. Caso seja necessário acesso totalmente público sem login, será preciso uma decisão separada (criar tabela/endpoint público), confirmar antes de implementar.
+Atualizar tipo `ReconciledStudent` para incluir `source: 'pdf_active' | 'pdf_struck' | 'db_only'` e `confidence?`.
 
-## 3. Turmas: resumo de presença ao clicar no card
+Nova lógica ao receber resposta da edge function:
 
-Hoje, clicar no card só amplia a foto. Vou substituir por um **modal de resumo da turma**:
+```text
+pdfActive  = nomes ativos no PDF (normalizados)
+pdfStruck  = nomes tachados no PDF (normalizados)
+existing   = alunos ativos da turma no DB
 
-- Novo componente `src/components/ClassSummaryDialog.tsx`.
-- Ao clicar no card, abrir o modal com:
-  - Cabeçalho: foto, nome, turno, total de alunos.
-  - **Resumo geral da turma**: % de presença geral (últimos 30 dias), nº de aulas registradas, total de presenças/faltas/atrasos.
-  - **Resumo por aluno** (tabela rolável): nome, total de presenças, faltas, atrasos, % de presença. Ordenável por % de presença (pior → melhor).
-  - Botão "Ver detalhes do aluno" abre `StudentReportModal` existente.
-- Consulta: `attendance` filtrado por `students.class = <turma>` agregado em memória; a foto continua sendo zoomada por um botão separado dentro do modal.
+Para cada nome em pdfActive:
+  - se existe no DB           → action='keep'
+  - se NÃO existe no DB       → action='add'  (selected por padrão)
 
-## 4. Turmas: importação PDF inteligente (reconciliação)
+Para cada nome em pdfStruck:
+  - se existe no DB           → action='remove' (motivo: "tachado no PDF")
+  - se NÃO existe no DB       → ignorar (não havia para remover)
 
-Substituir a lógica atual de "apenas inserir" por uma reconciliação completa entre PDF e alunos existentes da turma.
+Para cada existing:
+  - se NÃO está em pdfActive nem pdfStruck → action='remove' (motivo: "ausente no PDF")
+```
 
-Fluxo no `Classes.tsx` após `parse-students-pdf` retornar:
+### 3. UI de revisão — dupla checagem editável
 
-1. Buscar alunos atuais da turma (`students` onde `class = importingClass.name` e `status = 'active'`).
-2. Normalizar nomes (trim, lowercase, remover acentos) e comparar:
-   - **MANTER** (verde): nome existe nos dois → não alterar.
-   - **ADICIONAR** (azul): nome só no PDF → criar novo aluno.
-   - **REMOVER** (vermelho, tachado): nome só no banco → marcar para exclusão (soft via `status = 'inactive'` para preservar histórico de presenças).
-3. Mostrar tabela de revisão com 3 seções/colunas de status, checkbox por linha (todos pré-selecionados), permitindo o usuário desmarcar exclusões/adições antes de confirmar.
-4. Botão "Aplicar alterações" executa em paralelo: `insert` dos novos + `update status='inactive'` dos removidos. Toast resume: "X adicionados, Y removidos, Z mantidos".
+Na tabela de reconciliação atual (linhas 920–960):
 
-> Decisão de soft-delete: alunos com presenças históricas não podem ser apagados sem perder dados de frequência. Marcar como `inactive` mantém histórico e os remove das listas ativas. Confirmar se prefere hard delete.
+- Nova coluna **"Motivo"** explicando origem de cada item (Tachado no PDF / Ausente no PDF / Novo no PDF / Já cadastrado).
+- Nome editável inline (input) para itens `add` e `remove` por nome ausente — permite corrigir leitura errada antes de salvar. Editar um `add` para um nome já existente reclassifica automaticamente como `keep`.
+- Badge de **confiança baixa** (<0.8) em vermelho/âmbar nos itens `add`, sinalizando "revise este nome".
+- Bloco de aviso no topo: "X alunos foram detectados como tachados/riscados e serão removidos" quando aplicável.
+- Botão "Selecionar todos os adicionar" e "Desmarcar todos" separados.
 
-### Arquivos a editar
-- `src/pages/Home.tsx`
-- `src/components/events/EventCard.tsx`, `src/pages/Events.tsx`
-- `src/components/school-events/SchoolEventCard.tsx`, `src/pages/SchoolEvents.tsx`
-- `src/pages/Classes.tsx`
-- Novo: `src/components/ClassSummaryDialog.tsx`
+### 4. Salvamento
 
-### Sem mudanças de DB
-Nenhuma migração necessária — uso de `status='inactive'` já existe na tabela `students`.
+`handleSaveStudents` continua igual (insert para `add`, update `status='inactive'` para `remove`), apenas usando o `full_name` editado pelo usuário (não o original do PDF) ao inserir.
+
+## Arquivos alterados
+
+- `supabase/functions/parse-students-pdf/index.ts` — duas passadas, struck detection, modelo pro.
+- `src/pages/Classes.tsx` — tipos, lógica de reconciliação 3-fontes, UI editável com motivo e confiança.
+
+## Sem mudanças
+
+- Schema do banco (continua usando `students.status='inactive'` para soft-delete).
+- RLS, rotas, sidebar, outras telas.
+
+## Riscos / notas
+
+- `gemini-2.5-pro` é mais caro/lento que `flash`; o ganho de precisão compensa para listas de alunos. Mantemos fallback para `flash` se `pro` retornar 429/402.
+- Detecção de tachado depende da qualidade do PDF (escaneado vs. digital). Sempre cabe ao usuário revisar antes de aplicar.

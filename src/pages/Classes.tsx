@@ -41,15 +41,20 @@ interface ExtractedStudent {
   class: string;
   shift: string;
   selected?: boolean;
+  confidence?: number;
 }
 
 type ReconcileAction = 'keep' | 'add' | 'remove';
+type ReconcileSource = 'pdf_active' | 'pdf_struck' | 'db_only';
 interface ReconciledStudent {
   action: ReconcileAction;
   full_name: string;
   existing_id?: string;
   pdf?: ExtractedStudent;
   selected: boolean;
+  source: ReconcileSource;
+  reason: string;
+  confidence?: number;
 }
 
 const normalizeName = (s: string) =>
@@ -374,41 +379,93 @@ const Classes = () => {
           if (error) throw error;
           
           if (data.success && data.students?.length > 0) {
-            const pdfList: ExtractedStudent[] = data.students;
-            setExtractedStudents(pdfList);
+            const pdfActive: ExtractedStudent[] = data.active || data.students || [];
+            const pdfStruck: Array<{ full_name: string; reason?: string; confidence?: number }> = data.struck || [];
+            setExtractedStudents(pdfActive);
+
             // Build reconciliation against existing active students of this class
             const { data: existing } = await supabase
               .from('students')
               .select('id, full_name')
               .eq('class', importingClass.name)
               .eq('status', 'active');
+
             const existingMap = new Map<string, { id: string; full_name: string }>();
             (existing || []).forEach(e => existingMap.set(normalizeName(e.full_name), e));
-            const pdfMap = new Map<string, ExtractedStudent>();
-            pdfList.forEach(p => pdfMap.set(normalizeName(p.full_name), p));
+
+            const activeKeys = new Set(pdfActive.map(p => normalizeName(p.full_name)));
+            const struckKeys = new Set(pdfStruck.map(s => normalizeName(s.full_name)));
 
             const result: ReconciledStudent[] = [];
-            // keep + add from PDF
-            pdfList.forEach(p => {
+
+            // 1. PDF active → keep or add
+            pdfActive.forEach(p => {
               const key = normalizeName(p.full_name);
               const ex = existingMap.get(key);
               if (ex) {
-                result.push({ action: 'keep', full_name: ex.full_name, existing_id: ex.id, pdf: p, selected: false });
+                result.push({
+                  action: 'keep',
+                  full_name: ex.full_name,
+                  existing_id: ex.id,
+                  pdf: p,
+                  selected: false,
+                  source: 'pdf_active',
+                  reason: 'Já cadastrado e presente no PDF',
+                  confidence: p.confidence,
+                });
               } else {
-                result.push({ action: 'add', full_name: p.full_name, pdf: p, selected: true });
+                result.push({
+                  action: 'add',
+                  full_name: p.full_name,
+                  pdf: p,
+                  selected: true,
+                  source: 'pdf_active',
+                  reason: 'Novo no PDF',
+                  confidence: p.confidence,
+                });
               }
             });
-            // remove: existing but not in PDF
+
+            // 2. PDF struck → remove existing (skip if not in DB)
+            pdfStruck.forEach(s => {
+              const key = normalizeName(s.full_name);
+              const ex = existingMap.get(key);
+              if (ex) {
+                result.push({
+                  action: 'remove',
+                  full_name: ex.full_name,
+                  existing_id: ex.id,
+                  selected: true,
+                  source: 'pdf_struck',
+                  reason: s.reason || 'Tachado/riscado no PDF',
+                  confidence: s.confidence,
+                });
+              }
+            });
+
+            // 3. Existing not in PDF at all → remove
             (existing || []).forEach(e => {
-              if (!pdfMap.has(normalizeName(e.full_name))) {
-                result.push({ action: 'remove', full_name: e.full_name, existing_id: e.id, selected: true });
+              const key = normalizeName(e.full_name);
+              if (!activeKeys.has(key) && !struckKeys.has(key)) {
+                result.push({
+                  action: 'remove',
+                  full_name: e.full_name,
+                  existing_id: e.id,
+                  selected: true,
+                  source: 'db_only',
+                  reason: 'Ausente no PDF',
+                });
               }
             });
+
             setReconciled(result);
             const adds = result.filter(r => r.action === 'add').length;
             const rems = result.filter(r => r.action === 'remove').length;
             const keeps = result.filter(r => r.action === 'keep').length;
-            toast.success(`${data.count} no PDF — ${adds} novo(s), ${rems} a remover, ${keeps} mantido(s)`);
+            const struckCount = pdfStruck.length;
+            toast.success(
+              `${pdfActive.length} ativo(s) no PDF, ${struckCount} tachado(s) — ${adds} a adicionar, ${rems} a remover, ${keeps} mantido(s)`
+            );
           } else {
             toast.error(data.error || 'Nenhum aluno encontrado no documento');
           }
@@ -466,13 +523,13 @@ const Classes = () => {
       const ops: Promise<any>[] = [];
       if (toAdd.length) {
         const studentsToInsert = toAdd.map(r => ({
-          full_name: r.pdf!.full_name,
+          full_name: r.full_name, // use edited name
           birth_date: r.pdf!.birth_date || null,
           guardian_name: r.pdf!.guardian_name || 'Responsável',
           guardian_phone: r.pdf!.guardian_phone || '00000000000',
           class: r.pdf!.class,
           shift: r.pdf!.shift as 'morning' | 'afternoon' | 'evening',
-          student_id: generateStudentId(r.pdf!.full_name, r.pdf!.birth_date),
+          student_id: generateStudentId(r.full_name, r.pdf!.birth_date),
           status: 'active' as const,
         }));
         ops.push(Promise.resolve(supabase.from('students').insert(studentsToInsert)));
@@ -912,6 +969,21 @@ const Classes = () => {
                     </Button>
                   </div>
 
+                  {reconciled.some(r => r.source === 'pdf_struck') && (
+                    <div className="border border-destructive/30 bg-destructive/5 rounded-md p-3 text-xs flex items-start gap-2">
+                      <AlertCircle className="w-4 h-4 text-destructive mt-0.5 shrink-0" />
+                      <div>
+                        <strong>{reconciled.filter(r => r.source === 'pdf_struck').length} aluno(s)</strong> foram detectados como <em>tachados/riscados</em> no PDF e serão removidos da turma.
+                      </div>
+                    </div>
+                  )}
+                  {reconciled.some(r => r.action === 'add' && (r.confidence ?? 1) < 0.8) && (
+                    <div className="border border-amber-500/30 bg-amber-500/5 rounded-md p-3 text-xs flex items-start gap-2">
+                      <AlertCircle className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
+                      <div>Alguns nomes têm <strong>baixa confiança</strong> de leitura. Revise e edite-os antes de aplicar.</div>
+                    </div>
+                  )}
+
                   <div className="border rounded-lg overflow-hidden">
                     <Table>
                       <TableHeader>
@@ -919,6 +991,7 @@ const Classes = () => {
                           <TableHead className="w-10"></TableHead>
                           <TableHead className="w-28">Ação</TableHead>
                           <TableHead>Nome</TableHead>
+                          <TableHead className="w-56">Motivo</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -937,12 +1010,37 @@ const Classes = () => {
                               {r.action === 'add' && <Badge className="bg-blue-600 hover:bg-blue-600">Adicionar</Badge>}
                               {r.action === 'remove' && <Badge variant="destructive">Remover</Badge>}
                             </TableCell>
-                            <TableCell className={cn(
-                              "font-medium",
-                              r.action === 'remove' && "line-through text-destructive",
-                              r.action === 'add' && "text-blue-600",
-                              r.action === 'keep' && "text-emerald-700"
-                            )}>{r.full_name}</TableCell>
+                            <TableCell>
+                              {r.action === 'add' ? (
+                                <Input
+                                  value={r.full_name}
+                                  onChange={(e) => {
+                                    const v = e.target.value;
+                                    setReconciled(prev => prev.map((s, i) => i === index ? { ...s, full_name: v } : s));
+                                  }}
+                                  className={cn(
+                                    "h-8 text-sm font-medium",
+                                    (r.confidence ?? 1) < 0.8 && "border-amber-500"
+                                  )}
+                                />
+                              ) : (
+                                <span className={cn(
+                                  "font-medium text-sm",
+                                  r.action === 'remove' && "line-through text-destructive",
+                                  r.action === 'keep' && "text-emerald-700"
+                                )}>{r.full_name}</span>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-xs text-muted-foreground">
+                              {r.source === 'pdf_struck' && <span className="text-destructive">🚫 {r.reason}</span>}
+                              {r.source === 'db_only' && <span>📋 {r.reason}</span>}
+                              {r.source === 'pdf_active' && r.action === 'add' && (
+                                <span className={cn((r.confidence ?? 1) < 0.8 && "text-amber-600")}>
+                                  ✨ {r.reason}{r.confidence != null && ` (${Math.round(r.confidence * 100)}%)`}
+                                </span>
+                              )}
+                              {r.source === 'pdf_active' && r.action === 'keep' && <span className="text-emerald-700">✓ {r.reason}</span>}
+                            </TableCell>
                           </TableRow>
                         ))}
                       </TableBody>
