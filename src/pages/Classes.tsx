@@ -864,12 +864,15 @@ const Classes = () => {
                 className="hidden"
               />
 
-              {extractedStudents.length === 0 ? (
+              {reconciled.length === 0 ? (
                 <div className="border-2 border-dashed border-muted-foreground/25 rounded-lg p-8 text-center">
                   <Upload className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
                   <h3 className="font-medium mb-2">Selecione um arquivo PDF</h3>
                   <p className="text-sm text-muted-foreground mb-4">
-                    O sistema irá utilizar IA para identificar e extrair os dados dos alunos
+                    O sistema irá comparar os alunos do PDF com a turma atual: <br/>
+                    <span className="text-emerald-600">verde</span> = mantido •
+                    <span className="text-blue-600"> azul</span> = novo a adicionar •
+                    <span className="text-destructive line-through"> vermelho</span> = remover da turma
                   </p>
                   <Button 
                     onClick={() => fileInputRef.current?.click()}
@@ -891,14 +894,10 @@ const Classes = () => {
               ) : (
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Checkbox
-                        checked={extractedStudents.every(s => s.selected)}
-                        onCheckedChange={(checked) => toggleAllStudents(!!checked)}
-                      />
-                      <span className="text-sm font-medium">
-                        {extractedStudents.filter(s => s.selected).length} de {extractedStudents.length} selecionado(s)
-                      </span>
+                    <div className="flex flex-wrap items-center gap-2 text-xs">
+                      <Badge className="bg-emerald-600 hover:bg-emerald-600">Manter: {reconciled.filter(r => r.action === 'keep').length}</Badge>
+                      <Badge className="bg-blue-600 hover:bg-blue-600">Adicionar: {reconciled.filter(r => r.action === 'add' && r.selected).length}</Badge>
+                      <Badge variant="destructive">Remover: {reconciled.filter(r => r.action === 'remove' && r.selected).length}</Badge>
                     </div>
                     <Button
                       variant="outline"
@@ -916,25 +915,32 @@ const Classes = () => {
                       <TableHeader>
                         <TableRow>
                           <TableHead className="w-10"></TableHead>
+                          <TableHead className="w-28">Ação</TableHead>
                           <TableHead>Nome</TableHead>
-                          <TableHead>Data Nasc.</TableHead>
-                          <TableHead>Responsável</TableHead>
-                          {canViewGuardianPhone && <TableHead>Telefone</TableHead>}
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {extractedStudents.map((student, index) => (
+                        {reconciled.map((r, index) => (
                           <TableRow key={index}>
                             <TableCell>
-                              <Checkbox
-                                checked={student.selected}
-                                onCheckedChange={() => toggleStudentSelection(index)}
-                              />
+                              {r.action !== 'keep' ? (
+                                <Checkbox
+                                  checked={r.selected}
+                                  onCheckedChange={() => toggleStudentSelection(index)}
+                                />
+                              ) : <span className="text-muted-foreground text-xs">—</span>}
                             </TableCell>
-                            <TableCell className="font-medium">{student.full_name}</TableCell>
-                            <TableCell>{student.birth_date || '-'}</TableCell>
-                            <TableCell>{student.guardian_name || '-'}</TableCell>
-                            {canViewGuardianPhone && <TableCell>{student.guardian_phone || '-'}</TableCell>}
+                            <TableCell>
+                              {r.action === 'keep' && <Badge className="bg-emerald-600 hover:bg-emerald-600">Manter</Badge>}
+                              {r.action === 'add' && <Badge className="bg-blue-600 hover:bg-blue-600">Adicionar</Badge>}
+                              {r.action === 'remove' && <Badge variant="destructive">Remover</Badge>}
+                            </TableCell>
+                            <TableCell className={cn(
+                              "font-medium",
+                              r.action === 'remove' && "line-through text-destructive",
+                              r.action === 'add' && "text-blue-600",
+                              r.action === 'keep' && "text-emerald-700"
+                            )}>{r.full_name}</TableCell>
                           </TableRow>
                         ))}
                       </TableBody>
@@ -947,23 +953,24 @@ const Classes = () => {
                       onClick={() => {
                         setIsImportDialogOpen(false);
                         setExtractedStudents([]);
+                        setReconciled([]);
                       }}
                     >
                       Cancelar
                     </Button>
                     <Button
                       onClick={handleSaveStudents}
-                      disabled={isSavingStudents || extractedStudents.filter(s => s.selected).length === 0}
+                      disabled={isSavingStudents || reconciled.filter(r => r.action !== 'keep' && r.selected).length === 0}
                     >
                       {isSavingStudents ? (
                         <>
                           <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                          Cadastrando...
+                          Aplicando...
                         </>
                       ) : (
                         <>
                           <Plus className="w-4 h-4 mr-2" />
-                          Cadastrar Selecionados
+                          Aplicar Alterações
                         </>
                       )}
                     </Button>
