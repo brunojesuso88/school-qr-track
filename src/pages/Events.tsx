@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import DashboardLayout from '@/components/DashboardLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -23,6 +24,7 @@ export default function Events() {
   const [detailOpen, setDetailOpen] = useState(false);
   const [active, setActive] = useState<SchoolEvent | null>(null);
   const [logoDataUrl, setLogoDataUrl] = useState<string | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
 
   useEffect(() => {
     fetch(logoCepans)
@@ -46,6 +48,14 @@ export default function Events() {
   };
 
   useEffect(() => { load(); }, []);
+
+  useEffect(() => {
+    const id = searchParams.get('id');
+    if (id && events.length) {
+      const found = events.find(e => e.id === id);
+      if (found) { setActive(found); setDetailOpen(true); }
+    }
+  }, [events, searchParams]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
