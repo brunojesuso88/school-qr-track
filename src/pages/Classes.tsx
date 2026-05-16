@@ -715,13 +715,7 @@ const Classes = () => {
                 key={classItem.id}
                 className="card-hover animate-fade-in overflow-hidden cursor-pointer"
                 style={{ animationDelay: `${index * 30}ms` }}
-                onClick={async () => {
-                  if (classItem.photo_url) {
-                    const { data } = await supabase.storage.from('class-photos').createSignedUrl(classItem.photo_url, 3600);
-                    setZoomSignedUrl(data?.signedUrl || null);
-                    setZoomPhotoClass(classItem);
-                  }
-                }}
+                onClick={() => setSummaryClass(classItem.name)}
               >
                 <CardContent className="p-5">
                   <div className="flex items-start justify-between mb-3">
