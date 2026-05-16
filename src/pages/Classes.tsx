@@ -474,11 +474,11 @@ const Classes = () => {
           student_id: generateStudentId(r.pdf!.full_name, r.pdf!.birth_date),
           status: 'active' as const,
         }));
-        ops.push(supabase.from('students').insert(studentsToInsert));
+        ops.push(Promise.resolve(supabase.from('students').insert(studentsToInsert)));
       }
       if (toRemove.length) {
         const ids = toRemove.map(r => r.existing_id!).filter(Boolean);
-        ops.push(supabase.from('students').update({ status: 'inactive' }).in('id', ids));
+        ops.push(Promise.resolve(supabase.from('students').update({ status: 'inactive' }).in('id', ids)));
       }
       const results = await Promise.all(ops);
       const err = results.find((r: any) => r?.error)?.error;
@@ -973,24 +973,12 @@ const Classes = () => {
             </div>
           </DialogContent>
         </Dialog>
-        {/* Zoom Photo Dialog */}
-        <Dialog open={!!zoomPhotoClass} onOpenChange={(open) => { if (!open) { setZoomPhotoClass(null); setZoomSignedUrl(null); } }}>
-          <DialogContent className="max-w-lg">
-            <DialogHeader>
-              <DialogTitle>{zoomPhotoClass?.name}</DialogTitle>
-              <DialogDescription>{zoomPhotoClass && getShiftLabel(zoomPhotoClass.shift)}</DialogDescription>
-            </DialogHeader>
-            <div className="flex justify-center p-4">
-              {zoomSignedUrl ? (
-                <img src={zoomSignedUrl} alt={zoomPhotoClass?.name} className="max-w-full max-h-[60vh] rounded-lg object-contain" />
-              ) : (
-                <div className="w-48 h-48 bg-muted rounded-lg flex items-center justify-center">
-                  <GraduationCap className="w-16 h-16 text-muted-foreground" />
-                </div>
-              )}
-            </div>
-          </DialogContent>
-        </Dialog>
+        {/* Class Summary Dialog */}
+        <ClassSummaryDialog
+          open={!!summaryClass}
+          onOpenChange={(open) => !open && setSummaryClass(null)}
+          className={summaryClass}
+        />
 
         {/* Attendance Dialog */}
         <ClassAttendanceDialog
