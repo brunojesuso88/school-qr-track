@@ -292,8 +292,8 @@ const Students = () => {
           full_name: validationData.full_name,
           class: validationData.class,
           shift: validationData.shift,
-          guardian_name: validationData.guardian_name,
-          guardian_phone: validationData.guardian_phone,
+          guardian_name: validationData.guardian_name ? validationData.guardian_name : null,
+          guardian_phone: validationData.guardian_phone ? validationData.guardian_phone : null,
           status: validationData.status,
           student_id: studentId,
           
@@ -324,8 +324,8 @@ const Students = () => {
             full_name: validationData.full_name,
             class: validationData.class,
             shift: validationData.shift,
-            guardian_name: validationData.guardian_name,
-            guardian_phone: validationData.guardian_phone,
+            guardian_name: validationData.guardian_name ? validationData.guardian_name : null,
+            guardian_phone: validationData.guardian_phone ? validationData.guardian_phone : null,
             status: validationData.status,
             student_id: studentId,
             
@@ -752,12 +752,11 @@ const Students = () => {
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="guardian_name">Nome do Responsável</Label>
+                  <Label htmlFor="guardian_name">Nome do Responsável (opcional)</Label>
                   <Input
                     id="guardian_name"
                     value={formData.guardian_name}
                     onChange={(e) => setFormData({ ...formData, guardian_name: e.target.value })}
-                    required
                   />
                 </div>
                 {canViewGuardianPhone && (
