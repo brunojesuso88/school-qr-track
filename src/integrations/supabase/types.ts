@@ -643,8 +643,8 @@ export type Database = {
           created_at: string | null
           created_by: string | null
           full_name: string
-          guardian_name: string
-          guardian_phone: string
+          guardian_name: string | null
+          guardian_phone: string | null
           has_medical_report: boolean
           id: string
           medical_report_details: string | null
@@ -669,8 +669,8 @@ export type Database = {
           created_at?: string | null
           created_by?: string | null
           full_name: string
-          guardian_name: string
-          guardian_phone: string
+          guardian_name?: string | null
+          guardian_phone?: string | null
           has_medical_report?: boolean
           id?: string
           medical_report_details?: string | null
@@ -695,8 +695,8 @@ export type Database = {
           created_at?: string | null
           created_by?: string | null
           full_name?: string
-          guardian_name?: string
-          guardian_phone?: string
+          guardian_name?: string | null
+          guardian_phone?: string | null
           has_medical_report?: boolean
           id?: string
           medical_report_details?: string | null

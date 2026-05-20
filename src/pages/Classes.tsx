@@ -525,8 +525,8 @@ const Classes = () => {
         const studentsToInsert = toAdd.map(r => ({
           full_name: r.full_name, // use edited name
           birth_date: r.pdf!.birth_date || null,
-          guardian_name: r.pdf!.guardian_name || 'Responsável',
-          guardian_phone: r.pdf!.guardian_phone || '00000000000',
+          guardian_name: r.pdf!.guardian_name && r.pdf!.guardian_name.trim() ? r.pdf!.guardian_name : null,
+          guardian_phone: r.pdf!.guardian_phone && r.pdf!.guardian_phone.trim() ? r.pdf!.guardian_phone : null,
           class: r.pdf!.class,
           shift: r.pdf!.shift as 'morning' | 'afternoon' | 'evening',
           student_id: generateStudentId(r.full_name, r.pdf!.birth_date),
