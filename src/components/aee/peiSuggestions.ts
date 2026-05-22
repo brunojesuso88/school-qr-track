@@ -30,6 +30,15 @@ export const POTENTIALITIES_SUGGESTIONS = [
   'Apresenta vocabulário rico em temas de interesse específico.',
   'Demonstra interesse por leitura e contação de histórias.',
   'Possui senso de humor e interage de forma afetiva.',
+  // Altas habilidades / superdotação
+  'Demonstra interesse intenso por jogos de lógica, xadrez e desafios estratégicos.',
+  'Aprecia atividades desafiadoras que exigem raciocínio avançado.',
+  'Mostra curiosidade investigativa por temas científicos e filosóficos.',
+  'Cria projetos próprios, inventos ou histórias de forma autônoma.',
+  'Realiza leituras acima do esperado para a faixa etária.',
+  'Domina rapidamente novos conteúdos com pouca repetição.',
+  'Demonstra liderança natural em trabalhos em grupo.',
+  'Apresenta produções artísticas ou textuais de alta qualidade para a idade.',
 ];
 
 export const LEARNING_BARRIERS_SUGGESTIONS = [
@@ -47,6 +56,47 @@ export const LEARNING_BARRIERS_SUGGESTIONS = [
   'Dificuldade em copiar do quadro / atividades visuais distantes.',
   'Dificuldade na consolidação da leitura e escrita.',
   'Dificuldade no raciocínio lógico-matemático abstrato.',
+  'Dificuldade na memória de trabalho (esquece instruções recém-dadas).',
+  'Dificuldade na resolução de problemas que envolvem múltiplas etapas.',
+  'Lentidão no processamento de informações verbais e/ou visuais.',
+  'Dificuldade na expressão escrita (estruturação de frases e parágrafos).',
+  'Dificuldade no reconhecimento e produção de fonemas (consciência fonológica).',
+  'Dificuldade em manter postura adequada durante as atividades.',
+  'Baixa tolerância à frustração diante de erros ou correções.',
+  'Dificuldade no uso funcional do tempo (noção de antes, agora, depois).',
+  'Dificuldade em compreender metáforas, ironias e linguagem figurada.',
+  'Esquiva de atividades acadêmicas por sentimento de incapacidade.',
+  'Dificuldade no controle de impulsos e espera da vez.',
+  'Necessidade frequente de validação para iniciar tarefas.',
+  'Desmotivação por falta de desafio (em casos de altas habilidades).',
+  'Dispersão em ambientes com muitos estímulos simultâneos.',
+  'Dificuldade na transferência de conhecimentos entre disciplinas.',
+  'Resistência ao uso de materiais escritos (caderno, lápis).',
+];
+
+// Sugestões específicas para alunos com altas habilidades / superdotação
+export const HIGH_ABILITIES_FUNCTIONAL_SUGGESTIONS = [
+  'Apresenta memória excepcional para fatos, datas e detalhes.',
+  'Demonstra raciocínio lógico avançado para a faixa etária.',
+  'Utiliza vocabulário rebuscado e preciso em diferentes contextos.',
+  'Elabora estratégias próprias e criativas na resolução de problemas.',
+  'Aprende novos conteúdos com poucas repetições.',
+  'Faz conexões inusitadas entre diferentes áreas do conhecimento.',
+  'Demonstra interesse por temas complexos e abstratos.',
+  'Apresenta curiosidade investigativa intensa e persistente.',
+  'Possui alta capacidade de concentração em temas de interesse.',
+  'Produz textos, desenhos ou cálculos acima da média da turma.',
+];
+
+export const HIGH_ABILITIES_POTENTIALITIES_SUGGESTIONS = [
+  'Beneficia-se de jogos e atividades desafiadoras (xadrez, lógica, programação).',
+  'Engaja-se em projetos investigativos de longa duração.',
+  'Tem facilidade para liderar e mediar grupos de trabalho.',
+  'Aproveita atividades de aprofundamento em temas de interesse.',
+  'Beneficia-se de desafios matemáticos e olimpíadas científicas.',
+  'Apresenta produção criativa em escrita, arte ou música.',
+  'Aproveita oportunidades de mentoria e troca com pares avançados.',
+  'Demonstra autonomia em pesquisa e estudo independente.',
 ];
 
 export interface InterventionSuggestion {
