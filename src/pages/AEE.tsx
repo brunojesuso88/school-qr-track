@@ -1382,6 +1382,11 @@ const AEE = () => {
                         }}
                         data={peiData}
                         onChange={setPeiData}
+                        laudoData={formData}
+                        onLaudoChange={setFormData}
+                        onBirthDateChange={(date) =>
+                          setSelectedStudent({ ...selectedStudent, birth_date: date || null })
+                        }
                       />
                       <div className="flex justify-end pt-4 border-t">
                         <Button onClick={handleSavePEI} disabled={peiSaving}>
