@@ -905,6 +905,45 @@ const AEE = () => {
           ` : '<div class="content"><span class="empty">Nenhum professor vinculado à turma no mapeamento escolar.</span></div>'}
         </div>
 
+        <div class="section">
+          <h3>10. Informações do Laudo</h3>
+          <table>
+            <tr><td style="width:35%; background:#f8fafc; font-weight:bold; color:#1e3a8a;">CID</td>
+              <td>${
+                student.aee_cid_code
+                  ? `${escapeHtml(student.aee_cid_code)}${student.aee_cid_description ? ' — ' + escapeHtml(student.aee_cid_description) : ''}`
+                  : '<span class="empty">Não informado</span>'
+              }</td></tr>
+            <tr><td style="background:#f8fafc; font-weight:bold; color:#1e3a8a;">Uso de medicação</td>
+              <td>${
+                student.aee_uses_medication
+                  ? `Sim${student.aee_medication_name ? ' — ' + escapeHtml(student.aee_medication_name) : ''}`
+                  : 'Não'
+              }</td></tr>
+            <tr><td style="background:#f8fafc; font-weight:bold; color:#1e3a8a;">Alfabetização</td>
+              <td>${escapeHtml(getLiteracyLabel(student.aee_literacy_status))}</td></tr>
+            <tr><td style="background:#f8fafc; font-weight:bold; color:#1e3a8a;">Atividades adaptadas</td>
+              <td>${student.aee_adapted_activities ? 'Sim' : 'Não'}</td></tr>
+            <tr><td style="background:#f8fafc; font-weight:bold; color:#1e3a8a;">Sugestões de adaptações</td>
+              <td>${
+                student.aee_adaptation_suggestions
+                  ? escapeHtml(student.aee_adaptation_suggestions)
+                  : '<span class="empty">—</span>'
+              }</td></tr>
+          </table>
+        </div>
+
+        ${laudoSrc ? `
+        <div class="section">
+          <h3>11. Documento do Laudo</h3>
+          ${laudoIsPdf
+            ? `<div class="content">Documento em PDF anexado ao prontuário do aluno.</div>
+               <a class="laudo-link" href="${laudoSrc}" target="_blank">Abrir documento (PDF)</a>`
+            : `<img class="laudo-image" src="${laudoSrc}" alt="Foto do laudo" />`
+          }
+        </div>
+        ` : ''}
+
         <div class="signatures">
           <div class="signature"><div class="line">Professor(a) AEE</div></div>
           <div class="signature"><div class="line">Coordenação Pedagógica</div></div>
