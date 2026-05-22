@@ -568,6 +568,32 @@ const AEE = () => {
     }
 
     const age = calculateAge(student.birth_date);
+
+    // Resolve signed URLs (student photo + laudo attachment) so they
+    // render directly in the print/export window.
+    let photoSrc: string | null = null;
+    if (student.photo_url) {
+      try {
+        photoSrc = await getSignedPhotoUrl(student.photo_url);
+      } catch {
+        photoSrc = null;
+      }
+    }
+
+    let laudoSrc: string | null = null;
+    let laudoIsPdf = false;
+    if (student.aee_laudo_attachment_url) {
+      try {
+        const { data: laudoData } = await supabase.storage
+          .from('aee-documents')
+          .createSignedUrl(student.aee_laudo_attachment_url, 3600);
+        laudoSrc = laudoData?.signedUrl || null;
+        laudoIsPdf = /\.pdf($|\?)/i.test(student.aee_laudo_attachment_url);
+      } catch {
+        laudoSrc = null;
+      }
+    }
+
     const formatDate = (d: string | null | undefined) => {
       if (!d) return 'Não informada';
       try {
