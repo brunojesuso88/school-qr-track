@@ -685,6 +685,50 @@ const AEE = () => {
           .student-strip strong {
             color: #1e3a8a;
           }
+          .student-id-row {
+            display: flex;
+            gap: 16px;
+            align-items: center;
+            margin-bottom: 22px;
+          }
+          .student-id-row .photo {
+            width: 110px;
+            height: 110px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 3px solid #1e3a8a;
+            flex-shrink: 0;
+            background: #e2e8f0;
+          }
+          .student-id-row .photo-placeholder {
+            width: 110px;
+            height: 110px;
+            border-radius: 50%;
+            border: 3px solid #1e3a8a;
+            background: #e2e8f0;
+            color: #1e3a8a;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 36px;
+            flex-shrink: 0;
+          }
+          .laudo-image {
+            max-width: 100%;
+            max-height: 600px;
+            border: 1px solid #cbd5e1;
+            border-radius: 4px;
+            display: block;
+            margin: 10px auto;
+          }
+          .laudo-link {
+            display: inline-block;
+            margin-top: 8px;
+            color: #1e3a8a;
+            font-size: 12px;
+            word-break: break-all;
+          }
           .section {
             margin-bottom: 22px;
             page-break-inside: avoid;
@@ -775,11 +819,16 @@ const AEE = () => {
         </div>
         <div class="accent-bar"></div>
 
-        <div class="student-strip">
-          <strong>Aluno(a):</strong> ${escapeHtml(student.full_name)} &nbsp;|&nbsp;
-          <strong>Turma:</strong> ${escapeHtml(student.class)} &nbsp;|&nbsp;
-          <strong>Turno:</strong> ${getShiftLabel(student.shift)} &nbsp;|&nbsp;
-          <strong>Matrícula:</strong> ${escapeHtml(student.student_id)}
+        <div class="student-id-row">
+          ${photoSrc
+            ? `<img class="photo" src="${photoSrc}" alt="Foto do aluno" />`
+            : `<div class="photo-placeholder">${escapeHtml(student.full_name.charAt(0).toUpperCase())}</div>`}
+          <div class="student-strip" style="flex:1; margin-bottom:0;">
+            <strong>Aluno(a):</strong> ${escapeHtml(student.full_name)}<br/>
+            <strong>Turma:</strong> ${escapeHtml(student.class)} &nbsp;|&nbsp;
+            <strong>Turno:</strong> ${getShiftLabel(student.shift)} &nbsp;|&nbsp;
+            <strong>Matrícula:</strong> ${escapeHtml(student.student_id)}
+          </div>
         </div>
 
         <div class="section">
