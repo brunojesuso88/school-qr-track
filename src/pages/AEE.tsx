@@ -952,14 +952,22 @@ const AEE = () => {
 
         <script>
           window.onload = function() {
-            // Wait for the logo to render before printing
-            const img = document.querySelector('img');
-            if (img && !img.complete) {
-              img.onload = () => setTimeout(() => window.print(), 200);
-              img.onerror = () => setTimeout(() => window.print(), 200);
-            } else {
+            // Wait for all images (logo, student photo, laudo image) before printing
+            const imgs = Array.from(document.images);
+            const pending = imgs.filter((i) => !i.complete);
+            if (pending.length === 0) {
               setTimeout(() => window.print(), 200);
+              return;
             }
+            let remaining = pending.length;
+            const done = () => {
+              remaining -= 1;
+              if (remaining <= 0) setTimeout(() => window.print(), 200);
+            };
+            pending.forEach((i) => {
+              i.onload = done;
+              i.onerror = done;
+            });
           }
         </script>
       </body>
