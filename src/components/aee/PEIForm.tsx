@@ -4,6 +4,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Plus, Trash2, Sparkles } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { differenceInYears, parse } from 'date-fns';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
@@ -17,6 +19,8 @@ import {
   ADAPTATION_MATEMATICA_EXATAS_SUGGESTIONS,
   ADAPTATION_CIENCIAS_HUMANAS_SUGGESTIONS,
   EVALUATION_CRITERIA_SUGGESTIONS,
+  HIGH_ABILITIES_FUNCTIONAL_SUGGESTIONS,
+  HIGH_ABILITIES_POTENTIALITIES_SUGGESTIONS,
 } from './peiSuggestions';
 
 export type PerformanceLevel = 'independente' | 'com_apoio' | 'nao_realiza' | '';
@@ -139,10 +143,23 @@ interface StudentInfo {
   birth_date: string | null;
 }
 
+export interface LaudoData {
+  aee_cid_code: string;
+  aee_cid_description: string;
+  aee_uses_medication: boolean;
+  aee_medication_name: string;
+  aee_literacy_status: string;
+  aee_adapted_activities: boolean;
+  aee_adaptation_suggestions: string;
+}
+
 interface PEIFormProps {
   student: StudentInfo;
   data: PEIData;
   onChange: (data: PEIData) => void;
+  laudoData?: LaudoData;
+  onLaudoChange?: (data: LaudoData) => void;
+  onBirthDateChange?: (date: string) => void;
 }
 
 const shiftLabels: Record<string, string> = {
@@ -158,10 +175,17 @@ const PERFORMANCE_AREAS: Array<{ key: keyof PEIData['performance_levels']; label
   { key: 'ciencias_humanas', label: 'Ciências Humanas' },
 ];
 
-export const PEIForm = ({ student, data, onChange }: PEIFormProps) => {
+export const PEIForm = ({ student, data, onChange, laudoData, onLaudoChange, onBirthDateChange }: PEIFormProps) => {
+  const [highAbilities, setHighAbilities] = useState(false);
   const age = student.birth_date
     ? differenceInYears(new Date(), parse(student.birth_date, 'yyyy-MM-dd', new Date()))
     : null;
+
+  const updateLaudo = <K extends keyof LaudoData>(key: K, value: LaudoData[K]) => {
+    if (laudoData && onLaudoChange) {
+      onLaudoChange({ ...laudoData, [key]: value });
+    }
+  };
 
   const update = <K extends keyof PEIData>(key: K, value: PEIData[K]) => {
     onChange({ ...data, [key]: value });
@@ -226,7 +250,15 @@ export const PEIForm = ({ student, data, onChange }: PEIFormProps) => {
           </div>
           <div className="space-y-1.5">
             <Label className="text-xs text-muted-foreground">Data de nascimento</Label>
-            <Input value={student.birth_date || 'Não informada'} readOnly className="bg-muted" />
+            {onBirthDateChange ? (
+              <Input
+                type="date"
+                value={student.birth_date || ''}
+                onChange={(e) => onBirthDateChange(e.target.value)}
+              />
+            ) : (
+              <Input value={student.birth_date || 'Não informada'} readOnly className="bg-muted" />
+            )}
           </div>
           <div className="space-y-1.5">
             <Label className="text-xs text-muted-foreground">Idade</Label>
@@ -290,11 +322,34 @@ export const PEIForm = ({ student, data, onChange }: PEIFormProps) => {
       <section className="space-y-2">
         <div className="flex items-center justify-between border-b pb-2">
           <h3 className="text-base font-semibold">2. Perfil Funcional de Aprendizagem</h3>
-          <SuggestionPicker
-            options={FUNCTIONAL_PROFILE_SUGGESTIONS}
-            onPick={(t) => update('functional_profile', appendText(data.functional_profile, t))}
-          />
+          <div className="flex items-center gap-2">
+            <SuggestionPicker
+              label="Altas Habilidades"
+              options={HIGH_ABILITIES_FUNCTIONAL_SUGGESTIONS}
+              onPick={(t) => update('functional_profile', appendText(data.functional_profile, t))}
+            />
+            <SuggestionPicker
+              options={FUNCTIONAL_PROFILE_SUGGESTIONS}
+              onPick={(t) => update('functional_profile', appendText(data.functional_profile, t))}
+            />
+          </div>
         </div>
+        <div className="flex items-center gap-2 pb-1">
+          <Checkbox
+            id="high-abilities"
+            checked={highAbilities}
+            onCheckedChange={(v) => setHighAbilities(v === true)}
+          />
+          <Label htmlFor="high-abilities" className="text-sm font-normal cursor-pointer">
+            Apresenta indícios de Altas Habilidades / Superdotação
+          </Label>
+        </div>
+        {highAbilities && (
+          <p className="text-xs text-muted-foreground -mt-1 mb-1">
+            Use o botão <strong>"Altas Habilidades"</strong> acima para inserir sugestões como
+            memória excepcional, raciocínio lógico, vocabulário rebuscado e estratégias avançadas.
+          </p>
+        )}
         <Textarea
           placeholder="Descreva como o estudante aprende, formas de comunicação, atenção, autonomia e estilo cognitivo."
           value={data.functional_profile}
@@ -307,10 +362,17 @@ export const PEIForm = ({ student, data, onChange }: PEIFormProps) => {
       <section className="space-y-2">
         <div className="flex items-center justify-between border-b pb-2">
           <h3 className="text-base font-semibold">3. Potencialidades</h3>
-          <SuggestionPicker
-            options={POTENTIALITIES_SUGGESTIONS}
-            onPick={(t) => update('potentialities', appendText(data.potentialities, t))}
-          />
+          <div className="flex items-center gap-2">
+            <SuggestionPicker
+              label="Altas Habilidades"
+              options={HIGH_ABILITIES_POTENTIALITIES_SUGGESTIONS}
+              onPick={(t) => update('potentialities', appendText(data.potentialities, t))}
+            />
+            <SuggestionPicker
+              options={POTENTIALITIES_SUGGESTIONS}
+              onPick={(t) => update('potentialities', appendText(data.potentialities, t))}
+            />
+          </div>
         </div>
         <Textarea
           placeholder="Descreva habilidades, interesses e pontos fortes relevantes."
@@ -544,6 +606,112 @@ export const PEIForm = ({ student, data, onChange }: PEIFormProps) => {
           rows={4}
         />
       </section>
+
+      {/* 10. Informações do Laudo */}
+      {laudoData && onLaudoChange && (
+        <section className="space-y-4">
+          <h3 className="text-base font-semibold border-b pb-2">10. Informações do Laudo</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">CID — Código</Label>
+              <Input
+                placeholder="Ex: F84.0"
+                value={laudoData.aee_cid_code}
+                onChange={(e) => updateLaudo('aee_cid_code', e.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">CID — Descrição</Label>
+              <Input
+                placeholder="Ex: Autismo Infantil"
+                value={laudoData.aee_cid_description}
+                onChange={(e) => updateLaudo('aee_cid_description', e.target.value)}
+              />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label className="text-sm font-medium">Faz uso de medicação</Label>
+            <RadioGroup
+              value={laudoData.aee_uses_medication ? 'yes' : 'no'}
+              onValueChange={(v) =>
+                onLaudoChange({
+                  ...laudoData,
+                  aee_uses_medication: v === 'yes',
+                  aee_medication_name: v === 'no' ? '' : laudoData.aee_medication_name,
+                })
+              }
+              className="flex gap-4"
+            >
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="no" id="pei_med_no" />
+                <Label htmlFor="pei_med_no" className="font-normal cursor-pointer">Não</Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="yes" id="pei_med_yes" />
+                <Label htmlFor="pei_med_yes" className="font-normal cursor-pointer">Sim</Label>
+              </div>
+            </RadioGroup>
+            {laudoData.aee_uses_medication && (
+              <Input
+                placeholder="Nome da medicação"
+                value={laudoData.aee_medication_name}
+                onChange={(e) => updateLaudo('aee_medication_name', e.target.value)}
+              />
+            )}
+          </div>
+
+          <div className="space-y-2">
+            <Label className="text-sm font-medium">É alfabetizado</Label>
+            <RadioGroup
+              value={laudoData.aee_literacy_status}
+              onValueChange={(v) => updateLaudo('aee_literacy_status', v)}
+              className="flex flex-wrap gap-4"
+            >
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="no" id="pei_lit_no" />
+                <Label htmlFor="pei_lit_no" className="font-normal cursor-pointer">Não</Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="yes" id="pei_lit_yes" />
+                <Label htmlFor="pei_lit_yes" className="font-normal cursor-pointer">Sim</Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="in_process" id="pei_lit_proc" />
+                <Label htmlFor="pei_lit_proc" className="font-normal cursor-pointer">Em processo</Label>
+              </div>
+            </RadioGroup>
+          </div>
+
+          <div className="space-y-2">
+            <Label className="text-sm font-medium">Atividades e provas adaptadas</Label>
+            <RadioGroup
+              value={laudoData.aee_adapted_activities ? 'yes' : 'no'}
+              onValueChange={(v) => updateLaudo('aee_adapted_activities', v === 'yes')}
+              className="flex gap-4"
+            >
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="no" id="pei_adapt_no" />
+                <Label htmlFor="pei_adapt_no" className="font-normal cursor-pointer">Não</Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="yes" id="pei_adapt_yes" />
+                <Label htmlFor="pei_adapt_yes" className="font-normal cursor-pointer">Sim</Label>
+              </div>
+            </RadioGroup>
+          </div>
+
+          <div className="space-y-2">
+            <Label className="text-sm font-medium">Sugestões de Adaptações (do Laudo)</Label>
+            <Textarea
+              rows={3}
+              value={laudoData.aee_adaptation_suggestions}
+              onChange={(e) => updateLaudo('aee_adaptation_suggestions', e.target.value)}
+              placeholder="Anote sugestões trazidas pelo laudo médico/multiprofissional."
+            />
+          </div>
+        </section>
+      )}
     </div>
   );
 };

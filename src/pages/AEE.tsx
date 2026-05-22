@@ -18,6 +18,7 @@ import { Badge } from '@/components/ui/badge';
 import { differenceInYears, parse } from 'date-fns';
 import { useSchoolName } from '@/hooks/useSchoolName';
 import { PEIForm, PEIData, emptyPEI, InterventionRow, PerformanceLevel } from '@/components/aee/PEIForm';
+import { getSignedPhotoUrl } from '@/hooks/useSignedPhotoUrl';
 import logoCepans from '@/assets/logo-cepans.png';
 
 interface Student {
@@ -482,7 +483,26 @@ const AEE = () => {
         .from('student_pei')
         .upsert(payload, { onConflict: 'student_id' });
       if (error) throw error;
+
+      // Also persist Laudo info + birth_date back to the students table,
+      // since they are now editable from within the PEI tab.
+      const { error: studentError } = await supabase
+        .from('students')
+        .update({
+          birth_date: selectedStudent.birth_date || null,
+          aee_cid_code: formData.aee_cid_code || null,
+          aee_cid_description: formData.aee_cid_description || null,
+          aee_uses_medication: formData.aee_uses_medication,
+          aee_medication_name: formData.aee_uses_medication ? formData.aee_medication_name : null,
+          aee_literacy_status: formData.aee_literacy_status,
+          aee_adapted_activities: formData.aee_adapted_activities,
+          aee_adaptation_suggestions: formData.aee_adaptation_suggestions || null,
+        })
+        .eq('id', selectedStudent.id);
+      if (studentError) throw studentError;
+
       toast.success('PEI salvo com sucesso');
+      fetchStudents();
     } catch (error) {
       console.error('Error saving PEI:', error);
       toast.error('Falha ao salvar PEI');
@@ -548,6 +568,32 @@ const AEE = () => {
     }
 
     const age = calculateAge(student.birth_date);
+
+    // Resolve signed URLs (student photo + laudo attachment) so they
+    // render directly in the print/export window.
+    let photoSrc: string | null = null;
+    if (student.photo_url) {
+      try {
+        photoSrc = await getSignedPhotoUrl(student.photo_url);
+      } catch {
+        photoSrc = null;
+      }
+    }
+
+    let laudoSrc: string | null = null;
+    let laudoIsPdf = false;
+    if (student.aee_laudo_attachment_url) {
+      try {
+        const { data: laudoData } = await supabase.storage
+          .from('aee-documents')
+          .createSignedUrl(student.aee_laudo_attachment_url, 3600);
+        laudoSrc = laudoData?.signedUrl || null;
+        laudoIsPdf = /\.pdf($|\?)/i.test(student.aee_laudo_attachment_url);
+      } catch {
+        laudoSrc = null;
+      }
+    }
+
     const formatDate = (d: string | null | undefined) => {
       if (!d) return 'Não informada';
       try {
@@ -639,6 +685,50 @@ const AEE = () => {
           .student-strip strong {
             color: #1e3a8a;
           }
+          .student-id-row {
+            display: flex;
+            gap: 16px;
+            align-items: center;
+            margin-bottom: 22px;
+          }
+          .student-id-row .photo {
+            width: 110px;
+            height: 110px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 3px solid #1e3a8a;
+            flex-shrink: 0;
+            background: #e2e8f0;
+          }
+          .student-id-row .photo-placeholder {
+            width: 110px;
+            height: 110px;
+            border-radius: 50%;
+            border: 3px solid #1e3a8a;
+            background: #e2e8f0;
+            color: #1e3a8a;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 36px;
+            flex-shrink: 0;
+          }
+          .laudo-image {
+            max-width: 100%;
+            max-height: 600px;
+            border: 1px solid #cbd5e1;
+            border-radius: 4px;
+            display: block;
+            margin: 10px auto;
+          }
+          .laudo-link {
+            display: inline-block;
+            margin-top: 8px;
+            color: #1e3a8a;
+            font-size: 12px;
+            word-break: break-all;
+          }
           .section {
             margin-bottom: 22px;
             page-break-inside: avoid;
@@ -729,11 +819,16 @@ const AEE = () => {
         </div>
         <div class="accent-bar"></div>
 
-        <div class="student-strip">
-          <strong>Aluno(a):</strong> ${escapeHtml(student.full_name)} &nbsp;|&nbsp;
-          <strong>Turma:</strong> ${escapeHtml(student.class)} &nbsp;|&nbsp;
-          <strong>Turno:</strong> ${getShiftLabel(student.shift)} &nbsp;|&nbsp;
-          <strong>Matrícula:</strong> ${escapeHtml(student.student_id)}
+        <div class="student-id-row">
+          ${photoSrc
+            ? `<img class="photo" src="${photoSrc}" alt="Foto do aluno" />`
+            : `<div class="photo-placeholder">${escapeHtml(student.full_name.charAt(0).toUpperCase())}</div>`}
+          <div class="student-strip" style="flex:1; margin-bottom:0;">
+            <strong>Aluno(a):</strong> ${escapeHtml(student.full_name)}<br/>
+            <strong>Turma:</strong> ${escapeHtml(student.class)} &nbsp;|&nbsp;
+            <strong>Turno:</strong> ${getShiftLabel(student.shift)} &nbsp;|&nbsp;
+            <strong>Matrícula:</strong> ${escapeHtml(student.student_id)}
+          </div>
         </div>
 
         <div class="section">
@@ -810,6 +905,45 @@ const AEE = () => {
           ` : '<div class="content"><span class="empty">Nenhum professor vinculado à turma no mapeamento escolar.</span></div>'}
         </div>
 
+        <div class="section">
+          <h3>10. Informações do Laudo</h3>
+          <table>
+            <tr><td style="width:35%; background:#f8fafc; font-weight:bold; color:#1e3a8a;">CID</td>
+              <td>${
+                student.aee_cid_code
+                  ? `${escapeHtml(student.aee_cid_code)}${student.aee_cid_description ? ' — ' + escapeHtml(student.aee_cid_description) : ''}`
+                  : '<span class="empty">Não informado</span>'
+              }</td></tr>
+            <tr><td style="background:#f8fafc; font-weight:bold; color:#1e3a8a;">Uso de medicação</td>
+              <td>${
+                student.aee_uses_medication
+                  ? `Sim${student.aee_medication_name ? ' — ' + escapeHtml(student.aee_medication_name) : ''}`
+                  : 'Não'
+              }</td></tr>
+            <tr><td style="background:#f8fafc; font-weight:bold; color:#1e3a8a;">Alfabetização</td>
+              <td>${escapeHtml(getLiteracyLabel(student.aee_literacy_status))}</td></tr>
+            <tr><td style="background:#f8fafc; font-weight:bold; color:#1e3a8a;">Atividades adaptadas</td>
+              <td>${student.aee_adapted_activities ? 'Sim' : 'Não'}</td></tr>
+            <tr><td style="background:#f8fafc; font-weight:bold; color:#1e3a8a;">Sugestões de adaptações</td>
+              <td>${
+                student.aee_adaptation_suggestions
+                  ? escapeHtml(student.aee_adaptation_suggestions)
+                  : '<span class="empty">—</span>'
+              }</td></tr>
+          </table>
+        </div>
+
+        ${laudoSrc ? `
+        <div class="section">
+          <h3>11. Documento do Laudo</h3>
+          ${laudoIsPdf
+            ? `<div class="content">Documento em PDF anexado ao prontuário do aluno.</div>
+               <a class="laudo-link" href="${laudoSrc}" target="_blank">Abrir documento (PDF)</a>`
+            : `<img class="laudo-image" src="${laudoSrc}" alt="Foto do laudo" />`
+          }
+        </div>
+        ` : ''}
+
         <div class="signatures">
           <div class="signature"><div class="line">Professor(a) AEE</div></div>
           <div class="signature"><div class="line">Coordenação Pedagógica</div></div>
@@ -818,14 +952,22 @@ const AEE = () => {
 
         <script>
           window.onload = function() {
-            // Wait for the logo to render before printing
-            const img = document.querySelector('img');
-            if (img && !img.complete) {
-              img.onload = () => setTimeout(() => window.print(), 200);
-              img.onerror = () => setTimeout(() => window.print(), 200);
-            } else {
+            // Wait for all images (logo, student photo, laudo image) before printing
+            const imgs = Array.from(document.images);
+            const pending = imgs.filter((i) => !i.complete);
+            if (pending.length === 0) {
               setTimeout(() => window.print(), 200);
+              return;
             }
+            let remaining = pending.length;
+            const done = () => {
+              remaining -= 1;
+              if (remaining <= 0) setTimeout(() => window.print(), 200);
+            };
+            pending.forEach((i) => {
+              i.onload = done;
+              i.onerror = done;
+            });
           }
         </script>
       </body>
@@ -1381,6 +1523,11 @@ const AEE = () => {
                         }}
                         data={peiData}
                         onChange={setPeiData}
+                        laudoData={formData}
+                        onLaudoChange={setFormData}
+                        onBirthDateChange={(date) =>
+                          setSelectedStudent({ ...selectedStudent, birth_date: date || null })
+                        }
                       />
                       <div className="flex justify-end pt-4 border-t">
                         <Button onClick={handleSavePEI} disabled={peiSaving}>
