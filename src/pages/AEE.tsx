@@ -483,7 +483,26 @@ const AEE = () => {
         .from('student_pei')
         .upsert(payload, { onConflict: 'student_id' });
       if (error) throw error;
+
+      // Also persist Laudo info + birth_date back to the students table,
+      // since they are now editable from within the PEI tab.
+      const { error: studentError } = await supabase
+        .from('students')
+        .update({
+          birth_date: selectedStudent.birth_date || null,
+          aee_cid_code: formData.aee_cid_code || null,
+          aee_cid_description: formData.aee_cid_description || null,
+          aee_uses_medication: formData.aee_uses_medication,
+          aee_medication_name: formData.aee_uses_medication ? formData.aee_medication_name : null,
+          aee_literacy_status: formData.aee_literacy_status,
+          aee_adapted_activities: formData.aee_adapted_activities,
+          aee_adaptation_suggestions: formData.aee_adaptation_suggestions || null,
+        })
+        .eq('id', selectedStudent.id);
+      if (studentError) throw studentError;
+
       toast.success('PEI salvo com sucesso');
+      fetchStudents();
     } catch (error) {
       console.error('Error saving PEI:', error);
       toast.error('Falha ao salvar PEI');
