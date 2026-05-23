@@ -72,6 +72,11 @@ export const LEARNING_BARRIERS_SUGGESTIONS = [
   'Dispersão em ambientes com muitos estímulos simultâneos.',
   'Dificuldade na transferência de conhecimentos entre disciplinas.',
   'Resistência ao uso de materiais escritos (caderno, lápis).',
+  'Ansiedade que interfere no desempenho escolar.',
+  'Dificuldade na interação social com pares e adultos.',
+  'Falta de acompanhamento familiar nas tarefas escolares.',
+  'Insegurança e baixa autoestima diante das atividades.',
+  'Episódios de crise emocional em sala de aula.',
 ];
 
 // Sugestões específicas para alunos com altas habilidades / superdotação
@@ -178,6 +183,35 @@ export const INTERVENTION_PLAN_SUGGESTIONS: InterventionSuggestion[] = [
     responsavel: 'Professor AEE',
     recurso: 'Jogos pedagógicos',
   },
+  // Altas habilidades / superdotação
+  {
+    objetivo: 'Aprofundar conteúdos em área de interesse específico.',
+    estrategia: 'Projetos investigativos individuais e estudos avançados.',
+    frequencia: 'Semanal',
+    responsavel: 'Professor AEE',
+    recurso: 'Livros, artigos e recursos digitais avançados',
+  },
+  {
+    objetivo: 'Estimular pensamento crítico e criativo.',
+    estrategia: 'Desafios lógicos, xadrez e jogos estratégicos.',
+    frequencia: 'Semanal',
+    responsavel: 'Professor AEE',
+    recurso: 'Xadrez, jogos de lógica, plataformas online',
+  },
+  {
+    objetivo: 'Promover liderança e protagonismo.',
+    estrategia: 'Mediação de grupos e apresentação de projetos próprios.',
+    frequencia: 'Quinzenal',
+    responsavel: 'Professor regente / AEE',
+    recurso: 'Espaço de apresentação e materiais multimídia',
+  },
+  {
+    objetivo: 'Ampliar repertório cultural e científico.',
+    estrategia: 'Clubes de leitura, olimpíadas científicas e feiras.',
+    frequencia: 'Mensal',
+    responsavel: 'Professor AEE / Coordenação',
+    recurso: 'Editais de olimpíadas, livros e laboratório',
+  },
 ];
 
 export const ADAPTATION_PORTUGUES_HUMANAS_SUGGESTIONS = [
@@ -226,4 +260,19 @@ export const EVALUATION_CRITERIA_SUGGESTIONS = [
   'Adaptação significativa do conteúdo (currículo funcional).',
   'Aplicação da prova em ambiente reservado e silencioso.',
   'Permissão de uso de materiais de apoio (tabuada, glossário).',
+  'Enunciados simples, curtos e diretos, sem duplo sentido.',
+  'Fonte ampliada (mínimo 16pt) em todas as provas e atividades.',
+  'Espaçamento maior entre questões para facilitar a leitura.',
+];
+
+// Sugestões de adaptações para alunos com altas habilidades / superdotação
+export const ADAPTATION_HIGH_ABILITIES_SUGGESTIONS = [
+  'Atividades de aprofundamento e enriquecimento curricular.',
+  'Projetos de pesquisa autônoma sobre temas de interesse.',
+  'Desafios extras de raciocínio lógico e resolução de problemas.',
+  'Acesso a materiais avançados (livros, vídeos, artigos científicos).',
+  'Participação em olimpíadas científicas, matemáticas e concursos.',
+  'Tarefas abertas que estimulem criatividade e originalidade.',
+  'Possibilidade de avanço para conteúdos de séries posteriores.',
+  'Mentoria com especialistas ou estudantes mais avançados.',
 ];
