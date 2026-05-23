@@ -3,7 +3,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Plus, Trash2, Sparkles } from 'lucide-react';
+import { Plus, Trash2, Sparkles, CheckCircle2, Loader2, Hourglass } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { differenceInYears, parse } from 'date-fns';
@@ -32,6 +32,7 @@ export interface InterventionRow {
   frequencia: string;
   responsavel: string;
   recurso: string;
+  status?: 'planejado' | 'andamento' | 'concluido';
 }
 
 export interface PEIData {
@@ -205,7 +206,7 @@ export const PEIForm = ({ student, data, onChange, laudoData, onLaudoChange, onB
       ...data,
       intervention_plan: [
         ...data.intervention_plan,
-        { objetivo: '', estrategia: '', frequencia: '', responsavel: '', recurso: '' },
+        { objetivo: '', estrategia: '', frequencia: '', responsavel: '', recurso: '', status: 'planejado' },
       ],
     });
   };
@@ -234,6 +235,7 @@ export const PEIForm = ({ student, data, onChange, laudoData, onLaudoChange, onB
           frequencia: s.frequencia || '',
           responsavel: s.responsavel || '',
           recurso: s.recurso || '',
+          status: 'planejado',
         },
       ],
     });
