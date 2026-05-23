@@ -752,7 +752,7 @@ const Students = () => {
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="guardian_name">Nome do Responsável (opcional)</Label>
+                  <Label htmlFor="guardian_name">Nome do Responsável - Opcional</Label>
                   <Input
                     id="guardian_name"
                     value={formData.guardian_name}
