@@ -543,12 +543,23 @@ export const PEIForm = ({ student, data, onChange, laudoData, onLaudoChange, onB
           <div>
             <div className="flex items-center justify-between mb-1">
               <Label className="text-sm">Língua Portuguesa</Label>
-              <SuggestionPicker
-                options={ADAPTATION_PORTUGUES_HUMANAS_SUGGESTIONS}
-                onPick={(t) =>
-                  updateAdaptation('portugues_humanas', appendText(data.discipline_adaptations.portugues_humanas, t))
-                }
-              />
+              <div className="flex gap-1">
+                <SuggestionPicker
+                  options={ADAPTATION_PORTUGUES_HUMANAS_SUGGESTIONS}
+                  onPick={(t) =>
+                    updateAdaptation('portugues_humanas', appendText(data.discipline_adaptations.portugues_humanas, t))
+                  }
+                />
+                {highAbilities && (
+                  <SuggestionPicker
+                    label="Altas Habilidades"
+                    options={ADAPTATION_HIGH_ABILITIES_SUGGESTIONS}
+                    onPick={(t) =>
+                      updateAdaptation('portugues_humanas', appendText(data.discipline_adaptations.portugues_humanas, t))
+                    }
+                  />
+                )}
+              </div>
             </div>
             <Textarea
               rows={3}
@@ -559,12 +570,23 @@ export const PEIForm = ({ student, data, onChange, laudoData, onLaudoChange, onB
           <div>
             <div className="flex items-center justify-between mb-1">
               <Label className="text-sm">Matemática e Natureza</Label>
-              <SuggestionPicker
-                options={ADAPTATION_MATEMATICA_EXATAS_SUGGESTIONS}
-                onPick={(t) =>
-                  updateAdaptation('matematica_exatas', appendText(data.discipline_adaptations.matematica_exatas, t))
-                }
-              />
+              <div className="flex gap-1">
+                <SuggestionPicker
+                  options={ADAPTATION_MATEMATICA_EXATAS_SUGGESTIONS}
+                  onPick={(t) =>
+                    updateAdaptation('matematica_exatas', appendText(data.discipline_adaptations.matematica_exatas, t))
+                  }
+                />
+                {highAbilities && (
+                  <SuggestionPicker
+                    label="Altas Habilidades"
+                    options={ADAPTATION_HIGH_ABILITIES_SUGGESTIONS}
+                    onPick={(t) =>
+                      updateAdaptation('matematica_exatas', appendText(data.discipline_adaptations.matematica_exatas, t))
+                    }
+                  />
+                )}
+              </div>
             </div>
             <Textarea
               rows={3}
@@ -575,12 +597,23 @@ export const PEIForm = ({ student, data, onChange, laudoData, onLaudoChange, onB
           <div>
             <div className="flex items-center justify-between mb-1">
               <Label className="text-sm">Ciências Humanas</Label>
-              <SuggestionPicker
-                options={ADAPTATION_CIENCIAS_HUMANAS_SUGGESTIONS}
-                onPick={(t) =>
-                  updateAdaptation('ciencias_humanas', appendText(data.discipline_adaptations.ciencias_humanas, t))
-                }
-              />
+              <div className="flex gap-1">
+                <SuggestionPicker
+                  options={ADAPTATION_CIENCIAS_HUMANAS_SUGGESTIONS}
+                  onPick={(t) =>
+                    updateAdaptation('ciencias_humanas', appendText(data.discipline_adaptations.ciencias_humanas, t))
+                  }
+                />
+                {highAbilities && (
+                  <SuggestionPicker
+                    label="Altas Habilidades"
+                    options={ADAPTATION_HIGH_ABILITIES_SUGGESTIONS}
+                    onPick={(t) =>
+                      updateAdaptation('ciencias_humanas', appendText(data.discipline_adaptations.ciencias_humanas, t))
+                    }
+                  />
+                )}
+              </div>
             </div>
             <Textarea
               rows={3}
