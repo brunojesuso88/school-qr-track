@@ -3,7 +3,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Plus, Trash2, Sparkles } from 'lucide-react';
+import { Plus, Trash2, Sparkles, CheckCircle2, Loader2, Hourglass } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { differenceInYears, parse } from 'date-fns';
@@ -32,6 +32,7 @@ export interface InterventionRow {
   frequencia: string;
   responsavel: string;
   recurso: string;
+  status?: 'planejado' | 'andamento' | 'concluido';
 }
 
 export interface PEIData {
@@ -205,7 +206,7 @@ export const PEIForm = ({ student, data, onChange, laudoData, onLaudoChange, onB
       ...data,
       intervention_plan: [
         ...data.intervention_plan,
-        { objetivo: '', estrategia: '', frequencia: '', responsavel: '', recurso: '' },
+        { objetivo: '', estrategia: '', frequencia: '', responsavel: '', recurso: '', status: 'planejado' },
       ],
     });
   };
@@ -234,6 +235,7 @@ export const PEIForm = ({ student, data, onChange, laudoData, onLaudoChange, onB
           frequencia: s.frequencia || '',
           responsavel: s.responsavel || '',
           recurso: s.recurso || '',
+          status: 'planejado',
         },
       ],
     });
@@ -445,17 +447,43 @@ export const PEIForm = ({ student, data, onChange, laudoData, onLaudoChange, onB
         )}
         <div className="space-y-3">
           {data.intervention_plan.map((row, idx) => (
-            <div key={idx} className="border rounded-lg p-3 space-y-2 bg-muted/30">
-              <div className="flex items-center justify-between">
+            <div key={idx} className="relative border rounded-lg p-3 pl-20 space-y-2 bg-muted/30">
+              <div className="absolute top-3 left-3 flex items-center justify-center w-14 h-14 rounded-lg bg-background border">
+                {row.status === 'concluido' && (
+                  <CheckCircle2 className="w-10 h-10 text-green-500" />
+                )}
+                {row.status === 'andamento' && (
+                  <Loader2 className="w-10 h-10 text-amber-500 animate-spin" />
+                )}
+                {(!row.status || row.status === 'planejado') && (
+                  <Hourglass className="w-10 h-10 text-slate-400" />
+                )}
+              </div>
+              <div className="flex items-center justify-between gap-2">
                 <span className="text-xs font-medium text-muted-foreground">Item {idx + 1}</span>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => removeInterventionRow(idx)}
-                >
-                  <Trash2 className="w-4 h-4 text-destructive" />
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Select
+                    value={row.status || 'planejado'}
+                    onValueChange={(v) => updateInterventionRow(idx, 'status', v)}
+                  >
+                    <SelectTrigger className="h-8 w-[150px] text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="planejado">Planejado</SelectItem>
+                      <SelectItem value="andamento">Em andamento</SelectItem>
+                      <SelectItem value="concluido">Concluído</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => removeInterventionRow(idx)}
+                  >
+                    <Trash2 className="w-4 h-4 text-destructive" />
+                  </Button>
+                </div>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <div>

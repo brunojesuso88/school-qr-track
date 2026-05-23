@@ -1,42 +1,46 @@
-## Ajustes nas sugestões do PEI
+## Ajustes no Sistema AEE — Aba PEI
 
-Adicionar novas sugestões em `src/components/aee/peiSuggestions.ts` para complementar o que já existe.
+### 1. Expandir sugestões do PEI (+20 por tópico)
 
-### 4. Barreiras de Aprendizagem
-Adicionar a `LEARNING_BARRIERS_SUGGESTIONS`:
-- Ansiedade que interfere no desempenho escolar.
-- Dificuldade na interação social com pares e adultos.
-- Falta de acompanhamento familiar nas tarefas escolares.
-- Insegurança e baixa autoestima diante das atividades.
-- Episódios de crise emocional em sala de aula.
+Adicionar 20 novas sugestões em cada constante de `src/components/aee/peiSuggestions.ts`, mantendo as existentes. Conteúdo baseado em referências de Educação Especial (BNCC, Política Nacional de Educação Especial, materiais do MEC, AEE/SRM, manuais de neuropsicopedagogia e práticas de altas habilidades/superdotação).
 
-### 7. Plano de Intervenção (altas habilidades)
-Adicionar a `INTERVENTION_PLAN_SUGGESTIONS` novos objetivos:
-- Aprofundar conteúdos em área de interesse — projetos investigativos individuais, semanal, professor AEE.
-- Estimular pensamento crítico e criativo — desafios lógicos, xadrez e jogos estratégicos, semanal.
-- Promover liderança e protagonismo — mediação de grupos e apresentação de projetos, quinzenal.
-- Ampliar repertório cultural e científico — clubes de leitura, olimpíadas e feiras, mensal.
+**Tópico 2 — Perfil Funcional de Aprendizagem** (`FUNCTIONAL_PROFILE_SUGGESTIONS`)
++20 itens cobrindo: estilos cognitivos (sequencial/global), nível de iniciativa, regulação emocional, tempo de resposta, preferência por trabalho individual/grupo, uso funcional da linguagem escrita, percepção visuoespacial, organização de materiais, compreensão de instruções multi-etapa, autoavaliação, persistência diante de erros, etc.
 
-### 8. Adaptações por Disciplina (altas habilidades)
-Criar nova constante `ADAPTATION_HIGH_ABILITIES_SUGGESTIONS` (exibida quando o checkbox de altas habilidades está marcado) com itens como:
-- Atividades de aprofundamento e enriquecimento curricular.
-- Projetos de pesquisa autônoma sobre temas de interesse.
-- Desafios extras de raciocínio lógico e resolução de problemas.
-- Acesso a materiais avançados (livros, vídeos, artigos).
-- Participação em olimpíadas científicas e concursos.
-- Tarefas abertas que estimulem criatividade e originalidade.
+**Tópico 3 — Potencialidades** (`POTENTIALITIES_SUGGESTIONS`)
++20 itens incluindo: habilidades esportivas, oralidade e argumentação, sensibilidade musical/rítmica, raciocínio espacial, capacidade de imitação funcional, interesses por animais/natureza, habilidades culinárias, organização visual, talento para mediação de conflitos, habilidades digitais (apps, vídeos), expressão corporal, etc.
 
-Em `PEIForm.tsx`, quando `highAbilities` estiver marcado, exibir botões dessas sugestões dentro da seção de Adaptações por Disciplina (em todas as três áreas: Português/Humanas, Matemática/Exatas, Ciências/Humanas).
+**Tópico 4 — Barreiras de Aprendizagem** (`LEARNING_BARRIERS_SUGGESTIONS`)
++20 itens incluindo: discalculia funcional, disgrafia, dificuldade em sequência temporal, hiperfoco em interesses restritos, evitação seletiva de disciplinas, dificuldades em provas cronometradas, lentidão na cópia, dependência excessiva do mediador, dificuldade com transições, fadiga sensorial vespertina, dificuldade em automonitoramento, etc.
 
-### 9. Avaliação e Critérios
-Adicionar a `EVALUATION_CRITERIA_SUGGESTIONS`:
-- Enunciados simples, curtos e diretos, sem duplo sentido.
-- Fonte ampliada (mínimo 16pt) em todas as provas e atividades.
-- Espaçamento maior entre questões para facilitar a leitura.
+**Tópico 7 — Plano de Intervenção Pedagógica** (`INTERVENTION_PLAN_SUGGESTIONS`)
++20 objetivos estruturados (objetivo/estratégia/frequência/responsável/recurso), cobrindo: consciência fonológica, funções executivas, regulação emocional (técnica do semáforo), tutoria entre pares, ensino estruturado TEACCH, rotinas visuais, treino de habilidades sociais (PEHS), uso de tecnologia assistiva, mediação Feuerstein, projetos PBL para altas habilidades, mentoria acadêmica, enriquecimento Renzulli, etc.
 
-### Arquivos alterados
-- `src/components/aee/peiSuggestions.ts` — novas constantes e itens.
-- `src/components/aee/PEIForm.tsx` — renderizar as sugestões de altas habilidades nas adaptações por disciplina.
+**Tópico 8 — Adaptações por Disciplina**
+Distribuir +20 itens entre as três constantes (`ADAPTATION_PORTUGUES_HUMANAS_SUGGESTIONS`, `ADAPTATION_MATEMATICA_EXATAS_SUGGESTIONS`, `ADAPTATION_CIENCIAS_HUMANAS_SUGGESTIONS`) e `ADAPTATION_HIGH_ABILITIES_SUGGESTIONS` — ~5 novos itens em cada, totalizando 20. Exemplos: textos com símbolos pictográficos (ARASAAC), reconto oral, software de leitura imersiva, manipuláveis matemáticos virtuais (Geogebra), tabela pitagórica, modelos 3D anatômicos, experimentos práticos com roteiro ilustrado, debates estruturados, etc.
 
-### Fora de escopo (já implementado anteriormente)
-- Integração Laudo dentro da aba PEI, foto do aluno e imagem do laudo na exportação, edição da data de nascimento, checkbox de altas habilidades no Perfil Funcional e Potencialidades — tudo isto já foi entregue no turno anterior.
+**Tópico 9 — Avaliação e Critérios** (`EVALUATION_CRITERIA_SUGGESTIONS`)
++20 itens incluindo: rubricas individualizadas, avaliação por evidências (vídeos/áudios), prova em duas etapas, recuperação contínua, avaliação por projetos para altas habilidades, autoavaliação guiada, avaliação entre pares, ledor/escriba, prova em Libras, ampliação Braille, redução do peso de erros ortográficos, contextos avaliativos lúdicos, etc.
+
+### 2. Indicador visual de Status do Projeto (Plano de Intervenção)
+
+Em `src/components/aee/PEIForm.tsx`, na seção de **Plano de Intervenção** (cards de projeto/objetivo), adicionar um ícone grande (≈48–64px) no canto superior esquerdo de cada card indicando o status:
+
+- **Concluído** → ícone de check verde (Lucide `CheckCircle2` em `text-green-500`)
+- **Em Andamento** → ícone animado de progresso (Lucide `Loader2` com `animate-spin` em `text-amber-500`, ou barra `Progress` indeterminada)
+- **Planejado** → ícone de ampulheta/relógio (Lucide `Hourglass` em `text-slate-400`)
+
+Se o campo `status` ainda não existir no modelo de cada item do plano de intervenção, adicionar:
+- Campo `status: 'planejado' | 'andamento' | 'concluido'` (default `'planejado'`)
+- Seletor (Select ou ToggleGroup) no formulário para alternar o status
+- Persistência no JSON do PEI (já armazenado em `student_pei`, sem migração necessária)
+
+Layout do card: `relative` com o ícone posicionado `absolute top-3 left-3`, e o conteúdo do card recebendo `pl-16` para não sobrepor.
+
+### Arquivos a alterar
+- `src/components/aee/peiSuggestions.ts` — expandir todas as constantes listadas.
+- `src/components/aee/PEIForm.tsx` — renderizar indicador de status, adicionar seletor de status, ajustar layout dos cards de intervenção.
+
+### Fora de escopo
+- Alterações de banco (status fica no JSON do PEI já existente).
+- Alterações em outras abas além de PEI.
