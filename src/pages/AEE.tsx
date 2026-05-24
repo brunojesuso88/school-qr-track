@@ -811,7 +811,7 @@ const AEE = () => {
       <td class="label">Turno</td><td>${escapeHtml(getShiftLabel(student.shift))}</td>
     </tr>
     <tr>
-      <td class="label">Idade</td><td>${age !== null && age !== undefined && age !== '' ? `${age} anos` : '—'}</td>
+      <td class="label">Idade</td><td>${age !== null && age !== undefined && String(age) !== '' ? `${age} anos` : '—'}</td>
       <td class="label">Deficiência / CID</td><td>${escapeHtml(disabilityLabel)}</td>
     </tr>
   </table>
