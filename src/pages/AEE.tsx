@@ -260,6 +260,7 @@ const AEE = () => {
     }
 
     loadPEI(student);
+    loadPAEE(student);
   };
 
   const openEditMode = (student: Student) => {
@@ -290,6 +291,7 @@ const AEE = () => {
 
     // Load PEI data
     loadPEI(student);
+    loadPAEE(student);
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
