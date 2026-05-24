@@ -1660,6 +1660,78 @@ const AEE = () => {
                     </div>
                   )}
                 </TabsContent>
+
+                {/* PAEE Tab */}
+                <TabsContent value="paee" className="mt-4">
+                  {paeeLoading ? (
+                    <div className="space-y-3">
+                      {[1, 2, 3, 4].map((i) => (
+                        <div key={i} className="h-16 bg-muted animate-pulse rounded-lg" />
+                      ))}
+                    </div>
+                  ) : isEditMode ? (
+                    <div className="space-y-4">
+                      <PAEEForm
+                        student={{
+                          full_name: selectedStudent.full_name,
+                          student_id: selectedStudent.student_id,
+                          class: selectedStudent.class,
+                          shift: selectedStudent.shift,
+                          birth_date: selectedStudent.birth_date,
+                        }}
+                        schoolName={schoolName || ''}
+                        data={paeeData}
+                        onChange={setPaeeData}
+                      />
+                      <div className="flex justify-end pt-4 border-t">
+                        <Button onClick={handleSavePAEE} disabled={paeeSaving}>
+                          {paeeSaving ? 'Salvando PAEE...' : 'Salvar PAEE'}
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-4 text-sm">
+                      <p className="text-muted-foreground">
+                        Visualização somente leitura do PAEE. Para editar, clique em "Editar" no card do aluno.
+                      </p>
+                      {(['cognitiva', 'motora', 'comunicacao', 'social', 'comportamento'] as const).map((area) => {
+                        const entry = paeeData.pedagogical_matrix[area];
+                        const hasContent = entry && (entry.objectives || entry.strategies || entry.evaluation_record);
+                        if (!hasContent) return null;
+                        const labelMap: Record<string, string> = {
+                          cognitiva: 'Cognitiva',
+                          motora: 'Motora',
+                          comunicacao: 'Comunicação',
+                          social: 'Social',
+                          comportamento: 'Comportamento',
+                        };
+                        return (
+                          <div key={area} className="border rounded-lg p-3 space-y-2">
+                            <h4 className="font-semibold">Área {labelMap[area]}</h4>
+                            {entry.objectives && (
+                              <div>
+                                <Label className="text-muted-foreground text-xs">Objetivos</Label>
+                                <p className="whitespace-pre-wrap">{entry.objectives}</p>
+                              </div>
+                            )}
+                            {entry.strategies && (
+                              <div>
+                                <Label className="text-muted-foreground text-xs">Estratégias</Label>
+                                <p className="whitespace-pre-wrap">{entry.strategies}</p>
+                              </div>
+                            )}
+                            {entry.evaluation_record && (
+                              <div>
+                                <Label className="text-muted-foreground text-xs">Registro Avaliativo</Label>
+                                <p className="whitespace-pre-wrap">{entry.evaluation_record}</p>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </TabsContent>
               </Tabs>
 
               <DialogFooter className="mt-6">
