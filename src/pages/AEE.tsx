@@ -461,6 +461,91 @@ const AEE = () => {
     }
   };
 
+  const loadPAEE = async (student: Student) => {
+    setPaeeLoading(true);
+    try {
+      const { data, error } = await (supabase as any)
+        .from('student_paee')
+        .select('*')
+        .eq('student_id', student.id)
+        .maybeSingle();
+      if (error) throw error;
+
+      if (data) {
+        setPaeeData({
+          school: data.school || schoolName || '',
+          age: typeof data.age === 'number' ? data.age : '',
+          elaboration_date: data.elaboration_date || new Date().toISOString().split('T')[0],
+          disability_type: data.disability_type || student.aee_cid_code || '',
+          composition: (data.composition as PAEEData['composition']) || '',
+          libras_interpreter: !!data.libras_interpreter,
+          support_assistant: !!data.support_assistant,
+          weekdays: Array.isArray(data.weekdays) ? data.weekdays : [],
+          schedule_time: data.schedule_time || '',
+          periodicity: (data.periodicity as PAEEData['periodicity']) || '',
+          pedagogical_matrix: {
+            cognitiva: { ...emptyPAEE.pedagogical_matrix.cognitiva, ...(data.pedagogical_matrix?.cognitiva || {}) },
+            motora: { ...emptyPAEE.pedagogical_matrix.motora, ...(data.pedagogical_matrix?.motora || {}) },
+            comunicacao: { ...emptyPAEE.pedagogical_matrix.comunicacao, ...(data.pedagogical_matrix?.comunicacao || {}) },
+            social: { ...emptyPAEE.pedagogical_matrix.social, ...(data.pedagogical_matrix?.social || {}) },
+            comportamento: { ...emptyPAEE.pedagogical_matrix.comportamento, ...(data.pedagogical_matrix?.comportamento || {}) },
+          },
+          aee_teacher_signature: data.aee_teacher_signature || '',
+          coordinator_signature: data.coordinator_signature || '',
+        });
+      } else {
+        setPaeeData({
+          ...emptyPAEE,
+          school: schoolName || '',
+          disability_type: '',
+        });
+      }
+    } catch (error) {
+      console.error('Error loading PAEE:', error);
+      toast.error('Falha ao carregar PAEE');
+    } finally {
+      setPaeeLoading(false);
+    }
+  };
+
+  const handleSavePAEE = async () => {
+    if (!selectedStudent) return;
+    setPaeeSaving(true);
+    try {
+      const payload = {
+        student_id: selectedStudent.id,
+        school: paeeData.school || null,
+        class_snapshot: selectedStudent.class,
+        shift_snapshot: selectedStudent.shift,
+        birth_date_snapshot: selectedStudent.birth_date,
+        age: paeeData.age === '' ? null : paeeData.age,
+        elaboration_date: paeeData.elaboration_date || null,
+        disability_type: paeeData.disability_type || null,
+        composition: paeeData.composition || null,
+        libras_interpreter: paeeData.libras_interpreter,
+        support_assistant: paeeData.support_assistant,
+        weekdays: paeeData.weekdays,
+        schedule_time: paeeData.schedule_time || null,
+        periodicity: paeeData.periodicity || null,
+        pedagogical_matrix: paeeData.pedagogical_matrix,
+        aee_teacher_signature: paeeData.aee_teacher_signature || null,
+        coordinator_signature: paeeData.coordinator_signature || null,
+      };
+
+      const { error } = await (supabase as any)
+        .from('student_paee')
+        .upsert(payload, { onConflict: 'student_id' });
+      if (error) throw error;
+
+      toast.success('PAEE salvo com sucesso');
+    } catch (error) {
+      console.error('Error saving PAEE:', error);
+      toast.error('Falha ao salvar PAEE');
+    } finally {
+      setPaeeSaving(false);
+    }
+  };
+
   const handleSavePEI = async () => {
     if (!selectedStudent) return;
     setPeiSaving(true);
