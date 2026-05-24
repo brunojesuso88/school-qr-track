@@ -545,6 +545,78 @@ export type Database = {
         }
         Relationships: []
       }
+      student_paee: {
+        Row: {
+          aee_teacher_signature: string | null
+          age: number | null
+          birth_date_snapshot: string | null
+          class_snapshot: string | null
+          composition: string | null
+          coordinator_signature: string | null
+          created_at: string
+          created_by: string | null
+          disability_type: string | null
+          elaboration_date: string | null
+          id: string
+          libras_interpreter: boolean
+          pedagogical_matrix: Json
+          periodicity: string | null
+          schedule_time: string | null
+          school: string | null
+          shift_snapshot: string | null
+          student_id: string
+          support_assistant: boolean
+          updated_at: string
+          weekdays: string[]
+        }
+        Insert: {
+          aee_teacher_signature?: string | null
+          age?: number | null
+          birth_date_snapshot?: string | null
+          class_snapshot?: string | null
+          composition?: string | null
+          coordinator_signature?: string | null
+          created_at?: string
+          created_by?: string | null
+          disability_type?: string | null
+          elaboration_date?: string | null
+          id?: string
+          libras_interpreter?: boolean
+          pedagogical_matrix?: Json
+          periodicity?: string | null
+          schedule_time?: string | null
+          school?: string | null
+          shift_snapshot?: string | null
+          student_id: string
+          support_assistant?: boolean
+          updated_at?: string
+          weekdays?: string[]
+        }
+        Update: {
+          aee_teacher_signature?: string | null
+          age?: number | null
+          birth_date_snapshot?: string | null
+          class_snapshot?: string | null
+          composition?: string | null
+          coordinator_signature?: string | null
+          created_at?: string
+          created_by?: string | null
+          disability_type?: string | null
+          elaboration_date?: string | null
+          id?: string
+          libras_interpreter?: boolean
+          pedagogical_matrix?: Json
+          periodicity?: string | null
+          schedule_time?: string | null
+          school?: string | null
+          shift_snapshot?: string | null
+          student_id?: string
+          support_assistant?: boolean
+          updated_at?: string
+          weekdays?: string[]
+        }
+        Relationships: []
+      }
       student_pei: {
         Row: {
           aee_teacher: string | null
