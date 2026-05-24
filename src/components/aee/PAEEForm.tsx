@@ -65,7 +65,7 @@ export const emptyPAEE: PAEEData = {
   coordinator_signature: '',
 };
 
-const DISABILITY_OPTIONS = [
+export const DISABILITY_OPTIONS = [
   { value: 'intelectual', label: 'Intelectual' },
   { value: 'fisica', label: 'Física' },
   { value: 'auditiva', label: 'Auditiva' },
@@ -77,7 +77,7 @@ const DISABILITY_OPTIONS = [
   { value: 'outros', label: 'Outros' },
 ];
 
-const WEEKDAYS = [
+export const WEEKDAYS = [
   { value: 'seg', label: 'Seg' },
   { value: 'ter', label: 'Ter' },
   { value: 'qua', label: 'Qua' },
@@ -85,7 +85,7 @@ const WEEKDAYS = [
   { value: 'sex', label: 'Sex' },
 ];
 
-const AREAS: Array<{ key: PAEEArea; label: string; tooltip: string }> = [
+export const AREAS: Array<{ key: PAEEArea; label: string; tooltip: string }> = [
   {
     key: 'cognitiva',
     label: 'Cognitiva',
@@ -113,7 +113,7 @@ const AREAS: Array<{ key: PAEEArea; label: string; tooltip: string }> = [
   },
 ];
 
-const FIELD_LABELS: Record<PAEEFieldKey, string> = {
+export const FIELD_LABELS: Record<PAEEFieldKey, string> = {
   objectives: 'Objetivos',
   strategies: 'Estratégias',
   evaluation_record: 'Registro Avaliativo',

@@ -1,64 +1,87 @@
-# Nova aba "PAEE" no editor do aluno (Sistema AEE)
-
 ## Objetivo
 
-Adicionar uma 4ª aba **PAEE** (Plano de Atendimento Educacional Especializado, modelo Caxias/MA) ao modal de edição do aluno em `src/pages/AEE.tsx`, espelhando rigorosamente a estrutura/UX da aba **PEI** já existente, com sugestões geradas por IA via Lovable AI Gateway.
+Adicionar um botão no card de cada aluno no Sistema AEE para gerar um PDF do **PAEE** (Plano de Atendimento Educacional Especializado) com cabeçalho institucional, logo da escola e layout moderno, organizado e fácil de interpretar.
 
-## Escopo de UI (componente novo `PAEEForm.tsx`)
+## Onde aparece
 
-Seguir mesmo padrão visual do `PEIForm.tsx` (tons azul/cinza, Shadcn, micro-feedback ao preencher).
+- **Card do aluno em `src/pages/AEE.tsx`** — novo botão "PAEE PDF" ao lado dos botões existentes (Visualizar / Editar), com ícone `FileDown` e variante `outline`. Desabilitado (com tooltip "PAEE ainda não preenchido") quando o aluno não possui registro em `student_paee`.
 
-1. **Cabeçalho de identificação** — Nome do estudante, Escola, Turma, Idade, Data, e seletor **Deficiência/CID** (Intelectual, Física, Auditiva, Surdez, Visual, TEA, Altas Habilidades/Superdotação, Múltipla, Outros). Nome/Turma pré-preenchidos a partir do `student` (snapshot), Escola via `useSchoolName`.
-2. **Painel de organização do atendimento**:
-   - Composição: Individual / Dupla / Grupo (Select).
-   - Assistência na sala regular: checkboxes *Tradutor/Intérprete de Libras* e *Auxiliar de Apoio*.
-   - Grid Seg–Sex (toggles) + campo Horário.
-   - Periodicidade: Avaliação Inicial / 1º Semestre / 2º Semestre.
-3. **Matriz Pedagógica** — 5 cards (Cognitiva, Motora, Comunicação, Social, Comportamento), cada um com 3 textareas: *Objetivos*, *Estratégias*, *Registro Avaliativo*. Tooltip explicativo por área (ex.: Motora → coordenação ampla e fina).
-4. **Sugestões IA** por área/campo — botão "Sugerir com IA" em cada textarea, mesmo padrão usado no PEI (popover/lista para inserir).
-5. **Rodapé** — campos texto para assinatura do Professor de AEE e Coordenador (texto livre, igual ao padrão atual do PEI).
+## Geração do PDF
 
-## Integração na aba do modal (`src/pages/AEE.tsx`)
+Usar **`window.print()`** com uma janela auxiliar (mesmo padrão já adotado em PEI/Declarações no projeto — sem dependências novas). Fluxo:
 
-- `TabsList grid-cols-3` → `grid-cols-4`; adicionar `<TabsTrigger value="paee">PAEE</TabsTrigger>`.
-- `<TabsContent value="paee">` renderiza `<PAEEForm>` com mesmo padrão de estado/`isEditMode`/`Salvar`/somente leitura do PEI.
-- Novos estados: `paeeData`, `paeeSaving`, funções `loadPAEE`, `handleSavePAEE` análogas às de PEI.
-- Exportar PDF do PAEE: botão na aba (mesmo padrão de `exportPEIReport`) gerando HTML formatado para impressão (`window.print`), seguindo layout oficial do modelo Caxias/MA. *(MVP — sem dependência nova.)*
+1. Função `handleExportPAEEPDF(student)` busca `student_paee` por `student_id` (single).
+2. Se vazio → toast "Aluno sem PAEE cadastrado".
+3. Renderiza HTML em `window.open()`, injeta CSS de impressão (`@page A4`, margens, cores) e chama `window.print()` ao terminar o load.
+4. Logo: usa `logoCepans` já importado em `AEE.tsx` (convertido para data URL via `fetch` + `FileReader`) para garantir renderização na impressão.
 
-## Backend
+## Layout do PDF (moderno e institucional)
 
-Nova tabela `public.student_paee` (1 PAEE por aluno, espelhando `student_pei`):
+Inspirado em modelos institucionais de planos educacionais (faixa de cor, tipografia hierárquica, cards de área com cores suaves para facilitar leitura).
 
-- `student_id uuid` (único)
-- Identificação: `school`, `class_snapshot`, `age`, `elaboration_date`, `disability_type` (text — valor do select)
-- Atendimento: `composition` (individual/dupla/grupo), `libras_interpreter bool`, `support_assistant bool`, `weekdays text[]`, `schedule_time text`, `periodicity` (text)
-- Matriz: `pedagogical_matrix jsonb` (chave por área → `{objectives, strategies, evaluation_record}`)
-- Assinaturas: `aee_teacher_signature`, `coordinator_signature`
-- `created_by`, `created_at`, `updated_at`
+```text
+┌──────────────────────────────────────────────────────────────┐
+│  [LOGO]   {NOME DA ESCOLA}                          PAEE     │ ← faixa azul institucional
+│           Plano de Atendimento Educacional Especializado     │
+│           Data de Elaboração: 24/05/2026                     │
+├──────────────────────────────────────────────────────────────┤
+│  1. IDENTIFICAÇÃO                                            │
+│  ┌────────────────┬───────────────┬────────────────────────┐ │
+│  │ Estudante      │ Turma         │ Idade                  │ │
+│  │ Matrícula      │ Turno         │ Deficiência / CID      │ │
+│  └────────────────┴───────────────┴────────────────────────┘ │
+│                                                              │
+│  2. ORGANIZAÇÃO DO ATENDIMENTO                               │
+│  Composição: Individual    Periodicidade: 1º Semestre        │
+│  Dias: Seg • Qua • Sex     Horário: 14h–15h                  │
+│  Assistência: ☑ Intérprete Libras   ☐ Auxiliar de Apoio      │
+│                                                              │
+│  3. MATRIZ PEDAGÓGICA                                        │
+│  ┌──── Área Cognitiva ──────────────────────────────────┐    │
+│  │ Objetivos      │ ...                                 │    │
+│  │ Estratégias    │ ...                                 │    │
+│  │ Registro Aval. │ ...                                 │    │
+│  └──────────────────────────────────────────────────────┘    │
+│  (repetir para Motora, Comunicação, Social, Comportamento)   │
+│                                                              │
+│  4. ASSINATURAS                                              │
+│  _______________________     _______________________         │
+│  Professor(a) de AEE         Coordenador(a)                  │
+├──────────────────────────────────────────────────────────────┤
+│  Edunexus • {escola} • Pág. X/Y • Gerado em DD/MM/AAAA HH:MM │
+└──────────────────────────────────────────────────────────────┘
+```
 
-RLS idêntica a `student_pei`: SELECT/INSERT/UPDATE para `admin|direction|teacher`; DELETE para `admin|direction`. Trigger `update_updated_at_column`.
+**Decisões visuais:**
+- Faixa institucional superior em azul (`#1e3a5f` → `#2d6a9e`) com logo à esquerda e título à direita.
+- Tipografia: system-ui / Segoe UI, hierarquia clara (título 22pt, seções 14pt uppercase com barra lateral azul, rótulos 9pt cinza, conteúdo 11pt).
+- Cards de área da matriz com gradiente sutil (azul→cinza claro) e borda esquerda colorida por área (cognitiva azul, motora âmbar, comunicação verde, social roxo, comportamento rosa) para escaneamento visual rápido.
+- Tabelas com `border-collapse`, linhas alternadas (`#f8fafc`).
+- Checkboxes renderizadas como `☑/☐` Unicode para sinalizar Libras/Apoio.
+- Rodapé fixo via `@page` com paginação e timestamp.
+- `print-color-adjust: exact` para manter cores na impressão.
 
-## Sugestões IA
+## Mapeamento dos dados
 
-Reutilizar Lovable AI Gateway. Duas opções:
+Da tabela `student_paee` + `students`:
 
-- **A) Estática:** novo `paeeSuggestions.ts` com listas por área/campo (rápido, sem custo). 
-- **B) Dinâmica (recomendada):** nova edge function `paee-suggest` (modelo `google/gemini-3-flash-preview`) que recebe `{ area, field, studentContext }` e retorna 5 sugestões via tool calling estruturado. Usa o prompt do usuário como system prompt.
+| Seção | Campos |
+|---|---|
+| Cabeçalho | `schoolName` (hook), `logoCepans`, `elaboration_date` |
+| Identificação | `student.full_name`, `student_id`, `class`, `getShiftLabel(shift)`, `age` (ou calculado de `birth_date`), `disability_type` (label do enum) |
+| Organização | `composition`, `periodicity`, `weekdays` (labels), `schedule_time`, `libras_interpreter`, `support_assistant` |
+| Matriz | `pedagogical_matrix[area].{objectives, strategies, evaluation_record}` para 5 áreas |
+| Assinaturas | `aee_teacher_signature`, `coordinator_signature` |
 
-Plano: implementar **B** seguindo o mesmo formato das demais funções (`event-ai-suggest`), com botão "Sugerir com IA" que abre popover listando sugestões clicáveis.
+Reutilizar `escapeHtml`, `getShiftLabel`, `calculateAge` já existentes em `AEE.tsx`. Importar os labels de área/deficiência/dia de `PAEEForm.tsx` (exportar as constantes `DISABILITY_OPTIONS`, `WEEKDAYS`, `AREAS`, `FIELD_LABELS` que hoje são internas).
 
-## Fora de escopo (a confirmar se necessário)
+## Arquivos a editar
 
-- Auto-save em rascunho real-time (atualmente PEI salva por botão — manter mesmo padrão para consistência).
-- Geração de PDF "pixel-perfect" idêntica ao formulário oficial digitalizado (faremos HTML imprimível alinhado ao modelo, sem libs adicionais).
-- Assinatura digital com canvas/desenho (usando texto por ora).
+- `src/pages/AEE.tsx` — adicionar botão no card, função `handleExportPAEEPDF`, helpers de render HTML, conversão do logo para data URL (cacheada em ref).
+- `src/components/aee/PAEEForm.tsx` — `export` das constantes `DISABILITY_OPTIONS`, `WEEKDAYS`, `AREAS`, `FIELD_LABELS` para reuso na geração do PDF.
 
-## Arquivos a criar/editar
+## Fora de escopo
 
-- **Criar:** `src/components/aee/PAEEForm.tsx`, `src/components/aee/paeeSuggestions.ts` (fallback), `supabase/functions/paee-suggest/index.ts`, migração SQL para `student_paee`.
-- **Editar:** `src/pages/AEE.tsx` (4ª aba, load/save/export PAEE).
-
-## Pergunta para confirmar antes de implementar
-
-1. Sugestões IA: confirma a opção **B (edge function dinâmica)** ou prefere **A (lista estática)** para começar simples?
-2. Exportar PDF: ok seguir o padrão atual do PEI (HTML imprimível via `window.print`) em vez de lib externa?
+- Biblioteca externa de PDF (jsPDF/pdfmake) — `window.print` mantém consistência com PEI/Declarações.
+- Assinaturas digitais com canvas/imagem (apenas linhas para assinatura manual após impressão).
+- Edição do layout pelo usuário.

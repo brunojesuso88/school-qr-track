@@ -19,6 +19,7 @@ import { differenceInYears, parse } from 'date-fns';
 import { useSchoolName } from '@/hooks/useSchoolName';
 import { PEIForm, PEIData, emptyPEI, InterventionRow, PerformanceLevel } from '@/components/aee/PEIForm';
 import { PAEEForm, PAEEData, emptyPAEE } from '@/components/aee/PAEEForm';
+import { DISABILITY_OPTIONS, WEEKDAYS, AREAS } from '@/components/aee/PAEEForm';
 import { getSignedPhotoUrl } from '@/hooks/useSignedPhotoUrl';
 import logoCepans from '@/assets/logo-cepans.png';
 
@@ -601,6 +602,262 @@ const AEE = () => {
     } finally {
       setPeiSaving(false);
     }
+  };
+
+  const exportPAEEReport = async (student: Student) => {
+    let paee: PAEEData | null = null;
+    try {
+      const { data } = await (supabase as any)
+        .from('student_paee')
+        .select('*')
+        .eq('student_id', student.id)
+        .maybeSingle();
+      if (data) {
+        paee = {
+          school: data.school || schoolName || '',
+          age: typeof data.age === 'number' ? data.age : '',
+          elaboration_date: data.elaboration_date || new Date().toISOString().split('T')[0],
+          disability_type: data.disability_type || student.aee_cid_code || '',
+          composition: data.composition || '',
+          libras_interpreter: !!data.libras_interpreter,
+          support_assistant: !!data.support_assistant,
+          weekdays: Array.isArray(data.weekdays) ? data.weekdays : [],
+          schedule_time: data.schedule_time || '',
+          periodicity: data.periodicity || '',
+          pedagogical_matrix: {
+            cognitiva: { ...emptyPAEE.pedagogical_matrix.cognitiva, ...(data.pedagogical_matrix?.cognitiva || {}) },
+            motora: { ...emptyPAEE.pedagogical_matrix.motora, ...(data.pedagogical_matrix?.motora || {}) },
+            comunicacao: { ...emptyPAEE.pedagogical_matrix.comunicacao, ...(data.pedagogical_matrix?.comunicacao || {}) },
+            social: { ...emptyPAEE.pedagogical_matrix.social, ...(data.pedagogical_matrix?.social || {}) },
+            comportamento: { ...emptyPAEE.pedagogical_matrix.comportamento, ...(data.pedagogical_matrix?.comportamento || {}) },
+          },
+          aee_teacher_signature: data.aee_teacher_signature || '',
+          coordinator_signature: data.coordinator_signature || '',
+        };
+      }
+    } catch (e) {
+      console.error('Error loading PAEE for export:', e);
+      toast.error('Falha ao carregar PAEE');
+      return;
+    }
+
+    if (!paee) {
+      toast.error('Este aluno ainda não possui PAEE cadastrado');
+      return;
+    }
+
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      toast.error('Popup bloqueado. Permita popups para exportar o PAEE.');
+      return;
+    }
+
+    const formatDate = (d: string | null | undefined) => {
+      if (!d) return 'Não informada';
+      try {
+        const [y, m, day] = d.split('-');
+        return `${day}/${m}/${y}`;
+      } catch {
+        return d;
+      }
+    };
+
+    const age = paee.age !== '' ? paee.age : calculateAge(student.birth_date);
+    const disabilityLabel =
+      DISABILITY_OPTIONS.find((o) => o.value === paee!.disability_type)?.label ||
+      paee.disability_type ||
+      'Não informada';
+    const compositionLabel =
+      paee.composition === 'individual' ? 'Individual'
+      : paee.composition === 'dupla' ? 'Dupla'
+      : paee.composition === 'grupo' ? 'Grupo'
+      : 'Não informada';
+    const periodicityLabel =
+      paee.periodicity === 'avaliacao_inicial' ? 'Avaliação Inicial'
+      : paee.periodicity === '1_semestre' ? '1º Semestre'
+      : paee.periodicity === '2_semestre' ? '2º Semestre'
+      : 'Não informada';
+    const daysLabel = (paee.weekdays || [])
+      .map((v) => WEEKDAYS.find((d) => d.value === v)?.label || v)
+      .join(' • ') || '—';
+
+    const checkbox = (on: boolean) => (on ? '☑' : '☐');
+
+    const areaColors: Record<string, string> = {
+      cognitiva: '#2563eb',
+      motora: '#d97706',
+      comunicacao: '#059669',
+      social: '#7c3aed',
+      comportamento: '#db2777',
+    };
+
+    const areaBlocks = AREAS.map((area) => {
+      const entry = paee!.pedagogical_matrix[area.key];
+      const accent = areaColors[area.key];
+      return `
+        <section class="area" style="border-left-color:${accent}">
+          <h3 style="color:${accent}">Área ${area.label}</h3>
+          <div class="area-grid">
+            <div class="area-label">Objetivos</div>
+            <div class="area-value">${escapeHtml(entry.objectives) || '<span class="muted">—</span>'}</div>
+            <div class="area-label">Estratégias</div>
+            <div class="area-value">${escapeHtml(entry.strategies) || '<span class="muted">—</span>'}</div>
+            <div class="area-label">Registro Avaliativo</div>
+            <div class="area-value">${escapeHtml(entry.evaluation_record) || '<span class="muted">—</span>'}</div>
+          </div>
+        </section>
+      `;
+    }).join('');
+
+    const now = new Date();
+    const generatedAt = now.toLocaleString('pt-BR', { timeZone: 'America/Fortaleza' });
+    const schoolHeader = paee.school || schoolName || 'Escola';
+
+    const html = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<title>PAEE - ${escapeHtml(student.full_name)}</title>
+<style>
+  @page { size: A4; margin: 14mm 14mm 18mm 14mm; }
+  * { box-sizing: border-box; }
+  html, body { margin:0; padding:0; }
+  body {
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    color: #1f2937;
+    font-size: 11pt;
+    line-height: 1.45;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .header {
+    display: flex; align-items: center; gap: 16px;
+    background: linear-gradient(135deg, #1e3a5f 0%, #2d6a9e 100%);
+    color: #fff; padding: 14px 18px; border-radius: 10px;
+  }
+  .header img { height: 56px; width: auto; background:#fff; border-radius:8px; padding:4px; }
+  .header .school { font-size: 14pt; font-weight: 700; letter-spacing: .3px; }
+  .header .subtitle { font-size: 10pt; opacity: .9; }
+  .header .badge {
+    margin-left:auto; background: rgba(255,255,255,0.18);
+    border:1px solid rgba(255,255,255,0.35); padding:6px 14px;
+    border-radius:999px; font-weight:700; letter-spacing:1px;
+  }
+  h2.section {
+    margin: 18px 0 8px; padding-left: 10px;
+    font-size: 12pt; text-transform: uppercase; letter-spacing:.6px;
+    color: #1e3a5f; border-left: 4px solid #2d6a9e;
+  }
+  table.id { width:100%; border-collapse: collapse; }
+  table.id td { border:1px solid #e5e7eb; padding:6px 9px; vertical-align: top; }
+  table.id td.label {
+    background:#f1f5f9; color:#475569; font-size:8.5pt;
+    text-transform:uppercase; letter-spacing:.4px; width: 18%;
+  }
+  .org {
+    display:grid; grid-template-columns: 1fr 1fr; gap: 6px 18px;
+    border:1px solid #e5e7eb; border-radius:8px; padding:10px 12px;
+    background:#f8fafc;
+  }
+  .org .row { display:flex; gap:8px; align-items:baseline; }
+  .org .row .k { color:#64748b; font-size:9pt; text-transform:uppercase; letter-spacing:.4px; }
+  .org .row .v { font-weight:600; }
+  .assist { grid-column: 1 / -1; display:flex; gap:18px; padding-top:4px; border-top:1px dashed #cbd5e1; margin-top:4px; }
+  .area {
+    border:1px solid #e5e7eb; border-left-width:5px; border-radius:8px;
+    padding:10px 12px; margin-bottom:10px;
+    background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+    page-break-inside: avoid;
+  }
+  .area h3 { margin:0 0 6px; font-size:11pt; }
+  .area-grid { display:grid; grid-template-columns: 130px 1fr; gap:4px 10px; }
+  .area-label {
+    color:#64748b; font-size:8.5pt; text-transform:uppercase;
+    letter-spacing:.4px; padding-top:2px;
+  }
+  .area-value { white-space:pre-wrap; }
+  .muted { color:#94a3b8; }
+  .sign { display:grid; grid-template-columns: 1fr 1fr; gap: 30px; margin-top: 28px; }
+  .sign .box { text-align:center; }
+  .sign .line { border-top: 1px solid #1f2937; margin-bottom:4px; padding-top:24px; }
+  .sign .name { font-weight:600; }
+  .sign .role { font-size:9pt; color:#64748b; }
+  footer {
+    position: fixed; bottom: 6mm; left: 14mm; right: 14mm;
+    font-size: 8pt; color:#94a3b8; display:flex; justify-content:space-between;
+    border-top:1px solid #e5e7eb; padding-top:4px;
+  }
+</style>
+</head>
+<body>
+  <div class="header">
+    <img src="${logoCepans}" alt="Logo da escola" />
+    <div>
+      <div class="school">${escapeHtml(schoolHeader)}</div>
+      <div class="subtitle">Plano de Atendimento Educacional Especializado</div>
+      <div class="subtitle">Data de Elaboração: ${formatDate(paee.elaboration_date)}</div>
+    </div>
+    <div class="badge">PAEE</div>
+  </div>
+
+  <h2 class="section">1. Identificação</h2>
+  <table class="id">
+    <tr>
+      <td class="label">Estudante</td><td>${escapeHtml(student.full_name)}</td>
+      <td class="label">Matrícula</td><td>${escapeHtml(student.student_id)}</td>
+    </tr>
+    <tr>
+      <td class="label">Turma</td><td>${escapeHtml(student.class)}</td>
+      <td class="label">Turno</td><td>${escapeHtml(getShiftLabel(student.shift))}</td>
+    </tr>
+    <tr>
+      <td class="label">Idade</td><td>${age !== null && age !== undefined && String(age) !== '' ? `${age} anos` : '—'}</td>
+      <td class="label">Deficiência / CID</td><td>${escapeHtml(disabilityLabel)}</td>
+    </tr>
+  </table>
+
+  <h2 class="section">2. Organização do Atendimento</h2>
+  <div class="org">
+    <div class="row"><span class="k">Composição:</span> <span class="v">${compositionLabel}</span></div>
+    <div class="row"><span class="k">Periodicidade:</span> <span class="v">${periodicityLabel}</span></div>
+    <div class="row"><span class="k">Dias:</span> <span class="v">${daysLabel}</span></div>
+    <div class="row"><span class="k">Horário:</span> <span class="v">${escapeHtml(paee.schedule_time) || '—'}</span></div>
+    <div class="assist">
+      <span>${checkbox(paee.libras_interpreter)} Tradutor / Intérprete de Libras</span>
+      <span>${checkbox(paee.support_assistant)} Auxiliar de Apoio</span>
+    </div>
+  </div>
+
+  <h2 class="section">3. Matriz Pedagógica</h2>
+  ${areaBlocks}
+
+  <h2 class="section">4. Assinaturas</h2>
+  <div class="sign">
+    <div class="box">
+      <div class="line"></div>
+      <div class="name">${escapeHtml(paee.aee_teacher_signature) || '&nbsp;'}</div>
+      <div class="role">Professor(a) de AEE</div>
+    </div>
+    <div class="box">
+      <div class="line"></div>
+      <div class="name">${escapeHtml(paee.coordinator_signature) || '&nbsp;'}</div>
+      <div class="role">Coordenador(a)</div>
+    </div>
+  </div>
+
+  <footer>
+    <span>Edunexus • ${escapeHtml(schoolHeader)}</span>
+    <span>Gerado em ${generatedAt}</span>
+  </footer>
+
+  <script>
+    window.addEventListener('load', () => { setTimeout(() => window.print(), 250); });
+  </script>
+</body>
+</html>`;
+
+    printWindow.document.write(html);
+    printWindow.document.close();
   };
 
   const exportPEIReport = async (student: Student) => {
@@ -1205,6 +1462,18 @@ const AEE = () => {
                       title="Exportar PEI"
                     >
                       <FileDown className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        exportPAEEReport(student);
+                      }}
+                      title="Exportar PAEE"
+                      className="border-blue-500/40 text-blue-600 hover:bg-blue-500/10"
+                    >
+                      <FileText className="w-4 h-4" />
                     </Button>
                   </div>
                 </CardContent>
