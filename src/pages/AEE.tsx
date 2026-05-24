@@ -18,6 +18,7 @@ import { Badge } from '@/components/ui/badge';
 import { differenceInYears, parse } from 'date-fns';
 import { useSchoolName } from '@/hooks/useSchoolName';
 import { PEIForm, PEIData, emptyPEI, InterventionRow, PerformanceLevel } from '@/components/aee/PEIForm';
+import { PAEEForm, PAEEData, emptyPAEE } from '@/components/aee/PAEEForm';
 import { getSignedPhotoUrl } from '@/hooks/useSignedPhotoUrl';
 import logoCepans from '@/assets/logo-cepans.png';
 
