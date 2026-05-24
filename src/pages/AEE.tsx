@@ -87,6 +87,10 @@ const AEE = () => {
   const [peiLoading, setPeiLoading] = useState(false);
   const [peiSaving, setPeiSaving] = useState(false);
 
+  const [paeeData, setPaeeData] = useState<PAEEData>(emptyPAEE);
+  const [paeeLoading, setPaeeLoading] = useState(false);
+  const [paeeSaving, setPaeeSaving] = useState(false);
+
   useEffect(() => {
     fetchStudents();
   }, []);
