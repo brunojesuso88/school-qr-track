@@ -1463,6 +1463,18 @@ const AEE = () => {
                     >
                       <FileDown className="w-4 h-4" />
                     </Button>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        exportPAEEReport(student);
+                      }}
+                      title="Exportar PAEE"
+                      className="border-blue-500/40 text-blue-600 hover:bg-blue-500/10"
+                    >
+                      <FileText className="w-4 h-4" />
+                    </Button>
                   </div>
                 </CardContent>
               </Card>
