@@ -1268,10 +1268,11 @@ const AEE = () => {
 
               {/* Tabs */}
               <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-4">
-                <TabsList className="grid w-full grid-cols-3">
+                <TabsList className="grid w-full grid-cols-4">
                   <TabsTrigger value="teachers">Professores</TabsTrigger>
                   <TabsTrigger value="laudo">{isEditMode ? 'Laudo' : 'Informações do Laudo'}</TabsTrigger>
                   <TabsTrigger value="pei">PEI</TabsTrigger>
+                  <TabsTrigger value="paee">PAEE</TabsTrigger>
                 </TabsList>
 
                 {/* Teachers Tab */}
