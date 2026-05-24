@@ -18,6 +18,7 @@ import { Badge } from '@/components/ui/badge';
 import { differenceInYears, parse } from 'date-fns';
 import { useSchoolName } from '@/hooks/useSchoolName';
 import { PEIForm, PEIData, emptyPEI, InterventionRow, PerformanceLevel } from '@/components/aee/PEIForm';
+import { PAEEForm, PAEEData, emptyPAEE } from '@/components/aee/PAEEForm';
 import { getSignedPhotoUrl } from '@/hooks/useSignedPhotoUrl';
 import logoCepans from '@/assets/logo-cepans.png';
 
@@ -85,6 +86,10 @@ const AEE = () => {
   const [peiData, setPeiData] = useState<PEIData>(emptyPEI);
   const [peiLoading, setPeiLoading] = useState(false);
   const [peiSaving, setPeiSaving] = useState(false);
+
+  const [paeeData, setPaeeData] = useState<PAEEData>(emptyPAEE);
+  const [paeeLoading, setPaeeLoading] = useState(false);
+  const [paeeSaving, setPaeeSaving] = useState(false);
 
   useEffect(() => {
     fetchStudents();
@@ -255,6 +260,7 @@ const AEE = () => {
     }
 
     loadPEI(student);
+    loadPAEE(student);
   };
 
   const openEditMode = (student: Student) => {
@@ -285,6 +291,7 @@ const AEE = () => {
 
     // Load PEI data
     loadPEI(student);
+    loadPAEE(student);
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -451,6 +458,91 @@ const AEE = () => {
       toast.error('Falha ao carregar PEI');
     } finally {
       setPeiLoading(false);
+    }
+  };
+
+  const loadPAEE = async (student: Student) => {
+    setPaeeLoading(true);
+    try {
+      const { data, error } = await (supabase as any)
+        .from('student_paee')
+        .select('*')
+        .eq('student_id', student.id)
+        .maybeSingle();
+      if (error) throw error;
+
+      if (data) {
+        setPaeeData({
+          school: data.school || schoolName || '',
+          age: typeof data.age === 'number' ? data.age : '',
+          elaboration_date: data.elaboration_date || new Date().toISOString().split('T')[0],
+          disability_type: data.disability_type || student.aee_cid_code || '',
+          composition: (data.composition as PAEEData['composition']) || '',
+          libras_interpreter: !!data.libras_interpreter,
+          support_assistant: !!data.support_assistant,
+          weekdays: Array.isArray(data.weekdays) ? data.weekdays : [],
+          schedule_time: data.schedule_time || '',
+          periodicity: (data.periodicity as PAEEData['periodicity']) || '',
+          pedagogical_matrix: {
+            cognitiva: { ...emptyPAEE.pedagogical_matrix.cognitiva, ...(data.pedagogical_matrix?.cognitiva || {}) },
+            motora: { ...emptyPAEE.pedagogical_matrix.motora, ...(data.pedagogical_matrix?.motora || {}) },
+            comunicacao: { ...emptyPAEE.pedagogical_matrix.comunicacao, ...(data.pedagogical_matrix?.comunicacao || {}) },
+            social: { ...emptyPAEE.pedagogical_matrix.social, ...(data.pedagogical_matrix?.social || {}) },
+            comportamento: { ...emptyPAEE.pedagogical_matrix.comportamento, ...(data.pedagogical_matrix?.comportamento || {}) },
+          },
+          aee_teacher_signature: data.aee_teacher_signature || '',
+          coordinator_signature: data.coordinator_signature || '',
+        });
+      } else {
+        setPaeeData({
+          ...emptyPAEE,
+          school: schoolName || '',
+          disability_type: '',
+        });
+      }
+    } catch (error) {
+      console.error('Error loading PAEE:', error);
+      toast.error('Falha ao carregar PAEE');
+    } finally {
+      setPaeeLoading(false);
+    }
+  };
+
+  const handleSavePAEE = async () => {
+    if (!selectedStudent) return;
+    setPaeeSaving(true);
+    try {
+      const payload = {
+        student_id: selectedStudent.id,
+        school: paeeData.school || null,
+        class_snapshot: selectedStudent.class,
+        shift_snapshot: selectedStudent.shift,
+        birth_date_snapshot: selectedStudent.birth_date,
+        age: paeeData.age === '' ? null : paeeData.age,
+        elaboration_date: paeeData.elaboration_date || null,
+        disability_type: paeeData.disability_type || null,
+        composition: paeeData.composition || null,
+        libras_interpreter: paeeData.libras_interpreter,
+        support_assistant: paeeData.support_assistant,
+        weekdays: paeeData.weekdays,
+        schedule_time: paeeData.schedule_time || null,
+        periodicity: paeeData.periodicity || null,
+        pedagogical_matrix: paeeData.pedagogical_matrix,
+        aee_teacher_signature: paeeData.aee_teacher_signature || null,
+        coordinator_signature: paeeData.coordinator_signature || null,
+      };
+
+      const { error } = await (supabase as any)
+        .from('student_paee')
+        .upsert(payload, { onConflict: 'student_id' });
+      if (error) throw error;
+
+      toast.success('PAEE salvo com sucesso');
+    } catch (error) {
+      console.error('Error saving PAEE:', error);
+      toast.error('Falha ao salvar PAEE');
+    } finally {
+      setPaeeSaving(false);
     }
   };
 
@@ -1176,10 +1268,11 @@ const AEE = () => {
 
               {/* Tabs */}
               <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-4">
-                <TabsList className="grid w-full grid-cols-3">
+                <TabsList className="grid w-full grid-cols-4">
                   <TabsTrigger value="teachers">Professores</TabsTrigger>
                   <TabsTrigger value="laudo">{isEditMode ? 'Laudo' : 'Informações do Laudo'}</TabsTrigger>
                   <TabsTrigger value="pei">PEI</TabsTrigger>
+                  <TabsTrigger value="paee">PAEE</TabsTrigger>
                 </TabsList>
 
                 {/* Teachers Tab */}
@@ -1567,6 +1660,78 @@ const AEE = () => {
                     </div>
                   )}
                 </TabsContent>
+
+                {/* PAEE Tab */}
+                <TabsContent value="paee" className="mt-4">
+                  {paeeLoading ? (
+                    <div className="space-y-3">
+                      {[1, 2, 3, 4].map((i) => (
+                        <div key={i} className="h-16 bg-muted animate-pulse rounded-lg" />
+                      ))}
+                    </div>
+                  ) : isEditMode ? (
+                    <div className="space-y-4">
+                      <PAEEForm
+                        student={{
+                          full_name: selectedStudent.full_name,
+                          student_id: selectedStudent.student_id,
+                          class: selectedStudent.class,
+                          shift: selectedStudent.shift,
+                          birth_date: selectedStudent.birth_date,
+                        }}
+                        schoolName={schoolName || ''}
+                        data={paeeData}
+                        onChange={setPaeeData}
+                      />
+                      <div className="flex justify-end pt-4 border-t">
+                        <Button onClick={handleSavePAEE} disabled={paeeSaving}>
+                          {paeeSaving ? 'Salvando PAEE...' : 'Salvar PAEE'}
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-4 text-sm">
+                      <p className="text-muted-foreground">
+                        Visualização somente leitura do PAEE. Para editar, clique em "Editar" no card do aluno.
+                      </p>
+                      {(['cognitiva', 'motora', 'comunicacao', 'social', 'comportamento'] as const).map((area) => {
+                        const entry = paeeData.pedagogical_matrix[area];
+                        const hasContent = entry && (entry.objectives || entry.strategies || entry.evaluation_record);
+                        if (!hasContent) return null;
+                        const labelMap: Record<string, string> = {
+                          cognitiva: 'Cognitiva',
+                          motora: 'Motora',
+                          comunicacao: 'Comunicação',
+                          social: 'Social',
+                          comportamento: 'Comportamento',
+                        };
+                        return (
+                          <div key={area} className="border rounded-lg p-3 space-y-2">
+                            <h4 className="font-semibold">Área {labelMap[area]}</h4>
+                            {entry.objectives && (
+                              <div>
+                                <Label className="text-muted-foreground text-xs">Objetivos</Label>
+                                <p className="whitespace-pre-wrap">{entry.objectives}</p>
+                              </div>
+                            )}
+                            {entry.strategies && (
+                              <div>
+                                <Label className="text-muted-foreground text-xs">Estratégias</Label>
+                                <p className="whitespace-pre-wrap">{entry.strategies}</p>
+                              </div>
+                            )}
+                            {entry.evaluation_record && (
+                              <div>
+                                <Label className="text-muted-foreground text-xs">Registro Avaliativo</Label>
+                                <p className="whitespace-pre-wrap">{entry.evaluation_record}</p>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </TabsContent>
               </Tabs>
 
               <DialogFooter className="mt-6">
@@ -1579,7 +1744,7 @@ const AEE = () => {
                     <Button variant="outline" onClick={() => setIsEditMode(false)}>
                       Cancelar
                     </Button>
-                    {activeTab !== 'pei' && (
+                    {activeTab !== 'pei' && activeTab !== 'paee' && (
                       <Button onClick={handleSave} disabled={isSaving || isUploadingLaudo}>
                         {isSaving || isUploadingLaudo ? 'Salvando...' : 'Salvar Laudo'}
                       </Button>
