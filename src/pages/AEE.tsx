@@ -1672,7 +1672,7 @@ const AEE = () => {
                     <Button variant="outline" onClick={() => setIsEditMode(false)}>
                       Cancelar
                     </Button>
-                    {activeTab !== 'pei' && (
+                    {activeTab !== 'pei' && activeTab !== 'paee' && (
                       <Button onClick={handleSave} disabled={isSaving || isUploadingLaudo}>
                         {isSaving || isUploadingLaudo ? 'Salvando...' : 'Salvar Laudo'}
                       </Button>
