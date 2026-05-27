@@ -646,6 +646,16 @@ const AEE = () => {
       return;
     }
 
+    // Resolve signed photo URL (same approach as PEI export)
+    let photoSrc: string | null = null;
+    if (student.photo_url) {
+      try {
+        photoSrc = await getSignedPhotoUrl(student.photo_url);
+      } catch {
+        photoSrc = null;
+      }
+    }
+
     const printWindow = window.open('', '_blank');
     if (!printWindow) {
       toast.error('Popup bloqueado. Permita popups para exportar o PAEE.');
@@ -697,11 +707,15 @@ const AEE = () => {
       return `
         <section class="area" style="border-left-color:${accent}">
           <h3 style="color:${accent}">Área ${area.label}</h3>
-          <div class="area-grid">
+          <div class="area-field">
             <div class="area-label">Objetivos</div>
             <div class="area-value">${escapeHtml(entry.objectives) || '<span class="muted">—</span>'}</div>
+          </div>
+          <div class="area-field">
             <div class="area-label">Estratégias</div>
             <div class="area-value">${escapeHtml(entry.strategies) || '<span class="muted">—</span>'}</div>
+          </div>
+          <div class="area-field">
             <div class="area-label">Registro Avaliativo</div>
             <div class="area-value">${escapeHtml(entry.evaluation_record) || '<span class="muted">—</span>'}</div>
           </div>
@@ -719,105 +733,150 @@ const AEE = () => {
 <meta charset="UTF-8" />
 <title>PAEE - ${escapeHtml(student.full_name)}</title>
 <style>
-  @page { size: A4; margin: 14mm 14mm 18mm 14mm; }
-  * { box-sizing: border-box; }
-  html, body { margin:0; padding:0; }
+  @page { size: A4; margin: 12mm 12mm 14mm 12mm; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
-    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    font-family: Arial, Helvetica, sans-serif;
     color: #1f2937;
-    font-size: 11pt;
-    line-height: 1.45;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
-  .header {
-    display: flex; align-items: center; gap: 16px;
-    background: linear-gradient(135deg, #1e3a5f 0%, #2d6a9e 100%);
-    color: #fff; padding: 14px 18px; border-radius: 10px;
+  .institutional-header {
+    display: flex; align-items: center; gap: 18px;
+    padding-bottom: 14px; border-bottom: 3px solid #1e3a8a; margin-bottom: 6px;
   }
-  .header img { height: 56px; width: auto; background:#fff; border-radius:8px; padding:4px; }
-  .header .school { font-size: 14pt; font-weight: 700; letter-spacing: .3px; }
-  .header .subtitle { font-size: 10pt; opacity: .9; }
-  .header .badge {
-    margin-left:auto; background: rgba(255,255,255,0.18);
-    border:1px solid rgba(255,255,255,0.35); padding:6px 14px;
-    border-radius:999px; font-weight:700; letter-spacing:1px;
+  .institutional-header img { width: 110px; height: 110px; object-fit: contain; }
+  .institutional-header .info { flex: 1; text-align: center; }
+  .institutional-header .info .school {
+    font-size: 15px; font-weight: bold; color: #1e3a8a;
+    line-height: 1.25; letter-spacing: 0.3px;
   }
-  h2.section {
-    margin: 18px 0 8px; padding-left: 10px;
-    font-size: 12pt; text-transform: uppercase; letter-spacing:.6px;
-    color: #1e3a5f; border-left: 4px solid #2d6a9e;
+  .institutional-header .info .city { font-size: 12px; color: #475569; margin-top: 2px; }
+  .institutional-header .info .doc {
+    margin-top: 8px; font-size: 16px; font-weight: bold; color: #dc2626;
+    text-transform: uppercase; letter-spacing: 1px;
   }
-  table.id { width:100%; border-collapse: collapse; }
-  table.id td { border:1px solid #e5e7eb; padding:6px 9px; vertical-align: top; }
-  table.id td.label {
-    background:#f1f5f9; color:#475569; font-size:8.5pt;
-    text-transform:uppercase; letter-spacing:.4px; width: 18%;
+  .accent-bar {
+    height: 4px;
+    background: linear-gradient(90deg, #1e3a8a 0%, #1e3a8a 60%, #dc2626 60%, #dc2626 100%);
+    margin-bottom: 18px;
+  }
+  .student-id-row { display: flex; gap: 16px; align-items: center; margin-bottom: 16px; }
+  .student-id-row .photo {
+    width: 96px; height: 96px; border-radius: 50%; object-fit: cover;
+    border: 3px solid #1e3a8a; flex-shrink: 0; background: #e2e8f0;
+  }
+  .student-id-row .photo-placeholder {
+    width: 96px; height: 96px; border-radius: 50%; border: 3px solid #1e3a8a;
+    background: #e2e8f0; color: #1e3a8a; display: flex; align-items: center;
+    justify-content: center; font-weight: bold; font-size: 32px; flex-shrink: 0;
+  }
+  .student-strip {
+    background: #f1f5f9; border-left: 4px solid #1e3a8a;
+    padding: 10px 14px; font-size: 13px; flex: 1;
+  }
+  .student-strip strong { color: #1e3a8a; }
+  .section { margin-bottom: 16px; page-break-inside: avoid; }
+  .section h3 {
+    font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px;
+    background: #1e3a8a; color: #fff; padding: 6px 12px;
+    margin-bottom: 10px; border-radius: 3px;
+  }
+  table.id-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  table.id-table td { border: 1px solid #cbd5e1; padding: 6px 9px; vertical-align: top; }
+  table.id-table td.label {
+    background: #f8fafc; font-weight: bold; color: #1e3a8a; width: 22%;
   }
   .org {
-    display:grid; grid-template-columns: 1fr 1fr; gap: 6px 18px;
-    border:1px solid #e5e7eb; border-radius:8px; padding:10px 12px;
-    background:#f8fafc;
+    display: grid; grid-template-columns: 1fr 1fr; gap: 6px 18px;
+    border: 1px solid #cbd5e1; border-radius: 6px; padding: 10px 12px;
+    background: #f8fafc; font-size: 12px;
   }
-  .org .row { display:flex; gap:8px; align-items:baseline; }
-  .org .row .k { color:#64748b; font-size:9pt; text-transform:uppercase; letter-spacing:.4px; }
-  .org .row .v { font-weight:600; }
-  .assist { grid-column: 1 / -1; display:flex; gap:18px; padding-top:4px; border-top:1px dashed #cbd5e1; margin-top:4px; }
+  .org .row { display: flex; gap: 6px; align-items: baseline; }
+  .org .row .k { color: #64748b; font-size: 10px; text-transform: uppercase; letter-spacing: .4px; }
+  .org .row .v { font-weight: 600; color: #1e3a8a; }
+  .assist { grid-column: 1 / -1; display: flex; gap: 18px; padding-top: 6px; border-top: 1px dashed #cbd5e1; margin-top: 4px; }
+  /* Matriz: 2-column grid, fits in ~2 pages */
+  .matrix-page { page-break-before: always; }
+  .matrix-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+  }
   .area {
-    border:1px solid #e5e7eb; border-left-width:5px; border-radius:8px;
-    padding:10px 12px; margin-bottom:10px;
-    background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+    border: 1px solid #e5e7eb; border-left-width: 5px; border-radius: 6px;
+    padding: 8px 10px; background: #ffffff;
+    page-break-inside: avoid; font-size: 10pt; line-height: 1.35;
+  }
+  .area h3 {
+    margin: 0 0 6px; font-size: 11pt; padding: 0;
+    background: transparent; color: inherit; text-transform: none; letter-spacing: 0;
+    border-radius: 0;
+  }
+  .area-field { margin-bottom: 6px; }
+  .area-field:last-child { margin-bottom: 0; }
+  .area-label {
+    color: #64748b; font-size: 8.5pt; text-transform: uppercase;
+    letter-spacing: .4px; font-weight: bold; margin-bottom: 2px;
+  }
+  .area-value { white-space: pre-wrap; text-align: justify; }
+  .muted { color: #94a3b8; font-style: italic; }
+  .signatures {
+    margin-top: 40px; display: flex; justify-content: space-around; gap: 20px;
     page-break-inside: avoid;
   }
-  .area h3 { margin:0 0 6px; font-size:11pt; }
-  .area-grid { display:grid; grid-template-columns: 130px 1fr; gap:4px 10px; }
-  .area-label {
-    color:#64748b; font-size:8.5pt; text-transform:uppercase;
-    letter-spacing:.4px; padding-top:2px;
-  }
-  .area-value { white-space:pre-wrap; }
-  .muted { color:#94a3b8; }
-  .sign { display:grid; grid-template-columns: 1fr 1fr; gap: 30px; margin-top: 28px; }
-  .sign .box { text-align:center; }
-  .sign .line { border-top: 1px solid #1f2937; margin-bottom:4px; padding-top:24px; }
-  .sign .name { font-weight:600; }
-  .sign .role { font-size:9pt; color:#64748b; }
-  footer {
-    position: fixed; bottom: 6mm; left: 14mm; right: 14mm;
-    font-size: 8pt; color:#94a3b8; display:flex; justify-content:space-between;
-    border-top:1px solid #e5e7eb; padding-top:4px;
+  .signature { flex: 1; text-align: center; font-size: 12px; }
+  .signature .line { border-top: 1px solid #1f2937; margin-bottom: 4px; padding-top: 24px; }
+  .signature .name { font-weight: 600; }
+  .signature .role { font-size: 10px; color: #64748b; }
+  .footer {
+    margin-top: 24px; text-align: center; font-size: 10px; color: #64748b;
+    padding-top: 10px; border-top: 1px solid #e2e8f0;
   }
 </style>
 </head>
 <body>
-  <div class="header">
-    <img src="${logoCepans}" alt="Logo da escola" />
-    <div>
+  <div class="institutional-header">
+    <img src="${logoCepans}" alt="Brasão CEPANS" />
+    <div class="info">
       <div class="school">${escapeHtml(schoolHeader)}</div>
-      <div class="subtitle">Plano de Atendimento Educacional Especializado</div>
-      <div class="subtitle">Data de Elaboração: ${formatDate(paee.elaboration_date)}</div>
+      <div class="city">Coelho Neto - MA</div>
+      <div class="doc">Plano de Atendimento Educacional Especializado — PAEE</div>
     </div>
-    <div class="badge">PAEE</div>
+  </div>
+  <div class="accent-bar"></div>
+
+  <div class="student-id-row">
+    ${photoSrc
+      ? `<img class="photo" src="${photoSrc}" alt="Foto do aluno" />`
+      : `<div class="photo-placeholder">${escapeHtml(student.full_name.charAt(0).toUpperCase())}</div>`}
+    <div class="student-strip">
+      <strong>Aluno(a):</strong> ${escapeHtml(student.full_name)}<br/>
+      <strong>Turma:</strong> ${escapeHtml(student.class)} &nbsp;|&nbsp;
+      <strong>Turno:</strong> ${escapeHtml(getShiftLabel(student.shift))} &nbsp;|&nbsp;
+      <strong>Matrícula:</strong> ${escapeHtml(student.student_id)}
+    </div>
   </div>
 
-  <h2 class="section">1. Identificação</h2>
-  <table class="id">
-    <tr>
-      <td class="label">Estudante</td><td>${escapeHtml(student.full_name)}</td>
-      <td class="label">Matrícula</td><td>${escapeHtml(student.student_id)}</td>
-    </tr>
-    <tr>
-      <td class="label">Turma</td><td>${escapeHtml(student.class)}</td>
-      <td class="label">Turno</td><td>${escapeHtml(getShiftLabel(student.shift))}</td>
-    </tr>
-    <tr>
-      <td class="label">Idade</td><td>${age !== null && age !== undefined && String(age) !== '' ? `${age} anos` : '—'}</td>
-      <td class="label">Deficiência / CID</td><td>${escapeHtml(disabilityLabel)}</td>
-    </tr>
-  </table>
+  <div class="section">
+    <h3>1. Identificação</h3>
+    <table class="id-table">
+      <tr><td class="label">Nome Completo</td><td>${escapeHtml(student.full_name)}</td></tr>
+      <tr><td class="label">Matrícula</td><td>${escapeHtml(student.student_id)}</td></tr>
+      <tr><td class="label">Data de Nascimento</td><td>${formatDate(student.birth_date)}</td></tr>
+      <tr><td class="label">Idade</td><td>${age !== null && age !== undefined && String(age) !== '' ? `${age} anos` : '—'}</td></tr>
+      <tr><td class="label">Turma</td><td>${escapeHtml(student.class)}</td></tr>
+      <tr><td class="label">Turno</td><td>${escapeHtml(getShiftLabel(student.shift))}</td></tr>
+      <tr><td class="label">Deficiência / CID</td><td>${escapeHtml(disabilityLabel)}</td></tr>
+      <tr><td class="label">Data de Elaboração</td><td>${formatDate(paee.elaboration_date)}</td></tr>
+      <tr><td class="label">Responsável Legal</td><td>${escapeHtml(student.guardian_name || '') || '—'}</td></tr>
+      <tr><td class="label">Telefone do Responsável</td><td>${escapeHtml(student.guardian_phone || '') || '—'}</td></tr>
+      <tr><td class="label">Professor(a) AEE</td><td>${escapeHtml(paee.aee_teacher_signature) || '—'}</td></tr>
+      <tr><td class="label">Coordenação</td><td>${escapeHtml(paee.coordinator_signature) || '—'}</td></tr>
+    </table>
+  </div>
 
-  <h2 class="section">2. Organização do Atendimento</h2>
-  <div class="org">
+  <div class="section">
+    <h3>2. Organização do Atendimento</h3>
+    <div class="org">
     <div class="row"><span class="k">Composição:</span> <span class="v">${compositionLabel}</span></div>
     <div class="row"><span class="k">Periodicidade:</span> <span class="v">${periodicityLabel}</span></div>
     <div class="row"><span class="k">Dias:</span> <span class="v">${daysLabel}</span></div>
@@ -826,32 +885,42 @@ const AEE = () => {
       <span>${checkbox(paee.libras_interpreter)} Tradutor / Intérprete de Libras</span>
       <span>${checkbox(paee.support_assistant)} Auxiliar de Apoio</span>
     </div>
-  </div>
-
-  <h2 class="section">3. Matriz Pedagógica</h2>
-  ${areaBlocks}
-
-  <h2 class="section">4. Assinaturas</h2>
-  <div class="sign">
-    <div class="box">
-      <div class="line"></div>
-      <div class="name">${escapeHtml(paee.aee_teacher_signature) || '&nbsp;'}</div>
-      <div class="role">Professor(a) de AEE</div>
-    </div>
-    <div class="box">
-      <div class="line"></div>
-      <div class="name">${escapeHtml(paee.coordinator_signature) || '&nbsp;'}</div>
-      <div class="role">Coordenador(a)</div>
     </div>
   </div>
 
-  <footer>
-    <span>Edunexus • ${escapeHtml(schoolHeader)}</span>
-    <span>Gerado em ${generatedAt}</span>
-  </footer>
+  <div class="matrix-page">
+    <div class="section">
+      <h3>3. Matriz Pedagógica</h3>
+      <div class="matrix-grid">
+        ${areaBlocks}
+      </div>
+    </div>
+
+    <div class="signatures">
+      <div class="signature">
+        <div class="line">${escapeHtml(paee.aee_teacher_signature) || '&nbsp;'}</div>
+        <div class="role">Professor(a) de AEE</div>
+      </div>
+      <div class="signature">
+        <div class="line">${escapeHtml(paee.coordinator_signature) || '&nbsp;'}</div>
+        <div class="role">Coordenador(a)</div>
+      </div>
+    </div>
+
+    <div class="footer">
+      Edunexus • ${escapeHtml(schoolHeader)} • Gerado em ${generatedAt}
+    </div>
+  </div>
 
   <script>
-    window.addEventListener('load', () => { setTimeout(() => window.print(), 250); });
+    window.onload = function() {
+      const imgs = Array.from(document.images);
+      const pending = imgs.filter((i) => !i.complete);
+      if (pending.length === 0) { setTimeout(() => window.print(), 250); return; }
+      let remaining = pending.length;
+      const done = () => { remaining -= 1; if (remaining <= 0) setTimeout(() => window.print(), 250); };
+      pending.forEach((i) => { i.onload = done; i.onerror = done; });
+    }
   </script>
 </body>
 </html>`;
