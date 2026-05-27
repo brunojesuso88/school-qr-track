@@ -335,17 +335,11 @@ export const PEIForm = ({ student, data, onChange, laudoData, onLaudoChange, onB
       <section className="space-y-2">
         <div className="flex items-center justify-between border-b pb-2">
           <h3 className="text-base font-semibold">2. Perfil Funcional de Aprendizagem</h3>
-          <div className="flex items-center gap-2">
-            <SuggestionPicker
-              label="Altas Habilidades"
-              options={HIGH_ABILITIES_FUNCTIONAL_SUGGESTIONS}
-              onPick={(t) => update('functional_profile', appendText(data.functional_profile, t))}
-            />
-            <SuggestionPicker
-              options={FUNCTIONAL_PROFILE_SUGGESTIONS}
-              onPick={(t) => update('functional_profile', appendText(data.functional_profile, t))}
-            />
-          </div>
+          <AISuggestPicker
+            functionName="pei-suggest"
+            body={{ field: 'functional_profile', context: studentContext }}
+            onAdd={(items) => update('functional_profile', appendBullets(data.functional_profile, items))}
+          />
         </div>
         <div className="flex items-center gap-2 pb-1">
           <Checkbox
@@ -357,12 +351,6 @@ export const PEIForm = ({ student, data, onChange, laudoData, onLaudoChange, onB
             Apresenta indícios de Altas Habilidades / Superdotação
           </Label>
         </div>
-        {highAbilities && (
-          <p className="text-xs text-muted-foreground -mt-1 mb-1">
-            Use o botão <strong>"Altas Habilidades"</strong> acima para inserir sugestões como
-            memória excepcional, raciocínio lógico, vocabulário rebuscado e estratégias avançadas.
-          </p>
-        )}
         <Textarea
           placeholder="Descreva como o estudante aprende, formas de comunicação, atenção, autonomia e estilo cognitivo."
           value={data.functional_profile}
@@ -375,17 +363,11 @@ export const PEIForm = ({ student, data, onChange, laudoData, onLaudoChange, onB
       <section className="space-y-2">
         <div className="flex items-center justify-between border-b pb-2">
           <h3 className="text-base font-semibold">3. Potencialidades</h3>
-          <div className="flex items-center gap-2">
-            <SuggestionPicker
-              label="Altas Habilidades"
-              options={HIGH_ABILITIES_POTENTIALITIES_SUGGESTIONS}
-              onPick={(t) => update('potentialities', appendText(data.potentialities, t))}
-            />
-            <SuggestionPicker
-              options={POTENTIALITIES_SUGGESTIONS}
-              onPick={(t) => update('potentialities', appendText(data.potentialities, t))}
-            />
-          </div>
+          <AISuggestPicker
+            functionName="pei-suggest"
+            body={{ field: 'potentialities', context: studentContext }}
+            onAdd={(items) => update('potentialities', appendBullets(data.potentialities, items))}
+          />
         </div>
         <Textarea
           placeholder="Descreva habilidades, interesses e pontos fortes relevantes."
@@ -399,9 +381,10 @@ export const PEIForm = ({ student, data, onChange, laudoData, onLaudoChange, onB
       <section className="space-y-2">
         <div className="flex items-center justify-between border-b pb-2">
           <h3 className="text-base font-semibold">4. Barreiras de Aprendizagem</h3>
-          <SuggestionPicker
-            options={LEARNING_BARRIERS_SUGGESTIONS}
-            onPick={(t) => update('learning_barriers', appendText(data.learning_barriers, t))}
+          <AISuggestPicker
+            functionName="pei-suggest"
+            body={{ field: 'learning_barriers', context: studentContext }}
+            onAdd={(items) => update('learning_barriers', appendBullets(data.learning_barriers, items))}
           />
         </div>
         <Textarea
