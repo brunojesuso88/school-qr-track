@@ -11,18 +11,9 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { useState } from 'react';
 import {
-  FUNCTIONAL_PROFILE_SUGGESTIONS,
-  POTENTIALITIES_SUGGESTIONS,
-  LEARNING_BARRIERS_SUGGESTIONS,
   INTERVENTION_PLAN_SUGGESTIONS,
-  ADAPTATION_PORTUGUES_HUMANAS_SUGGESTIONS,
-  ADAPTATION_MATEMATICA_EXATAS_SUGGESTIONS,
-  ADAPTATION_CIENCIAS_HUMANAS_SUGGESTIONS,
-  ADAPTATION_HIGH_ABILITIES_SUGGESTIONS,
-  EVALUATION_CRITERIA_SUGGESTIONS,
-  HIGH_ABILITIES_FUNCTIONAL_SUGGESTIONS,
-  HIGH_ABILITIES_POTENTIALITIES_SUGGESTIONS,
 } from './peiSuggestions';
+import { AISuggestPicker, appendBullets } from './AISuggestPicker';
 
 export type PerformanceLevel = 'independente' | 'com_apoio' | 'nao_realiza' | '';
 
