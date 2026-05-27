@@ -241,7 +241,7 @@ const QRCodes = () => {
         <html>
         <head>
           <meta charset="UTF-8">
-          <title>QR Codes - Turma ${selectedClassForExport}</title>
+          <title>QR Codes - Turma ${escapeHtml(selectedClassForExport)}</title>
           <style>
             @page { size: A4; margin: 15mm; }
             * { box-sizing: border-box; }
@@ -294,15 +294,15 @@ const QRCodes = () => {
         </head>
         <body>
           <div class="header">
-            <h1>QR Codes - Turma ${selectedClassForExport}</h1>
+            <h1>QR Codes - Turma ${escapeHtml(selectedClassForExport)}</h1>
             <p>Total: ${classStudents.length} alunos | Gerado em: ${format(new Date(), 'dd/MM/yyyy HH:mm')}</p>
           </div>
           <div class="grid">
             ${qrCodes.map(({ student, dataUrl }) => `
               <div class="qr-card">
-                <img src="${dataUrl}" alt="QR Code ${student.full_name}" />
-                <div class="student-name">${student.full_name}</div>
-                <div class="student-info">ID: ${student.student_id}</div>
+                <img src="${dataUrl}" alt="QR Code ${escapeHtml(student.full_name)}" />
+                <div class="student-name">${escapeHtml(student.full_name)}</div>
+                <div class="student-info">ID: ${escapeHtml(student.student_id)}</div>
               </div>
             `).join('')}
           </div>
