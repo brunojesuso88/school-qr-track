@@ -165,17 +165,26 @@ Deno.serve(async (req) => {
     const supabase = createClient(supabaseUrl, serviceRoleKey);
 
     // Parse the request body
-    const { newUserEmail, newUserName } = await req.json();
+    const body = await req.json().catch(() => ({}));
 
-    if (!newUserEmail) {
+    // Never trust client-supplied identity. Look up the verified
+    // email/name from auth.users using the JWT-validated user id.
+    const { data: verifiedUser } = await supabase.auth.admin.getUserById(auth.userId);
+    const verifiedEmail = verifiedUser?.user?.email ?? null;
+    const verifiedName =
+      (verifiedUser?.user?.user_metadata as { full_name?: string } | undefined)?.full_name ?? null;
+
+    if (!verifiedEmail) {
       return new Response(
-        JSON.stringify({ error: 'Missing newUserEmail' }),
+        JSON.stringify({ error: 'Verified user not found' }),
         { 
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           status: 400 
         }
       );
     }
+    const newUserEmail = verifiedEmail;
+    const newUserName = verifiedName ?? verifiedEmail;
 
     // Get all admin users with push subscriptions
     const { data: adminRoles, error: rolesError } = await supabase
