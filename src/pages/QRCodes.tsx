@@ -12,6 +12,14 @@ import { QrCode, Camera, CheckCircle2, XCircle, Loader2, Search, Download, FileT
 import { format } from 'date-fns';
 import { QRCodeSVG } from 'qrcode.react';
 
+const escapeHtml = (s: unknown) =>
+  String(s ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+
 interface Student {
   id: string;
   full_name: string;
