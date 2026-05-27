@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1';
+import { requireAuth } from "../_shared/auth.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -134,6 +135,13 @@ Deno.serve(async (req) => {
   }
 
   try {
+    // Require an authenticated caller to prevent unauthenticated
+    // notification injection. Notifications about new signups are
+    // triggered by the just-registered user from the client, so any
+    // authenticated user is acceptable here.
+    const auth = await requireAuth(req, corsHeaders);
+    if (auth instanceof Response) return auth;
+
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const vapidPublicKey = Deno.env.get('VAPID_PUBLIC_KEY');
