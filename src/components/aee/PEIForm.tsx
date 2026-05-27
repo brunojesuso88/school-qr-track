@@ -564,23 +564,11 @@ export const PEIForm = ({ student, data, onChange, laudoData, onLaudoChange, onB
           <div>
             <div className="flex items-center justify-between mb-1">
               <Label className="text-sm">Língua Portuguesa</Label>
-              <div className="flex gap-1">
-                <SuggestionPicker
-                  options={ADAPTATION_PORTUGUES_HUMANAS_SUGGESTIONS}
-                  onPick={(t) =>
-                    updateAdaptation('portugues_humanas', appendText(data.discipline_adaptations.portugues_humanas, t))
-                  }
-                />
-                {highAbilities && (
-                  <SuggestionPicker
-                    label="Altas Habilidades"
-                    options={ADAPTATION_HIGH_ABILITIES_SUGGESTIONS}
-                    onPick={(t) =>
-                      updateAdaptation('portugues_humanas', appendText(data.discipline_adaptations.portugues_humanas, t))
-                    }
-                  />
-                )}
-              </div>
+              <AISuggestPicker
+                functionName="pei-suggest"
+                body={{ field: 'adapt_portugues_humanas', context: studentContext }}
+                onAdd={(items) => updateAdaptation('portugues_humanas', appendBullets(data.discipline_adaptations.portugues_humanas, items))}
+              />
             </div>
             <Textarea
               rows={3}
@@ -591,23 +579,11 @@ export const PEIForm = ({ student, data, onChange, laudoData, onLaudoChange, onB
           <div>
             <div className="flex items-center justify-between mb-1">
               <Label className="text-sm">Matemática e Natureza</Label>
-              <div className="flex gap-1">
-                <SuggestionPicker
-                  options={ADAPTATION_MATEMATICA_EXATAS_SUGGESTIONS}
-                  onPick={(t) =>
-                    updateAdaptation('matematica_exatas', appendText(data.discipline_adaptations.matematica_exatas, t))
-                  }
-                />
-                {highAbilities && (
-                  <SuggestionPicker
-                    label="Altas Habilidades"
-                    options={ADAPTATION_HIGH_ABILITIES_SUGGESTIONS}
-                    onPick={(t) =>
-                      updateAdaptation('matematica_exatas', appendText(data.discipline_adaptations.matematica_exatas, t))
-                    }
-                  />
-                )}
-              </div>
+              <AISuggestPicker
+                functionName="pei-suggest"
+                body={{ field: 'adapt_matematica_exatas', context: studentContext }}
+                onAdd={(items) => updateAdaptation('matematica_exatas', appendBullets(data.discipline_adaptations.matematica_exatas, items))}
+              />
             </div>
             <Textarea
               rows={3}
@@ -618,23 +594,11 @@ export const PEIForm = ({ student, data, onChange, laudoData, onLaudoChange, onB
           <div>
             <div className="flex items-center justify-between mb-1">
               <Label className="text-sm">Ciências Humanas</Label>
-              <div className="flex gap-1">
-                <SuggestionPicker
-                  options={ADAPTATION_CIENCIAS_HUMANAS_SUGGESTIONS}
-                  onPick={(t) =>
-                    updateAdaptation('ciencias_humanas', appendText(data.discipline_adaptations.ciencias_humanas, t))
-                  }
-                />
-                {highAbilities && (
-                  <SuggestionPicker
-                    label="Altas Habilidades"
-                    options={ADAPTATION_HIGH_ABILITIES_SUGGESTIONS}
-                    onPick={(t) =>
-                      updateAdaptation('ciencias_humanas', appendText(data.discipline_adaptations.ciencias_humanas, t))
-                    }
-                  />
-                )}
-              </div>
+              <AISuggestPicker
+                functionName="pei-suggest"
+                body={{ field: 'adapt_ciencias_humanas', context: studentContext }}
+                onAdd={(items) => updateAdaptation('ciencias_humanas', appendBullets(data.discipline_adaptations.ciencias_humanas, items))}
+              />
             </div>
             <Textarea
               rows={3}
@@ -649,9 +613,10 @@ export const PEIForm = ({ student, data, onChange, laudoData, onLaudoChange, onB
       <section className="space-y-2">
         <div className="flex items-center justify-between border-b pb-2">
           <h3 className="text-base font-semibold">9. Avaliação e Critérios</h3>
-          <SuggestionPicker
-            options={EVALUATION_CRITERIA_SUGGESTIONS}
-            onPick={(t) => update('evaluation_criteria', appendText(data.evaluation_criteria, t))}
+          <AISuggestPicker
+            functionName="pei-suggest"
+            body={{ field: 'evaluation_criteria', context: studentContext }}
+            onAdd={(items) => update('evaluation_criteria', appendBullets(data.evaluation_criteria, items))}
           />
         </div>
         <Textarea
