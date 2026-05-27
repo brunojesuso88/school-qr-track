@@ -174,6 +174,25 @@ export const PEIForm = ({ student, data, onChange, laudoData, onLaudoChange, onB
     ? differenceInYears(new Date(), parse(student.birth_date, 'yyyy-MM-dd', new Date()))
     : null;
 
+  const studentContext = {
+    nome: student.full_name,
+    matricula: student.student_id,
+    turma: student.class,
+    turno: shiftLabels[student.shift] || student.shift,
+    idade: age,
+    altas_habilidades: highAbilities,
+    cid_codigo: laudoData?.aee_cid_code || null,
+    cid_descricao: laudoData?.aee_cid_description || null,
+    faz_uso_medicacao: laudoData?.aee_uses_medication || false,
+    medicacao: laudoData?.aee_medication_name || null,
+    alfabetizacao: laudoData?.aee_literacy_status || null,
+    atividades_adaptadas: laudoData?.aee_adapted_activities || false,
+    sugestoes_do_laudo: laudoData?.aee_adaptation_suggestions || null,
+    perfil_funcional_atual: data.functional_profile || null,
+    potencialidades_atuais: data.potentialities || null,
+    barreiras_atuais: data.learning_barriers || null,
+  };
+
   const updateLaudo = <K extends keyof LaudoData>(key: K, value: LaudoData[K]) => {
     if (laudoData && onLaudoChange) {
       onLaudoChange({ ...laudoData, [key]: value });
