@@ -12,6 +12,13 @@ import { toast } from 'sonner';
 import { FileText, FileSpreadsheet, Printer, Download, Building } from 'lucide-react';
 
 const DAYS = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta'];
+const escapeHtml = (s: unknown) =>
+  String(s ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 const SHIFT_LABELS: Record<string, string> = {
   morning: 'Manhã',
   afternoon: 'Tarde',
@@ -155,7 +162,7 @@ const ExportContent = () => {
         <!DOCTYPE html>
         <html>
         <head>
-          <title>Horário - ${selectedItem.name}</title>
+          <title>Horário - ${escapeHtml(selectedItem.name)}</title>
           <style>
             body { font-family: Arial, sans-serif; padding: 20px; }
             .header { text-align: center; margin-bottom: 30px; }
@@ -173,14 +180,14 @@ const ExportContent = () => {
         </head>
         <body>
           <div class="header">
-            <h1>Horário de ${selectedItem.name}</h1>
-            <h2>Turno: ${shiftLabel}</h2>
+            <h1>Horário de ${escapeHtml(selectedItem.name)}</h1>
+            <h2>Turno: ${escapeHtml(shiftLabel)}</h2>
           </div>
           <table>
             <thead>
               <tr>
                 <th>Horário</th>
-                ${DAYS.map(day => `<th>${day}</th>`).join('')}
+                ${DAYS.map(day => `<th>${escapeHtml(day)}</th>`).join('')}
               </tr>
             </thead>
             <tbody>
@@ -191,8 +198,8 @@ const ExportContent = () => {
                     const cell = generateTableData[period][day + 1];
                     return `
                       <td>
-                        <div class="subject">${cell.subject || '-'}</div>
-                        ${cell.extra ? `<div class="extra">${cell.extra}</div>` : ''}
+                        <div class="subject">${cell.subject ? escapeHtml(cell.subject) : '-'}</div>
+                        ${cell.extra ? `<div class="extra">${escapeHtml(cell.extra)}</div>` : ''}
                       </td>
                     `;
                   }).join('')}
@@ -255,7 +262,7 @@ const ExportContent = () => {
       <!DOCTYPE html>
       <html>
       <head>
-        <title>Horário Geral - Turno ${shiftLabel}</title>
+        <title>Horário Geral - Turno ${escapeHtml(shiftLabel)}</title>
         <style>
           body { font-family: Arial, sans-serif; padding: 20px; }
           .main-header { text-align: center; margin-bottom: 40px; border-bottom: 3px solid #333; padding-bottom: 20px; }
@@ -278,19 +285,19 @@ const ExportContent = () => {
       <body>
         <div class="main-header">
           <h1>HORÁRIO GERAL DA ESCOLA</h1>
-          <h2>Turno: ${shiftLabel}</h2>
+          <h2>Turno: ${escapeHtml(shiftLabel)}</h2>
         </div>
         
         ${classGrids.map(({ cls, grid }) => `
           <div class="class-section">
             <div class="class-header">
-              <h3>${cls.name}</h3>
+              <h3>${escapeHtml(cls.name)}</h3>
             </div>
             <table>
               <thead>
                 <tr>
                   <th style="width: 80px;">Horário</th>
-                  ${DAYS.map(day => `<th>${day}</th>`).join('')}
+                  ${DAYS.map(day => `<th>${escapeHtml(day)}</th>`).join('')}
                 </tr>
               </thead>
               <tbody>
@@ -302,8 +309,8 @@ const ExportContent = () => {
                       return `
                         <td>
                           ${cell.subject ? `
-                            <div class="subject">${cell.subject}</div>
-                            ${cell.teacher ? `<div class="teacher">${cell.teacher}</div>` : ''}
+                            <div class="subject">${escapeHtml(cell.subject)}</div>
+                            ${cell.teacher ? `<div class="teacher">${escapeHtml(cell.teacher)}</div>` : ''}
                           ` : '-'}
                         </td>
                       `;
