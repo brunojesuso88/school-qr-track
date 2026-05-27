@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1';
+import { requireAuth } from "../_shared/auth.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -134,6 +135,13 @@ Deno.serve(async (req) => {
   }
 
   try {
+    // Require an authenticated caller to prevent unauthenticated
+    // notification injection. Notifications about new signups are
+    // triggered by the just-registered user from the client, so any
+    // authenticated user is acceptable here.
+    const auth = await requireAuth(req, corsHeaders);
+    if (auth instanceof Response) return auth;
+
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const vapidPublicKey = Deno.env.get('VAPID_PUBLIC_KEY');
@@ -157,17 +165,26 @@ Deno.serve(async (req) => {
     const supabase = createClient(supabaseUrl, serviceRoleKey);
 
     // Parse the request body
-    const { newUserEmail, newUserName } = await req.json();
+    const body = await req.json().catch(() => ({}));
 
-    if (!newUserEmail) {
+    // Never trust client-supplied identity. Look up the verified
+    // email/name from auth.users using the JWT-validated user id.
+    const { data: verifiedUser } = await supabase.auth.admin.getUserById(auth.userId);
+    const verifiedEmail = verifiedUser?.user?.email ?? null;
+    const verifiedName =
+      (verifiedUser?.user?.user_metadata as { full_name?: string } | undefined)?.full_name ?? null;
+
+    if (!verifiedEmail) {
       return new Response(
-        JSON.stringify({ error: 'Missing newUserEmail' }),
+        JSON.stringify({ error: 'Verified user not found' }),
         { 
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           status: 400 
         }
       );
     }
+    const newUserEmail = verifiedEmail;
+    const newUserName = verifiedName ?? verifiedEmail;
 
     // Get all admin users with push subscriptions
     const { data: adminRoles, error: rolesError } = await supabase
