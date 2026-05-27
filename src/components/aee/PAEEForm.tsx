@@ -379,15 +379,14 @@ export const PAEEForm = ({ student, schoolName, data, onChange }: PAEEFormProps)
                         <Label className="text-xs font-medium text-muted-foreground">
                           {FIELD_LABELS[field]}
                         </Label>
-                        <AISuggestButton
-                          area={area.key}
-                          field={field}
-                          context={studentContext}
-                          onPick={(t) =>
+                        <AISuggestPicker
+                          functionName="paee-suggest"
+                          body={{ context: studentContext, area: area.key, field }}
+                          onAdd={(items) =>
                             updateMatrix(
                               area.key,
                               field,
-                              appendText(data.pedagogical_matrix[area.key][field], t),
+                              appendBullets(data.pedagogical_matrix[area.key][field], items),
                             )
                           }
                         />
