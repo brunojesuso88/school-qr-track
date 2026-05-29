@@ -690,12 +690,13 @@ const ClassesBulkImportDialog = ({ open, onOpenChange }: Props) => {
               </Button>
               <Button
                 onClick={handleSave}
-                disabled={isSaving || selectedCount === 0 || invalidCount > 0}
-                title={invalidCount > 0 ? `${invalidCount} turma(s) com carga inconsistente` : undefined}
+                disabled={isSaving || selectedCount === 0}
+                title={invalidCount > 0 ? `${invalidCount} turma(s) terão a carga horária ajustada conforme o PDF` : undefined}
+                variant={invalidCount > 0 ? "default" : "default"}
               >
                 {isSaving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
                 {invalidCount > 0
-                  ? `Ajuste ${invalidCount} turma(s) com carga inconsistente`
+                  ? `Atualizar ${selectedCount} turma(s) conforme PDF`
                   : `Importar ${selectedCount} turma(s)`}
               </Button>
             </DialogFooter>
