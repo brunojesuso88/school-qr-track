@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Plus, Pencil, Trash2, BookOpen, Copy } from "lucide-react";
+import { Plus, Pencil, Trash2, BookOpen, Copy, RefreshCw } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -29,6 +29,7 @@ const MappingClassesContent = () => {
   const [deletingClass, setDeletingClass] = useState<MappingClass | null>(null);
   const [managingSubjectsClass, setManagingSubjectsClass] = useState<MappingClass | null>(null);
   const [viewingClass, setViewingClass] = useState<MappingClass | null>(null);
+  const [syncing, setSyncing] = useState(false);
 
   const getClassSubjectCount = (classId: string) => {
     return classSubjects.filter(cs => cs.class_id === classId).length;
@@ -118,6 +119,59 @@ const MappingClassesContent = () => {
     setEditingClass(null);
   };
 
+  const normalizeShift = (shift: string | null | undefined): "morning" | "afternoon" | "evening" => {
+    const s = (shift || "").toLowerCase().trim();
+    if (s === "afternoon" || s === "tarde") return "afternoon";
+    if (s === "evening" || s === "night" || s === "noite") return "evening";
+    return "morning";
+  };
+
+  const handleSyncFromManagement = async () => {
+    setSyncing(true);
+    try {
+      const { data: mgmtClasses, error } = await supabase
+        .from('classes')
+        .select('name, shift, status')
+        .eq('status', 'active');
+      if (error) throw error;
+
+      const existingNames = new Set(
+        classes.map(c => c.name.trim().toLowerCase())
+      );
+
+      const toInsert = (mgmtClasses || [])
+        .filter(c => c.name && !existingNames.has(c.name.trim().toLowerCase()))
+        .map(c => {
+          const shift = normalizeShift(c.shift);
+          return {
+            name: c.name.trim(),
+            shift,
+            weekly_hours: shift === 'evening' ? 25 : 30,
+            student_count: null as number | null,
+          };
+        });
+
+      const skipped = (mgmtClasses?.length || 0) - toInsert.length;
+
+      if (toInsert.length > 0) {
+        const { error: insertError } = await supabase
+          .from('mapping_classes')
+          .insert(toInsert);
+        if (insertError) throw insertError;
+      }
+
+      toast({
+        title: "Sincronização concluída",
+        description: `${toInsert.length} turma(s) adicionada(s) · ${skipped} já existente(s)`,
+      });
+      await refreshData();
+    } catch (error: any) {
+      toast({ title: "Erro ao sincronizar", description: error.message, variant: "destructive" });
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   if (loading) {
     return (
       <SchoolMappingLayout>
@@ -141,6 +195,11 @@ const MappingClassesContent = () => {
             <p className="text-muted-foreground">{classes.length} turmas cadastradas</p>
           </div>
 
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={handleSyncFromManagement} disabled={syncing}>
+              <RefreshCw className={`h-4 w-4 mr-2 ${syncing ? 'animate-spin' : ''}`} />
+              {syncing ? 'Atualizando...' : 'Atualizar do Sistema'}
+            </Button>
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             <DialogTrigger asChild>
               <Button onClick={() => setEditingClass(null)}>
@@ -157,6 +216,7 @@ const MappingClassesContent = () => {
               <ClassForm classData={editingClass} onClose={handleCloseDialog} />
             </DialogContent>
           </Dialog>
+          </div>
         </div>
 
         {/* Classes List */}
