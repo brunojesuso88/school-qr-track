@@ -476,6 +476,7 @@ const ClassesBulkImportDialog = ({ open, onOpenChange }: Props) => {
   const selectedCount = extracted.filter((c) => c.selected).length;
   const newClassCount = extracted.filter((c) => c.selected && !c.matchedClassId).length;
   const updateClassCount = extracted.filter((c) => c.selected && !!c.matchedClassId).length;
+  const invalidCount = extracted.filter((c) => c.selected && getSumStatus(c) !== "ok").length;
 
   return (
     <Dialog open={open} onOpenChange={(o) => (!o ? handleClose() : onOpenChange(o))}>
@@ -570,12 +571,41 @@ const ClassesBulkImportDialog = ({ open, onOpenChange }: Props) => {
                           <Badge variant="secondary" className="text-[10px]">
                             {c.subjects.length} disciplina(s)
                           </Badge>
+                          {(() => {
+                            const sum = getClassSum(c);
+                            const target = getTargetHours(c);
+                            const status = getSumStatus(c);
+                            const cls =
+                              status === "ok"
+                                ? "bg-emerald-500 hover:bg-emerald-500/90"
+                                : status === "over"
+                                ? "bg-red-500 hover:bg-red-500/90"
+                                : "bg-amber-500 hover:bg-amber-500/90";
+                            return (
+                              <Badge className={`text-[10px] ${cls}`}>
+                                Soma: {sum}h / {target}h
+                              </Badge>
+                            );
+                          })()}
                         </div>
+                        {getSumStatus(c) !== "ok" && (
+                          <p className="mt-1 text-[11px] text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                            <AlertTriangle className="h-3 w-3" />
+                            Soma das aulas ({getClassSum(c)}h) difere da carga semanal da turma ({getTargetHours(c)}h).
+                          </p>
+                        )}
 
                         <ul className="mt-2 space-y-1">
                           {c.subjects.map((s, si) => {
                             const t = matchTeacher(s.teacher_name, s.teacher_abbreviation);
                             const subjExists = subjectExists(s.name);
+                            const gd = getGlobalDefault(s.name);
+                            const willUpdateDefault =
+                              subjExists &&
+                              s.weekly_classes != null &&
+                              s.weekly_classes > 0 &&
+                              gd != null &&
+                              s.weekly_classes !== gd;
                             return (
                               <li
                                 key={si}
@@ -589,6 +619,11 @@ const ClassesBulkImportDialog = ({ open, onOpenChange }: Props) => {
                                   <span className="text-muted-foreground">
                                     · {s.weekly_classes}h
                                   </span>
+                                )}
+                                {willUpdateDefault && (
+                                  <Badge variant="outline" className="text-[9px] border-amber-500/40 text-amber-600 dark:text-amber-400">
+                                    atualizar padrão ({gd}h→{s.weekly_classes}h)
+                                  </Badge>
                                 )}
                                 <span className="text-muted-foreground">→</span>
                                 {s.teacher_name || s.teacher_abbreviation ? (
@@ -644,9 +679,15 @@ const ClassesBulkImportDialog = ({ open, onOpenChange }: Props) => {
               <Button variant="outline" onClick={handleClose} disabled={isSaving}>
                 Cancelar
               </Button>
-              <Button onClick={handleSave} disabled={isSaving || selectedCount === 0}>
+              <Button
+                onClick={handleSave}
+                disabled={isSaving || selectedCount === 0 || invalidCount > 0}
+                title={invalidCount > 0 ? `${invalidCount} turma(s) com carga inconsistente` : undefined}
+              >
                 {isSaving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                Importar {selectedCount} turma(s)
+                {invalidCount > 0
+                  ? `Ajuste ${invalidCount} turma(s) com carga inconsistente`
+                  : `Importar ${selectedCount} turma(s)`}
               </Button>
             </DialogFooter>
           </>
