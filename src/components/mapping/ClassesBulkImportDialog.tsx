@@ -200,16 +200,6 @@ const ClassesBulkImportDialog = ({ open, onOpenChange }: Props) => {
       return;
     }
 
-    const invalid = selected.filter((c) => getSumStatus(c) !== "ok");
-    if (invalid.length > 0) {
-      toast({
-        title: "Carga horária inconsistente",
-        description: `${invalid.length} turma(s) com soma de aulas ≠ carga semanal. Desmarque ou ajuste antes de importar.`,
-        variant: "destructive",
-      });
-      return;
-    }
-
     setIsSaving(true);
     try {
       // 0) Calcular consenso de weekly_classes por disciplina (canônica) a partir do PDF
@@ -274,10 +264,11 @@ const ClassesBulkImportDialog = ({ open, onOpenChange }: Props) => {
         .filter((c) => !c.matchedClassId)
         .map((c) => {
           const shift = c.shift || "morning";
+          const pdfSum = getClassSum(c);
           return {
             name: c.name,
             shift,
-            weekly_hours: shift === "evening" ? 25 : 30,
+            weekly_hours: pdfSum > 0 ? pdfSum : shift === "evening" ? 25 : 30,
             student_count: null as number | null,
           };
         });
@@ -291,6 +282,23 @@ const ClassesBulkImportDialog = ({ open, onOpenChange }: Props) => {
         if (error) throw error;
         (data || []).forEach((c) => classNameToId.set(norm(c.name), c.id));
         createdClassesCount = data?.length || 0;
+      }
+
+      // 2b) Atualizar weekly_hours de turmas existentes quando o PDF diverge
+      let updatedClassHoursCount = 0;
+      for (const c of selected) {
+        if (!c.matchedClassId) continue;
+        const existing = classes.find((mc) => mc.id === c.matchedClassId);
+        if (!existing) continue;
+        const pdfSum = getClassSum(c);
+        if (pdfSum > 0 && pdfSum !== existing.weekly_hours) {
+          const { error } = await supabase
+            .from("mapping_classes")
+            .update({ weekly_hours: pdfSum })
+            .eq("id", existing.id);
+          if (error) console.error("Erro ao atualizar weekly_hours", existing.name, error);
+          else updatedClassHoursCount++;
+        }
       }
 
       // 3) Criar professores novos (únicos por nome/abreviação no PDF que não casam)
@@ -452,6 +460,7 @@ const ClassesBulkImportDialog = ({ open, onOpenChange }: Props) => {
       parts.push(`${toInsertCS.length + toUpdateCS.length} disciplina(s)`);
       if (createdTeachersCount > 0) parts.push(`${createdTeachersCount} professor(es) novo(s)`);
       if (createdSubjCount > 0) parts.push(`${createdSubjCount} disciplina(s) global(is)`);
+      if (updatedClassHoursCount > 0) parts.push(`${updatedClassHoursCount} carga(s) horária(s) de turma atualizada(s)`);
       if (updatedGlobalDefaults > 0) parts.push(`${updatedGlobalDefaults} padrão(ões) global(is) atualizado(s)`);
       if (conflicts.length > 0) parts.push(`${conflicts.length} disciplina(s) com conflito de carga (mantido por turma)`);
       if (assignmentCount > 0) parts.push(`${assignmentCount} atribuição(ões)`);
@@ -681,12 +690,13 @@ const ClassesBulkImportDialog = ({ open, onOpenChange }: Props) => {
               </Button>
               <Button
                 onClick={handleSave}
-                disabled={isSaving || selectedCount === 0 || invalidCount > 0}
-                title={invalidCount > 0 ? `${invalidCount} turma(s) com carga inconsistente` : undefined}
+                disabled={isSaving || selectedCount === 0}
+                title={invalidCount > 0 ? `${invalidCount} turma(s) terão a carga horária ajustada conforme o PDF` : undefined}
+                variant={invalidCount > 0 ? "default" : "default"}
               >
                 {isSaving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
                 {invalidCount > 0
-                  ? `Ajuste ${invalidCount} turma(s) com carga inconsistente`
+                  ? `Atualizar ${selectedCount} turma(s) conforme PDF`
                   : `Importar ${selectedCount} turma(s)`}
               </Button>
             </DialogFooter>
