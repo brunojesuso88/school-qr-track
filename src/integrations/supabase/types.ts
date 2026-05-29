@@ -222,6 +222,7 @@ export type Database = {
       }
       mapping_teachers: {
         Row: {
+          abbreviation: string | null
           availability: string[] | null
           color: string
           created_at: string | null
@@ -236,6 +237,7 @@ export type Database = {
           updated_at: string | null
         }
         Insert: {
+          abbreviation?: string | null
           availability?: string[] | null
           color: string
           created_at?: string | null
@@ -250,6 +252,7 @@ export type Database = {
           updated_at?: string | null
         }
         Update: {
+          abbreviation?: string | null
           availability?: string[] | null
           color?: string
           created_at?: string | null
