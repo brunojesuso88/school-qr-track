@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useSchoolMapping, MappingGlobalSubject } from "@/contexts/SchoolMappingContext";
 import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 
 interface SubjectFormProps {
   subject?: MappingGlobalSubject | null;
@@ -11,7 +12,7 @@ interface SubjectFormProps {
 }
 
 const SubjectForm = ({ subject, onClose }: SubjectFormProps) => {
-  const { addGlobalSubject, updateGlobalSubject } = useSchoolMapping();
+  const { addGlobalSubject, updateGlobalSubject, refreshData } = useSchoolMapping();
   const { toast } = useToast();
   
   const [name, setName] = useState(subject?.name || "");
@@ -38,8 +39,32 @@ const SubjectForm = ({ subject, onClose }: SubjectFormProps) => {
       };
 
       if (subject) {
+        const previous = subject.default_weekly_classes;
         await updateGlobalSubject(subject.id, data);
-        toast({ title: "Disciplina atualizada com sucesso" });
+
+        // Propagate the new default to every existing class_subject row
+        // so the "Disciplinas" tab and the "Distribuição" tab never diverge.
+        let propagated = 0;
+        if (data.default_weekly_classes !== previous) {
+          const { data: updated, error } = await supabase
+            .from("mapping_class_subjects")
+            .update({ weekly_classes: data.default_weekly_classes })
+            .eq("subject_name", subject.name)
+            .select("id");
+          if (!error) {
+            propagated = updated?.length || 0;
+            // teacher current_hours is recomputed inside refreshData()
+            await refreshData();
+          }
+        }
+
+        toast({
+          title: "Disciplina atualizada com sucesso",
+          description:
+            propagated > 0
+              ? `${propagated} turma(s) sincronizada(s) com o novo padrão.`
+              : undefined,
+        });
       } else {
         await addGlobalSubject(data);
         toast({ title: "Disciplina cadastrada com sucesso" });

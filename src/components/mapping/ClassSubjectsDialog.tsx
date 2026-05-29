@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -27,6 +27,15 @@ const ClassSubjectsDialog = ({ classData, onClose }: ClassSubjectsDialogProps) =
   const availableSubjects = globalSubjects.filter(
     gs => !classSubjectsList.some(cs => cs.subject_name === gs.name)
   );
+
+  // Sync weekly classes with the global default whenever a subject is picked
+  useEffect(() => {
+    if (!selectedSubject) return;
+    const gs = globalSubjects.find(g => g.name === selectedSubject);
+    if (gs?.default_weekly_classes) {
+      setWeeklyClasses(String(gs.default_weekly_classes));
+    }
+  }, [selectedSubject, globalSubjects]);
 
   const handleAdd = async () => {
     if (!selectedSubject) {
