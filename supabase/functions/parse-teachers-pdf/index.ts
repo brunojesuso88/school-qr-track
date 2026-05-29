@@ -76,14 +76,17 @@ serve(async (req) => {
 Analise o documento com rigor máximo e extraia TODOS os professores que encontrar.
 Para cada professor, identifique:
 - Nome completo (obrigatório)
+- Abreviação/sigla do professor (se aparecer, ex.: "JMS", "M.S.", iniciais)
 - E-mail (se disponível)
 - Telefone (se disponível)
 - Carga horária semanal máxima (se disponível, default 20)
 - Turmas/classes associadas ao professor (ex: 1A, 2B, 3ºA, 1º Ano A, etc.)
+- Disciplinas lecionadas pelo professor (nome completo OU abreviação, ex.: "Matemática", "MAT", "Português", "POR")
 
 Seja rigoroso: extraia TODOS os nomes de professores e suas respectivas turmas.
 As turmas podem aparecer como "1A", "1ºA", "1º Ano A", "Turma 1A", etc.
 Se um professor leciona em múltiplas turmas, liste todas elas.
+Se um professor leciona múltiplas disciplinas, liste todas (nome completo ou abreviação como aparece no documento).
 Ignore cabeçalhos, títulos e textos que não sejam nomes de professores.`
           },
           {
@@ -91,7 +94,7 @@ Ignore cabeçalhos, títulos e textos que não sejam nomes de professores.`
             content: [
               {
                 type: 'text',
-                text: 'Analise este documento PDF e extraia todos os dados de professores encontrados, incluindo as turmas de cada professor. Seja rigoroso e extraia todos os nomes e turmas.'
+                text: 'Analise este documento PDF e extraia todos os dados de professores encontrados, incluindo nome, abreviação, turmas e disciplinas. Seja rigoroso e extraia tudo que aparecer no documento.'
               },
               {
                 type: 'image_url',
@@ -107,7 +110,7 @@ Ignore cabeçalhos, títulos e textos que não sejam nomes de professores.`
             type: 'function',
             function: {
               name: 'extract_teachers',
-              description: 'Extrai dados de professores do documento, incluindo suas turmas',
+              description: 'Extrai dados de professores do documento, incluindo abreviação, turmas e disciplinas',
               parameters: {
                 type: 'object',
                 properties: {
@@ -117,6 +120,7 @@ Ignore cabeçalhos, títulos e textos que não sejam nomes de professores.`
                       type: 'object',
                       properties: {
                         name: { type: 'string', description: 'Nome completo do professor' },
+                        abbreviation: { type: 'string', description: 'Sigla/abreviação do professor (opcional)' },
                         email: { type: 'string', description: 'E-mail do professor' },
                         phone: { type: 'string', description: 'Telefone do professor' },
                         max_weekly_hours: { type: 'number', description: 'Carga horária semanal máxima' },
@@ -124,6 +128,11 @@ Ignore cabeçalhos, títulos e textos que não sejam nomes de professores.`
                           type: 'array', 
                           items: { type: 'string' }, 
                           description: 'Nomes das turmas/classes do professor (ex: 1A, 2B, 3ºA)' 
+                        },
+                        subjects: {
+                          type: 'array',
+                          items: { type: 'string' },
+                          description: 'Disciplinas lecionadas (nome completo ou abreviação, ex.: Matemática, MAT)'
                         }
                       },
                       required: ['name']
@@ -190,10 +199,12 @@ Ignore cabeçalhos, títulos e textos que não sejam nomes de professores.`
     const formattedTeachers = teachers
       .map((t: any) => ({
         name: String(t.name || t.nome || '').trim().substring(0, 100),
+        abbreviation: String(t.abbreviation || t.sigla || '').trim().toUpperCase().substring(0, 10) || '',
         email: String(t.email || '').trim().substring(0, 100) || '',
         phone: String(t.phone || t.telefone || '').replace(/\D/g, '').substring(0, 15) || '',
         max_weekly_hours: Number(t.max_weekly_hours || t.carga_horaria || 20),
         classes: Array.isArray(t.classes) ? t.classes.map((c: any) => String(c).trim()).filter((c: string) => c.length > 0) : [],
+        subjects: Array.isArray(t.subjects) ? t.subjects.map((s: any) => String(s).trim()).filter((s: string) => s.length > 0) : [],
       }))
       .filter((t: any) => t.name.length >= 2);
 
