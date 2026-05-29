@@ -58,7 +58,14 @@ const MappingSubjectsContent = () => {
       <CardContent className="p-4">
         <div className="flex items-start justify-between gap-4">
           <div className="space-y-2">
-            <h3 className="font-semibold">{subject.name}</h3>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h3 className="font-semibold">{subject.name}</h3>
+              {subject.abbreviation && (
+                <Badge variant="outline" className="font-mono text-xs">
+                  {subject.abbreviation}
+                </Badge>
+              )}
+            </div>
             <Badge variant="secondary">
               {subject.default_weekly_classes} aulas/semana
             </Badge>
