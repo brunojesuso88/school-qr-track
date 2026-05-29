@@ -15,6 +15,7 @@ const SubjectForm = ({ subject, onClose }: SubjectFormProps) => {
   const { toast } = useToast();
   
   const [name, setName] = useState(subject?.name || "");
+  const [abbreviation, setAbbreviation] = useState(subject?.abbreviation || "");
   const [defaultWeeklyClasses, setDefaultWeeklyClasses] = useState(
     subject?.default_weekly_classes?.toString() || "4"
   );
@@ -32,6 +33,7 @@ const SubjectForm = ({ subject, onClose }: SubjectFormProps) => {
     try {
       const data = {
         name: name.trim(),
+        abbreviation: abbreviation.trim() ? abbreviation.trim().toUpperCase() : null,
         default_weekly_classes: parseInt(defaultWeeklyClasses)
       };
 
@@ -60,6 +62,20 @@ const SubjectForm = ({ subject, onClose }: SubjectFormProps) => {
           onChange={e => setName(e.target.value)}
           placeholder="Ex: Matemática"
         />
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="abbreviation">Abreviação</Label>
+        <Input
+          id="abbreviation"
+          value={abbreviation}
+          onChange={e => setAbbreviation(e.target.value.slice(0, 10))}
+          placeholder="Ex: MAT"
+          maxLength={10}
+        />
+        <p className="text-xs text-muted-foreground">
+          Opcional. Permite identificar a disciplina por uma sigla curta (até 10 caracteres).
+        </p>
       </div>
 
       <div className="space-y-2">
