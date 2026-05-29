@@ -162,6 +162,11 @@ const MappingTeachersContent = () => {
                             style={{ backgroundColor: teacher.color }}
                           />
                           <h3 className="font-semibold">{teacher.name}</h3>
+                          {teacher.abbreviation && (
+                            <Badge variant="outline" className="text-[10px] font-mono">
+                              {teacher.abbreviation}
+                            </Badge>
+                          )}
                           {isOverloaded && (
                             <AlertTriangle className="h-4 w-4 text-amber-500" />
                           )}

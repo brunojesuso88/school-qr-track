@@ -38,6 +38,7 @@ const TeacherForm = ({ teacher, onClose }: TeacherFormProps) => {
   const { toast } = useToast();
   
   const [name, setName] = useState(teacher?.name || "");
+  const [abbreviation, setAbbreviation] = useState(teacher?.abbreviation || "");
   const [email, setEmail] = useState(teacher?.email || "");
   const [phone, setPhone] = useState(teacher?.phone || "");
   const [maxWeeklyHours, setMaxWeeklyHours] = useState(teacher?.max_weekly_hours?.toString() || "20");
@@ -151,6 +152,7 @@ const TeacherForm = ({ teacher, onClose }: TeacherFormProps) => {
     try {
       const data = {
         name: name.trim(),
+        abbreviation: abbreviation.trim() ? abbreviation.trim().toUpperCase() : null,
         email: email.trim() || undefined,
         phone: phone.trim() || undefined,
         max_weekly_hours: parseInt(maxWeeklyHours),
@@ -222,6 +224,20 @@ const TeacherForm = ({ teacher, onClose }: TeacherFormProps) => {
           onChange={e => setName(e.target.value)}
           placeholder="Nome completo"
         />
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="abbreviation">Abreviação</Label>
+        <Input
+          id="abbreviation"
+          value={abbreviation}
+          onChange={e => setAbbreviation(e.target.value.slice(0, 10))}
+          placeholder="Ex: JMS"
+          maxLength={10}
+        />
+        <p className="text-xs text-muted-foreground">
+          Opcional. Permite identificar o professor por uma sigla curta (até 10 caracteres).
+        </p>
       </div>
 
       <div className="grid grid-cols-2 gap-4">

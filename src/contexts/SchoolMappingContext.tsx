@@ -12,6 +12,7 @@ export const TEACHER_COLORS = [
 export interface MappingTeacher {
   id: string;
   name: string;
+  abbreviation?: string | null;
   email?: string;
   phone?: string;
   max_weekly_hours: number;

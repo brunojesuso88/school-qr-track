@@ -301,6 +301,11 @@ const TeacherAssociationDialog = ({ teacher, onClose }: TeacherAssociationDialog
               style={{ backgroundColor: teacher.color }}
             />
             <span className="font-medium">{teacher.name}</span>
+            {teacher.abbreviation && (
+              <Badge variant="outline" className="text-[10px] font-mono">
+                {teacher.abbreviation}
+              </Badge>
+            )}
             <span className="text-sm text-muted-foreground">
               ({localCurrentHours}h / {teacher.max_weekly_hours}h)
             </span>
