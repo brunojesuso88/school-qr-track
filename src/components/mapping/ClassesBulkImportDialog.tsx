@@ -14,6 +14,8 @@ interface ExtractedSubject {
   name: string;
   weekly_classes: number | null;
   original_weekly_classes: number | null;
+  double_periods: number;
+  merged_from: number;
   teacher_name: string | null;
   teacher_abbreviation: string | null;
 }
@@ -21,6 +23,7 @@ interface ExtractedSubject {
 interface ExtractedClass {
   name: string;
   shift: string | null;
+  notes: string | null;
   subjects: ExtractedSubject[];
   selected: boolean;
   matchedClassId?: string | null;
@@ -87,11 +90,13 @@ const ClassesBulkImportDialog = ({ open, onOpenChange }: Props) => {
   };
 
   const getTargetHours = (c: ExtractedClass): number => {
-    if (c.matchedClassId) {
-      const existing = classes.find((mc) => mc.id === c.matchedClassId);
-      if (existing?.weekly_hours) return existing.weekly_hours;
-    }
     return (c.shift || "morning") === "evening" ? 25 : 30;
+  };
+
+  const getStoredHours = (c: ExtractedClass): number | null => {
+    if (!c.matchedClassId) return null;
+    const existing = classes.find((mc) => mc.id === c.matchedClassId);
+    return existing?.weekly_hours ?? null;
   };
 
   const getClassSum = (c: ExtractedClass): number =>
@@ -103,6 +108,24 @@ const ClassesBulkImportDialog = ({ open, onOpenChange }: Props) => {
     if (sum === target) return "ok";
     if (sum > target) return "over";
     return "diff";
+  };
+
+  const getDivergenceReasons = (c: ExtractedClass): string[] => {
+    const reasons: string[] = [];
+    const sum = getClassSum(c);
+    const target = getTargetHours(c);
+    const merged = c.subjects.filter((s) => s.merged_from > 1).length;
+    const missing = c.subjects.filter((s) => !s.weekly_classes || s.weekly_classes <= 0).length;
+    const doubles = c.subjects.reduce((acc, s) => acc + (s.double_periods || 0), 0);
+    const stored = getStoredHours(c);
+    if (merged > 0) reasons.push(`${merged} disciplina(s) duplicada(s) consolidada(s) automaticamente`);
+    if (missing > 0) reasons.push(`${missing} disciplina(s) sem carga no PDF (usando padrão)`);
+    if (sum > target) reasons.push(`Sobrecarga: ${sum - target}h acima do alvo`);
+    if (sum < target) reasons.push(`Subcarga: ${target - sum}h abaixo do alvo`);
+    if (doubles > 0) reasons.push(`Aulas duplas detectadas: ${doubles}`);
+    if (stored != null && stored !== target) reasons.push(`Cadastro da turma tem ${stored}h (padrão é ${target}h)`);
+    if (sum !== target) reasons.push(`Carga semanal alvo: 30h (manhã/tarde) ou 25h (noite)`);
+    return reasons;
   };
 
   const subjectExists = (mention: string) => {
@@ -146,19 +169,42 @@ const ClassesBulkImportDialog = ({ open, onOpenChange }: Props) => {
 
       const result: ExtractedClass[] = (data.classes || []).map((c: any) => {
         const matched = classes.find((mc) => norm(mc.name) === norm(c.name));
+        // Deduplicação: consolidar disciplinas repetidas na mesma turma
+        const byCanonical = new Map<string, ExtractedSubject>();
+        for (const s of c.subjects || []) {
+          const rawName = String(s.name || "").trim();
+          if (!rawName) continue;
+          const canonical = resolveSubjectName(rawName);
+          const key = norm(canonical);
+          const wc = Number(s.weekly_classes) > 0 ? Number(s.weekly_classes) : null;
+          const dp = Number(s.double_periods) > 0 ? Number(s.double_periods) : 0;
+          const existing = byCanonical.get(key);
+          if (existing) {
+            const sumWc = (existing.weekly_classes || 0) + (wc || 0);
+            existing.weekly_classes = sumWc > 0 ? sumWc : existing.weekly_classes;
+            existing.original_weekly_classes = existing.weekly_classes;
+            existing.double_periods += dp;
+            existing.merged_from += 1;
+            if (!existing.teacher_name && s.teacher_name) existing.teacher_name = s.teacher_name;
+            if (!existing.teacher_abbreviation && s.teacher_abbreviation)
+              existing.teacher_abbreviation = s.teacher_abbreviation;
+          } else {
+            byCanonical.set(key, {
+              name: rawName,
+              weekly_classes: wc,
+              original_weekly_classes: wc,
+              double_periods: dp,
+              merged_from: 1,
+              teacher_name: s.teacher_name || null,
+              teacher_abbreviation: s.teacher_abbreviation || null,
+            });
+          }
+        }
         return {
           name: String(c.name || "").trim(),
           shift: c.shift || null,
-          subjects: (c.subjects || []).map((s: any) => {
-            const wc = s.weekly_classes || null;
-            return {
-              name: String(s.name || "").trim(),
-              weekly_classes: wc,
-              original_weekly_classes: wc,
-              teacher_name: s.teacher_name || null,
-              teacher_abbreviation: s.teacher_abbreviation || null,
-            };
-          }),
+          notes: c.notes || null,
+          subjects: Array.from(byCanonical.values()),
           selected: true,
           matchedClassId: matched?.id ?? null,
         };
