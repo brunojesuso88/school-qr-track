@@ -224,6 +224,7 @@ const Students = () => {
         return;
       }
       setPhotoFile(file);
+      setRemovePhoto(false);
       const reader = new FileReader();
       reader.onloadend = () => {
         setPhotoPreview(reader.result as string);
@@ -446,8 +447,8 @@ const Students = () => {
       full_name: student.full_name,
       class: student.class,
       shift: student.shift,
-      guardian_name: student.guardian_name,
-      guardian_phone: student.guardian_phone,
+      guardian_name: student.guardian_name ?? '',
+      guardian_phone: student.guardian_phone ?? '',
       status: student.status || 'active',
       has_medical_report: student.has_medical_report || false,
       medical_report_details: student.medical_report_details || '',
@@ -648,14 +649,6 @@ const Students = () => {
                       <p className="text-xs text-muted-foreground mt-1">
                         JPG, PNG ou GIF. Máximo 5MB.
                       </p>
-                      <CameraPhotoCapture
-                        open={isCameraOpen}
-                        onOpenChange={setIsCameraOpen}
-                        onCapture={(file, previewUrl) => {
-                          setPhotoFile(file);
-                          setPhotoPreview(previewUrl);
-                        }}
-                      />
                     </div>
                   </div>
                 </div>
