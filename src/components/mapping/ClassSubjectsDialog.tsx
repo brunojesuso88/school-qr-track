@@ -84,7 +84,7 @@ const ClassSubjectsDialog = ({ classData, onClose }: ClassSubjectsDialogProps) =
                   ) : (
                     availableSubjects.map(subject => (
                       <SelectItem key={subject.id} value={subject.name}>
-                        {subject.name}
+                        {subject.name}{subject.abbreviation ? ` (${subject.abbreviation})` : ''}
                       </SelectItem>
                     ))
                   )}
@@ -126,6 +126,11 @@ const ClassSubjectsDialog = ({ classData, onClose }: ClassSubjectsDialogProps) =
                   >
                     <div className="flex items-center gap-2">
                       <span className="font-medium">{subject.subject_name}</span>
+                      {globalSubjects.find(gs => gs.name === subject.subject_name)?.abbreviation && (
+                        <Badge variant="outline" className="text-xs font-mono">
+                          {globalSubjects.find(gs => gs.name === subject.subject_name)?.abbreviation}
+                        </Badge>
+                      )}
                       <Badge variant="secondary" className="text-xs">
                         {subject.weekly_classes} aulas
                       </Badge>
