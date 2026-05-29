@@ -36,6 +36,7 @@ import TimetableSettings from "./pages/timetable/TimetableSettings";
 import TimetableRules from "./pages/timetable/TimetableRules";
 import TimetableGenerate from "./pages/timetable/TimetableGenerate";
 import TimetableExport from "./pages/timetable/TimetableExport";
+import TeacherNotifications from "./pages/TeacherNotifications";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -72,6 +73,7 @@ const App = () => (
               <Route path="/events" element={<AdminRoute><Events /></AdminRoute>} />
               <Route path="/school-events" element={<AdminRoute><SchoolEvents /></AdminRoute>} />
               <Route path="/declarations" element={<AdminRoute><Declarations /></AdminRoute>} />
+              <Route path="/teacher-notifications" element={<AdminRoute><TeacherNotifications /></AdminRoute>} />
               <Route path="/notifications" element={<AdminRoute><Notifications /></AdminRoute>} />
               <Route path="/settings" element={<AdminRoute><Settings /></AdminRoute>} />
               
