@@ -3,6 +3,15 @@ project_id = "firhmtfjxagrmyltsypd"
 [functions.parse-students-pdf]
 verify_jwt = false
 
+[functions.parse-classes-pdf]
+verify_jwt = false
+
+[functions.parse-teachers-pdf]
+verify_jwt = false
+
+[functions.parse-subjects-pdf]
+verify_jwt = false
+
 [functions.generate-timetable]
 verify_jwt = false
 
