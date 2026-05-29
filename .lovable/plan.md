@@ -1,48 +1,51 @@
-## Diagnóstico
+## Objetivo
 
-Existem **dois campos independentes** armazenando "aulas por semana", e eles não se comunicam:
+No diálogo "Adicionar em Lote (PDF)" da aba **Turmas**, adicionar checagem rigorosa da carga horária semanal extraída do PDF e propagar as mudanças para o padrão global da disciplina.
 
-1. `mapping_global_subjects.default_weekly_classes` — exibido na aba **Disciplinas** (o "valor padrão" global da disciplina).
-2. `mapping_class_subjects.weekly_classes` — exibido na aba **Distribuição** (o valor real daquela disciplina dentro de cada turma).
+## Mudanças em `src/components/mapping/ClassesBulkImportDialog.tsx`
 
-### Pontos onde a divergência nasce
+### 1. Validação da soma por turma (na revisão)
 
-- **`ClassSubjectsDialog.tsx`** (linha 22): ao adicionar uma disciplina à turma o input começa fixo em `"2"`, ignorando o `default_weekly_classes` da disciplina global.
-- **`ClassesBulkImportDialog.tsx`**: quando o PDF não traz `weekly_classes`, cai para `4` (default da coluna), também ignorando o valor global.
-- **`SubjectForm.tsx`**: ao editar `default_weekly_classes` da disciplina global, **nenhuma** das linhas já existentes em `mapping_class_subjects` é atualizada → quem já está nas turmas continua com o valor antigo.
-- Resultado: a aba Disciplinas mostra (por ex.) 4 aulas/semana e a Distribuição mostra 2 para a mesma disciplina.
+Para cada turma extraída do PDF, calcular a soma de `weekly_classes` das disciplinas e comparar com a carga semanal alvo:
 
-## Solução definitiva
+- Turmas existentes → usar `mapping_classes.weekly_hours` da turma já cadastrada.
+- Turmas novas → usar default por turno (`evening` = 25h, demais = 30h).
+- Disciplinas sem `weekly_classes` extraído → considerar fallback (`default_weekly_classes` global ou 4) já usado hoje.
 
-Fazer da disciplina global a **fonte única da verdade** para "aulas/semana padrão", propagando para baixo automaticamente.
+Exibir na revisão, por turma:
+- Badge "Soma: Xh / Yh" em verde quando bate, âmbar quando difere, vermelho quando ultrapassa.
+- Aviso textual quando houver divergência ("Soma das aulas (X) difere da carga da turma (Y)").
 
-### 1. `SubjectForm.tsx` — propagar alterações do padrão
-Ao salvar uma disciplina existente, se `default_weekly_classes` mudou:
-- Atualizar `mapping_global_subjects` (já é feito).
-- Em seguida `UPDATE mapping_class_subjects SET weekly_classes = <novo> WHERE subject_name = <nome>`.
-- Mostrar no toast: "X linhas em turmas atualizadas".
-- Como isso muda a carga horária dos professores, chamar `refreshData()` (o context já recalcula `current_hours` a partir das `mapping_class_subjects`).
+Por disciplina, marcar visualmente (badge âmbar "atualizar padrão") quando o valor do PDF for diferente do `default_weekly_classes` global atual.
 
-### 2. `ClassSubjectsDialog.tsx` — usar o padrão da disciplina selecionada
-- Trocar o estado inicial fixo `"2"` por um valor derivado do `globalSubjects.find(...).default_weekly_classes` da disciplina escolhida.
-- `useEffect` que sincroniza `weeklyClasses` sempre que `selectedSubject` mudar.
-- O input fica editável (override pontual), mas o default é sempre o da disciplina.
+### 2. Bloqueio de importação em caso de soma incorreta
 
-### 3. `ClassesBulkImportDialog.tsx` — mesma regra no import
-- No mapeamento `subject.weekly_classes ?? 4`, trocar o fallback `4` por `globalSubjects.find(name match)?.default_weekly_classes ?? 4`.
-- Para disciplinas novas criadas pelo import, o registro em `mapping_class_subjects` herda o `default_weekly_classes` que acabou de ser inserido.
+Botão "Importar" desabilitado enquanto houver pelo menos uma turma selecionada com soma ≠ carga da turma. Toast explicativo se o usuário tentar prosseguir. Permitir desmarcar turmas problemáticas para liberar.
 
-### 4. (Opcional/coerência) `MappingSubjects.tsx`
-- Adicionar um pequeno texto sob o badge "X aulas/semana" indicando "valor padrão — aplicado a turmas ao adicionar". Sem mudança de comportamento, apenas clareza.
+### 3. Atualização do padrão global da disciplina
 
-## Arquivos a editar
+Durante `handleSave`, após resolver o nome canônico de cada disciplina:
 
-- `src/components/mapping/SubjectForm.tsx`
-- `src/components/mapping/ClassSubjectsDialog.tsx`
-- `src/components/mapping/ClassesBulkImportDialog.tsx`
-- `src/pages/mapping/MappingSubjects.tsx` (apenas texto auxiliar)
+- Agrupar, por disciplina global, todos os `weekly_classes` vindos do PDF (ignorando nulos).
+- Se houver consenso (todos os valores idênticos) e for **diferente** do `default_weekly_classes` atual:
+  - `UPDATE mapping_global_subjects SET default_weekly_classes = <novo>` para essa disciplina.
+  - `UPDATE mapping_class_subjects SET weekly_classes = <novo> WHERE subject_name = <name>` para propagar a todas as turmas existentes (mesma estratégia já usada no `SubjectForm`).
+- Se houver conflito (valores diferentes para a mesma disciplina em turmas distintas no PDF): não atualizar o padrão global, manter o valor por turma exatamente como veio do PDF, e logar um aviso no toast final.
+
+Para disciplinas globais novas criadas na etapa 1 do save, usar o `weekly_classes` mais frequente do PDF como `default_weekly_classes` (em vez do `4` fixo atual).
+
+### 4. Resumo no toast final
+
+Acrescentar ao toast:
+- "N disciplina(s) global(is) com padrão atualizado"
+- "N turma(s) com soma divergente ignorada(s)" (se aplicável)
+
+## Arquivos afetados
+
+- `src/components/mapping/ClassesBulkImportDialog.tsx` (único arquivo editado)
 
 ## Fora de escopo
 
-- Não remover a coluna `weekly_classes` de `mapping_class_subjects` (turmas ainda podem ter override pontual).
-- Sem migration de schema; apenas um `UPDATE` em runtime quando o admin edita o padrão.
+- Sem mudanças de schema.
+- Sem alteração no Edge Function `parse-classes-pdf`.
+- Sem mudanças em outras abas (Disciplinas, Distribuição, Professores).

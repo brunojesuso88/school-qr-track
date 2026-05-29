@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
-import { Upload, Loader2, FileText } from "lucide-react";
+import { Upload, Loader2, FileText, AlertTriangle } from "lucide-react";
 import { useSchoolMapping, TEACHER_COLORS } from "@/contexts/SchoolMappingContext";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
@@ -70,6 +70,37 @@ const ClassesBulkImportDialog = ({ open, onOpenChange }: Props) => {
       (gs) => norm(gs.name) === m || (gs.abbreviation || "").toLowerCase() === m
     );
     return found ? found.name : mention.trim();
+  };
+
+  const getGlobalDefault = (mention: string): number | null => {
+    const canonical = resolveSubjectName(mention);
+    const found = globalSubjects.find((gs) => norm(gs.name) === norm(canonical));
+    return found?.default_weekly_classes ?? null;
+  };
+
+  const getEffectiveWeekly = (s: ExtractedSubject): number => {
+    if (s.weekly_classes && s.weekly_classes > 0) return s.weekly_classes;
+    const gd = getGlobalDefault(s.name);
+    return gd && gd > 0 ? gd : 4;
+  };
+
+  const getTargetHours = (c: ExtractedClass): number => {
+    if (c.matchedClassId) {
+      const existing = classes.find((mc) => mc.id === c.matchedClassId);
+      if (existing?.weekly_hours) return existing.weekly_hours;
+    }
+    return (c.shift || "morning") === "evening" ? 25 : 30;
+  };
+
+  const getClassSum = (c: ExtractedClass): number =>
+    c.subjects.reduce((acc, s) => acc + getEffectiveWeekly(s), 0);
+
+  const getSumStatus = (c: ExtractedClass): "ok" | "diff" | "over" => {
+    const sum = getClassSum(c);
+    const target = getTargetHours(c);
+    if (sum === target) return "ok";
+    if (sum > target) return "over";
+    return "diff";
   };
 
   const subjectExists = (mention: string) => {
@@ -169,15 +200,69 @@ const ClassesBulkImportDialog = ({ open, onOpenChange }: Props) => {
       return;
     }
 
+    const invalid = selected.filter((c) => getSumStatus(c) !== "ok");
+    if (invalid.length > 0) {
+      toast({
+        title: "Carga horária inconsistente",
+        description: `${invalid.length} turma(s) com soma de aulas ≠ carga semanal. Desmarque ou ajuste antes de importar.`,
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsSaving(true);
     try {
-      // 1) Criar disciplinas globais novas selecionadas
+      // 0) Calcular consenso de weekly_classes por disciplina (canônica) a partir do PDF
+      const subjectPdfValues = new Map<string, number[]>(); // canonical name -> [weekly_classes...]
+      for (const c of selected) {
+        for (const s of c.subjects) {
+          if (!s.weekly_classes || s.weekly_classes <= 0) continue;
+          const canonical = resolveSubjectName(s.name);
+          const key = norm(canonical);
+          const arr = subjectPdfValues.get(key) || [];
+          arr.push(s.weekly_classes);
+          subjectPdfValues.set(key, arr);
+        }
+      }
+      const subjectConsensus = new Map<string, number | null>(); // null = conflito
+      const conflicts: string[] = [];
+      subjectPdfValues.forEach((vals, key) => {
+        const unique = Array.from(new Set(vals));
+        if (unique.length === 1) {
+          subjectConsensus.set(key, unique[0]);
+        } else {
+          subjectConsensus.set(key, null);
+          conflicts.push(key);
+        }
+      });
+
+      const mostFrequent = (vals: number[]): number => {
+        const count = new Map<number, number>();
+        vals.forEach((v) => count.set(v, (count.get(v) || 0) + 1));
+        let best = vals[0];
+        let max = 0;
+        count.forEach((n, v) => {
+          if (n > max) {
+            max = n;
+            best = v;
+          }
+        });
+        return best;
+      };
+
+      // 1) Criar disciplinas globais novas selecionadas (usando consenso/mais frequente do PDF)
       const subjToCreate = newSubjects.filter((s) => s.selected);
       let createdSubjCount = 0;
       if (subjToCreate.length > 0) {
+        const rows = subjToCreate.map((s) => {
+          const key = norm(resolveSubjectName(s.name));
+          const vals = subjectPdfValues.get(key) || [];
+          const def = vals.length > 0 ? mostFrequent(vals) : 4;
+          return { name: s.name, default_weekly_classes: def };
+        });
         const { error } = await supabase
           .from("mapping_global_subjects")
-          .insert(subjToCreate.map((s) => ({ name: s.name, default_weekly_classes: 4 })));
+          .insert(rows);
         if (!error) createdSubjCount = subjToCreate.length;
       }
 
@@ -335,6 +420,30 @@ const ClassesBulkImportDialog = ({ open, onOpenChange }: Props) => {
         if (error) console.error("Erro ao atualizar class_subject", u.id, error);
       }
 
+      // 5) Atualizar default_weekly_classes nas disciplinas globais existentes
+      // quando o PDF traz consenso diferente, e propagar para mapping_class_subjects.
+      let updatedGlobalDefaults = 0;
+      for (const [key, consensus] of subjectConsensus.entries()) {
+        if (consensus == null) continue;
+        const gs = globalSubjects.find((g) => norm(g.name) === key);
+        if (!gs) continue; // novas já foram criadas com o valor correto
+        if (gs.default_weekly_classes === consensus) continue;
+        const { error: gErr } = await supabase
+          .from("mapping_global_subjects")
+          .update({ default_weekly_classes: consensus })
+          .eq("id", gs.id);
+        if (gErr) {
+          console.error("Erro ao atualizar default global", gs.name, gErr);
+          continue;
+        }
+        const { error: csErr } = await supabase
+          .from("mapping_class_subjects")
+          .update({ weekly_classes: consensus })
+          .eq("subject_name", gs.name);
+        if (csErr) console.error("Erro ao propagar weekly_classes", gs.name, csErr);
+        updatedGlobalDefaults++;
+      }
+
       await refreshData();
 
       const parts: string[] = [];
@@ -343,6 +452,8 @@ const ClassesBulkImportDialog = ({ open, onOpenChange }: Props) => {
       parts.push(`${toInsertCS.length + toUpdateCS.length} disciplina(s)`);
       if (createdTeachersCount > 0) parts.push(`${createdTeachersCount} professor(es) novo(s)`);
       if (createdSubjCount > 0) parts.push(`${createdSubjCount} disciplina(s) global(is)`);
+      if (updatedGlobalDefaults > 0) parts.push(`${updatedGlobalDefaults} padrão(ões) global(is) atualizado(s)`);
+      if (conflicts.length > 0) parts.push(`${conflicts.length} disciplina(s) com conflito de carga (mantido por turma)`);
       if (assignmentCount > 0) parts.push(`${assignmentCount} atribuição(ões)`);
       toast({ title: "Importação concluída", description: parts.join(" · ") });
       handleClose();
