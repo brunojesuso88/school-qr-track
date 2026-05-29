@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Plus, Pencil, Trash2 } from "lucide-react";
+import { Plus, Pencil, Trash2, Upload } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -8,6 +8,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import SubjectForm from "@/components/mapping/SubjectForm";
+import SubjectsBulkImportDialog from "@/components/mapping/SubjectsBulkImportDialog";
 import { useToast } from "@/hooks/use-toast";
 import SchoolMappingLayout from "@/components/mapping/SchoolMappingLayout";
 
@@ -17,6 +18,7 @@ const MappingSubjectsContent = () => {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingSubject, setEditingSubject] = useState<MappingGlobalSubject | null>(null);
   const [deletingSubject, setDeletingSubject] = useState<MappingGlobalSubject | null>(null);
+  const [isBulkImportOpen, setIsBulkImportOpen] = useState(false);
 
   const handleDelete = async () => {
     if (!deletingSubject) return;
@@ -99,6 +101,7 @@ const MappingSubjectsContent = () => {
             <p className="text-muted-foreground">{globalSubjects.length} disciplinas cadastradas</p>
           </div>
 
+          <div className="flex flex-wrap gap-2">
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             <DialogTrigger asChild>
               <Button onClick={() => setEditingSubject(null)}>
@@ -115,6 +118,11 @@ const MappingSubjectsContent = () => {
               <SubjectForm subject={editingSubject} onClose={handleCloseDialog} />
             </DialogContent>
           </Dialog>
+          <Button variant="outline" onClick={() => setIsBulkImportOpen(true)}>
+            <Upload className="h-4 w-4 mr-2" />
+            Adicionar em Lote (PDF)
+          </Button>
+          </div>
         </div>
 
         {/* Empty State */}
@@ -153,6 +161,8 @@ const MappingSubjectsContent = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <SubjectsBulkImportDialog open={isBulkImportOpen} onOpenChange={setIsBulkImportOpen} />
     </SchoolMappingLayout>
   );
 };
