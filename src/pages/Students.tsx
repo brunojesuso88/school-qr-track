@@ -1207,6 +1207,17 @@ const Students = () => {
           student={reportStudent} 
           onClose={() => setReportStudent(null)} 
         />
+
+        {/* Camera Photo Capture - rendered outside of any form to avoid nested dialog interference */}
+        <CameraPhotoCapture
+          open={isCameraOpen}
+          onOpenChange={setIsCameraOpen}
+          onCapture={(file, previewUrl) => {
+            setPhotoFile(file);
+            setPhotoPreview(previewUrl);
+            setRemovePhoto(false);
+          }}
+        />
       </div>
     </DashboardLayout>
   );
