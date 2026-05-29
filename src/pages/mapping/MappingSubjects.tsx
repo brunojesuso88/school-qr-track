@@ -101,6 +101,7 @@ const MappingSubjectsContent = () => {
             <p className="text-muted-foreground">{globalSubjects.length} disciplinas cadastradas</p>
           </div>
 
+          <div className="flex flex-wrap gap-2">
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             <DialogTrigger asChild>
               <Button onClick={() => setEditingSubject(null)}>
@@ -121,6 +122,7 @@ const MappingSubjectsContent = () => {
             <Upload className="h-4 w-4 mr-2" />
             Adicionar em Lote (PDF)
           </Button>
+          </div>
         </div>
 
         {/* Empty State */}
