@@ -195,6 +195,7 @@ export type Database = {
       }
       mapping_global_subjects: {
         Row: {
+          abbreviation: string | null
           created_at: string | null
           default_weekly_classes: number
           id: string
@@ -202,6 +203,7 @@ export type Database = {
           shift: string
         }
         Insert: {
+          abbreviation?: string | null
           created_at?: string | null
           default_weekly_classes?: number
           id?: string
@@ -209,6 +211,7 @@ export type Database = {
           shift?: string
         }
         Update: {
+          abbreviation?: string | null
           created_at?: string | null
           default_weekly_classes?: number
           id?: string
