@@ -14,6 +14,8 @@ interface ExtractedSubject {
   name: string;
   weekly_classes: number | null;
   original_weekly_classes: number | null;
+  double_periods: number;
+  merged_from: number;
   teacher_name: string | null;
   teacher_abbreviation: string | null;
 }
@@ -21,6 +23,7 @@ interface ExtractedSubject {
 interface ExtractedClass {
   name: string;
   shift: string | null;
+  notes: string | null;
   subjects: ExtractedSubject[];
   selected: boolean;
   matchedClassId?: string | null;
@@ -87,11 +90,13 @@ const ClassesBulkImportDialog = ({ open, onOpenChange }: Props) => {
   };
 
   const getTargetHours = (c: ExtractedClass): number => {
-    if (c.matchedClassId) {
-      const existing = classes.find((mc) => mc.id === c.matchedClassId);
-      if (existing?.weekly_hours) return existing.weekly_hours;
-    }
     return (c.shift || "morning") === "evening" ? 25 : 30;
+  };
+
+  const getStoredHours = (c: ExtractedClass): number | null => {
+    if (!c.matchedClassId) return null;
+    const existing = classes.find((mc) => mc.id === c.matchedClassId);
+    return existing?.weekly_hours ?? null;
   };
 
   const getClassSum = (c: ExtractedClass): number =>
@@ -103,6 +108,24 @@ const ClassesBulkImportDialog = ({ open, onOpenChange }: Props) => {
     if (sum === target) return "ok";
     if (sum > target) return "over";
     return "diff";
+  };
+
+  const getDivergenceReasons = (c: ExtractedClass): string[] => {
+    const reasons: string[] = [];
+    const sum = getClassSum(c);
+    const target = getTargetHours(c);
+    const merged = c.subjects.filter((s) => s.merged_from > 1).length;
+    const missing = c.subjects.filter((s) => !s.weekly_classes || s.weekly_classes <= 0).length;
+    const doubles = c.subjects.reduce((acc, s) => acc + (s.double_periods || 0), 0);
+    const stored = getStoredHours(c);
+    if (merged > 0) reasons.push(`${merged} disciplina(s) duplicada(s) consolidada(s) automaticamente`);
+    if (missing > 0) reasons.push(`${missing} disciplina(s) sem carga no PDF (usando padrão)`);
+    if (sum > target) reasons.push(`Sobrecarga: ${sum - target}h acima do alvo`);
+    if (sum < target) reasons.push(`Subcarga: ${target - sum}h abaixo do alvo`);
+    if (doubles > 0) reasons.push(`Aulas duplas detectadas: ${doubles}`);
+    if (stored != null && stored !== target) reasons.push(`Cadastro da turma tem ${stored}h (padrão é ${target}h)`);
+    if (sum !== target) reasons.push(`Carga semanal alvo: 30h (manhã/tarde) ou 25h (noite)`);
+    return reasons;
   };
 
   const subjectExists = (mention: string) => {
@@ -146,19 +169,42 @@ const ClassesBulkImportDialog = ({ open, onOpenChange }: Props) => {
 
       const result: ExtractedClass[] = (data.classes || []).map((c: any) => {
         const matched = classes.find((mc) => norm(mc.name) === norm(c.name));
+        // Deduplicação: consolidar disciplinas repetidas na mesma turma
+        const byCanonical = new Map<string, ExtractedSubject>();
+        for (const s of c.subjects || []) {
+          const rawName = String(s.name || "").trim();
+          if (!rawName) continue;
+          const canonical = resolveSubjectName(rawName);
+          const key = norm(canonical);
+          const wc = Number(s.weekly_classes) > 0 ? Number(s.weekly_classes) : null;
+          const dp = Number(s.double_periods) > 0 ? Number(s.double_periods) : 0;
+          const existing = byCanonical.get(key);
+          if (existing) {
+            const sumWc = (existing.weekly_classes || 0) + (wc || 0);
+            existing.weekly_classes = sumWc > 0 ? sumWc : existing.weekly_classes;
+            existing.original_weekly_classes = existing.weekly_classes;
+            existing.double_periods += dp;
+            existing.merged_from += 1;
+            if (!existing.teacher_name && s.teacher_name) existing.teacher_name = s.teacher_name;
+            if (!existing.teacher_abbreviation && s.teacher_abbreviation)
+              existing.teacher_abbreviation = s.teacher_abbreviation;
+          } else {
+            byCanonical.set(key, {
+              name: rawName,
+              weekly_classes: wc,
+              original_weekly_classes: wc,
+              double_periods: dp,
+              merged_from: 1,
+              teacher_name: s.teacher_name || null,
+              teacher_abbreviation: s.teacher_abbreviation || null,
+            });
+          }
+        }
         return {
           name: String(c.name || "").trim(),
           shift: c.shift || null,
-          subjects: (c.subjects || []).map((s: any) => {
-            const wc = s.weekly_classes || null;
-            return {
-              name: String(s.name || "").trim(),
-              weekly_classes: wc,
-              original_weekly_classes: wc,
-              teacher_name: s.teacher_name || null,
-              teacher_abbreviation: s.teacher_abbreviation || null,
-            };
-          }),
+          notes: c.notes || null,
+          subjects: Array.from(byCanonical.values()),
           selected: true,
           matchedClassId: matched?.id ?? null,
         };
@@ -529,6 +575,11 @@ const ClassesBulkImportDialog = ({ open, onOpenChange }: Props) => {
   const newClassCount = extracted.filter((c) => c.selected && !c.matchedClassId).length;
   const updateClassCount = extracted.filter((c) => c.selected && !!c.matchedClassId).length;
   const invalidCount = extracted.filter((c) => c.selected && getSumStatus(c) !== "ok").length;
+  const totalMergedSubjects = extracted.reduce(
+    (acc, c) => acc + c.subjects.filter((s) => s.merged_from > 1).length,
+    0,
+  );
+  const classesWithMerges = extracted.filter((c) => c.subjects.some((s) => s.merged_from > 1)).length;
 
   return (
     <Dialog open={open} onOpenChange={(o) => (!o ? handleClose() : onOpenChange(o))}>
@@ -588,6 +639,15 @@ const ClassesBulkImportDialog = ({ open, onOpenChange }: Props) => {
               </Button>
             </div>
 
+            {totalMergedSubjects > 0 && (
+              <div className="mb-2 p-2 rounded-md border border-amber-500/40 bg-amber-500/10 text-[11px] text-amber-700 dark:text-amber-300 flex items-start gap-2">
+                <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                <span>
+                  {totalMergedSubjects} disciplina(s) duplicada(s) em {classesWithMerges} turma(s) foram consolidadas automaticamente — revise as quantidades de aulas.
+                </span>
+              </div>
+            )}
+
             <ScrollArea className="h-[50vh]">
               <div className="space-y-3 pr-4">
                 {extracted.map((c, idx) => (
@@ -641,11 +701,15 @@ const ClassesBulkImportDialog = ({ open, onOpenChange }: Props) => {
                           })()}
                         </div>
                         {getSumStatus(c) !== "ok" && (
-                          <div className="mt-1 flex items-center gap-2 flex-wrap">
-                            <p className="text-[11px] text-amber-600 dark:text-amber-400 flex items-center gap-1">
-                              <AlertTriangle className="h-3 w-3" />
-                              Soma das aulas ({getClassSum(c)}h) difere da carga semanal da turma ({getTargetHours(c)}h).
-                            </p>
+                          <div className="mt-1.5 space-y-1">
+                            <ul className="text-[11px] text-amber-600 dark:text-amber-400 space-y-0.5">
+                              {getDivergenceReasons(c).map((r, ri) => (
+                                <li key={ri} className="flex items-start gap-1">
+                                  <AlertTriangle className="h-3 w-3 mt-0.5 shrink-0" />
+                                  <span>{r}</span>
+                                </li>
+                              ))}
+                            </ul>
                             <Button
                               type="button"
                               variant="outline"
@@ -656,9 +720,12 @@ const ClassesBulkImportDialog = ({ open, onOpenChange }: Props) => {
                                 distributeEvenly(idx);
                               }}
                             >
-                              Distribuir igualmente
+                              Forçar {getTargetHours(c)}h (distribuir)
                             </Button>
                           </div>
+                        )}
+                        {c.notes && (
+                          <p className="mt-1 text-[10px] text-muted-foreground italic">IA: {c.notes}</p>
                         )}
 
                         <ul className="mt-2 space-y-1">
@@ -684,6 +751,16 @@ const ClassesBulkImportDialog = ({ open, onOpenChange }: Props) => {
                                 <span className="font-medium">{resolveSubjectName(s.name)}</span>
                                 {!subjExists && (
                                   <Badge variant="outline" className="text-[9px]">nova disc.</Badge>
+                                )}
+                                {s.merged_from > 1 && (
+                                  <Badge variant="outline" className="text-[9px] border-amber-500/40 text-amber-600 dark:text-amber-400">
+                                    consolidada ({s.merged_from}→1)
+                                  </Badge>
+                                )}
+                                {s.double_periods > 0 && (
+                                  <Badge variant="outline" className="text-[9px] border-sky-500/40 text-sky-600 dark:text-sky-400">
+                                    {s.double_periods} dupla(s)
+                                  </Badge>
                                 )}
                                 <span className="flex items-center gap-1 text-muted-foreground">
                                   ·

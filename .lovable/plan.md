@@ -1,40 +1,55 @@
 ## Objetivo
 
-Permitir edição manual da quantidade de aulas/semana de cada disciplina diretamente no card de revisão do diálogo "Adicionar em Lote (PDF)" da aba Turmas, com recálculo em tempo real do total por turma.
+Reforçar a interpretação do PDF na função "Adicionar em Lote (PDF)" da aba Turmas para garantir que cada turma totalize 30h semanais (25h noite), detectar aulas duplas, evitar contagem duplicada de disciplinas e mostrar diagnóstico claro de divergências.
 
-## Mudanças em `src/components/mapping/ClassesBulkImportDialog.tsx`
+## Mudanças
 
-### 1. Input editável por disciplina
+### 1. Edge function `supabase/functions/parse-classes-pdf/index.ts`
 
-Substituir o texto estático `· {s.weekly_classes}h` no `<li>` de cada disciplina por um `<Input type="number">` compacto (~56px de largura, `min=1`, `max=10`):
+Reforçar o prompt e o schema para a IA extrair melhor:
 
-- Valor controlado por `s.weekly_classes` (com fallback para o `default_weekly_classes` global ou 1 se vazio).
-- `onChange` chama `updateSubjectWeekly(classIdx, subjectIdx, newValue)` que atualiza o `extracted[classIdx].subjects[subjectIdx].weekly_classes`.
-- Label curta ao lado: "aulas/sem".
+- Acrescentar instrução explícita: "Aulas DUPLAS (dois períodos seguidos com a mesma disciplina/professor no mesmo dia) contam como **2 aulas**, não 1. Some todas as ocorrências da disciplina na semana, contando cada período individual."
+- Pedir validação de soma: o total semanal de cada turma deve ser **30** (manhã/tarde) ou **25** (noite). Se a soma divergir, a IA deve revisar a contagem antes de retornar.
+- Schema: adicionar campo opcional `weekly_total_expected` por turma e `notes` (string) onde a IA registra observações sobre aulas duplas detectadas ou divergências percebidas.
+- Schema da disciplina: adicionar `double_periods` (number, opcional) — quantidade de blocos duplos detectados — para auditoria.
+- Adicionar deduplicação server-side: se a IA retornar a mesma disciplina duas vezes na mesma turma (mesmo nome canônico), consolidar somando `weekly_classes` e logar em `notes`.
 
-### 2. Recálculo em tempo real
+### 2. Componente `src/components/mapping/ClassesBulkImportDialog.tsx`
 
-Como `getClassSum`, `getSumStatus` e `invalidCount` já derivam de `extracted`, o badge "Soma: Xh / Yh", o alerta de divergência e o texto do botão "Atualizar/Importar" são reavaliados automaticamente a cada digitação.
+#### 2a. Deduplicação no parsing client-side
+Ao receber o resultado, após `result.map(...)`:
+- Agrupar `c.subjects` por nome canônico (`resolveSubjectName`). Se houver duplicatas na mesma turma, somar os `weekly_classes`, preservar o primeiro professor não-nulo e marcar a entrada com flag `merged_from: number` (quantas linhas foram fundidas).
+- Renderizar badge "consolidada (N→1)" quando `merged_from > 1`.
 
-### 3. Indicador de inconsistência por disciplina
+#### 2b. Diagnóstico de divergência detalhado
+Substituir o alerta atual genérico por motivos específicos. Criar helper `getDivergenceReasons(c)` que retorna lista de strings:
+- `"Disciplinas duplicadas consolidadas (X)"` — quando alguma disciplina tinha `merged_from > 1`.
+- `"Disciplinas sem carga (X)"` — quando alguma `weekly_classes` veio nula/zerada do PDF.
+- `"Sobrecarga: Yh acima do alvo"` — quando soma > alvo.
+- `"Subcarga: Yh abaixo do alvo"` — quando soma < alvo.
+- `"Aulas duplas detectadas: N"` — quando `double_periods > 0` (informativo).
+- `"Carga semanal alvo: 30h (manhã/tarde) ou 25h (noite)"` — sempre que houver divergência, reforçar a regra.
 
-Quando o usuário edita um valor e ele difere do extraído originalmente pelo PDF, mostrar uma marca discreta (badge `editado` em outline) para indicar que foi corrigido manualmente.
+Renderizar essa lista como bullet abaixo do card, em vez do parágrafo único atual.
 
-Preservar o valor original do PDF em uma propriedade `original_weekly_classes` no `ExtractedSubject` para permitir a comparação.
+#### 2c. Validação 30h fixa
+- `getTargetHours` continua usando 30/25 por turno, mas adicionar aviso visual quando `mapping_classes.weekly_hours` da turma existente difere de 30/25 — badge "alvo fora do padrão (Yh)" para o admin perceber.
+- Botão "Forçar 30h" por turma: distribui igualmente respeitando 30h fixo (ignora o `weekly_hours` salvo da turma) — útil quando o PDF e o cadastro estão ambos errados.
 
-### 4. Botão "Distribuir igualmente"
+#### 2d. Dupla verificação visual
+- No header de cada card, junto ao badge "Soma: Xh/Yh", adicionar contador `Σ por disciplina: N disciplina(s) · M aula(s)` para o usuário conferir rapidamente.
+- Listar disciplinas duplicadas detectadas em um banner amarelo no topo da revisão (resumo geral): `"X disciplinas consolidadas em Y turmas — revise as quantidades"`.
 
-Adicionar um pequeno botão por turma "Distribuir restante" que, ao clicar, soma o que falta/excede e ajusta proporcionalmente as disciplinas da turma para bater com a carga semanal alvo (`mapping_classes.weekly_hours` ou default por turno). Útil quando o PDF errou todas as contagens de uma turma.
+### 3. Sem mudanças em schema
 
-### 5. Validação no save
-
-Manter a lógica existente: o `getClassSum` agora reflete o valor editado, então o fluxo de update de `mapping_class_subjects.weekly_classes`, propagação para `mapping_global_subjects.default_weekly_classes` (consenso) e atualização de `mapping_classes.weekly_hours` (quando divergente) já passa a usar os valores corrigidos pelo usuário.
+Nenhuma alteração de tabela. Apenas componente + edge function.
 
 ## Arquivos afetados
 
-- `src/components/mapping/ClassesBulkImportDialog.tsx` (único arquivo)
+- `supabase/functions/parse-classes-pdf/index.ts`
+- `src/components/mapping/ClassesBulkImportDialog.tsx`
 
 ## Fora de escopo
 
-- Sem mudanças em schema, edge function ou outras abas.
-- Sem dupla extração via IA — confiamos na correção manual do usuário antes do save.
+- Outras abas (Professores, Disciplinas).
+- Mudanças no fluxo de save (já usa os valores corrigidos).
