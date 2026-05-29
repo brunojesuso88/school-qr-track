@@ -98,6 +98,7 @@ function buildPrintHTML(data: NotificationData, docNumber: number, docYear: numb
   .header img { width: 115px; height: 115px; object-fit: contain; }
   .header .info { flex: 1; text-align: center; }
   .header .info .line { font-size: 10.5pt; letter-spacing: 1px; }
+  .header .info .line.seduc { font-size: 9.5pt; letter-spacing: 0.4px; white-space: nowrap; }
   .header .info .school { font-size: 11.5pt; font-weight: 700; color: #0D47A1; margin-top: 3px; }
   .divider { height: 3px; background: linear-gradient(90deg,#0D47A1,#C62828); margin: 12px 0 20px; }
   .title { text-align: center; margin-bottom: 16px; }
@@ -119,10 +120,10 @@ function buildPrintHTML(data: NotificationData, docNumber: number, docYear: numb
     <img src="${logoCepans}" alt="CEPANS" />
     <div class="info">
       <div class="line">ESTADO DO MARANHÃO</div>
-      <div class="line">SECRETARIA DE ESTADO DA EDUCAÇÃO DO MARANHÃO (SEDUC MA)</div>
+      <div class="line seduc">SECRETARIA DE ESTADO DA EDUCAÇÃO DO MARANHÃO (SEDUC MA)</div>
       <div class="school">CENTRO DE ENSINO PROFESSOR ANTÔNIO NONATO SAMPAIO – CEPANS</div>
     </div>
-    <div style="width:115px"></div>
+    <div style="width:40px"></div>
   </div>
   <div class="divider"></div>
   <div class="title">

@@ -1,12 +1,19 @@
 ## Ajustes no cabeçalho da Notificação Docente
 
-1. **Atualizar texto do cabeçalho**
-   - Substituir "SECRETARIA DE ESTADO DA EDUCAÇÃO" por "SECRETARIA DE ESTADO DA EDUCAÇÃO DO MARANHÃO (SEDUC MA)" em ambas as etapas do documento.
-   - Arquivos:
-     - `src/components/notifications/NotificationPreview.tsx` (pré-visualização ao vivo)
-     - `src/pages/TeacherNotifications.tsx` (HTML de impressão/PDF)
+### Objetivo
+Ajustar a formatação do texto no cabeçalho dos documentos de notificação para que o conteúdo caiba em uma única linha.
 
-2. **Aumentar tamanho do logo CEPANS**
-   - Aumentar de 84×84 px para 110×110 px no componente de pré-visualização (`NotificationPreview.tsx`).
-   - Ajustar o espaçador simétrico do lado direito de 84 px para 110 px.
-   - Aumentar de 90×90 px para 115×115 px no HTML de impressão (`TeacherNotifications.tsx`), incluindo o espaçador correspondente.
+### Alterações
+
+**1. Reduzir a margem direita (spacer)**
+- `src/components/notifications/NotificationPreview.tsx`: reduzir o `div` espaçador à direita de `110px` para `40px`, ampliando o espaço disponível para o texto central.
+- `src/pages/TeacherNotifications.tsx`: aplicar o mesmo ajuste no HTML de impressão, reduzindo o espaçador de `115px` para `40px`.
+
+**2. Ajustar a formatação do texto "SEDUC MA"**
+- Diminuir ligeiramente o `fontSize` de `12px` para `11px`.
+- Reduzir o `letterSpacing` de `1px` para `0.5px`.
+- Esses ajustes combinados com a margem maior garantem que "SECRETARIA DE ESTADO DA EDUCAÇÃO DO MARANHÃO (SEDUC MA)" fique em uma única linha tanto na pré-visualização quanto na impressão.
+
+### Arquivos
+- `src/components/notifications/NotificationPreview.tsx`
+- `src/pages/TeacherNotifications.tsx`
