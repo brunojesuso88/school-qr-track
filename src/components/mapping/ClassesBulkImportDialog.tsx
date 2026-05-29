@@ -575,6 +575,11 @@ const ClassesBulkImportDialog = ({ open, onOpenChange }: Props) => {
   const newClassCount = extracted.filter((c) => c.selected && !c.matchedClassId).length;
   const updateClassCount = extracted.filter((c) => c.selected && !!c.matchedClassId).length;
   const invalidCount = extracted.filter((c) => c.selected && getSumStatus(c) !== "ok").length;
+  const totalMergedSubjects = extracted.reduce(
+    (acc, c) => acc + c.subjects.filter((s) => s.merged_from > 1).length,
+    0,
+  );
+  const classesWithMerges = extracted.filter((c) => c.subjects.some((s) => s.merged_from > 1)).length;
 
   return (
     <Dialog open={open} onOpenChange={(o) => (!o ? handleClose() : onOpenChange(o))}>
@@ -634,6 +639,15 @@ const ClassesBulkImportDialog = ({ open, onOpenChange }: Props) => {
               </Button>
             </div>
 
+            {totalMergedSubjects > 0 && (
+              <div className="mb-2 p-2 rounded-md border border-amber-500/40 bg-amber-500/10 text-[11px] text-amber-700 dark:text-amber-300 flex items-start gap-2">
+                <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                <span>
+                  {totalMergedSubjects} disciplina(s) duplicada(s) em {classesWithMerges} turma(s) foram consolidadas automaticamente — revise as quantidades de aulas.
+                </span>
+              </div>
+            )}
+
             <ScrollArea className="h-[50vh]">
               <div className="space-y-3 pr-4">
                 {extracted.map((c, idx) => (
@@ -687,11 +701,15 @@ const ClassesBulkImportDialog = ({ open, onOpenChange }: Props) => {
                           })()}
                         </div>
                         {getSumStatus(c) !== "ok" && (
-                          <div className="mt-1 flex items-center gap-2 flex-wrap">
-                            <p className="text-[11px] text-amber-600 dark:text-amber-400 flex items-center gap-1">
-                              <AlertTriangle className="h-3 w-3" />
-                              Soma das aulas ({getClassSum(c)}h) difere da carga semanal da turma ({getTargetHours(c)}h).
-                            </p>
+                          <div className="mt-1.5 space-y-1">
+                            <ul className="text-[11px] text-amber-600 dark:text-amber-400 space-y-0.5">
+                              {getDivergenceReasons(c).map((r, ri) => (
+                                <li key={ri} className="flex items-start gap-1">
+                                  <AlertTriangle className="h-3 w-3 mt-0.5 shrink-0" />
+                                  <span>{r}</span>
+                                </li>
+                              ))}
+                            </ul>
                             <Button
                               type="button"
                               variant="outline"
@@ -702,9 +720,12 @@ const ClassesBulkImportDialog = ({ open, onOpenChange }: Props) => {
                                 distributeEvenly(idx);
                               }}
                             >
-                              Distribuir igualmente
+                              Forçar {getTargetHours(c)}h (distribuir)
                             </Button>
                           </div>
+                        )}
+                        {c.notes && (
+                          <p className="mt-1 text-[10px] text-muted-foreground italic">IA: {c.notes}</p>
                         )}
 
                         <ul className="mt-2 space-y-1">
@@ -730,6 +751,16 @@ const ClassesBulkImportDialog = ({ open, onOpenChange }: Props) => {
                                 <span className="font-medium">{resolveSubjectName(s.name)}</span>
                                 {!subjExists && (
                                   <Badge variant="outline" className="text-[9px]">nova disc.</Badge>
+                                )}
+                                {s.merged_from > 1 && (
+                                  <Badge variant="outline" className="text-[9px] border-amber-500/40 text-amber-600 dark:text-amber-400">
+                                    consolidada ({s.merged_from}→1)
+                                  </Badge>
+                                )}
+                                {s.double_periods > 0 && (
+                                  <Badge variant="outline" className="text-[9px] border-sky-500/40 text-sky-600 dark:text-sky-400">
+                                    {s.double_periods} dupla(s)
+                                  </Badge>
                                 )}
                                 <span className="flex items-center gap-1 text-muted-foreground">
                                   ·
