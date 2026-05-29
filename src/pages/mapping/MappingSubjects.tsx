@@ -71,6 +71,9 @@ const MappingSubjectsContent = () => {
             <Badge variant="secondary">
               {subject.default_weekly_classes} aulas/semana
             </Badge>
+            <p className="text-xs text-muted-foreground">
+              Valor padrão — propagado a todas as turmas ao salvar.
+            </p>
           </div>
 
           <div className="flex gap-2">

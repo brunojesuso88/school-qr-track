@@ -294,7 +294,15 @@ const ClassesBulkImportDialog = ({ open, onOpenChange }: Props) => {
         const existingList = existingMap.get(classId) || [];
         for (const s of c.subjects) {
           const canonical = resolveSubjectName(s.name);
-          const weekly = s.weekly_classes && s.weekly_classes > 0 ? s.weekly_classes : 4;
+          const globalDefault = globalSubjects.find(
+            (gs) => norm(gs.name) === norm(canonical)
+          )?.default_weekly_classes;
+          const weekly =
+            s.weekly_classes && s.weekly_classes > 0
+              ? s.weekly_classes
+              : globalDefault && globalDefault > 0
+              ? globalDefault
+              : 4;
           const teacherKey = norm(s.teacher_name || s.teacher_abbreviation || "");
           const teacherId = teacherKey ? teacherKeyToId.get(teacherKey) || null : null;
 
