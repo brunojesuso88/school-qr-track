@@ -82,6 +82,12 @@ Para cada turma identifique:
   * Nome completo do professor responsável (se disponível)
   * Abreviação/sigla do professor (se disponível, ex.: "JMS", "M.S.")
 
+REGRAS CRÍTICAS DE CONTAGEM:
+1. CARGA SEMANAL ALVO: cada turma deve totalizar 30 aulas/semana (turno manhã/tarde) ou 25 aulas/semana (noite). SOME as cargas das disciplinas e CONFIRME que bate com esse total antes de retornar. Se divergir, REVISE a contagem.
+2. AULAS DUPLAS: dois períodos consecutivos com a mesma disciplina/professor no mesmo dia contam como 2 AULAS, não 1. Conte cada período individualmente. Registre quantos blocos duplos detectou em "double_periods".
+3. NÃO DUPLIQUE disciplinas: cada disciplina deve aparecer UMA única vez por turma, com a soma TOTAL de aulas da semana. NUNCA liste a mesma disciplina duas vezes na mesma turma.
+4. Em "notes" registre observações sobre aulas duplas detectadas, divergências de soma ou qualquer ambiguidade.
+
 Seja rigoroso: extraia TUDO que aparecer no documento — disciplinas, professores e turmas. Ignore cabeçalhos, títulos e legendas.`
           },
           {
@@ -116,6 +122,7 @@ Seja rigoroso: extraia TUDO que aparecer no documento — disciplinas, professor
                       properties: {
                         name: { type: 'string', description: 'Nome da turma' },
                         shift: { type: 'string', description: 'morning | afternoon | evening' },
+                        notes: { type: 'string', description: 'Observações sobre contagem, aulas duplas, divergências (opcional)' },
                         subjects: {
                           type: 'array',
                           items: {
@@ -123,6 +130,7 @@ Seja rigoroso: extraia TUDO que aparecer no documento — disciplinas, professor
                             properties: {
                               name: { type: 'string', description: 'Nome ou abreviação da disciplina' },
                               weekly_classes: { type: 'number', description: 'Aulas semanais (opcional)' },
+                              double_periods: { type: 'number', description: 'Quantidade de blocos duplos detectados na semana (opcional)' },
                               teacher_name: { type: 'string', description: 'Nome completo do professor (opcional)' },
                               teacher_abbreviation: { type: 'string', description: 'Sigla do professor (opcional)' }
                             },
@@ -189,11 +197,13 @@ Seja rigoroso: extraia TUDO que aparecer no documento — disciplinas, professor
       .map((c: any) => ({
         name: String(c.name || '').trim().substring(0, 100),
         shift: normalizeShift(c.shift),
+        notes: String(c.notes || '').trim().substring(0, 500) || null,
         subjects: Array.isArray(c.subjects)
           ? c.subjects
               .map((s: any) => ({
                 name: String(s.name || '').trim().substring(0, 100),
                 weekly_classes: Number(s.weekly_classes) > 0 ? Number(s.weekly_classes) : null,
+                double_periods: Number(s.double_periods) > 0 ? Number(s.double_periods) : 0,
                 teacher_name: String(s.teacher_name || '').trim().substring(0, 100) || null,
                 teacher_abbreviation: String(s.teacher_abbreviation || '').trim().toUpperCase().substring(0, 10) || null,
               }))
