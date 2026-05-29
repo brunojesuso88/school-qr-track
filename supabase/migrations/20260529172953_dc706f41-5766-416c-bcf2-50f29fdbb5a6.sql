@@ -1,0 +1,1 @@
+ALTER TABLE public.mapping_teachers ADD COLUMN IF NOT EXISTS abbreviation TEXT;
