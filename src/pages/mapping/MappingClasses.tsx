@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Plus, Pencil, Trash2, BookOpen, Copy, RefreshCw } from "lucide-react";
+import { Plus, Pencil, Trash2, BookOpen, Copy, RefreshCw, Upload } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,7 @@ import ClassForm from "@/components/mapping/ClassForm";
 import ClassSubjectsDialog from "@/components/mapping/ClassSubjectsDialog";
 import ClassSummarySheet from "@/components/mapping/ClassSummarySheet";
 import SchoolMappingLayout from "@/components/mapping/SchoolMappingLayout";
+import ClassesBulkImportDialog from "@/components/mapping/ClassesBulkImportDialog";
 import { useToast } from "@/hooks/use-toast";
 
 const SHIFT_LABELS: Record<string, string> = {
@@ -30,6 +31,7 @@ const MappingClassesContent = () => {
   const [managingSubjectsClass, setManagingSubjectsClass] = useState<MappingClass | null>(null);
   const [viewingClass, setViewingClass] = useState<MappingClass | null>(null);
   const [syncing, setSyncing] = useState(false);
+  const [bulkImportOpen, setBulkImportOpen] = useState(false);
 
   const getClassSubjectCount = (classId: string) => {
     return classSubjects.filter(cs => cs.class_id === classId).length;
@@ -200,6 +202,10 @@ const MappingClassesContent = () => {
               <RefreshCw className={`h-4 w-4 mr-2 ${syncing ? 'animate-spin' : ''}`} />
               {syncing ? 'Atualizando...' : 'Atualizar do Sistema'}
             </Button>
+            <Button variant="outline" onClick={() => setBulkImportOpen(true)}>
+              <Upload className="h-4 w-4 mr-2" />
+              Adicionar em Lote (PDF)
+            </Button>
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             <DialogTrigger asChild>
               <Button onClick={() => setEditingClass(null)}>
@@ -341,6 +347,8 @@ const MappingClassesContent = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <ClassesBulkImportDialog open={bulkImportOpen} onOpenChange={setBulkImportOpen} />
     </SchoolMappingLayout>
   );
 };
