@@ -816,6 +816,63 @@ export type Database = {
           },
         ]
       }
+      teacher_notifications: {
+        Row: {
+          classes_subjects: string | null
+          created_at: string
+          created_by: string | null
+          custom_body: string | null
+          doc_number: number
+          doc_year: number
+          id: string
+          new_deadline: string
+          obligations: string[]
+          original_deadline: string
+          other_obligation: string | null
+          reason: string
+          stage: string
+          teacher_justification: string | null
+          teacher_name: string
+          updated_at: string
+        }
+        Insert: {
+          classes_subjects?: string | null
+          created_at?: string
+          created_by?: string | null
+          custom_body?: string | null
+          doc_number: number
+          doc_year: number
+          id?: string
+          new_deadline: string
+          obligations?: string[]
+          original_deadline: string
+          other_obligation?: string | null
+          reason: string
+          stage: string
+          teacher_justification?: string | null
+          teacher_name: string
+          updated_at?: string
+        }
+        Update: {
+          classes_subjects?: string | null
+          created_at?: string
+          created_by?: string | null
+          custom_body?: string | null
+          doc_number?: number
+          doc_year?: number
+          id?: string
+          new_deadline?: string
+          obligations?: string[]
+          original_deadline?: string
+          other_obligation?: string | null
+          reason?: string
+          stage?: string
+          teacher_justification?: string | null
+          teacher_name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       timetable_entries: {
         Row: {
           class_id: string
@@ -1020,6 +1077,10 @@ export type Database = {
           _user_id: string
         }
         Returns: boolean
+      }
+      next_teacher_notification_number: {
+        Args: { _year: number }
+        Returns: number
       }
       user_has_any_role: {
         Args: { _roles: Database["public"]["Enums"]["app_role"][] }
