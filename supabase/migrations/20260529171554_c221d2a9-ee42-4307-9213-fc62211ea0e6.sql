@@ -1,0 +1,1 @@
+ALTER TABLE public.mapping_global_subjects ADD COLUMN IF NOT EXISTS abbreviation TEXT;
