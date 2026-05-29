@@ -58,7 +58,7 @@ export function NotificationPreview({ data, docNumber, docYear, customBody }: Pr
         <div style={{ marginTop: 10, fontSize: 12, color: '#0B2E59' }}>
           <strong>Documento nº {formatDocNumber(docNumber, docYear)}</strong>
           <span style={{ margin: '0 10px' }}>•</span>
-          São Luís/MA, {todayBR()}
+          Coelho Neto/MA, {todayBR()}
         </div>
       </div>
 
