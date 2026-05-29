@@ -38,7 +38,7 @@ import {
 } from '@/lib/notificationTemplates';
 import { NotificationPreview } from '@/components/notifications/NotificationPreview';
 
-interface Record extends NotificationData {
+interface NotificationRecord extends NotificationData {
   id: string;
   doc_number: number;
   doc_year: number;
@@ -154,7 +154,7 @@ export default function TeacherNotifications() {
   const [customBody, setCustomBody] = useState<string>('');
   const [editingBody, setEditingBody] = useState(false);
   const [previewDocNumber, setPreviewDocNumber] = useState<number>(1);
-  const [records, setRecords] = useState<Record[]>([]);
+  const [records, setRecords] = useState<NotificationRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -180,7 +180,7 @@ export default function TeacherNotifications() {
       toast.error('Erro ao carregar histórico');
       return;
     }
-    setRecords((data || []) as unknown as Record[]);
+    setRecords((data || []) as unknown as NotificationRecord[]);
     // Preview number = next sequential for current year
     const maxThisYear = (data || []).filter((r: any) => r.doc_year === year).reduce((m: number, r: any) => Math.max(m, r.doc_number), 0);
     setPreviewDocNumber(maxThisYear + 1);
@@ -273,7 +273,7 @@ export default function TeacherNotifications() {
     w.document.close();
   };
 
-  const loadRecord = (r: Record) => {
+  const loadRecord = (r: NotificationRecord) => {
     setForm({
       teacher_name: r.teacher_name,
       stage: r.stage,
@@ -294,7 +294,7 @@ export default function TeacherNotifications() {
     toast.info(`Editando ${formatDocNumber(r.doc_number, r.doc_year)}`);
   };
 
-  const deleteRecord = async (r: Record) => {
+  const deleteRecord = async (r: NotificationRecord) => {
     if (!confirm(`Excluir notificação ${formatDocNumber(r.doc_number, r.doc_year)}?`)) return;
     const { error } = await supabase.from('teacher_notifications').delete().eq('id', r.id);
     if (error) { toast.error('Erro ao excluir'); return; }
@@ -302,7 +302,7 @@ export default function TeacherNotifications() {
     fetchRecords();
   };
 
-  const printRecord = (r: Record) => {
+  const printRecord = (r: NotificationRecord) => {
     const html = buildPrintHTML(
       {
         teacher_name: r.teacher_name,
