@@ -11,11 +11,15 @@ import { supabase } from "@/integrations/supabase/client";
 
 interface ExtractedTeacher {
   name: string;
+  abbreviation: string;
   email: string;
   phone: string;
   max_weekly_hours: number;
   classes: string[];
+  subjects: string[];
   selected: boolean;
+  matchedTeacherId?: string | null;
+  matchedTeacherName?: string | null;
 }
 
 interface TeacherBulkImportDialogProps {
@@ -23,13 +27,16 @@ interface TeacherBulkImportDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
+const norm = (s: string) => s.trim().toLowerCase();
+
 const TeacherBulkImportDialog = ({ open, onOpenChange }: TeacherBulkImportDialogProps) => {
-  const { teachers, refreshData } = useSchoolMapping();
+  const { teachers, globalSubjects, refreshData } = useSchoolMapping();
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [step, setStep] = useState<"upload" | "processing" | "review">("upload");
   const [extractedTeachers, setExtractedTeachers] = useState<ExtractedTeacher[]>([]);
+  const [newSubjects, setNewSubjects] = useState<{ name: string; selected: boolean }[]>([]);
   const [isSaving, setIsSaving] = useState(false);
   const [fileName, setFileName] = useState("");
 
@@ -68,20 +75,56 @@ const TeacherBulkImportDialog = ({ open, onOpenChange }: TeacherBulkImportDialog
       if (error) throw error;
       if (!data?.success) throw new Error(data?.error || "Erro ao processar PDF");
 
-      const extracted: ExtractedTeacher[] = (data.teachers || []).map((t: any) => ({
-        name: t.name || "",
-        email: t.email || "",
-        phone: t.phone || "",
-        max_weekly_hours: t.max_weekly_hours || 20,
-        classes: Array.isArray(t.classes) ? t.classes : [],
-        selected: true,
-      }));
+      const extracted: ExtractedTeacher[] = (data.teachers || []).map((t: any) => {
+        const name = String(t.name || "").trim();
+        const abbr = String(t.abbreviation || "").trim().toUpperCase();
+        // Match contra professores existentes por nome ou abreviação
+        const match = teachers.find(existing => {
+          const en = norm(existing.name);
+          const ea = (existing.abbreviation || "").trim().toLowerCase();
+          const n = norm(name);
+          const a = abbr.toLowerCase();
+          return (
+            (n && en === n) ||
+            (a && ea && ea === a) ||
+            (a && en === a) ||
+            (n && ea && ea === n)
+          );
+        });
+        return {
+          name,
+          abbreviation: abbr,
+          email: t.email || "",
+          phone: t.phone || "",
+          max_weekly_hours: t.max_weekly_hours || 20,
+          classes: Array.isArray(t.classes) ? t.classes : [],
+          subjects: Array.isArray(t.subjects) ? t.subjects : [],
+          selected: true,
+          matchedTeacherId: match?.id ?? null,
+          matchedTeacherName: match?.name ?? null,
+        };
+      });
 
       if (extracted.length === 0) {
         toast({ title: "Nenhum professor encontrado no PDF", variant: "destructive" });
         setStep("upload");
         return;
       }
+
+      // Identificar disciplinas novas mencionadas no PDF
+      const allMentioned = new Set<string>();
+      extracted.forEach(t => t.subjects.forEach(s => allMentioned.add(s.trim())));
+      const newSubjList: { name: string; selected: boolean }[] = [];
+      allMentioned.forEach(s => {
+        if (!s) return;
+        const sl = s.toLowerCase();
+        const exists = globalSubjects.some(gs =>
+          norm(gs.name) === sl ||
+          (gs.abbreviation || "").toLowerCase() === sl
+        );
+        if (!exists) newSubjList.push({ name: s, selected: true });
+      });
+      setNewSubjects(newSubjList);
 
       setExtractedTeachers(extracted);
       setStep("review");
@@ -105,6 +148,19 @@ const TeacherBulkImportDialog = ({ open, onOpenChange }: TeacherBulkImportDialog
     setExtractedTeachers(prev => prev.map(t => ({ ...t, selected: !allSelected })));
   };
 
+  const toggleNewSubject = (index: number) => {
+    setNewSubjects(prev => prev.map((s, i) => (i === index ? { ...s, selected: !s.selected } : s)));
+  };
+
+  // Resolve um nome/abreviação mencionada para o nome canônico de uma disciplina existente
+  const resolveSubjectName = (mention: string): string => {
+    const m = mention.trim().toLowerCase();
+    const found = globalSubjects.find(gs =>
+      norm(gs.name) === m || (gs.abbreviation || "").toLowerCase() === m
+    );
+    return found ? found.name : mention.trim();
+  };
+
   const handleSave = async () => {
     const selected = extractedTeachers.filter(t => t.selected);
     if (selected.length === 0) {
@@ -115,44 +171,97 @@ const TeacherBulkImportDialog = ({ open, onOpenChange }: TeacherBulkImportDialog
     setIsSaving(true);
 
     try {
-      // Calculate colors locally for all teachers at once
+      // 1) Criar disciplinas novas (selecionadas)
+      const subjectsToCreate = newSubjects.filter(s => s.selected);
+      let createdSubjectsCount = 0;
+      if (subjectsToCreate.length > 0) {
+        const { error: subjErr } = await supabase
+          .from("mapping_global_subjects")
+          .insert(subjectsToCreate.map(s => ({ name: s.name, default_weekly_classes: 4 })));
+        if (subjErr) console.error("Erro ao criar disciplinas:", subjErr);
+        else createdSubjectsCount = subjectsToCreate.length;
+      }
+
+      // 2) Separar novos vs atualizações
+      const toInsert = selected.filter(t => !t.matchedTeacherId);
+      const toUpdate = selected.filter(t => !!t.matchedTeacherId);
+
+      // 3) Insert novos professores
       const usedColors = teachers.map(t => t.color);
-      const teachersToInsert = selected.map((t, index) => {
+      const teachersToInsert = toInsert.map((t, index) => {
         const allUsed = [...usedColors];
-        // Add colors already assigned in this batch
         for (let i = 0; i < index; i++) {
-          const prevColor = TEACHER_COLORS.find(c => !allUsed.includes(c)) || 
+          const prevColor = TEACHER_COLORS.find(c => !allUsed.includes(c)) ||
             TEACHER_COLORS[(teachers.length + i) % TEACHER_COLORS.length];
           allUsed.push(prevColor);
         }
-        const color = TEACHER_COLORS.find(c => !allUsed.includes(c)) || 
+        const color = TEACHER_COLORS.find(c => !allUsed.includes(c)) ||
           TEACHER_COLORS[(teachers.length + index) % TEACHER_COLORS.length];
+
+        const resolvedSubjects = Array.from(new Set(t.subjects.map(resolveSubjectName))).filter(Boolean);
 
         return {
           name: t.name,
+          abbreviation: t.abbreviation || null,
           email: t.email || null,
           phone: t.phone || null,
           max_weekly_hours: t.max_weekly_hours,
           current_hours: 0,
           color,
+          subjects: resolvedSubjects,
         };
       });
 
-      // Single batch insert
-      const { data: insertedTeachers, error } = await supabase
-        .from("mapping_teachers")
-        .insert(teachersToInsert)
-        .select("id, name");
+      let insertedTeachers: { id: string; name: string }[] = [];
+      if (teachersToInsert.length > 0) {
+        const { data, error } = await supabase
+          .from("mapping_teachers")
+          .insert(teachersToInsert)
+          .select("id, name");
+        if (error) throw error;
+        insertedTeachers = data || [];
+      }
 
-      if (error) throw error;
-      if (!insertedTeachers) throw new Error("Nenhum professor retornado do banco");
+      // 4) Update professores existentes (apenas campos preenchidos; mesclar subjects)
+      let updatedCount = 0;
+      for (const t of toUpdate) {
+        const existing = teachers.find(e => e.id === t.matchedTeacherId);
+        if (!existing) continue;
+        const patch: Record<string, any> = {};
+        if (t.abbreviation && t.abbreviation !== (existing.abbreviation || "")) patch.abbreviation = t.abbreviation;
+        if (t.email && t.email !== (existing.email || "")) patch.email = t.email;
+        if (t.phone && t.phone !== (existing.phone || "")) patch.phone = t.phone;
+        if (t.max_weekly_hours && t.max_weekly_hours !== existing.max_weekly_hours) patch.max_weekly_hours = t.max_weekly_hours;
+
+        // Mesclar disciplinas: união sem duplicar (normalizando para nome canônico)
+        if (t.subjects.length > 0) {
+          const existingSubjects = (existing as any).subjects as string[] | undefined || [];
+          const resolved = t.subjects.map(resolveSubjectName);
+          const merged = Array.from(new Set([...existingSubjects, ...resolved].map(s => s.trim()).filter(Boolean)));
+          patch.subjects = merged;
+        }
+
+        if (Object.keys(patch).length === 0) continue;
+        const { error: upErr } = await supabase
+          .from("mapping_teachers")
+          .update(patch)
+          .eq("id", t.matchedTeacherId!);
+        if (upErr) {
+          console.error("Erro ao atualizar professor", t.name, upErr);
+        } else {
+          updatedCount++;
+        }
+      }
 
       // Batch class assignments
       let classAssignCount = 0;
       
-      // Build a map of inserted teacher name -> id
+      // Mapa: nome extraído -> teacher_id (novos + atualizações)
       const teacherIdMap = new Map<string, string>();
       insertedTeachers.forEach(t => teacherIdMap.set(t.name, t.id));
+      toUpdate.forEach(t => {
+        if (t.matchedTeacherId) teacherIdMap.set(t.name, t.matchedTeacherId);
+      });
 
       // Collect all class names we need to look up
       const allClassNames = new Set<string>();
@@ -218,10 +327,12 @@ const TeacherBulkImportDialog = ({ open, onOpenChange }: TeacherBulkImportDialog
       // Single refresh at the end
       await refreshData();
 
-      const msg = classAssignCount > 0
-        ? `${insertedTeachers.length} professor(es) adicionado(s) e ${classAssignCount} disciplina(s) atribuída(s)!`
-        : `${insertedTeachers.length} professor(es) adicionado(s) com sucesso!`;
-      toast({ title: msg });
+      const parts: string[] = [];
+      if (insertedTeachers.length > 0) parts.push(`${insertedTeachers.length} novo(s)`);
+      if (updatedCount > 0) parts.push(`${updatedCount} atualizado(s)`);
+      if (createdSubjectsCount > 0) parts.push(`${createdSubjectsCount} disciplina(s) nova(s)`);
+      if (classAssignCount > 0) parts.push(`${classAssignCount} atribuição(ões) de turma`);
+      toast({ title: parts.length > 0 ? parts.join(" · ") : "Nada a salvar" });
       handleClose();
     } catch (error: any) {
       toast({ title: "Erro ao salvar professores", description: error.message, variant: "destructive" });
@@ -233,11 +344,15 @@ const TeacherBulkImportDialog = ({ open, onOpenChange }: TeacherBulkImportDialog
   const handleClose = () => {
     setStep("upload");
     setExtractedTeachers([]);
+    setNewSubjects([]);
     setFileName("");
     onOpenChange(false);
   };
 
   const selectedCount = extractedTeachers.filter(t => t.selected).length;
+  const newCount = extractedTeachers.filter(t => t.selected && !t.matchedTeacherId).length;
+  const updateCount = extractedTeachers.filter(t => t.selected && !!t.matchedTeacherId).length;
+  const newSubjCount = newSubjects.filter(s => s.selected).length;
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
@@ -252,7 +367,7 @@ const TeacherBulkImportDialog = ({ open, onOpenChange }: TeacherBulkImportDialog
               <Upload className="h-8 w-8 text-primary" />
             </div>
             <p className="text-sm text-muted-foreground text-center">
-              Envie um PDF com a lista de professores. O sistema usará IA para extrair os dados automaticamente.
+              Envie um PDF com a lista de professores. A IA extrai nomes, abreviações e disciplinas, casa com cadastros existentes e permite atualizá-los.
             </p>
             <input
               ref={fileInputRef}
@@ -279,15 +394,19 @@ const TeacherBulkImportDialog = ({ open, onOpenChange }: TeacherBulkImportDialog
         {step === "review" && (
           <>
             <div className="flex items-center justify-between mb-2">
-              <p className="text-sm text-muted-foreground">
-                {extractedTeachers.length} professores encontrados
-              </p>
+              <div className="flex flex-wrap gap-1.5">
+                <Badge variant="secondary" className="text-[10px]">{newCount} novo(s)</Badge>
+                <Badge variant="secondary" className="text-[10px]">{updateCount} atualização(ões)</Badge>
+                {newSubjects.length > 0 && (
+                  <Badge variant="outline" className="text-[10px]">{newSubjCount}/{newSubjects.length} disciplina(s) nova(s)</Badge>
+                )}
+              </div>
               <Button variant="ghost" size="sm" onClick={toggleAll}>
                 {extractedTeachers.every(t => t.selected) ? "Desmarcar todos" : "Selecionar todos"}
               </Button>
             </div>
 
-            <ScrollArea className="h-[40vh]">
+            <ScrollArea className="h-[45vh]">
               <div className="space-y-2 pr-4">
                 {extractedTeachers.map((teacher, index) => (
                   <div
@@ -302,7 +421,19 @@ const TeacherBulkImportDialog = ({ open, onOpenChange }: TeacherBulkImportDialog
                       className="mt-0.5"
                     />
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate">{teacher.name}</p>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="text-sm font-medium truncate">{teacher.name}</p>
+                        {teacher.abbreviation && (
+                          <Badge variant="outline" className="text-[10px] font-mono">{teacher.abbreviation}</Badge>
+                        )}
+                        {teacher.matchedTeacherId ? (
+                          <Badge className="text-[10px] bg-amber-500 hover:bg-amber-500/90">
+                            Atualizar: {teacher.matchedTeacherName}
+                          </Badge>
+                        ) : (
+                          <Badge className="text-[10px] bg-emerald-500 hover:bg-emerald-500/90">Novo</Badge>
+                        )}
+                      </div>
                       <div className="flex flex-wrap gap-1 mt-1">
                         {teacher.email && (
                           <Badge variant="outline" className="text-[10px]">{teacher.email}</Badge>
@@ -312,6 +443,13 @@ const TeacherBulkImportDialog = ({ open, onOpenChange }: TeacherBulkImportDialog
                         )}
                         <Badge variant="secondary" className="text-[10px]">{teacher.max_weekly_hours}h/sem</Badge>
                       </div>
+                      {teacher.subjects.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {teacher.subjects.map((s, i) => (
+                            <Badge key={i} variant="outline" className="text-[10px]">{s}</Badge>
+                          ))}
+                        </div>
+                      )}
                       {teacher.classes.length > 0 && (
                         <div className="flex flex-wrap gap-1 mt-1">
                           {teacher.classes.map((cls, i) => (
@@ -322,6 +460,31 @@ const TeacherBulkImportDialog = ({ open, onOpenChange }: TeacherBulkImportDialog
                     </div>
                   </div>
                 ))}
+
+                {newSubjects.length > 0 && (
+                  <div className="mt-4 border-t pt-3">
+                    <p className="text-xs font-semibold text-muted-foreground mb-2">
+                      Disciplinas novas detectadas no PDF
+                    </p>
+                    <div className="space-y-1">
+                      {newSubjects.map((s, i) => (
+                        <div
+                          key={i}
+                          className={`flex items-center gap-2 p-2 rounded border ${
+                            s.selected ? "bg-primary/5 border-primary/20" : "bg-muted/30 border-transparent"
+                          }`}
+                        >
+                          <Checkbox
+                            checked={s.selected}
+                            onCheckedChange={() => toggleNewSubject(i)}
+                          />
+                          <span className="text-sm">{s.name}</span>
+                          <Badge variant="outline" className="text-[10px] ml-auto">criar</Badge>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             </ScrollArea>
 
@@ -334,7 +497,7 @@ const TeacherBulkImportDialog = ({ open, onOpenChange }: TeacherBulkImportDialog
                     Salvando...
                   </>
                 ) : (
-                  `Adicionar ${selectedCount} professor(es)`
+                  `Salvar ${selectedCount} professor(es)`
                 )}
               </Button>
             </DialogFooter>
