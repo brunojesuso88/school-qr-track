@@ -128,7 +128,7 @@ function buildPrintHTML(data: NotificationData, docNumber: number, docYear: numb
   <div class="title">
     <div class="t1">${stage.title}</div>
     <div class="t2">${stage.subtitle}</div>
-    <div class="meta"><strong>Documento nº ${formatDocNumber(docNumber, docYear)}</strong> &nbsp;•&nbsp; São Luís/MA, ${todayBR()}</div>
+    <div class="meta"><strong>Documento nº ${formatDocNumber(docNumber, docYear)}</strong> &nbsp;•&nbsp; Coelho Neto/MA, ${todayBR()}</div>
   </div>
   <div class="body section">${body}</div>
   ${data.reason ? `<div class="section"><div class="label">Motivo da notificação</div><div class="body">${escapeHTML(data.reason)}</div></div>` : ''}
@@ -407,7 +407,8 @@ export default function TeacherNotifications() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label>Obrigação acadêmica não cumprida *</Label>
+                    <Label>Obrigações acadêmicas não cumpridas *</Label>
+                    <p className="text-xs text-muted-foreground">Selecione uma ou mais opções</p>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 p-3 border rounded-md">
                       {OBLIGATION_OPTIONS.map((opt) => (
                         <label key={opt} className="flex items-center gap-2 text-sm cursor-pointer">
