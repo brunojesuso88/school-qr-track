@@ -25,6 +25,7 @@ export interface MappingTeacher {
 export interface MappingGlobalSubject {
   id: string;
   name: string;
+  abbreviation?: string | null;
   default_weekly_classes: number;
   created_at: string;
 }
