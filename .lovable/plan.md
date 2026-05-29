@@ -1,11 +1,12 @@
-## Ajustes Notificação Docente
+## Ajustes no cabeçalho da Notificação Docente
 
-1. **Localização dos documentos**
-   - Substituir "São Luís/MA" por "Coelho Neto/MA" no cabeçalho de data/place dos documentos.
-   - Arquivos: `src/components/notifications/NotificationPreview.tsx` (preview em tela) e `src/pages/TeacherNotifications.tsx` (HTML de impressão/PDF).
+1. **Atualizar texto do cabeçalho**
+   - Substituir "SECRETARIA DE ESTADO DA EDUCAÇÃO" por "SECRETARIA DE ESTADO DA EDUCAÇÃO DO MARANHÃO (SEDUC MA)" em ambas as etapas do documento.
+   - Arquivos:
+     - `src/components/notifications/NotificationPreview.tsx` (pré-visualização ao vivo)
+     - `src/pages/TeacherNotifications.tsx` (HTML de impressão/PDF)
 
-2. **Seleção múltipla de obrigações**
-   - O formulário já utiliza checkboxes com array (`obligations[]`), portanto a seleção múltipla já funciona tecnicamente.
-   - Ajustar o label do campo de "Obrigação acadêmica não cumprida" (singular) para **"Obrigações acadêmicas não cumpridas"** (plural).
-   - Adicionar hint abaixo do label: "Selecione uma ou mais opções".
-   - Arquivo: `src/pages/TeacherNotifications.tsx`.
+2. **Aumentar tamanho do logo CEPANS**
+   - Aumentar de 84×84 px para 110×110 px no componente de pré-visualização (`NotificationPreview.tsx`).
+   - Ajustar o espaçador simétrico do lado direito de 84 px para 110 px.
+   - Aumentar de 90×90 px para 115×115 px no HTML de impressão (`TeacherNotifications.tsx`), incluindo o espaçador correspondente.

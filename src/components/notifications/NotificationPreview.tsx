@@ -39,15 +39,15 @@ export function NotificationPreview({ data, docNumber, docYear, customBody }: Pr
     >
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-        <img src={logoCepans} alt="Brasão CEPANS" style={{ width: 84, height: 84, objectFit: 'contain' }} />
+        <img src={logoCepans} alt="Brasão CEPANS" style={{ width: 110, height: 110, objectFit: 'contain' }} />
         <div style={{ flex: 1, textAlign: 'center' }}>
           <div style={{ fontSize: 12, letterSpacing: 1, color: '#0B2E59' }}>ESTADO DO MARANHÃO</div>
-          <div style={{ fontSize: 12, letterSpacing: 1, color: '#0B2E59' }}>SECRETARIA DE ESTADO DA EDUCAÇÃO</div>
+          <div style={{ fontSize: 12, letterSpacing: 1, color: '#0B2E59' }}>SECRETARIA DE ESTADO DA EDUCAÇÃO DO MARANHÃO (SEDUC MA)</div>
           <div style={{ fontSize: 13, fontWeight: 700, color: '#0D47A1', marginTop: 2 }}>
             CENTRO DE ENSINO PROFESSOR ANTÔNIO NONATO SAMPAIO – CEPANS
           </div>
         </div>
-        <div style={{ width: 84 }} />
+        <div style={{ width: 110 }} />
       </div>
       <div style={{ height: 3, background: 'linear-gradient(90deg,#0D47A1,#C62828)', margin: '14px 0 22px' }} />
 
