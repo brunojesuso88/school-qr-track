@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { Upload, Loader2, FileText, AlertTriangle } from "lucide-react";
 import { useSchoolMapping, TEACHER_COLORS } from "@/contexts/SchoolMappingContext";
 import { useToast } from "@/hooks/use-toast";
@@ -12,6 +13,7 @@ import { supabase } from "@/integrations/supabase/client";
 interface ExtractedSubject {
   name: string;
   weekly_classes: number | null;
+  original_weekly_classes: number | null;
   teacher_name: string | null;
   teacher_abbreviation: string | null;
 }
@@ -147,12 +149,16 @@ const ClassesBulkImportDialog = ({ open, onOpenChange }: Props) => {
         return {
           name: String(c.name || "").trim(),
           shift: c.shift || null,
-          subjects: (c.subjects || []).map((s: any) => ({
-            name: String(s.name || "").trim(),
-            weekly_classes: s.weekly_classes || null,
-            teacher_name: s.teacher_name || null,
-            teacher_abbreviation: s.teacher_abbreviation || null,
-          })),
+          subjects: (c.subjects || []).map((s: any) => {
+            const wc = s.weekly_classes || null;
+            return {
+              name: String(s.name || "").trim(),
+              weekly_classes: wc,
+              original_weekly_classes: wc,
+              teacher_name: s.teacher_name || null,
+              teacher_abbreviation: s.teacher_abbreviation || null,
+            };
+          }),
           selected: true,
           matchedClassId: matched?.id ?? null,
         };
@@ -192,6 +198,43 @@ const ClassesBulkImportDialog = ({ open, onOpenChange }: Props) => {
   };
   const toggleNewSubject = (i: number) =>
     setNewSubjects((prev) => prev.map((s, idx) => (idx === i ? { ...s, selected: !s.selected } : s)));
+
+  const updateSubjectWeekly = (classIdx: number, subjectIdx: number, value: number) => {
+    const v = Math.max(1, Math.min(20, Math.floor(value) || 1));
+    setExtracted((prev) =>
+      prev.map((c, ci) =>
+        ci !== classIdx
+          ? c
+          : {
+              ...c,
+              subjects: c.subjects.map((s, si) =>
+                si !== subjectIdx ? s : { ...s, weekly_classes: v }
+              ),
+            }
+      )
+    );
+  };
+
+  const distributeEvenly = (classIdx: number) => {
+    setExtracted((prev) =>
+      prev.map((c, ci) => {
+        if (ci !== classIdx) return c;
+        const target = getTargetHours(c);
+        const n = c.subjects.length;
+        if (n === 0) return c;
+        const base = Math.floor(target / n);
+        let remainder = target - base * n;
+        return {
+          ...c,
+          subjects: c.subjects.map((s) => {
+            const extra = remainder > 0 ? 1 : 0;
+            if (extra) remainder--;
+            return { ...s, weekly_classes: Math.max(1, base + extra) };
+          }),
+        };
+      })
+    );
+  };
 
   const handleSave = async () => {
     const selected = extracted.filter((c) => c.selected);
