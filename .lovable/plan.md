@@ -1,51 +1,40 @@
 ## Objetivo
 
-No diálogo "Adicionar em Lote (PDF)" da aba **Turmas**, adicionar checagem rigorosa da carga horária semanal extraída do PDF e propagar as mudanças para o padrão global da disciplina.
+Permitir edição manual da quantidade de aulas/semana de cada disciplina diretamente no card de revisão do diálogo "Adicionar em Lote (PDF)" da aba Turmas, com recálculo em tempo real do total por turma.
 
 ## Mudanças em `src/components/mapping/ClassesBulkImportDialog.tsx`
 
-### 1. Validação da soma por turma (na revisão)
+### 1. Input editável por disciplina
 
-Para cada turma extraída do PDF, calcular a soma de `weekly_classes` das disciplinas e comparar com a carga semanal alvo:
+Substituir o texto estático `· {s.weekly_classes}h` no `<li>` de cada disciplina por um `<Input type="number">` compacto (~56px de largura, `min=1`, `max=10`):
 
-- Turmas existentes → usar `mapping_classes.weekly_hours` da turma já cadastrada.
-- Turmas novas → usar default por turno (`evening` = 25h, demais = 30h).
-- Disciplinas sem `weekly_classes` extraído → considerar fallback (`default_weekly_classes` global ou 4) já usado hoje.
+- Valor controlado por `s.weekly_classes` (com fallback para o `default_weekly_classes` global ou 1 se vazio).
+- `onChange` chama `updateSubjectWeekly(classIdx, subjectIdx, newValue)` que atualiza o `extracted[classIdx].subjects[subjectIdx].weekly_classes`.
+- Label curta ao lado: "aulas/sem".
 
-Exibir na revisão, por turma:
-- Badge "Soma: Xh / Yh" em verde quando bate, âmbar quando difere, vermelho quando ultrapassa.
-- Aviso textual quando houver divergência ("Soma das aulas (X) difere da carga da turma (Y)").
+### 2. Recálculo em tempo real
 
-Por disciplina, marcar visualmente (badge âmbar "atualizar padrão") quando o valor do PDF for diferente do `default_weekly_classes` global atual.
+Como `getClassSum`, `getSumStatus` e `invalidCount` já derivam de `extracted`, o badge "Soma: Xh / Yh", o alerta de divergência e o texto do botão "Atualizar/Importar" são reavaliados automaticamente a cada digitação.
 
-### 2. Bloqueio de importação em caso de soma incorreta
+### 3. Indicador de inconsistência por disciplina
 
-Botão "Importar" desabilitado enquanto houver pelo menos uma turma selecionada com soma ≠ carga da turma. Toast explicativo se o usuário tentar prosseguir. Permitir desmarcar turmas problemáticas para liberar.
+Quando o usuário edita um valor e ele difere do extraído originalmente pelo PDF, mostrar uma marca discreta (badge `editado` em outline) para indicar que foi corrigido manualmente.
 
-### 3. Atualização do padrão global da disciplina
+Preservar o valor original do PDF em uma propriedade `original_weekly_classes` no `ExtractedSubject` para permitir a comparação.
 
-Durante `handleSave`, após resolver o nome canônico de cada disciplina:
+### 4. Botão "Distribuir igualmente"
 
-- Agrupar, por disciplina global, todos os `weekly_classes` vindos do PDF (ignorando nulos).
-- Se houver consenso (todos os valores idênticos) e for **diferente** do `default_weekly_classes` atual:
-  - `UPDATE mapping_global_subjects SET default_weekly_classes = <novo>` para essa disciplina.
-  - `UPDATE mapping_class_subjects SET weekly_classes = <novo> WHERE subject_name = <name>` para propagar a todas as turmas existentes (mesma estratégia já usada no `SubjectForm`).
-- Se houver conflito (valores diferentes para a mesma disciplina em turmas distintas no PDF): não atualizar o padrão global, manter o valor por turma exatamente como veio do PDF, e logar um aviso no toast final.
+Adicionar um pequeno botão por turma "Distribuir restante" que, ao clicar, soma o que falta/excede e ajusta proporcionalmente as disciplinas da turma para bater com a carga semanal alvo (`mapping_classes.weekly_hours` ou default por turno). Útil quando o PDF errou todas as contagens de uma turma.
 
-Para disciplinas globais novas criadas na etapa 1 do save, usar o `weekly_classes` mais frequente do PDF como `default_weekly_classes` (em vez do `4` fixo atual).
+### 5. Validação no save
 
-### 4. Resumo no toast final
-
-Acrescentar ao toast:
-- "N disciplina(s) global(is) com padrão atualizado"
-- "N turma(s) com soma divergente ignorada(s)" (se aplicável)
+Manter a lógica existente: o `getClassSum` agora reflete o valor editado, então o fluxo de update de `mapping_class_subjects.weekly_classes`, propagação para `mapping_global_subjects.default_weekly_classes` (consenso) e atualização de `mapping_classes.weekly_hours` (quando divergente) já passa a usar os valores corrigidos pelo usuário.
 
 ## Arquivos afetados
 
-- `src/components/mapping/ClassesBulkImportDialog.tsx` (único arquivo editado)
+- `src/components/mapping/ClassesBulkImportDialog.tsx` (único arquivo)
 
 ## Fora de escopo
 
-- Sem mudanças de schema.
-- Sem alteração no Edge Function `parse-classes-pdf`.
-- Sem mudanças em outras abas (Disciplinas, Distribuição, Professores).
+- Sem mudanças em schema, edge function ou outras abas.
+- Sem dupla extração via IA — confiamos na correção manual do usuário antes do save.

@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { Upload, Loader2, FileText, AlertTriangle } from "lucide-react";
 import { useSchoolMapping, TEACHER_COLORS } from "@/contexts/SchoolMappingContext";
 import { useToast } from "@/hooks/use-toast";
@@ -12,6 +13,7 @@ import { supabase } from "@/integrations/supabase/client";
 interface ExtractedSubject {
   name: string;
   weekly_classes: number | null;
+  original_weekly_classes: number | null;
   teacher_name: string | null;
   teacher_abbreviation: string | null;
 }
@@ -147,12 +149,16 @@ const ClassesBulkImportDialog = ({ open, onOpenChange }: Props) => {
         return {
           name: String(c.name || "").trim(),
           shift: c.shift || null,
-          subjects: (c.subjects || []).map((s: any) => ({
-            name: String(s.name || "").trim(),
-            weekly_classes: s.weekly_classes || null,
-            teacher_name: s.teacher_name || null,
-            teacher_abbreviation: s.teacher_abbreviation || null,
-          })),
+          subjects: (c.subjects || []).map((s: any) => {
+            const wc = s.weekly_classes || null;
+            return {
+              name: String(s.name || "").trim(),
+              weekly_classes: wc,
+              original_weekly_classes: wc,
+              teacher_name: s.teacher_name || null,
+              teacher_abbreviation: s.teacher_abbreviation || null,
+            };
+          }),
           selected: true,
           matchedClassId: matched?.id ?? null,
         };
@@ -192,6 +198,43 @@ const ClassesBulkImportDialog = ({ open, onOpenChange }: Props) => {
   };
   const toggleNewSubject = (i: number) =>
     setNewSubjects((prev) => prev.map((s, idx) => (idx === i ? { ...s, selected: !s.selected } : s)));
+
+  const updateSubjectWeekly = (classIdx: number, subjectIdx: number, value: number) => {
+    const v = Math.max(1, Math.min(20, Math.floor(value) || 1));
+    setExtracted((prev) =>
+      prev.map((c, ci) =>
+        ci !== classIdx
+          ? c
+          : {
+              ...c,
+              subjects: c.subjects.map((s, si) =>
+                si !== subjectIdx ? s : { ...s, weekly_classes: v }
+              ),
+            }
+      )
+    );
+  };
+
+  const distributeEvenly = (classIdx: number) => {
+    setExtracted((prev) =>
+      prev.map((c, ci) => {
+        if (ci !== classIdx) return c;
+        const target = getTargetHours(c);
+        const n = c.subjects.length;
+        if (n === 0) return c;
+        const base = Math.floor(target / n);
+        let remainder = target - base * n;
+        return {
+          ...c,
+          subjects: c.subjects.map((s) => {
+            const extra = remainder > 0 ? 1 : 0;
+            if (extra) remainder--;
+            return { ...s, weekly_classes: Math.max(1, base + extra) };
+          }),
+        };
+      })
+    );
+  };
 
   const handleSave = async () => {
     const selected = extracted.filter((c) => c.selected);
@@ -598,10 +641,24 @@ const ClassesBulkImportDialog = ({ open, onOpenChange }: Props) => {
                           })()}
                         </div>
                         {getSumStatus(c) !== "ok" && (
-                          <p className="mt-1 text-[11px] text-amber-600 dark:text-amber-400 flex items-center gap-1">
-                            <AlertTriangle className="h-3 w-3" />
-                            Soma das aulas ({getClassSum(c)}h) difere da carga semanal da turma ({getTargetHours(c)}h).
-                          </p>
+                          <div className="mt-1 flex items-center gap-2 flex-wrap">
+                            <p className="text-[11px] text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                              <AlertTriangle className="h-3 w-3" />
+                              Soma das aulas ({getClassSum(c)}h) difere da carga semanal da turma ({getTargetHours(c)}h).
+                            </p>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="h-6 px-2 text-[10px]"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                distributeEvenly(idx);
+                              }}
+                            >
+                              Distribuir igualmente
+                            </Button>
+                          </div>
                         )}
 
                         <ul className="mt-2 space-y-1">
@@ -615,6 +672,10 @@ const ClassesBulkImportDialog = ({ open, onOpenChange }: Props) => {
                               s.weekly_classes > 0 &&
                               gd != null &&
                               s.weekly_classes !== gd;
+                            const edited =
+                              s.weekly_classes != null &&
+                              s.original_weekly_classes != null &&
+                              s.weekly_classes !== s.original_weekly_classes;
                             return (
                               <li
                                 key={si}
@@ -624,10 +685,25 @@ const ClassesBulkImportDialog = ({ open, onOpenChange }: Props) => {
                                 {!subjExists && (
                                   <Badge variant="outline" className="text-[9px]">nova disc.</Badge>
                                 )}
-                                {s.weekly_classes && (
-                                  <span className="text-muted-foreground">
-                                    · {s.weekly_classes}h
-                                  </span>
+                                <span className="flex items-center gap-1 text-muted-foreground">
+                                  ·
+                                  <Input
+                                    type="number"
+                                    min={1}
+                                    max={20}
+                                    value={s.weekly_classes ?? ""}
+                                    onChange={(e) =>
+                                      updateSubjectWeekly(idx, si, parseInt(e.target.value, 10))
+                                    }
+                                    onClick={(e) => e.stopPropagation()}
+                                    className="h-6 w-14 px-1 text-xs"
+                                  />
+                                  <span className="text-[10px]">aulas/sem</span>
+                                </span>
+                                {edited && (
+                                  <Badge variant="outline" className="text-[9px] border-sky-500/40 text-sky-600 dark:text-sky-400">
+                                    editado ({s.original_weekly_classes ?? "?"}→{s.weekly_classes})
+                                  </Badge>
                                 )}
                                 {willUpdateDefault && (
                                   <Badge variant="outline" className="text-[9px] border-amber-500/40 text-amber-600 dark:text-amber-400">
