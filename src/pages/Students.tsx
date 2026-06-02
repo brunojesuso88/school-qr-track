@@ -560,6 +560,11 @@ const Students = () => {
     const matchesOccurrence = !filterOccurrences || occurrenceMap.has(student.id);
     return matchesSearch && matchesClass && matchesShift && matchesOccurrence;
   }).sort((a, b) => {
+    if (sortByAbsences !== 'none') {
+      const ca = absenceCountMap.get(a.id) || 0;
+      const cb = absenceCountMap.get(b.id) || 0;
+      return sortByAbsences === 'desc' ? cb - ca : ca - cb;
+    }
     if (!filterOccurrences) return 0;
     const dateA = occurrenceMap.get(a.id) || '';
     const dateB = occurrenceMap.get(b.id) || '';
