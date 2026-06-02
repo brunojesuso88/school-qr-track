@@ -945,6 +945,11 @@ const Students = () => {
                           Laudo
                         </span>
                       )}
+                      {sortByAbsences !== 'none' && (
+                        <span className="text-xs px-2 py-1 rounded-full font-medium bg-red-500/10 text-red-600">
+                          {absenceCountMap.get(student.id) || 0} falta(s)
+                        </span>
+                      )}
                     </div>
                   </div>
 
