@@ -65,6 +65,7 @@ const OCCURRENCE_TYPES = [
   { value: 'medical_certificate', label: 'Atestado Médico' },
   { value: 'late_arrival', label: 'Atraso' },
   { value: 'discipline', label: 'Ocorrência Disciplinar' },
+  { value: 'class_council', label: 'Conselho de Classe' },
   { value: 'other', label: 'Outros' },
 ];
 
@@ -90,6 +91,8 @@ const Students = () => {
   const [reportStudent, setReportStudent] = useState<Student | null>(null);
   const [filterOccurrences, setFilterOccurrences] = useState(false);
   const [occurrenceMap, setOccurrenceMap] = useState<Map<string, string>>(new Map());
+  const [absenceCountMap, setAbsenceCountMap] = useState<Map<string, number>>(new Map());
+  const [sortByAbsences, setSortByAbsences] = useState<'none' | 'desc' | 'asc'>('none');
 
   const [formData, setFormData] = useState({
     full_name: '',
@@ -122,6 +125,7 @@ const Students = () => {
     fetchClasses();
     fetchCurrentUserName();
     fetchOccurrenceMap();
+    fetchAbsenceCounts();
   }, []);
 
   const fetchOccurrenceMap = async () => {
@@ -138,6 +142,23 @@ const Students = () => {
       setOccurrenceMap(map);
     } catch (error) {
       console.error('Error fetching occurrences map:', error);
+    }
+  };
+
+  const fetchAbsenceCounts = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('attendance')
+        .select('student_id')
+        .eq('status', 'absent');
+      if (error) throw error;
+      const map = new Map<string, number>();
+      data?.forEach((a: any) => {
+        map.set(a.student_id, (map.get(a.student_id) || 0) + 1);
+      });
+      setAbsenceCountMap(map);
+    } catch (error) {
+      console.error('Error fetching absence counts:', error);
     }
   };
 
