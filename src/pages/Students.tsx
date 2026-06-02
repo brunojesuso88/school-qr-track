@@ -65,6 +65,7 @@ const OCCURRENCE_TYPES = [
   { value: 'medical_certificate', label: 'Atestado Médico' },
   { value: 'late_arrival', label: 'Atraso' },
   { value: 'discipline', label: 'Ocorrência Disciplinar' },
+  { value: 'class_council', label: 'Conselho de Classe' },
   { value: 'other', label: 'Outros' },
 ];
 
@@ -90,6 +91,8 @@ const Students = () => {
   const [reportStudent, setReportStudent] = useState<Student | null>(null);
   const [filterOccurrences, setFilterOccurrences] = useState(false);
   const [occurrenceMap, setOccurrenceMap] = useState<Map<string, string>>(new Map());
+  const [absenceCountMap, setAbsenceCountMap] = useState<Map<string, number>>(new Map());
+  const [sortByAbsences, setSortByAbsences] = useState<'none' | 'desc' | 'asc'>('none');
 
   const [formData, setFormData] = useState({
     full_name: '',
@@ -122,6 +125,7 @@ const Students = () => {
     fetchClasses();
     fetchCurrentUserName();
     fetchOccurrenceMap();
+    fetchAbsenceCounts();
   }, []);
 
   const fetchOccurrenceMap = async () => {
@@ -138,6 +142,23 @@ const Students = () => {
       setOccurrenceMap(map);
     } catch (error) {
       console.error('Error fetching occurrences map:', error);
+    }
+  };
+
+  const fetchAbsenceCounts = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('attendance')
+        .select('student_id')
+        .eq('status', 'absent');
+      if (error) throw error;
+      const map = new Map<string, number>();
+      data?.forEach((a: any) => {
+        map.set(a.student_id, (map.get(a.student_id) || 0) + 1);
+      });
+      setAbsenceCountMap(map);
+    } catch (error) {
+      console.error('Error fetching absence counts:', error);
     }
   };
 
@@ -539,6 +560,11 @@ const Students = () => {
     const matchesOccurrence = !filterOccurrences || occurrenceMap.has(student.id);
     return matchesSearch && matchesClass && matchesShift && matchesOccurrence;
   }).sort((a, b) => {
+    if (sortByAbsences !== 'none') {
+      const ca = absenceCountMap.get(a.id) || 0;
+      const cb = absenceCountMap.get(b.id) || 0;
+      return sortByAbsences === 'desc' ? cb - ca : ca - cb;
+    }
     if (!filterOccurrences) return 0;
     const dateA = occurrenceMap.get(a.id) || '';
     const dateB = occurrenceMap.get(b.id) || '';
@@ -836,6 +862,16 @@ const Students = () => {
                   <SelectItem value="evening">Noite</SelectItem>
                 </SelectContent>
               </Select>
+              <Select value={sortByAbsences} onValueChange={(v) => setSortByAbsences(v as 'none' | 'desc' | 'asc')}>
+                <SelectTrigger className="w-full sm:w-48">
+                  <SelectValue placeholder="Ordenar por faltas" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Sem ordenação</SelectItem>
+                  <SelectItem value="desc">Mais faltas primeiro</SelectItem>
+                  <SelectItem value="asc">Menos faltas primeiro</SelectItem>
+                </SelectContent>
+              </Select>
               <div className="flex items-center gap-2 mt-3 sm:mt-0">
                 <Checkbox
                   id="filterOccurrences"
@@ -907,6 +943,11 @@ const Students = () => {
                       {student.has_medical_report && (
                         <span className="text-xs px-2 py-1 rounded-full font-medium bg-amber-500/10 text-amber-600">
                           Laudo
+                        </span>
+                      )}
+                      {sortByAbsences !== 'none' && (
+                        <span className="text-xs px-2 py-1 rounded-full font-medium bg-red-500/10 text-red-600">
+                          {absenceCountMap.get(student.id) || 0} falta(s)
                         </span>
                       )}
                     </div>
