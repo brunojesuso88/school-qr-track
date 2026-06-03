@@ -1,22 +1,29 @@
-## Atualizar regras de classificação de situação no importador PDF de alunos
+## Objetivo
 
-### Contexto
-O edge function `parse-students-pdf` classifica alunos em "ativo", "removido" ou "revisão" com base em sinais visuais (cor do texto, rachura) e na sigla da coluna **Situação** do PDF. Atualmente apenas `MTR` e `MTI` são reconhecidas como situações de aluno ativo.
+Na aba **Notificação Docente**, substituir o campo de texto livre **"Turmas / disciplina"** por dois seletores múltiplos populados a partir do **Mapeamento Escolar**:
 
-### Mudanças necessárias
+- **Disciplinas** → vindas de `mapping_global_subjects` (campo `name`)
+- **Turmas** → vindas de `mapping_classes` (campo `name`, agrupadas por `shift`)
 
-#### 1. Edge Function `supabase/functions/parse-students-pdf/index.ts`
+## Comportamento
 
-- Adicionar `CTI` e `CPG` como situações de **aluno removido** (`VALID_REMOVED_SITUATIONS`).
-- Ajustar a lógica de classificação para que:
-  - `MTR` / `MTI` → ativo (quando preto + sem rachura, como hoje)
-  - `CTI` / `CPG` → removido (independentemente de cor/rachura, pois a situação indica transferência/cancelamento)
-  - Demais siglas ou ausência → comportamento atual (revisão se divergir, ou com base em cor/rachura)
-- Atualizar o prompt do sistema (extração Pass 1 e Pass 2) para listar `CTI` e `CPG` como exemplos de siglas da coluna Situação, junto com as já citadas (`MTR`, `MTI`, `TRA`, `DES`, `REM`).
+1. Ao abrir o formulário de nova notificação, buscar em paralelo:
+   - `mapping_global_subjects` ordenado por `name`
+   - `mapping_classes` ordenado por `shift, name`
+2. Dois campos lado a lado (responsivo):
+   - **Disciplinas** — multi-select com busca (Popover + Command + Checkbox), permite selecionar 1+ disciplinas
+   - **Turmas** — multi-select com busca, com separadores por turno (Manhã / Tarde / Noite)
+3. As seleções são combinadas no formato salvo em `classes_subjects` (texto):
+   - `"<Disciplina1, Disciplina2> – <Turma A, Turma B, Turma C>"`
+   - Esse texto continua sendo exibido no preview, PDF e listagem (sem mudanças no backend nem no schema).
+4. Ao editar uma notificação existente, tentar reconstruir as seleções a partir do texto salvo (split por `–` e por `,`); se não casar, manter seleção vazia e mostrar o texto original como dica (fallback editável).
+5. Campo continua opcional. Botão "Limpar" para zerar as duas listas.
 
-#### 2. Deploy
-- Reimplantar o edge function `parse-students-pdf` após a edição.
+## Arquivos afetados
 
-### Fora de escopo
-- Nenhuma alteração no frontend (`src/pages/Classes.tsx`) — a resposta do servidor continua seguindo o mesmo schema (`active`, `removed`, `review`).
-- Nenhuma alteração em outros edge functions de importação PDF.
+- `src/pages/TeacherNotifications.tsx` — substituir o `<Input>` da seção "Turmas / disciplina" pelos dois multi-selects e adicionar o `useEffect`/`useQuery` que carrega as listas. Atualizar `setForm` para gravar `classes_subjects` derivado.
+
+## Fora de escopo
+
+- Nenhuma mudança em banco, RLS, edge functions, preview/PDF ou estrutura de `teacher_notifications`.
+- Não alterar regras de import/visualização.
