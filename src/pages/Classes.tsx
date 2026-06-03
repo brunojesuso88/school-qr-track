@@ -61,6 +61,7 @@ interface ClassItem {
   status: string;
   photo_url: string | null;
   created_at: string;
+  location?: string;
 }
 
 interface PdfStudentBase {
@@ -160,6 +161,7 @@ const Classes = () => {
     shift: 'morning',
     description: '',
     photo_url: '' as string | null,
+    location: 'sede' as 'sede' | 'salas_fora',
   });
 
   useEffect(() => {
@@ -254,6 +256,7 @@ const Classes = () => {
             shift: validationData.shift,
             description: validationData.description,
             photo_url: formData.photo_url,
+            location: formData.location,
           })
           .eq('id', editingClass.id);
 
@@ -266,6 +269,7 @@ const Classes = () => {
             name: validationData.name,
             shift: validationData.shift,
             description: validationData.description,
+            location: formData.location,
           });
 
         if (error) throw error;
@@ -293,6 +297,7 @@ const Classes = () => {
       shift: classItem.shift,
       description: classItem.description || '',
       photo_url: classItem.photo_url || null,
+      location: (classItem.location === 'salas_fora' ? 'salas_fora' : 'sede'),
     });
     // Load existing photo preview
     if (classItem.photo_url) {
@@ -324,6 +329,7 @@ const Classes = () => {
       shift: 'morning',
       description: '',
       photo_url: null,
+      location: 'sede',
     });
     setPhotoPreview(null);
   };
@@ -786,6 +792,21 @@ const Classes = () => {
                     placeholder="Ex: Sala 12"
                   />
                 </div>
+                <div className="space-y-2">
+                  <Label htmlFor="location">Localização</Label>
+                  <Select
+                    value={formData.location}
+                    onValueChange={(value) => setFormData({ ...formData, location: value as 'sede' | 'salas_fora' })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="sede">Sede</SelectItem>
+                      <SelectItem value="salas_fora">Salas Foras</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
                 {editingClass && (
                   <div className="space-y-2">
                     <Label>Foto da Turma</Label>
@@ -857,8 +878,19 @@ const Classes = () => {
             ))}
           </div>
         ) : filteredClasses.length > 0 ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {filteredClasses.map((classItem, index) => (
+          <div className="space-y-8">
+            {(['sede', 'salas_fora'] as const).map((loc) => {
+              const group = filteredClasses.filter((c) => (c.location || 'sede') === loc);
+              if (group.length === 0) return null;
+              const title = loc === 'sede' ? 'SEDE' : 'SALAS FORAS';
+              return (
+                <div key={loc} className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-lg font-semibold">{title}</h2>
+                    <Badge variant="outline">{group.length}</Badge>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {group.map((classItem, index) => (
               <Card
                 key={classItem.id}
                 className="card-hover animate-fade-in overflow-hidden cursor-pointer"
@@ -971,6 +1003,10 @@ const Classes = () => {
                 </CardContent>
               </Card>
             ))}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         ) : (
           <Card>

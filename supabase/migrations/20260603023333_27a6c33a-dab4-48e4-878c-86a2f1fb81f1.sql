@@ -1,0 +1,1 @@
+ALTER TABLE public.classes ADD COLUMN IF NOT EXISTS location text NOT NULL DEFAULT 'sede' CHECK (location IN ('sede','salas_fora'));
