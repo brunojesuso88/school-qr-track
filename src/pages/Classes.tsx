@@ -585,16 +585,19 @@ const Classes = () => {
     try {
       let addedIds: string[] = [];
       if (toAdd.length) {
-        const studentsToInsert = toAdd.map(r => ({
-          full_name: r.full_name,
-          birth_date: r.birth_date || null,
-          guardian_name: r.guardian_name?.trim() || null,
-          guardian_phone: r.guardian_phone?.trim() || null,
-          class: r.class,
-          shift: r.shift as 'morning' | 'afternoon' | 'evening',
-          student_id: generateStudentId(r.full_name, r.birth_date),
-          status: 'active' as const,
-        }));
+        const studentsToInsert = toAdd.map(r => {
+          const isoBirth = toIsoBirthDate(r.birth_date);
+          return {
+            full_name: r.full_name,
+            birth_date: isoBirth,
+            guardian_name: r.guardian_name?.trim() || null,
+            guardian_phone: r.guardian_phone?.trim() || null,
+            class: r.class,
+            shift: r.shift as 'morning' | 'afternoon' | 'evening',
+            student_id: generateStudentId(r.full_name, isoBirth),
+            status: 'active' as const,
+          };
+        });
         const { data: inserted, error: insErr } = await supabase
           .from('students').insert(studentsToInsert).select('id');
         if (insErr) throw insErr;
