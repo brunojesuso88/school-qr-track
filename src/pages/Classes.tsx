@@ -295,6 +295,7 @@ const Classes = () => {
       shift: classItem.shift,
       description: classItem.description || '',
       photo_url: classItem.photo_url || null,
+      location: (classItem.location === 'salas_fora' ? 'salas_fora' : 'sede'),
     });
     // Load existing photo preview
     if (classItem.photo_url) {
@@ -326,6 +327,7 @@ const Classes = () => {
       shift: 'morning',
       description: '',
       photo_url: null,
+      location: 'sede',
     });
     setPhotoPreview(null);
   };
