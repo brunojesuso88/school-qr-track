@@ -529,8 +529,7 @@ const Classes = () => {
 
     const pendingReview = reviewItems.filter(r => r.resolution === 'pending').length;
     if (pendingReview > 0) {
-      toast.error(`Resolva os ${pendingReview} registro(s) com inconsistências antes de confirmar`);
-      return;
+      toast.info(`${pendingReview} registro(s) pendentes em "Revisar" serão ignorados`);
     }
 
     const toAdd: ActiveItem[] = [
