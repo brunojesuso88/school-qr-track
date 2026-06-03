@@ -10,8 +10,9 @@ const corsHeaders = {
 const MAX_PDF_SIZE_MB = 10;
 const MAX_PDF_SIZE_BYTES = MAX_PDF_SIZE_MB * 1024 * 1024;
 
-const PRIMARY_MODEL = 'google/gemini-2.5-pro';
-const FALLBACK_MODEL = 'google/gemini-2.5-flash';
+// Use Flash as primary to avoid Pro rate/credit limits (402/429) on common imports.
+const PRIMARY_MODEL = 'google/gemini-2.5-flash';
+const FALLBACK_MODEL = 'google/gemini-2.5-flash-lite';
 
 const normalizeName = (s: string) =>
   String(s || '')
@@ -42,30 +43,31 @@ async function callWithFallback(body: any, apiKey: string) {
 }
 
 const VALID_ACTIVE_SITUATIONS = ['MTR', 'MTI'];
-const VALID_REMOVED_SITUATIONS = ['CTI', 'CPG'];
+const VALID_REMOVED_SITUATIONS = ['CTI', 'CPG', 'TRA', 'DES', 'REM'];
 
 function buildExtractionBody(pdfBase64: string, passLabel: string) {
   return {
     messages: [
       {
         role: 'system',
-        content: `Você é um analisador visual de listas escolares em PDF (${passLabel}). Examine TODAS as páginas do documento, linha por linha da tabela de alunos. Para CADA linha que contém um nome de aluno, reporte exatamente o que você vê — NÃO classifique, NÃO interprete, apenas descreva.
+        content: `Você analisa listas escolares em PDF. Examine TODAS as páginas, linha por linha, e reporte cada aluno encontrado.
+
+CAMPO MAIS IMPORTANTE — situacao:
+Leia EXATAMENTE a sigla da coluna "Situação" de cada linha. Valores comuns: MTR, MTI (alunos ativos/matriculados); CTI, CPG, TRA, DES, REM (alunos removidos/transferidos/desistentes). Se a célula estiver vazia, retorne "".
 
 Para cada aluno reporte:
-- full_name: nome exato como aparece, preservando acentos e ortografia
-- name_color: "black" (preto/cinza escuro normal) | "red" (texto em vermelho) | "other" (qualquer outra cor distinguível)
-- has_strikethrough: true se houver linha horizontal cortando o nome (rachura/strikethrough), seja impressa ou manuscrita; false caso contrário
-- situacao: conteúdo EXATO da coluna "Situação" (geralmente siglas como MTR, MTI, TRA, DES, REM). Se vazia, retorne "".
-- situacao: conteúdo EXATO da coluna "Situação" (geralmente siglas como MTR, MTI, CTI, CPG, TRA, DES, REM). Se vazia, retorne "".
-- page: número da página onde o nome aparece (1-indexed)
-- guardian_name, guardian_phone, birth_date: quando visíveis nas demais colunas
-- confidence: 0.0 a 1.0 indicando clareza da leitura desse registro
+- full_name: nome exato como aparece (preserve acentos)
+- situacao: sigla EXATA da coluna Situação (em maiúsculas)
+- name_color: "black" | "red" | "other" — apenas se claramente visível, senão use "black"
+- has_strikethrough: true apenas se houver rachura óbvia sobre o nome
+- page: número da página (1-indexed)
+- guardian_name, guardian_phone, birth_date: quando visíveis
 
 REGRAS:
-1. Examine TODAS as páginas. Nenhuma linha pode ser omitida.
+1. Examine TODAS as páginas — nenhuma linha pode ser omitida.
 2. Não invente nomes nem complete nomes parciais.
-3. Ignore cabeçalhos, números de ordem e rótulos.
-4. Reporte cor e rachura observando o estilo visual REAL do PDF.`
+3. Ignore cabeçalhos, rodapés e números de ordem.
+4. Priorize a leitura correta da coluna Situação acima de qualquer outro sinal.`
       },
       {
         role: 'user',
@@ -97,9 +99,8 @@ REGRAS:
                   guardian_name: { type: 'string' },
                   guardian_phone: { type: 'string' },
                   birth_date: { type: 'string' },
-                  confidence: { type: 'number' }
                 },
-                required: ['full_name', 'name_color', 'has_strikethrough', 'situacao']
+                required: ['full_name', 'situacao']
               }
             }
           },
@@ -213,40 +214,20 @@ serve(async (req) => {
 
     console.log('Processing PDF for class:', className, '| Size:', (estimatedSize / 1024 / 1024).toFixed(2), 'MB');
 
-    // ===== Dois passes INDEPENDENTES =====
-    const [pass1, pass2] = await Promise.all([
-      runExtractionPass(pdfBase64, 'Passe 1', LOVABLE_API_KEY),
-      runExtractionPass(pdfBase64, 'Passe 2', LOVABLE_API_KEY),
-    ]);
+    // ===== Passe único (Flash) — situacao é o sinal primário =====
+    const pass = await runExtractionPass(pdfBase64, 'Único', LOVABLE_API_KEY);
 
-    if (!pass1.ok && !pass2.ok) {
-      const status = pass1.status === 402 || pass2.status === 402 ? 402
-        : pass1.status === 429 || pass2.status === 429 ? 429 : 500;
-      const msg = status === 429 ? 'Limite de requisições excedido. Tente novamente mais tarde.'
-        : status === 402 ? 'Créditos insuficientes. Adicione créditos à sua conta.'
+    if (!pass.ok) {
+      const status = pass.status === 402 ? 402 : pass.status === 429 ? 429 : 500;
+      const msg = status === 429 ? 'Limite de requisições excedido. Tente novamente em alguns minutos.'
+        : status === 402 ? 'Créditos de IA insuficientes. Adicione créditos à sua conta.'
         : 'Falha ao analisar o PDF. Estrutura desconhecida ou ilegível.';
       return new Response(JSON.stringify({ success: false, error: msg }),
         { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    const pagesRead = Math.max(pass1.pages, pass2.pages);
-    console.log(`Pass1: ${pass1.rows.length} rows | Pass2: ${pass2.rows.length} rows | pages=${pagesRead}`);
-
-    // Index pass2 by normalized name
-    const p2Map = new Map<string, any>();
-    for (const r of pass2.rows) {
-      const k = normalizeName(r.full_name || '');
-      if (k.length >= 2 && !p2Map.has(k)) p2Map.set(k, r);
-    }
-
-    // Use union of names from both passes as authoritative set
-    const allKeys = new Set<string>();
-    const p1Map = new Map<string, any>();
-    for (const r of pass1.rows) {
-      const k = normalizeName(r.full_name || '');
-      if (k.length >= 2 && !p1Map.has(k)) { p1Map.set(k, r); allKeys.add(k); }
-    }
-    for (const k of p2Map.keys()) allKeys.add(k);
+    const pagesRead = pass.pages;
+    console.log(`Passe único: ${pass.rows.length} rows | pages=${pagesRead}`);
 
     const phoneRegex = /^\d{10,11}$/;
     const nameValid = (n: string) => /^[\p{L}\s'\-\.]+$/u.test(n) && n.trim().length >= 2;
@@ -254,84 +235,69 @@ serve(async (req) => {
     const active: any[] = [];
     const removed: any[] = [];
     const review: any[] = [];
+    const seen = new Set<string>();
 
-    for (const k of allKeys) {
-      const a = p1Map.get(k);
-      const b = p2Map.get(k);
-      const primary = a || b;
-      const full_name = String(primary.full_name || '').trim().substring(0, 100);
+    for (const r of pass.rows) {
+      const full_name = String(r.full_name || '').trim().substring(0, 100);
+      const key = normalizeName(full_name);
+      if (key.length < 2 || seen.has(key)) continue;
+      seen.add(key);
 
-      // Collect issues for divergence/quality
-      const issues: string[] = [];
-      if (!a) issues.push('Detectado apenas no Passe 2');
-      if (!b) issues.push('Detectado apenas no Passe 1');
-      if (!nameValid(full_name)) issues.push('Nome com caracteres suspeitos');
+      const color = String(r.name_color || 'black').toLowerCase();
+      const strike = !!r.has_strikethrough;
+      const situacao = String(r.situacao || '').trim().toUpperCase();
+      const rawPhone = String(r.guardian_phone || '').replace(/\D/g, '');
 
-      const colorA = a?.name_color ?? null;
-      const colorB = b?.name_color ?? null;
-      const strikeA = a?.has_strikethrough ?? null;
-      const strikeB = b?.has_strikethrough ?? null;
-      const sitA = String(a?.situacao ?? '').trim().toUpperCase();
-      const sitB = String(b?.situacao ?? '').trim().toUpperCase();
-      const confA = typeof a?.confidence === 'number' ? a.confidence : 0.8;
-      const confB = typeof b?.confidence === 'number' ? b.confidence : 0.8;
-
-      if (a && b) {
-        if (colorA !== colorB) issues.push(`Divergência de cor (${colorA} vs ${colorB})`);
-        if (strikeA !== strikeB) issues.push(`Divergência de rachura (${strikeA} vs ${strikeB})`);
-        if (sitA !== sitB) issues.push(`Divergência de situação (${sitA || '—'} vs ${sitB || '—'})`);
-      }
-      if (confA < 0.7 || confB < 0.7) issues.push('Baixa confiança de leitura');
-
-      // Determine consolidated signals (only when both agree, otherwise mark review)
-      const color = colorA && colorB && colorA === colorB ? colorA : (colorA || colorB);
-      const strike = (strikeA === strikeB) ? strikeA : (strikeA ?? strikeB);
-      const situacao = (sitA && sitB && sitA === sitB) ? sitA : (sitA || sitB);
-
-      const rawPhone = String(primary.guardian_phone || '').replace(/\D/g, '');
       const base = {
         full_name,
-        page: primary.page ?? null,
+        page: r.page ?? null,
         name_color: color,
-        has_strikethrough: !!strike,
+        has_strikethrough: strike,
         situacao,
-        birth_date: primary.birth_date || null,
-        guardian_name: String(primary.guardian_name || '').substring(0, 100),
+        birth_date: r.birth_date || null,
+        guardian_name: String(r.guardian_name || '').substring(0, 100),
         guardian_phone: phoneRegex.test(rawPhone) ? rawPhone : '',
-        confidence: Math.min(confA, confB || confA),
         class: className.substring(0, 100),
         shift: shift || 'morning',
       };
 
-      const isRemovedBySituation = VALID_REMOVED_SITUATIONS.includes(situacao);
-      const isRemoved = color === 'red' || strike === true || isRemovedBySituation;
-      const isActive = color === 'black' && strike === false && VALID_ACTIVE_SITUATIONS.includes(situacao);
+      // Situação é o sinal PRIMÁRIO e determinístico
+      const isActiveBySit = VALID_ACTIVE_SITUATIONS.includes(situacao);
+      const isRemovedBySit = VALID_REMOVED_SITUATIONS.includes(situacao);
 
-      if (issues.length > 0) {
-        review.push({ ...base, reasons: issues, suggested: isRemoved ? 'removed' : (isActive ? 'active' : 'unknown') });
-      } else if (isRemoved) {
-        const reason = color === 'red' && strike ? 'both'
-          : color === 'red' ? 'red'
-          : strike ? 'strike'
-          : 'strike'; // situação CTI/CPG — reaproveita rótulo existente do frontend
+      if (!nameValid(full_name)) {
+        review.push({ ...base, reasons: ['Nome com caracteres suspeitos'], suggested: 'unknown' });
+        continue;
+      }
+
+      if (isActiveBySit) {
+        active.push(base);
+      } else if (isRemovedBySit) {
+        const reason = situacao === 'CTI' || situacao === 'CPG' ? 'strike'
+          : color === 'red' ? 'red' : 'strike';
         removed.push({ ...base, reason });
-      } else if (isActive) {
+      } else if (color === 'red' || strike) {
+        // Fallback visual quando situação está ausente
+        removed.push({ ...base, reason: color === 'red' && strike ? 'both' : color === 'red' ? 'red' : 'strike' });
+      } else if (!situacao) {
+        // Sem situação e sem sinais visuais → trata como ativo (padrão da lista escolar)
         active.push(base);
       } else {
-        // Cor preta, sem rachura, mas situação fora de MTR/MTI → revisão
-        const why = !situacao ? 'Situação ausente' : `Situação "${situacao}" não reconhecida`;
-        review.push({ ...base, reasons: [why], suggested: 'unknown' });
+        review.push({
+          ...base,
+          reasons: [`Situação "${situacao}" não reconhecida`],
+          suggested: 'unknown',
+        });
       }
     }
 
     const stats = {
       pages: pagesRead,
-      total: allKeys.size,
+      total: seen.size,
       active: active.length,
       removed: removed.length,
       review: review.length,
-      pass1_rows: pass1.rows.length,
-      pass2_rows: pass2.rows.length,
+      rows_read: pass.rows.length,
     };
     console.log('Final stats:', stats);
 
