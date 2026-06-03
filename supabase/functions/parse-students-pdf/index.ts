@@ -43,7 +43,7 @@ async function callWithFallback(body: any, apiKey: string) {
 }
 
 const VALID_ACTIVE_SITUATIONS = ['MTR', 'MTI'];
-const VALID_REMOVED_SITUATIONS = ['CTI', 'CPG', 'TRA', 'DES', 'REM'];
+const VALID_REMOVED_SITUATIONS = ['CTI', 'CPG', 'TRA', 'DES', 'REM', 'CTE'];
 
 function buildExtractionBody(pdfBase64: string, passLabel: string) {
   return {
@@ -273,7 +273,7 @@ serve(async (req) => {
       if (isActiveBySit) {
         active.push(base);
       } else if (isRemovedBySit) {
-        const reason = situacao === 'CTI' || situacao === 'CPG' ? 'strike'
+        const reason = situacao === 'CTI' || situacao === 'CPG' || situacao === 'CTE' ? 'strike'
           : color === 'red' ? 'red' : 'strike';
         removed.push({ ...base, reason });
       } else if (color === 'red' || strike) {
