@@ -878,8 +878,19 @@ const Classes = () => {
             ))}
           </div>
         ) : filteredClasses.length > 0 ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {filteredClasses.map((classItem, index) => (
+          <div className="space-y-8">
+            {(['sede', 'salas_fora'] as const).map((loc) => {
+              const group = filteredClasses.filter((c) => (c.location || 'sede') === loc);
+              if (group.length === 0) return null;
+              const title = loc === 'sede' ? 'SEDE' : 'SALAS FORAS';
+              return (
+                <div key={loc} className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-lg font-semibold">{title}</h2>
+                    <Badge variant="outline">{group.length}</Badge>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {group.map((classItem, index) => (
               <Card
                 key={classItem.id}
                 className="card-hover animate-fade-in overflow-hidden cursor-pointer"
@@ -992,6 +1003,10 @@ const Classes = () => {
                 </CardContent>
               </Card>
             ))}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         ) : (
           <Card>
