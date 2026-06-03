@@ -792,6 +792,21 @@ const Classes = () => {
                     placeholder="Ex: Sala 12"
                   />
                 </div>
+                <div className="space-y-2">
+                  <Label htmlFor="location">Localização</Label>
+                  <Select
+                    value={formData.location}
+                    onValueChange={(value) => setFormData({ ...formData, location: value as 'sede' | 'salas_fora' })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="sede">Sede</SelectItem>
+                      <SelectItem value="salas_fora">Salas Foras</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
                 {editingClass && (
                   <div className="space-y-2">
                     <Label>Foto da Turma</Label>
