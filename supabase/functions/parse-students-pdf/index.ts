@@ -42,6 +42,7 @@ async function callWithFallback(body: any, apiKey: string) {
 }
 
 const VALID_ACTIVE_SITUATIONS = ['MTR', 'MTI'];
+const VALID_REMOVED_SITUATIONS = ['CTI', 'CPG'];
 
 function buildExtractionBody(pdfBase64: string, passLabel: string) {
   return {
@@ -55,6 +56,7 @@ Para cada aluno reporte:
 - name_color: "black" (preto/cinza escuro normal) | "red" (texto em vermelho) | "other" (qualquer outra cor distinguível)
 - has_strikethrough: true se houver linha horizontal cortando o nome (rachura/strikethrough), seja impressa ou manuscrita; false caso contrário
 - situacao: conteúdo EXATO da coluna "Situação" (geralmente siglas como MTR, MTI, TRA, DES, REM). Se vazia, retorne "".
+- situacao: conteúdo EXATO da coluna "Situação" (geralmente siglas como MTR, MTI, CTI, CPG, TRA, DES, REM). Se vazia, retorne "".
 - page: número da página onde o nome aparece (1-indexed)
 - guardian_name, guardian_phone, birth_date: quando visíveis nas demais colunas
 - confidence: 0.0 a 1.0 indicando clareza da leitura desse registro
@@ -301,19 +303,23 @@ serve(async (req) => {
         shift: shift || 'morning',
       };
 
-      const isRemoved = color === 'red' || strike === true;
+      const isRemovedBySituation = VALID_REMOVED_SITUATIONS.includes(situacao);
+      const isRemoved = color === 'red' || strike === true || isRemovedBySituation;
       const isActive = color === 'black' && strike === false && VALID_ACTIVE_SITUATIONS.includes(situacao);
 
       if (issues.length > 0) {
         review.push({ ...base, reasons: issues, suggested: isRemoved ? 'removed' : (isActive ? 'active' : 'unknown') });
       } else if (isRemoved) {
-        const reason = color === 'red' && strike ? 'both' : (color === 'red' ? 'red' : 'strike');
+        const reason = color === 'red' && strike ? 'both'
+          : color === 'red' ? 'red'
+          : strike ? 'strike'
+          : 'strike'; // situação CTI/CPG — reaproveita rótulo existente do frontend
         removed.push({ ...base, reason });
       } else if (isActive) {
         active.push(base);
       } else {
         // Cor preta, sem rachura, mas situação fora de MTR/MTI → revisão
-        const why = !situacao ? 'Situação ausente' : `Situação "${situacao}" não é MTR/MTI`;
+        const why = !situacao ? 'Situação ausente' : `Situação "${situacao}" não reconhecida`;
         review.push({ ...base, reasons: [why], suggested: 'unknown' });
       }
     }
