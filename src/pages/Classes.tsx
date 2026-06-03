@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { toast } from 'sonner';
 import { Plus, Edit2, Trash2, GraduationCap, Search, Users, Upload, FileText, Loader2, CheckCircle2, AlertCircle, ImagePlus, CalendarIcon, Download } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Checkbox } from '@/components/ui/checkbox';
 import { classSchema } from '@/lib/validations';
 import { cn } from '@/lib/utils';
@@ -33,28 +34,42 @@ interface ClassItem {
   created_at: string;
 }
 
-interface ExtractedStudent {
+interface PdfStudentBase {
   full_name: string;
   birth_date: string | null;
   guardian_name: string;
   guardian_phone: string;
   class: string;
   shift: string;
-  selected?: boolean;
+  page?: number | null;
+  name_color?: string;
+  has_strikethrough?: boolean;
+  situacao?: string;
   confidence?: number;
 }
-
-type ReconcileAction = 'keep' | 'add' | 'remove';
-type ReconcileSource = 'pdf_active' | 'pdf_struck' | 'db_only';
-interface ReconciledStudent {
-  action: ReconcileAction;
-  full_name: string;
+interface ActiveItem extends PdfStudentBase {
   existing_id?: string;
-  pdf?: ExtractedStudent;
+  action: 'add' | 'keep';
   selected: boolean;
-  source: ReconcileSource;
-  reason: string;
-  confidence?: number;
+}
+interface RemovedItem extends PdfStudentBase {
+  existing_id?: string;
+  reason: 'red' | 'strike' | 'both';
+  selected: boolean;
+  source: 'pdf' | 'db_only';
+}
+interface ReviewItem extends PdfStudentBase {
+  existing_id?: string;
+  reasons: string[];
+  suggested: 'active' | 'removed' | 'unknown';
+  resolution: 'pending' | 'active' | 'removed' | 'ignore';
+}
+interface PdfStats {
+  pages: number;
+  total: number;
+  active: number;
+  removed: number;
+  review: number;
 }
 
 const normalizeName = (s: string) =>
@@ -97,8 +112,11 @@ const Classes = () => {
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
   const [importingClass, setImportingClass] = useState<ClassItem | null>(null);
   const [isProcessingPdf, setIsProcessingPdf] = useState(false);
-  const [extractedStudents, setExtractedStudents] = useState<ExtractedStudent[]>([]);
-  const [reconciled, setReconciled] = useState<ReconciledStudent[]>([]);
+  const [activeItems, setActiveItems] = useState<ActiveItem[]>([]);
+  const [removedItems, setRemovedItems] = useState<RemovedItem[]>([]);
+  const [reviewItems, setReviewItems] = useState<ReviewItem[]>([]);
+  const [pdfStats, setPdfStats] = useState<PdfStats | null>(null);
+  const [pdfFileName, setPdfFileName] = useState<string>('');
   const [isSavingStudents, setIsSavingStudents] = useState(false);
   const [attendanceClass, setAttendanceClass] = useState<string | null>(null);
   const [summaryClass, setSummaryClass] = useState<string | null>(null);
