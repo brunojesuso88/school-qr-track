@@ -61,6 +61,7 @@ interface ClassItem {
   status: string;
   photo_url: string | null;
   created_at: string;
+  location?: string;
 }
 
 interface PdfStudentBase {
