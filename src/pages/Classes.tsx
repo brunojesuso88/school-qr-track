@@ -354,8 +354,11 @@ const Classes = () => {
 
   const handleImportClick = (classItem: ClassItem) => {
     setImportingClass(classItem);
-    setExtractedStudents([]);
-    setReconciled([]);
+    setActiveItems([]);
+    setRemovedItems([]);
+    setReviewItems([]);
+    setPdfStats(null);
+    setPdfFileName('');
     setIsImportDialogOpen(true);
   };
 
@@ -374,6 +377,7 @@ const Classes = () => {
       return;
     }
 
+    setPdfFileName(file.name);
     setIsProcessingPdf(true);
     try {
       const reader = new FileReader();
@@ -395,97 +399,97 @@ const Classes = () => {
           });
 
           if (error) throw error;
-          
-          if (data.success && data.students?.length > 0) {
-            const pdfActive: ExtractedStudent[] = data.active || data.students || [];
-            const pdfStruck: Array<{ full_name: string; reason?: string; confidence?: number }> = data.struck || [];
-            setExtractedStudents(pdfActive);
 
-            // Build reconciliation against existing active students of this class
-            const { data: existing } = await supabase
-              .from('students')
-              .select('id, full_name')
-              .eq('class', importingClass.name)
-              .eq('status', 'active');
+          if (!data?.success) {
+            toast.error(data?.error || 'Falha ao processar o PDF');
+            return;
+          }
 
-            const existingMap = new Map<string, { id: string; full_name: string }>();
-            (existing || []).forEach(e => existingMap.set(normalizeName(e.full_name), e));
+          const pdfActive = (data.active || []) as PdfStudentBase[];
+          const pdfRemoved = (data.removed || []) as Array<PdfStudentBase & { reason: 'red' | 'strike' | 'both' }>;
+          const pdfReview = (data.review || []) as Array<PdfStudentBase & { reasons: string[]; suggested: 'active' | 'removed' | 'unknown' }>;
 
-            const activeKeys = new Set(pdfActive.map(p => normalizeName(p.full_name)));
-            const struckKeys = new Set(pdfStruck.map(s => normalizeName(s.full_name)));
+          const { data: existing } = await supabase
+            .from('students')
+            .select('id, full_name')
+            .eq('class', importingClass.name)
+            .eq('status', 'active');
 
-            const result: ReconciledStudent[] = [];
+          const existingMap = new Map<string, { id: string; full_name: string }>();
+          (existing || []).forEach(e => existingMap.set(normalizeName(e.full_name), e));
 
-            // 1. PDF active → keep or add
-            pdfActive.forEach(p => {
-              const key = normalizeName(p.full_name);
-              const ex = existingMap.get(key);
-              if (ex) {
-                result.push({
-                  action: 'keep',
-                  full_name: ex.full_name,
-                  existing_id: ex.id,
-                  pdf: p,
-                  selected: false,
-                  source: 'pdf_active',
-                  reason: 'Já cadastrado e presente no PDF',
-                  confidence: p.confidence,
-                });
-              } else {
-                result.push({
-                  action: 'add',
-                  full_name: p.full_name,
-                  pdf: p,
-                  selected: true,
-                  source: 'pdf_active',
-                  reason: 'Novo no PDF',
-                  confidence: p.confidence,
-                });
-              }
-            });
+          const pdfKeys = new Set<string>();
+          pdfActive.forEach(p => pdfKeys.add(normalizeName(p.full_name)));
+          pdfRemoved.forEach(p => pdfKeys.add(normalizeName(p.full_name)));
+          pdfReview.forEach(p => pdfKeys.add(normalizeName(p.full_name)));
 
-            // 2. PDF struck → remove existing (skip if not in DB)
-            pdfStruck.forEach(s => {
-              const key = normalizeName(s.full_name);
-              const ex = existingMap.get(key);
-              if (ex) {
-                result.push({
-                  action: 'remove',
-                  full_name: ex.full_name,
-                  existing_id: ex.id,
-                  selected: true,
-                  source: 'pdf_struck',
-                  reason: s.reason || 'Tachado/riscado no PDF',
-                  confidence: s.confidence,
-                });
-              }
-            });
+          // Active items: add (new) or keep (already in DB)
+          const actives: ActiveItem[] = pdfActive.map(p => {
+            const ex = existingMap.get(normalizeName(p.full_name));
+            return {
+              ...p,
+              existing_id: ex?.id,
+              action: ex ? 'keep' : 'add',
+              selected: !ex, // only add new ones by default
+            };
+          });
 
-            // 3. Existing not in PDF at all → remove
-            (existing || []).forEach(e => {
-              const key = normalizeName(e.full_name);
-              if (!activeKeys.has(key) && !struckKeys.has(key)) {
-                result.push({
-                  action: 'remove',
-                  full_name: e.full_name,
-                  existing_id: e.id,
-                  selected: true,
-                  source: 'db_only',
-                  reason: 'Ausente no PDF',
-                });
-              }
-            });
+          // Removed items from PDF (red/strike)
+          const removeds: RemovedItem[] = pdfRemoved.map(p => {
+            const ex = existingMap.get(normalizeName(p.full_name));
+            return {
+              ...p,
+              existing_id: ex?.id,
+              reason: p.reason,
+              source: 'pdf' as const,
+              selected: !!ex, // only meaningful if currently in DB
+            };
+          });
 
-            setReconciled(result);
-            const adds = result.filter(r => r.action === 'add').length;
-            const rems = result.filter(r => r.action === 'remove').length;
-            const keeps = result.filter(r => r.action === 'keep').length;
-            const struckCount = pdfStruck.length;
-            toast.success(
-              `${pdfActive.length} ativo(s) no PDF, ${struckCount} tachado(s) — ${adds} a adicionar, ${rems} a remover, ${keeps} mantido(s)`
-            );
+          // Existing in DB but absent from PDF → mark for review (potentially removed)
+          (existing || []).forEach(e => {
+            if (!pdfKeys.has(normalizeName(e.full_name))) {
+              pdfReview.push({
+                full_name: e.full_name,
+                birth_date: null,
+                guardian_name: '',
+                guardian_phone: '',
+                class: importingClass.name,
+                shift: importingClass.shift,
+                reasons: ['Aluno cadastrado mas ausente no PDF'],
+                suggested: 'unknown',
+              } as any);
+            }
+          });
+
+          const reviews: ReviewItem[] = pdfReview.map(p => {
+            const ex = existingMap.get(normalizeName(p.full_name));
+            return {
+              ...p,
+              existing_id: ex?.id,
+              reasons: p.reasons || [],
+              suggested: p.suggested || 'unknown',
+              resolution: 'pending',
+            };
+          });
+
+          setActiveItems(actives);
+          setRemovedItems(removeds);
+          setReviewItems(reviews);
+          setPdfStats({
+            pages: data.stats?.pages || 0,
+            total: data.stats?.total || actives.length + removeds.length + reviews.length,
+            active: actives.length,
+            removed: removeds.length,
+            review: reviews.length,
+          });
+
+          if (actives.length === 0 && removeds.length === 0 && reviews.length === 0) {
+            toast.error('Nenhum aluno detectado no PDF');
           } else {
-            toast.error(data.error || 'Nenhum aluno encontrado no documento');
+            toast.success(
+              `${actives.length} ativo(s), ${removeds.length} removido(s), ${reviews.length} para revisar`
+            );
           }
         } catch (err: any) {
           console.error('Error processing PDF:', err);
@@ -506,14 +510,6 @@ const Classes = () => {
     }
   };
 
-  const toggleStudentSelection = (index: number) => {
-    setReconciled(prev => prev.map((s, i) => i === index ? { ...s, selected: !s.selected } : s));
-  };
-
-  const toggleAllStudents = (selected: boolean) => {
-    setReconciled(prev => prev.map(s => s.action === 'keep' ? s : { ...s, selected }));
-  };
-
   const generateStudentId = (fullName: string, birthDate: string | null) => {
     const nameParts = fullName.trim().split(' ');
     const initials = nameParts.length >= 2 
@@ -529,41 +525,86 @@ const Classes = () => {
   };
 
   const handleSaveStudents = async () => {
-    const toAdd = reconciled.filter(r => r.action === 'add' && r.selected);
-    const toRemove = reconciled.filter(r => r.action === 'remove' && r.selected);
-    if (toAdd.length === 0 && toRemove.length === 0) {
-      toast.error('Nenhuma alteração selecionada');
+    if (!importingClass) return;
+
+    const pendingReview = reviewItems.filter(r => r.resolution === 'pending').length;
+    if (pendingReview > 0) {
+      toast.error(`Resolva os ${pendingReview} registro(s) com inconsistências antes de confirmar`);
+      return;
+    }
+
+    const toAdd: ActiveItem[] = [
+      ...activeItems.filter(a => a.action === 'add' && a.selected),
+      ...reviewItems
+        .filter(r => r.resolution === 'active' && !r.existing_id)
+        .map<ActiveItem>(r => ({
+          ...r,
+          action: 'add',
+          selected: true,
+        })),
+    ];
+    const toRemoveIds = [
+      ...removedItems.filter(r => r.selected && r.existing_id).map(r => r.existing_id!),
+      ...reviewItems.filter(r => r.resolution === 'removed' && r.existing_id).map(r => r.existing_id!),
+    ];
+
+    if (toAdd.length === 0 && toRemoveIds.length === 0) {
+      toast.error('Nenhuma alteração para aplicar');
       return;
     }
 
     setIsSavingStudents(true);
     try {
-      const ops: Promise<any>[] = [];
+      let addedIds: string[] = [];
       if (toAdd.length) {
         const studentsToInsert = toAdd.map(r => ({
-          full_name: r.full_name, // use edited name
-          birth_date: r.pdf!.birth_date || null,
-          guardian_name: r.pdf!.guardian_name && r.pdf!.guardian_name.trim() ? r.pdf!.guardian_name : null,
-          guardian_phone: r.pdf!.guardian_phone && r.pdf!.guardian_phone.trim() ? r.pdf!.guardian_phone : null,
-          class: r.pdf!.class,
-          shift: r.pdf!.shift as 'morning' | 'afternoon' | 'evening',
-          student_id: generateStudentId(r.full_name, r.pdf!.birth_date),
+          full_name: r.full_name,
+          birth_date: r.birth_date || null,
+          guardian_name: r.guardian_name?.trim() || null,
+          guardian_phone: r.guardian_phone?.trim() || null,
+          class: r.class,
+          shift: r.shift as 'morning' | 'afternoon' | 'evening',
+          student_id: generateStudentId(r.full_name, r.birth_date),
           status: 'active' as const,
         }));
-        ops.push(Promise.resolve(supabase.from('students').insert(studentsToInsert)));
+        const { data: inserted, error: insErr } = await supabase
+          .from('students').insert(studentsToInsert).select('id');
+        if (insErr) throw insErr;
+        addedIds = (inserted || []).map((r: any) => r.id);
       }
-      if (toRemove.length) {
-        const ids = toRemove.map(r => r.existing_id!).filter(Boolean);
-        ops.push(Promise.resolve(supabase.from('students').update({ status: 'inactive' }).in('id', ids)));
+      if (toRemoveIds.length) {
+        const { error: updErr } = await supabase
+          .from('students').update({ status: 'inactive' }).in('id', toRemoveIds);
+        if (updErr) throw updErr;
       }
-      const results = await Promise.all(ops);
-      const err = results.find((r: any) => r?.error)?.error;
-      if (err) throw err;
 
-      toast.success(`${toAdd.length} adicionado(s), ${toRemove.length} removido(s)`);
+      // Audit log (best-effort, do not fail the import if it fails)
+      try {
+        await supabase.from('audit_logs').insert({
+          action: 'PDF_IMPORT_STUDENTS',
+          table_name: 'students',
+          new_data: {
+            class_name: importingClass.name,
+            pdf_filename: pdfFileName,
+            pages_read: pdfStats?.pages ?? null,
+            active_detected: pdfStats?.active ?? null,
+            removed_detected: pdfStats?.removed ?? null,
+            review_count: pdfStats?.review ?? null,
+            added_ids: addedIds,
+            removed_ids: toRemoveIds,
+            at: new Date().toISOString(),
+          },
+        });
+      } catch (logErr) {
+        console.warn('Audit log failed:', logErr);
+      }
+
+      toast.success(`${toAdd.length} adicionado(s), ${toRemoveIds.length} removido(s)`);
       setIsImportDialogOpen(false);
-      setExtractedStudents([]);
-      setReconciled([]);
+      setActiveItems([]);
+      setRemovedItems([]);
+      setReviewItems([]);
+      setPdfStats(null);
       fetchStudentCounts();
     } catch (err: any) {
       console.error('Error saving students:', err);
