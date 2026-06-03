@@ -635,14 +635,33 @@ export default function TeacherNotifications() {
                     </div>
                   </div>
 
-                  <div className="space-y-2">
-                    <Label>Turmas / disciplina</Label>
-                    <Input
-                      placeholder="Ex.: Física – 1º A, 2º B e 3º C"
-                      value={form.classes_subjects || ''}
-                      onChange={(e) => setForm({ ...form, classes_subjects: e.target.value })}
-                      maxLength={200}
-                    />
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Disciplina(s)</Label>
+                      <MultiSelectPicker
+                        label="disciplinas"
+                        placeholder="Selecione disciplinas do mapeamento"
+                        options={subjectOptions.map((s) => ({ value: s }))}
+                        selected={selectedSubjects}
+                        onChange={setSelectedSubjects}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Turma(s)</Label>
+                      <MultiSelectPicker
+                        label="turmas"
+                        placeholder="Selecione turmas do mapeamento"
+                        options={classOptions}
+                        selected={selectedClasses}
+                        onChange={setSelectedClasses}
+                        groupBy
+                      />
+                    </div>
+                    {form.classes_subjects && (
+                      <div className="md:col-span-2 text-xs text-muted-foreground">
+                        Será registrado como: <span className="font-medium text-foreground">{form.classes_subjects}</span>
+                      </div>
+                    )}
                   </div>
 
                   <div className="space-y-2">
