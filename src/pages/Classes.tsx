@@ -161,6 +161,7 @@ const Classes = () => {
     shift: 'morning',
     description: '',
     photo_url: '' as string | null,
+    location: 'sede' as 'sede' | 'salas_fora',
   });
 
   useEffect(() => {
