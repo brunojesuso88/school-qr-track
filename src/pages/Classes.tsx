@@ -256,6 +256,7 @@ const Classes = () => {
             shift: validationData.shift,
             description: validationData.description,
             photo_url: formData.photo_url,
+            location: formData.location,
           })
           .eq('id', editingClass.id);
 
@@ -268,6 +269,7 @@ const Classes = () => {
             name: validationData.name,
             shift: validationData.shift,
             description: validationData.description,
+            location: formData.location,
           });
 
         if (error) throw error;
