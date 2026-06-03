@@ -529,8 +529,7 @@ const Classes = () => {
 
     const pendingReview = reviewItems.filter(r => r.resolution === 'pending').length;
     if (pendingReview > 0) {
-      toast.error(`Resolva os ${pendingReview} registro(s) com inconsistências antes de confirmar`);
-      return;
+      toast.info(`${pendingReview} registro(s) pendentes em "Revisar" serão ignorados`);
     }
 
     const toAdd: ActiveItem[] = [
@@ -1144,6 +1143,33 @@ const Classes = () => {
 
                     {/* ===== REVIEW ===== */}
                     <TabsContent value="review" className="border rounded-lg overflow-hidden mt-3">
+                      {reviewItems.length > 0 && (
+                        <div className="flex flex-wrap gap-2 p-2 border-b bg-muted/30">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setReviewItems(prev => prev.map(r => r.resolution === 'pending'
+                              ? { ...r, resolution: r.suggested === 'removed' && r.existing_id ? 'removed' : r.suggested === 'active' ? 'active' : 'ignore' }
+                              : r))}
+                          >
+                            Aplicar sugestões
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setReviewItems(prev => prev.map(r => ({ ...r, resolution: 'active' as const })))}
+                          >
+                            Marcar todos como ativo
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setReviewItems(prev => prev.map(r => ({ ...r, resolution: 'ignore' as const })))}
+                          >
+                            Ignorar todos
+                          </Button>
+                        </div>
+                      )}
                       <Table>
                         <TableHeader>
                           <TableRow>
@@ -1210,7 +1236,6 @@ const Classes = () => {
                       onClick={handleSaveStudents}
                       disabled={
                         isSavingStudents ||
-                        reviewItems.some(r => r.resolution === 'pending') ||
                         (activeItems.filter(a => a.action === 'add' && a.selected).length === 0 &&
                          removedItems.filter(r => r.selected && r.existing_id).length === 0 &&
                          reviewItems.filter(r => r.resolution === 'active' || r.resolution === 'removed').length === 0)
