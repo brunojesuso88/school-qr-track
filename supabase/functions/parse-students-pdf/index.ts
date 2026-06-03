@@ -41,6 +41,98 @@ async function callWithFallback(body: any, apiKey: string) {
   return res;
 }
 
+const VALID_ACTIVE_SITUATIONS = ['MTR', 'MTI'];
+
+function buildExtractionBody(pdfBase64: string, passLabel: string) {
+  return {
+    messages: [
+      {
+        role: 'system',
+        content: `Você é um analisador visual de listas escolares em PDF (${passLabel}). Examine TODAS as páginas do documento, linha por linha da tabela de alunos. Para CADA linha que contém um nome de aluno, reporte exatamente o que você vê — NÃO classifique, NÃO interprete, apenas descreva.
+
+Para cada aluno reporte:
+- full_name: nome exato como aparece, preservando acentos e ortografia
+- name_color: "black" (preto/cinza escuro normal) | "red" (texto em vermelho) | "other" (qualquer outra cor distinguível)
+- has_strikethrough: true se houver linha horizontal cortando o nome (rachura/strikethrough), seja impressa ou manuscrita; false caso contrário
+- situacao: conteúdo EXATO da coluna "Situação" (geralmente siglas como MTR, MTI, TRA, DES, REM). Se vazia, retorne "".
+- page: número da página onde o nome aparece (1-indexed)
+- guardian_name, guardian_phone, birth_date: quando visíveis nas demais colunas
+- confidence: 0.0 a 1.0 indicando clareza da leitura desse registro
+
+REGRAS:
+1. Examine TODAS as páginas. Nenhuma linha pode ser omitida.
+2. Não invente nomes nem complete nomes parciais.
+3. Ignore cabeçalhos, números de ordem e rótulos.
+4. Reporte cor e rachura observando o estilo visual REAL do PDF.`
+      },
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: `Analise TODAS as páginas deste PDF e reporte cada linha de aluno (${passLabel}).` },
+          { type: 'image_url', image_url: { url: `data:application/pdf;base64,${pdfBase64}` } }
+        ]
+      }
+    ],
+    tools: [{
+      type: 'function',
+      function: {
+        name: 'report_rows',
+        description: 'Reporta cada linha de aluno observada no PDF',
+        parameters: {
+          type: 'object',
+          properties: {
+            pages_read: { type: 'number' },
+            rows: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  full_name: { type: 'string' },
+                  name_color: { type: 'string', enum: ['black', 'red', 'other'] },
+                  has_strikethrough: { type: 'boolean' },
+                  situacao: { type: 'string' },
+                  page: { type: 'number' },
+                  guardian_name: { type: 'string' },
+                  guardian_phone: { type: 'string' },
+                  birth_date: { type: 'string' },
+                  confidence: { type: 'number' }
+                },
+                required: ['full_name', 'name_color', 'has_strikethrough', 'situacao']
+              }
+            }
+          },
+          required: ['rows', 'pages_read']
+        }
+      }
+    }],
+    tool_choice: { type: 'function', function: { name: 'report_rows' } }
+  };
+}
+
+async function runExtractionPass(pdfBase64: string, passLabel: string, apiKey: string) {
+  const res = await callWithFallback(buildExtractionBody(pdfBase64, passLabel), apiKey);
+  if (!res.ok) {
+    const txt = await res.text();
+    console.error(`${passLabel} failed:`, res.status, txt);
+    return { ok: false, status: res.status, rows: [] as any[], pages: 0 };
+  }
+  const data = await res.json();
+  const call = data.choices?.[0]?.message?.tool_calls?.[0];
+  if (!call?.function?.arguments) return { ok: false, status: 500, rows: [], pages: 0 };
+  try {
+    const parsed = JSON.parse(call.function.arguments);
+    return {
+      ok: true,
+      status: 200,
+      rows: Array.isArray(parsed.rows) ? parsed.rows : [],
+      pages: Number(parsed.pages_read) || 0,
+    };
+  } catch (e) {
+    console.error(`${passLabel} parse error:`, e);
+    return { ok: false, status: 500, rows: [], pages: 0 };
+  }
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -119,263 +211,126 @@ serve(async (req) => {
 
     console.log('Processing PDF for class:', className, '| Size:', (estimatedSize / 1024 / 1024).toFixed(2), 'MB');
 
-    // ===== PASS 1: extraction with struck-through detection =====
-    const extractionBody = {
-      messages: [
-        {
-          role: 'system',
-          content: `Você é um especialista em OCR de listas escolares brasileiras. Extraia TODOS os nomes de alunos do documento com máxima precisão, letra por letra.
+    // ===== Dois passes INDEPENDENTES =====
+    const [pass1, pass2] = await Promise.all([
+      runExtractionPass(pdfBase64, 'Passe 1', LOVABLE_API_KEY),
+      runExtractionPass(pdfBase64, 'Passe 2', LOVABLE_API_KEY),
+    ]);
 
-REGRAS CRÍTICAS:
-1. Classifique cada nome em DOIS GRUPOS distintos:
-   - "active_students": nomes legíveis SEM marcação de remoção.
-   - "struck_students": nomes TACHADOS (linha horizontal cortando o nome), RISCADOS em vermelho/caneta, com X sobre o nome, marcados como "transferido", "desistente", "removido", "cancelado", "excluído", ou riscados de qualquer forma visual.
-2. Examine atentamente o estilo visual de cada linha: cor diferente (vermelho), texto cortado, riscos manuais sobre o nome → SEMPRE struck_students.
-3. Preserve acentos e ortografia exata. NÃO invente nomes. NÃO complete nomes parciais.
-4. Para cada aluno, informe "confidence" (0.0–1.0) baseado na clareza da leitura.
-5. Ignore cabeçalhos, números de ordem, rótulos como "Nome", "Aluno", "Responsável".`
-        },
-        {
-          role: 'user',
-          content: [
-            { type: 'text', text: 'Extraia os alunos deste PDF separando ATIVOS de TACHADOS/RISCADOS. Inclua confidence em cada nome.' },
-            { type: 'image_url', image_url: { url: `data:application/pdf;base64,${pdfBase64}` } }
-          ]
-        }
-      ],
-      tools: [{
-        type: 'function',
-        function: {
-          name: 'extract_students',
-          description: 'Extrai e classifica alunos como ativos ou tachados',
-          parameters: {
-            type: 'object',
-            properties: {
-              active_students: {
-                type: 'array',
-                items: {
-                  type: 'object',
-                  properties: {
-                    full_name: { type: 'string' },
-                    birth_date: { type: 'string', description: 'YYYY-MM-DD se disponível' },
-                    guardian_name: { type: 'string' },
-                    guardian_phone: { type: 'string' },
-                    confidence: { type: 'number' }
-                  },
-                  required: ['full_name']
-                }
-              },
-              struck_students: {
-                type: 'array',
-                items: {
-                  type: 'object',
-                  properties: {
-                    full_name: { type: 'string' },
-                    reason: { type: 'string', description: 'Por que foi classificado como tachado/riscado' },
-                    confidence: { type: 'number' }
-                  },
-                  required: ['full_name']
-                }
-              }
-            },
-            required: ['active_students', 'struck_students']
-          }
-        }
-      }],
-      tool_choice: { type: 'function', function: { name: 'extract_students' } }
-    };
-
-    const response = await callWithFallback(extractionBody, LOVABLE_API_KEY);
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('AI Gateway error:', response.status, errorText);
-      
-      if (response.status === 429) {
-        return new Response(
-          JSON.stringify({ success: false, error: 'Limite de requisições excedido. Tente novamente mais tarde.' }),
-          { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-      if (response.status === 402) {
-        return new Response(
-          JSON.stringify({ success: false, error: 'Créditos insuficientes. Adicione créditos à sua conta.' }),
-          { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-      
-      return new Response(
-        JSON.stringify({ success: false, error: 'Erro ao processar documento com IA' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+    if (!pass1.ok && !pass2.ok) {
+      const status = pass1.status === 402 || pass2.status === 402 ? 402
+        : pass1.status === 429 || pass2.status === 429 ? 429 : 500;
+      const msg = status === 429 ? 'Limite de requisições excedido. Tente novamente mais tarde.'
+        : status === 402 ? 'Créditos insuficientes. Adicione créditos à sua conta.'
+        : 'Falha ao analisar o PDF. Estrutura desconhecida ou ilegível.';
+      return new Response(JSON.stringify({ success: false, error: msg }),
+        { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    const data = await response.json();
-    console.log('Pass 1 (extraction) response received');
+    const pagesRead = Math.max(pass1.pages, pass2.pages);
+    console.log(`Pass1: ${pass1.rows.length} rows | Pass2: ${pass2.rows.length} rows | pages=${pagesRead}`);
 
-    let activeRaw: any[] = [];
-    let struckRaw: any[] = [];
-    const toolCall = data.choices?.[0]?.message?.tool_calls?.[0];
-    if (toolCall?.function?.arguments) {
-      try {
-        const parsed = JSON.parse(toolCall.function.arguments);
-        activeRaw = parsed.active_students || parsed.students || [];
-        struckRaw = parsed.struck_students || [];
-      } catch (e) {
-        console.error('Error parsing pass 1 arguments:', e);
-      }
+    // Index pass2 by normalized name
+    const p2Map = new Map<string, any>();
+    for (const r of pass2.rows) {
+      const k = normalizeName(r.full_name || '');
+      if (k.length >= 2 && !p2Map.has(k)) p2Map.set(k, r);
     }
-    console.log(`Pass 1: ${activeRaw.length} active, ${struckRaw.length} struck`);
 
-    // ===== PASS 2: verification =====
-    try {
-      const verifyBody = {
-        messages: [
-          {
-            role: 'system',
-            content: `Você é um revisor de OCR. Receberá o PDF original e uma classificação preliminar de alunos. Sua tarefa:
-1. Verifique cada nome letra por letra contra o PDF e corrija erros de leitura.
-2. Reclassifique para "struck" qualquer nome que esteja tachado/riscado no PDF mas foi listado como ativo.
-3. Reclassifique para "active" qualquer nome que NÃO esteja tachado mas foi listado como struck.
-4. Remova entradas que NÃO existem de fato no documento (alucinação).
-5. Adicione nomes que estão claramente no documento mas foram omitidos.
-Devolva a lista FINAL e corrigida.`
-          },
-          {
-            role: 'user',
-            content: [
-              {
-                type: 'text',
-                text: `Classificação preliminar a revisar:
+    // Use union of names from both passes as authoritative set
+    const allKeys = new Set<string>();
+    const p1Map = new Map<string, any>();
+    for (const r of pass1.rows) {
+      const k = normalizeName(r.full_name || '');
+      if (k.length >= 2 && !p1Map.has(k)) { p1Map.set(k, r); allKeys.add(k); }
+    }
+    for (const k of p2Map.keys()) allKeys.add(k);
 
-ATIVOS (${activeRaw.length}):
-${activeRaw.map((s: any, i: number) => `${i + 1}. ${s.full_name}`).join('\n')}
+    const phoneRegex = /^\d{10,11}$/;
+    const nameValid = (n: string) => /^[\p{L}\s'\-\.]+$/u.test(n) && n.trim().length >= 2;
 
-TACHADOS (${struckRaw.length}):
-${struckRaw.map((s: any, i: number) => `${i + 1}. ${s.full_name}`).join('\n')}
+    const active: any[] = [];
+    const removed: any[] = [];
+    const review: any[] = [];
 
-Compare com o PDF abaixo e retorne a lista final corrigida.`
-              },
-              { type: 'image_url', image_url: { url: `data:application/pdf;base64,${pdfBase64}` } }
-            ]
-          }
-        ],
-        tools: [{
-          type: 'function',
-          function: {
-            name: 'verified_students',
-            description: 'Lista final verificada de alunos',
-            parameters: {
-              type: 'object',
-              properties: {
-                active_students: {
-                  type: 'array',
-                  items: {
-                    type: 'object',
-                    properties: {
-                      full_name: { type: 'string' },
-                      birth_date: { type: 'string' },
-                      guardian_name: { type: 'string' },
-                      guardian_phone: { type: 'string' },
-                      confidence: { type: 'number' }
-                    },
-                    required: ['full_name']
-                  }
-                },
-                struck_students: {
-                  type: 'array',
-                  items: {
-                    type: 'object',
-                    properties: {
-                      full_name: { type: 'string' },
-                      reason: { type: 'string' },
-                      confidence: { type: 'number' }
-                    },
-                    required: ['full_name']
-                  }
-                }
-              },
-              required: ['active_students', 'struck_students']
-            }
-          }
-        }],
-        tool_choice: { type: 'function', function: { name: 'verified_students' } }
+    for (const k of allKeys) {
+      const a = p1Map.get(k);
+      const b = p2Map.get(k);
+      const primary = a || b;
+      const full_name = String(primary.full_name || '').trim().substring(0, 100);
+
+      // Collect issues for divergence/quality
+      const issues: string[] = [];
+      if (!a) issues.push('Detectado apenas no Passe 2');
+      if (!b) issues.push('Detectado apenas no Passe 1');
+      if (!nameValid(full_name)) issues.push('Nome com caracteres suspeitos');
+
+      const colorA = a?.name_color ?? null;
+      const colorB = b?.name_color ?? null;
+      const strikeA = a?.has_strikethrough ?? null;
+      const strikeB = b?.has_strikethrough ?? null;
+      const sitA = String(a?.situacao ?? '').trim().toUpperCase();
+      const sitB = String(b?.situacao ?? '').trim().toUpperCase();
+      const confA = typeof a?.confidence === 'number' ? a.confidence : 0.8;
+      const confB = typeof b?.confidence === 'number' ? b.confidence : 0.8;
+
+      if (a && b) {
+        if (colorA !== colorB) issues.push(`Divergência de cor (${colorA} vs ${colorB})`);
+        if (strikeA !== strikeB) issues.push(`Divergência de rachura (${strikeA} vs ${strikeB})`);
+        if (sitA !== sitB) issues.push(`Divergência de situação (${sitA || '—'} vs ${sitB || '—'})`);
+      }
+      if (confA < 0.7 || confB < 0.7) issues.push('Baixa confiança de leitura');
+
+      // Determine consolidated signals (only when both agree, otherwise mark review)
+      const color = colorA && colorB && colorA === colorB ? colorA : (colorA || colorB);
+      const strike = (strikeA === strikeB) ? strikeA : (strikeA ?? strikeB);
+      const situacao = (sitA && sitB && sitA === sitB) ? sitA : (sitA || sitB);
+
+      const rawPhone = String(primary.guardian_phone || '').replace(/\D/g, '');
+      const base = {
+        full_name,
+        page: primary.page ?? null,
+        name_color: color,
+        has_strikethrough: !!strike,
+        situacao,
+        birth_date: primary.birth_date || null,
+        guardian_name: String(primary.guardian_name || '').substring(0, 100),
+        guardian_phone: phoneRegex.test(rawPhone) ? rawPhone : '',
+        confidence: Math.min(confA, confB || confA),
+        class: className.substring(0, 100),
+        shift: shift || 'morning',
       };
 
-      const verifyRes = await callWithFallback(verifyBody, LOVABLE_API_KEY);
-      if (verifyRes.ok) {
-        const verifyData = await verifyRes.json();
-        const vCall = verifyData.choices?.[0]?.message?.tool_calls?.[0];
-        if (vCall?.function?.arguments) {
-          const vParsed = JSON.parse(vCall.function.arguments);
-          if (Array.isArray(vParsed.active_students) && Array.isArray(vParsed.struck_students)) {
-            activeRaw = vParsed.active_students;
-            struckRaw = vParsed.struck_students;
-            console.log(`Pass 2 (verified): ${activeRaw.length} active, ${struckRaw.length} struck`);
-          }
-        }
+      const isRemoved = color === 'red' || strike === true;
+      const isActive = color === 'black' && strike === false && VALID_ACTIVE_SITUATIONS.includes(situacao);
+
+      if (issues.length > 0) {
+        review.push({ ...base, reasons: issues, suggested: isRemoved ? 'removed' : (isActive ? 'active' : 'unknown') });
+      } else if (isRemoved) {
+        const reason = color === 'red' && strike ? 'both' : (color === 'red' ? 'red' : 'strike');
+        removed.push({ ...base, reason });
+      } else if (isActive) {
+        active.push(base);
       } else {
-        console.warn('Pass 2 verification failed, using pass 1 results. Status:', verifyRes.status);
+        // Cor preta, sem rachura, mas situação fora de MTR/MTI → revisão
+        const why = !situacao ? 'Situação ausente' : `Situação "${situacao}" não é MTR/MTI`;
+        review.push({ ...base, reasons: [why], suggested: 'unknown' });
       }
-    } catch (e) {
-      console.warn('Pass 2 error, using pass 1 results:', e);
     }
 
-    // Phone number validation regex
-    const phoneRegex = /^\d{10,11}$/;
-
-    // Dedupe active and struck by normalized name; struck wins over active when conflict
-    const struckKeys = new Set<string>();
-    const struckFormatted = struckRaw
-      .map((s: any) => {
-        const full_name = String(s.full_name || '').trim().substring(0, 100);
-        return {
-          full_name,
-          reason: String(s.reason || 'Tachado/riscado no PDF').substring(0, 200),
-          confidence: typeof s.confidence === 'number' ? s.confidence : 0.9,
-        };
-      })
-      .filter((s) => s.full_name.length >= 2)
-      .filter((s) => {
-        const k = normalizeName(s.full_name);
-        if (struckKeys.has(k)) return false;
-        struckKeys.add(k);
-        return true;
-      });
-
-    const activeKeys = new Set<string>();
-    const activeFormatted = activeRaw
-      .map((student: any) => {
-        const rawPhone = String(student.guardian_phone || student.telefone || '').replace(/\D/g, '');
-        return {
-          full_name: String(student.full_name || student.nome || '').trim().substring(0, 100),
-          birth_date: student.birth_date || student.data_nascimento || null,
-          guardian_name: String(student.guardian_name || student.responsavel || 'Responsável').substring(0, 100),
-          guardian_phone: phoneRegex.test(rawPhone) ? rawPhone : '',
-          class: className.substring(0, 100),
-          shift: shift || 'morning',
-          confidence: typeof student.confidence === 'number' ? student.confidence : 0.9,
-        };
-      })
-      .filter((s: any) => s.full_name.length >= 2)
-      .filter((s: any) => {
-        const k = normalizeName(s.full_name);
-        if (struckKeys.has(k)) return false; // struck wins
-        if (activeKeys.has(k)) return false;
-        activeKeys.add(k);
-        return true;
-      });
-
-    console.log(`Final: ${activeFormatted.length} active, ${struckFormatted.length} struck`);
+    const stats = {
+      pages: pagesRead,
+      total: allKeys.size,
+      active: active.length,
+      removed: removed.length,
+      review: review.length,
+      pass1_rows: pass1.rows.length,
+      pass2_rows: pass2.rows.length,
+    };
+    console.log('Final stats:', stats);
 
     return new Response(
-      JSON.stringify({
-        success: true,
-        active: activeFormatted,
-        struck: struckFormatted,
-        students: activeFormatted, // backward compatibility
-        count: activeFormatted.length,
-      }),
+      JSON.stringify({ success: true, active, removed, review, stats }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 

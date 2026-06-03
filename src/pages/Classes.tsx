@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { toast } from 'sonner';
 import { Plus, Edit2, Trash2, GraduationCap, Search, Users, Upload, FileText, Loader2, CheckCircle2, AlertCircle, ImagePlus, CalendarIcon, Download } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Checkbox } from '@/components/ui/checkbox';
 import { classSchema } from '@/lib/validations';
 import { cn } from '@/lib/utils';
@@ -33,28 +34,42 @@ interface ClassItem {
   created_at: string;
 }
 
-interface ExtractedStudent {
+interface PdfStudentBase {
   full_name: string;
   birth_date: string | null;
   guardian_name: string;
   guardian_phone: string;
   class: string;
   shift: string;
-  selected?: boolean;
+  page?: number | null;
+  name_color?: string;
+  has_strikethrough?: boolean;
+  situacao?: string;
   confidence?: number;
 }
-
-type ReconcileAction = 'keep' | 'add' | 'remove';
-type ReconcileSource = 'pdf_active' | 'pdf_struck' | 'db_only';
-interface ReconciledStudent {
-  action: ReconcileAction;
-  full_name: string;
+interface ActiveItem extends PdfStudentBase {
   existing_id?: string;
-  pdf?: ExtractedStudent;
+  action: 'add' | 'keep';
   selected: boolean;
-  source: ReconcileSource;
-  reason: string;
-  confidence?: number;
+}
+interface RemovedItem extends PdfStudentBase {
+  existing_id?: string;
+  reason: 'red' | 'strike' | 'both';
+  selected: boolean;
+  source: 'pdf' | 'db_only';
+}
+interface ReviewItem extends PdfStudentBase {
+  existing_id?: string;
+  reasons: string[];
+  suggested: 'active' | 'removed' | 'unknown';
+  resolution: 'pending' | 'active' | 'removed' | 'ignore';
+}
+interface PdfStats {
+  pages: number;
+  total: number;
+  active: number;
+  removed: number;
+  review: number;
 }
 
 const normalizeName = (s: string) =>
@@ -97,8 +112,11 @@ const Classes = () => {
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
   const [importingClass, setImportingClass] = useState<ClassItem | null>(null);
   const [isProcessingPdf, setIsProcessingPdf] = useState(false);
-  const [extractedStudents, setExtractedStudents] = useState<ExtractedStudent[]>([]);
-  const [reconciled, setReconciled] = useState<ReconciledStudent[]>([]);
+  const [activeItems, setActiveItems] = useState<ActiveItem[]>([]);
+  const [removedItems, setRemovedItems] = useState<RemovedItem[]>([]);
+  const [reviewItems, setReviewItems] = useState<ReviewItem[]>([]);
+  const [pdfStats, setPdfStats] = useState<PdfStats | null>(null);
+  const [pdfFileName, setPdfFileName] = useState<string>('');
   const [isSavingStudents, setIsSavingStudents] = useState(false);
   const [attendanceClass, setAttendanceClass] = useState<string | null>(null);
   const [summaryClass, setSummaryClass] = useState<string | null>(null);
@@ -336,8 +354,11 @@ const Classes = () => {
 
   const handleImportClick = (classItem: ClassItem) => {
     setImportingClass(classItem);
-    setExtractedStudents([]);
-    setReconciled([]);
+    setActiveItems([]);
+    setRemovedItems([]);
+    setReviewItems([]);
+    setPdfStats(null);
+    setPdfFileName('');
     setIsImportDialogOpen(true);
   };
 
@@ -356,6 +377,7 @@ const Classes = () => {
       return;
     }
 
+    setPdfFileName(file.name);
     setIsProcessingPdf(true);
     try {
       const reader = new FileReader();
@@ -377,97 +399,97 @@ const Classes = () => {
           });
 
           if (error) throw error;
-          
-          if (data.success && data.students?.length > 0) {
-            const pdfActive: ExtractedStudent[] = data.active || data.students || [];
-            const pdfStruck: Array<{ full_name: string; reason?: string; confidence?: number }> = data.struck || [];
-            setExtractedStudents(pdfActive);
 
-            // Build reconciliation against existing active students of this class
-            const { data: existing } = await supabase
-              .from('students')
-              .select('id, full_name')
-              .eq('class', importingClass.name)
-              .eq('status', 'active');
+          if (!data?.success) {
+            toast.error(data?.error || 'Falha ao processar o PDF');
+            return;
+          }
 
-            const existingMap = new Map<string, { id: string; full_name: string }>();
-            (existing || []).forEach(e => existingMap.set(normalizeName(e.full_name), e));
+          const pdfActive = (data.active || []) as PdfStudentBase[];
+          const pdfRemoved = (data.removed || []) as Array<PdfStudentBase & { reason: 'red' | 'strike' | 'both' }>;
+          const pdfReview = (data.review || []) as Array<PdfStudentBase & { reasons: string[]; suggested: 'active' | 'removed' | 'unknown' }>;
 
-            const activeKeys = new Set(pdfActive.map(p => normalizeName(p.full_name)));
-            const struckKeys = new Set(pdfStruck.map(s => normalizeName(s.full_name)));
+          const { data: existing } = await supabase
+            .from('students')
+            .select('id, full_name')
+            .eq('class', importingClass.name)
+            .eq('status', 'active');
 
-            const result: ReconciledStudent[] = [];
+          const existingMap = new Map<string, { id: string; full_name: string }>();
+          (existing || []).forEach(e => existingMap.set(normalizeName(e.full_name), e));
 
-            // 1. PDF active → keep or add
-            pdfActive.forEach(p => {
-              const key = normalizeName(p.full_name);
-              const ex = existingMap.get(key);
-              if (ex) {
-                result.push({
-                  action: 'keep',
-                  full_name: ex.full_name,
-                  existing_id: ex.id,
-                  pdf: p,
-                  selected: false,
-                  source: 'pdf_active',
-                  reason: 'Já cadastrado e presente no PDF',
-                  confidence: p.confidence,
-                });
-              } else {
-                result.push({
-                  action: 'add',
-                  full_name: p.full_name,
-                  pdf: p,
-                  selected: true,
-                  source: 'pdf_active',
-                  reason: 'Novo no PDF',
-                  confidence: p.confidence,
-                });
-              }
-            });
+          const pdfKeys = new Set<string>();
+          pdfActive.forEach(p => pdfKeys.add(normalizeName(p.full_name)));
+          pdfRemoved.forEach(p => pdfKeys.add(normalizeName(p.full_name)));
+          pdfReview.forEach(p => pdfKeys.add(normalizeName(p.full_name)));
 
-            // 2. PDF struck → remove existing (skip if not in DB)
-            pdfStruck.forEach(s => {
-              const key = normalizeName(s.full_name);
-              const ex = existingMap.get(key);
-              if (ex) {
-                result.push({
-                  action: 'remove',
-                  full_name: ex.full_name,
-                  existing_id: ex.id,
-                  selected: true,
-                  source: 'pdf_struck',
-                  reason: s.reason || 'Tachado/riscado no PDF',
-                  confidence: s.confidence,
-                });
-              }
-            });
+          // Active items: add (new) or keep (already in DB)
+          const actives: ActiveItem[] = pdfActive.map(p => {
+            const ex = existingMap.get(normalizeName(p.full_name));
+            return {
+              ...p,
+              existing_id: ex?.id,
+              action: ex ? 'keep' : 'add',
+              selected: !ex, // only add new ones by default
+            };
+          });
 
-            // 3. Existing not in PDF at all → remove
-            (existing || []).forEach(e => {
-              const key = normalizeName(e.full_name);
-              if (!activeKeys.has(key) && !struckKeys.has(key)) {
-                result.push({
-                  action: 'remove',
-                  full_name: e.full_name,
-                  existing_id: e.id,
-                  selected: true,
-                  source: 'db_only',
-                  reason: 'Ausente no PDF',
-                });
-              }
-            });
+          // Removed items from PDF (red/strike)
+          const removeds: RemovedItem[] = pdfRemoved.map(p => {
+            const ex = existingMap.get(normalizeName(p.full_name));
+            return {
+              ...p,
+              existing_id: ex?.id,
+              reason: p.reason,
+              source: 'pdf' as const,
+              selected: !!ex, // only meaningful if currently in DB
+            };
+          });
 
-            setReconciled(result);
-            const adds = result.filter(r => r.action === 'add').length;
-            const rems = result.filter(r => r.action === 'remove').length;
-            const keeps = result.filter(r => r.action === 'keep').length;
-            const struckCount = pdfStruck.length;
-            toast.success(
-              `${pdfActive.length} ativo(s) no PDF, ${struckCount} tachado(s) — ${adds} a adicionar, ${rems} a remover, ${keeps} mantido(s)`
-            );
+          // Existing in DB but absent from PDF → mark for review (potentially removed)
+          (existing || []).forEach(e => {
+            if (!pdfKeys.has(normalizeName(e.full_name))) {
+              pdfReview.push({
+                full_name: e.full_name,
+                birth_date: null,
+                guardian_name: '',
+                guardian_phone: '',
+                class: importingClass.name,
+                shift: importingClass.shift,
+                reasons: ['Aluno cadastrado mas ausente no PDF'],
+                suggested: 'unknown',
+              } as any);
+            }
+          });
+
+          const reviews: ReviewItem[] = pdfReview.map(p => {
+            const ex = existingMap.get(normalizeName(p.full_name));
+            return {
+              ...p,
+              existing_id: ex?.id,
+              reasons: p.reasons || [],
+              suggested: p.suggested || 'unknown',
+              resolution: 'pending',
+            };
+          });
+
+          setActiveItems(actives);
+          setRemovedItems(removeds);
+          setReviewItems(reviews);
+          setPdfStats({
+            pages: data.stats?.pages || 0,
+            total: data.stats?.total || actives.length + removeds.length + reviews.length,
+            active: actives.length,
+            removed: removeds.length,
+            review: reviews.length,
+          });
+
+          if (actives.length === 0 && removeds.length === 0 && reviews.length === 0) {
+            toast.error('Nenhum aluno detectado no PDF');
           } else {
-            toast.error(data.error || 'Nenhum aluno encontrado no documento');
+            toast.success(
+              `${actives.length} ativo(s), ${removeds.length} removido(s), ${reviews.length} para revisar`
+            );
           }
         } catch (err: any) {
           console.error('Error processing PDF:', err);
@@ -488,14 +510,6 @@ const Classes = () => {
     }
   };
 
-  const toggleStudentSelection = (index: number) => {
-    setReconciled(prev => prev.map((s, i) => i === index ? { ...s, selected: !s.selected } : s));
-  };
-
-  const toggleAllStudents = (selected: boolean) => {
-    setReconciled(prev => prev.map(s => s.action === 'keep' ? s : { ...s, selected }));
-  };
-
   const generateStudentId = (fullName: string, birthDate: string | null) => {
     const nameParts = fullName.trim().split(' ');
     const initials = nameParts.length >= 2 
@@ -511,41 +525,86 @@ const Classes = () => {
   };
 
   const handleSaveStudents = async () => {
-    const toAdd = reconciled.filter(r => r.action === 'add' && r.selected);
-    const toRemove = reconciled.filter(r => r.action === 'remove' && r.selected);
-    if (toAdd.length === 0 && toRemove.length === 0) {
-      toast.error('Nenhuma alteração selecionada');
+    if (!importingClass) return;
+
+    const pendingReview = reviewItems.filter(r => r.resolution === 'pending').length;
+    if (pendingReview > 0) {
+      toast.error(`Resolva os ${pendingReview} registro(s) com inconsistências antes de confirmar`);
+      return;
+    }
+
+    const toAdd: ActiveItem[] = [
+      ...activeItems.filter(a => a.action === 'add' && a.selected),
+      ...reviewItems
+        .filter(r => r.resolution === 'active' && !r.existing_id)
+        .map<ActiveItem>(r => ({
+          ...r,
+          action: 'add',
+          selected: true,
+        })),
+    ];
+    const toRemoveIds = [
+      ...removedItems.filter(r => r.selected && r.existing_id).map(r => r.existing_id!),
+      ...reviewItems.filter(r => r.resolution === 'removed' && r.existing_id).map(r => r.existing_id!),
+    ];
+
+    if (toAdd.length === 0 && toRemoveIds.length === 0) {
+      toast.error('Nenhuma alteração para aplicar');
       return;
     }
 
     setIsSavingStudents(true);
     try {
-      const ops: Promise<any>[] = [];
+      let addedIds: string[] = [];
       if (toAdd.length) {
         const studentsToInsert = toAdd.map(r => ({
-          full_name: r.full_name, // use edited name
-          birth_date: r.pdf!.birth_date || null,
-          guardian_name: r.pdf!.guardian_name && r.pdf!.guardian_name.trim() ? r.pdf!.guardian_name : null,
-          guardian_phone: r.pdf!.guardian_phone && r.pdf!.guardian_phone.trim() ? r.pdf!.guardian_phone : null,
-          class: r.pdf!.class,
-          shift: r.pdf!.shift as 'morning' | 'afternoon' | 'evening',
-          student_id: generateStudentId(r.full_name, r.pdf!.birth_date),
+          full_name: r.full_name,
+          birth_date: r.birth_date || null,
+          guardian_name: r.guardian_name?.trim() || null,
+          guardian_phone: r.guardian_phone?.trim() || null,
+          class: r.class,
+          shift: r.shift as 'morning' | 'afternoon' | 'evening',
+          student_id: generateStudentId(r.full_name, r.birth_date),
           status: 'active' as const,
         }));
-        ops.push(Promise.resolve(supabase.from('students').insert(studentsToInsert)));
+        const { data: inserted, error: insErr } = await supabase
+          .from('students').insert(studentsToInsert).select('id');
+        if (insErr) throw insErr;
+        addedIds = (inserted || []).map((r: any) => r.id);
       }
-      if (toRemove.length) {
-        const ids = toRemove.map(r => r.existing_id!).filter(Boolean);
-        ops.push(Promise.resolve(supabase.from('students').update({ status: 'inactive' }).in('id', ids)));
+      if (toRemoveIds.length) {
+        const { error: updErr } = await supabase
+          .from('students').update({ status: 'inactive' }).in('id', toRemoveIds);
+        if (updErr) throw updErr;
       }
-      const results = await Promise.all(ops);
-      const err = results.find((r: any) => r?.error)?.error;
-      if (err) throw err;
 
-      toast.success(`${toAdd.length} adicionado(s), ${toRemove.length} removido(s)`);
+      // Audit log (best-effort, do not fail the import if it fails)
+      try {
+        await supabase.from('audit_logs').insert({
+          action: 'PDF_IMPORT_STUDENTS',
+          table_name: 'students',
+          new_data: {
+            class_name: importingClass.name,
+            pdf_filename: pdfFileName,
+            pages_read: pdfStats?.pages ?? null,
+            active_detected: pdfStats?.active ?? null,
+            removed_detected: pdfStats?.removed ?? null,
+            review_count: pdfStats?.review ?? null,
+            added_ids: addedIds,
+            removed_ids: toRemoveIds,
+            at: new Date().toISOString(),
+          },
+        });
+      } catch (logErr) {
+        console.warn('Audit log failed:', logErr);
+      }
+
+      toast.success(`${toAdd.length} adicionado(s), ${toRemoveIds.length} removido(s)`);
       setIsImportDialogOpen(false);
-      setExtractedStudents([]);
-      setReconciled([]);
+      setActiveItems([]);
+      setRemovedItems([]);
+      setReviewItems([]);
+      setPdfStats(null);
       fetchStudentCounts();
     } catch (err: any) {
       console.error('Error saving students:', err);
@@ -899,11 +958,14 @@ const Classes = () => {
           setIsImportDialogOpen(open);
           if (!open) {
             setImportingClass(null);
-            setExtractedStudents([]);
-            setReconciled([]);
+            setActiveItems([]);
+            setRemovedItems([]);
+            setReviewItems([]);
+            setPdfStats(null);
+            setPdfFileName('');
           }
         }}>
-          <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <FileText className="w-5 h-5" />
@@ -923,15 +985,12 @@ const Classes = () => {
                 className="hidden"
               />
 
-              {reconciled.length === 0 ? (
+              {!pdfStats ? (
                 <div className="border-2 border-dashed border-muted-foreground/25 rounded-lg p-8 text-center">
                   <Upload className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
                   <h3 className="font-medium mb-2">Selecione um arquivo PDF</h3>
                   <p className="text-sm text-muted-foreground mb-4">
-                    O sistema irá comparar os alunos do PDF com a turma atual: <br/>
-                    <span className="text-emerald-600">verde</span> = mantido •
-                    <span className="text-blue-600"> azul</span> = novo a adicionar •
-                    <span className="text-destructive line-through"> vermelho</span> = remover da turma
+                    Leitura completa do PDF com dupla validação. Alunos ativos: nome em <strong>preto</strong>, sem rachura, situação <strong>MTR</strong> ou <strong>MTI</strong>. Removidos: nome em <span className="text-destructive">vermelho</span> ou <span className="line-through">rachurado</span>.
                   </p>
                   <Button 
                     onClick={() => fileInputRef.current?.click()}
@@ -940,7 +999,7 @@ const Classes = () => {
                     {isProcessingPdf ? (
                       <>
                         <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        Processando...
+                        Lendo e validando PDF...
                       </>
                     ) : (
                       <>
@@ -952,11 +1011,13 @@ const Classes = () => {
                 </div>
               ) : (
                 <div className="space-y-4">
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
                     <div className="flex flex-wrap items-center gap-2 text-xs">
-                      <Badge className="bg-emerald-600 hover:bg-emerald-600">Manter: {reconciled.filter(r => r.action === 'keep').length}</Badge>
-                      <Badge className="bg-blue-600 hover:bg-blue-600">Adicionar: {reconciled.filter(r => r.action === 'add' && r.selected).length}</Badge>
-                      <Badge variant="destructive">Remover: {reconciled.filter(r => r.action === 'remove' && r.selected).length}</Badge>
+                      <Badge variant="outline">{pdfFileName || 'PDF'}</Badge>
+                      <Badge variant="outline">{pdfStats.pages} página(s)</Badge>
+                      <Badge className="bg-emerald-600 hover:bg-emerald-600">Ativos: {pdfStats.active}</Badge>
+                      <Badge variant="destructive">Removidos: {pdfStats.removed}</Badge>
+                      <Badge className="bg-amber-500 hover:bg-amber-500 text-white">Revisar: {pdfStats.review}</Badge>
                     </div>
                     <Button
                       variant="outline"
@@ -969,98 +1030,191 @@ const Classes = () => {
                     </Button>
                   </div>
 
-                  {reconciled.some(r => r.source === 'pdf_struck') && (
-                    <div className="border border-destructive/30 bg-destructive/5 rounded-md p-3 text-xs flex items-start gap-2">
-                      <AlertCircle className="w-4 h-4 text-destructive mt-0.5 shrink-0" />
+                  {reviewItems.some(r => r.resolution === 'pending') && (
+                    <div className="border border-amber-500/30 bg-amber-500/5 rounded-md p-3 text-xs flex items-start gap-2">
+                      <AlertCircle className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
                       <div>
-                        <strong>{reconciled.filter(r => r.source === 'pdf_struck').length} aluno(s)</strong> foram detectados como <em>tachados/riscados</em> no PDF e serão removidos da turma.
+                        Existem <strong>{reviewItems.filter(r => r.resolution === 'pending').length} registro(s)</strong> com inconsistências. Resolva-os na aba "Revisar" antes de confirmar a importação.
                       </div>
                     </div>
                   )}
-                  {reconciled.some(r => r.action === 'add' && (r.confidence ?? 1) < 0.8) && (
-                    <div className="border border-amber-500/30 bg-amber-500/5 rounded-md p-3 text-xs flex items-start gap-2">
-                      <AlertCircle className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
-                      <div>Alguns nomes têm <strong>baixa confiança</strong> de leitura. Revise e edite-os antes de aplicar.</div>
-                    </div>
-                  )}
 
-                  <div className="border rounded-lg overflow-hidden">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead className="w-10"></TableHead>
-                          <TableHead className="w-28">Ação</TableHead>
-                          <TableHead>Nome</TableHead>
-                          <TableHead className="w-56">Motivo</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {reconciled.map((r, index) => (
-                          <TableRow key={index}>
-                            <TableCell>
-                              {r.action !== 'keep' ? (
-                                <Checkbox
-                                  checked={r.selected}
-                                  onCheckedChange={() => toggleStudentSelection(index)}
-                                />
-                              ) : <span className="text-muted-foreground text-xs">—</span>}
-                            </TableCell>
-                            <TableCell>
-                              {r.action === 'keep' && <Badge className="bg-emerald-600 hover:bg-emerald-600">Manter</Badge>}
-                              {r.action === 'add' && <Badge className="bg-blue-600 hover:bg-blue-600">Adicionar</Badge>}
-                              {r.action === 'remove' && <Badge variant="destructive">Remover</Badge>}
-                            </TableCell>
-                            <TableCell>
-                              {r.action === 'add' ? (
+                  <Tabs defaultValue="active">
+                    <TabsList className="grid w-full grid-cols-3">
+                      <TabsTrigger value="active">Ativos ({activeItems.length})</TabsTrigger>
+                      <TabsTrigger value="removed">Removidos ({removedItems.length})</TabsTrigger>
+                      <TabsTrigger value="review">
+                        Revisar ({reviewItems.length})
+                        {reviewItems.some(r => r.resolution === 'pending') && (
+                          <span className="ml-1 inline-block w-2 h-2 rounded-full bg-amber-500" />
+                        )}
+                      </TabsTrigger>
+                    </TabsList>
+
+                    {/* ===== ACTIVE ===== */}
+                    <TabsContent value="active" className="border rounded-lg overflow-hidden mt-3">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead className="w-10"></TableHead>
+                            <TableHead>Nome</TableHead>
+                            <TableHead className="w-24">Situação</TableHead>
+                            <TableHead className="w-28">Status</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {activeItems.length === 0 ? (
+                            <TableRow><TableCell colSpan={4} className="text-center text-sm text-muted-foreground py-6">Nenhum aluno ativo detectado.</TableCell></TableRow>
+                          ) : activeItems.map((r, idx) => (
+                            <TableRow key={idx}>
+                              <TableCell>
+                                {r.action === 'add' ? (
+                                  <Checkbox
+                                    checked={r.selected}
+                                    onCheckedChange={() => setActiveItems(prev => prev.map((s, i) => i === idx ? { ...s, selected: !s.selected } : s))}
+                                  />
+                                ) : <span className="text-muted-foreground text-xs">—</span>}
+                              </TableCell>
+                              <TableCell>
+                                {r.action === 'add' ? (
+                                  <Input
+                                    value={r.full_name}
+                                    onChange={(e) => {
+                                      const v = e.target.value;
+                                      setActiveItems(prev => prev.map((s, i) => i === idx ? { ...s, full_name: v } : s));
+                                    }}
+                                    className="h-8 text-sm"
+                                  />
+                                ) : (
+                                  <span className="text-sm font-medium text-emerald-700">{r.full_name}</span>
+                                )}
+                              </TableCell>
+                              <TableCell><Badge variant="outline">{r.situacao || '—'}</Badge></TableCell>
+                              <TableCell>
+                                {r.action === 'add'
+                                  ? <Badge className="bg-blue-600 hover:bg-blue-600">Novo</Badge>
+                                  : <Badge className="bg-emerald-600 hover:bg-emerald-600">Já cadastrado</Badge>}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </TabsContent>
+
+                    {/* ===== REMOVED ===== */}
+                    <TabsContent value="removed" className="border rounded-lg overflow-hidden mt-3">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead className="w-10"></TableHead>
+                            <TableHead>Nome</TableHead>
+                            <TableHead className="w-40">Motivo</TableHead>
+                            <TableHead className="w-32">Cadastro</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {removedItems.length === 0 ? (
+                            <TableRow><TableCell colSpan={4} className="text-center text-sm text-muted-foreground py-6">Nenhum aluno removido detectado.</TableCell></TableRow>
+                          ) : removedItems.map((r, idx) => (
+                            <TableRow key={idx}>
+                              <TableCell>
+                                {r.existing_id ? (
+                                  <Checkbox
+                                    checked={r.selected}
+                                    onCheckedChange={() => setRemovedItems(prev => prev.map((s, i) => i === idx ? { ...s, selected: !s.selected } : s))}
+                                  />
+                                ) : <span className="text-muted-foreground text-xs">—</span>}
+                              </TableCell>
+                              <TableCell><span className="text-sm font-medium line-through text-destructive">{r.full_name}</span></TableCell>
+                              <TableCell className="text-xs">
+                                {r.reason === 'red' && 'Nome em vermelho'}
+                                {r.reason === 'strike' && 'Nome rachurado'}
+                                {r.reason === 'both' && 'Vermelho e rachurado'}
+                              </TableCell>
+                              <TableCell>
+                                {r.existing_id
+                                  ? <Badge variant="destructive">Será desativado</Badge>
+                                  : <Badge variant="outline">Não cadastrado</Badge>}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </TabsContent>
+
+                    {/* ===== REVIEW ===== */}
+                    <TabsContent value="review" className="border rounded-lg overflow-hidden mt-3">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Nome</TableHead>
+                            <TableHead className="w-60">Motivo</TableHead>
+                            <TableHead className="w-44">Decisão</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {reviewItems.length === 0 ? (
+                            <TableRow><TableCell colSpan={3} className="text-center text-sm text-muted-foreground py-6">Nenhuma inconsistência detectada.</TableCell></TableRow>
+                          ) : reviewItems.map((r, idx) => (
+                            <TableRow key={idx} className={r.resolution === 'pending' ? 'bg-amber-50/40 dark:bg-amber-950/10' : ''}>
+                              <TableCell>
                                 <Input
                                   value={r.full_name}
                                   onChange={(e) => {
                                     const v = e.target.value;
-                                    setReconciled(prev => prev.map((s, i) => i === index ? { ...s, full_name: v } : s));
+                                    setReviewItems(prev => prev.map((s, i) => i === idx ? { ...s, full_name: v } : s));
                                   }}
-                                  className={cn(
-                                    "h-8 text-sm font-medium",
-                                    (r.confidence ?? 1) < 0.8 && "border-amber-500"
-                                  )}
+                                  className="h-8 text-sm"
                                 />
-                              ) : (
-                                <span className={cn(
-                                  "font-medium text-sm",
-                                  r.action === 'remove' && "line-through text-destructive",
-                                  r.action === 'keep' && "text-emerald-700"
-                                )}>{r.full_name}</span>
-                              )}
-                            </TableCell>
-                            <TableCell className="text-xs text-muted-foreground">
-                              {r.source === 'pdf_struck' && <span className="text-destructive">🚫 {r.reason}</span>}
-                              {r.source === 'db_only' && <span>📋 {r.reason}</span>}
-                              {r.source === 'pdf_active' && r.action === 'add' && (
-                                <span className={cn((r.confidence ?? 1) < 0.8 && "text-amber-600")}>
-                                  ✨ {r.reason}{r.confidence != null && ` (${Math.round(r.confidence * 100)}%)`}
-                                </span>
-                              )}
-                              {r.source === 'pdf_active' && r.action === 'keep' && <span className="text-emerald-700">✓ {r.reason}</span>}
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
+                              </TableCell>
+                              <TableCell className="text-xs text-amber-700 dark:text-amber-400">
+                                <ul className="list-disc pl-4 space-y-0.5">
+                                  {r.reasons.map((reason, i) => <li key={i}>{reason}</li>)}
+                                </ul>
+                              </TableCell>
+                              <TableCell>
+                                <Select
+                                  value={r.resolution}
+                                  onValueChange={(v) => setReviewItems(prev => prev.map((s, i) => i === idx ? { ...s, resolution: v as any } : s))}
+                                >
+                                  <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Selecionar..." /></SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="pending">Pendente</SelectItem>
+                                    <SelectItem value="active">Marcar como ativo</SelectItem>
+                                    <SelectItem value="removed" disabled={!r.existing_id}>Marcar como removido</SelectItem>
+                                    <SelectItem value="ignore">Ignorar</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </TabsContent>
+                  </Tabs>
 
-                  <div className="flex justify-end gap-2">
+                  <div className="flex justify-end gap-2 pt-2">
                     <Button
                       variant="outline"
                       onClick={() => {
                         setIsImportDialogOpen(false);
-                        setExtractedStudents([]);
-                        setReconciled([]);
+                        setActiveItems([]);
+                        setRemovedItems([]);
+                        setReviewItems([]);
+                        setPdfStats(null);
                       }}
                     >
                       Cancelar
                     </Button>
                     <Button
                       onClick={handleSaveStudents}
-                      disabled={isSavingStudents || reconciled.filter(r => r.action !== 'keep' && r.selected).length === 0}
+                      disabled={
+                        isSavingStudents ||
+                        reviewItems.some(r => r.resolution === 'pending') ||
+                        (activeItems.filter(a => a.action === 'add' && a.selected).length === 0 &&
+                         removedItems.filter(r => r.selected && r.existing_id).length === 0 &&
+                         reviewItems.filter(r => r.resolution === 'active' || r.resolution === 'removed').length === 0)
+                      }
                     >
                       {isSavingStudents ? (
                         <>
@@ -1069,8 +1223,8 @@ const Classes = () => {
                         </>
                       ) : (
                         <>
-                          <Plus className="w-4 h-4 mr-2" />
-                          Aplicar Alterações
+                          <CheckCircle2 className="w-4 h-4 mr-2" />
+                          Confirmar Importação
                         </>
                       )}
                     </Button>
