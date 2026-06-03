@@ -384,6 +384,8 @@ export default function TeacherNotifications() {
     setEditingBody(false);
     setEditingId(null);
     setEditingYear(null);
+    setSelectedSubjects([]);
+    setSelectedClasses([]);
   };
 
   const handleSave = async () => {
@@ -462,6 +464,13 @@ export default function TeacherNotifications() {
       classes_subjects: r.classes_subjects || '',
       teacher_justification: r.teacher_justification || '',
     });
+    const parsed = parseClassesSubjects(
+      r.classes_subjects || '',
+      subjectOptions,
+      classOptions.map((c) => c.value)
+    );
+    setSelectedSubjects(parsed.subjects);
+    setSelectedClasses(parsed.classes);
     setCustomBody(r.custom_body || '');
     setEditingId(r.id);
     setEditingYear(r.doc_year);
