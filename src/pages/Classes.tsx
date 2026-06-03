@@ -958,11 +958,14 @@ const Classes = () => {
           setIsImportDialogOpen(open);
           if (!open) {
             setImportingClass(null);
-            setExtractedStudents([]);
-            setReconciled([]);
+            setActiveItems([]);
+            setRemovedItems([]);
+            setReviewItems([]);
+            setPdfStats(null);
+            setPdfFileName('');
           }
         }}>
-          <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <FileText className="w-5 h-5" />
@@ -982,15 +985,12 @@ const Classes = () => {
                 className="hidden"
               />
 
-              {reconciled.length === 0 ? (
+              {!pdfStats ? (
                 <div className="border-2 border-dashed border-muted-foreground/25 rounded-lg p-8 text-center">
                   <Upload className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
                   <h3 className="font-medium mb-2">Selecione um arquivo PDF</h3>
                   <p className="text-sm text-muted-foreground mb-4">
-                    O sistema irá comparar os alunos do PDF com a turma atual: <br/>
-                    <span className="text-emerald-600">verde</span> = mantido •
-                    <span className="text-blue-600"> azul</span> = novo a adicionar •
-                    <span className="text-destructive line-through"> vermelho</span> = remover da turma
+                    Leitura completa do PDF com dupla validação. Alunos ativos: nome em <strong>preto</strong>, sem rachura, situação <strong>MTR</strong> ou <strong>MTI</strong>. Removidos: nome em <span className="text-destructive">vermelho</span> ou <span className="line-through">rachurado</span>.
                   </p>
                   <Button 
                     onClick={() => fileInputRef.current?.click()}
@@ -999,7 +999,7 @@ const Classes = () => {
                     {isProcessingPdf ? (
                       <>
                         <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        Processando...
+                        Lendo e validando PDF...
                       </>
                     ) : (
                       <>
@@ -1011,11 +1011,13 @@ const Classes = () => {
                 </div>
               ) : (
                 <div className="space-y-4">
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
                     <div className="flex flex-wrap items-center gap-2 text-xs">
-                      <Badge className="bg-emerald-600 hover:bg-emerald-600">Manter: {reconciled.filter(r => r.action === 'keep').length}</Badge>
-                      <Badge className="bg-blue-600 hover:bg-blue-600">Adicionar: {reconciled.filter(r => r.action === 'add' && r.selected).length}</Badge>
-                      <Badge variant="destructive">Remover: {reconciled.filter(r => r.action === 'remove' && r.selected).length}</Badge>
+                      <Badge variant="outline">{pdfFileName || 'PDF'}</Badge>
+                      <Badge variant="outline">{pdfStats.pages} página(s)</Badge>
+                      <Badge className="bg-emerald-600 hover:bg-emerald-600">Ativos: {pdfStats.active}</Badge>
+                      <Badge variant="destructive">Removidos: {pdfStats.removed}</Badge>
+                      <Badge className="bg-amber-500 hover:bg-amber-500 text-white">Revisar: {pdfStats.review}</Badge>
                     </div>
                     <Button
                       variant="outline"
@@ -1028,98 +1030,191 @@ const Classes = () => {
                     </Button>
                   </div>
 
-                  {reconciled.some(r => r.source === 'pdf_struck') && (
-                    <div className="border border-destructive/30 bg-destructive/5 rounded-md p-3 text-xs flex items-start gap-2">
-                      <AlertCircle className="w-4 h-4 text-destructive mt-0.5 shrink-0" />
+                  {reviewItems.some(r => r.resolution === 'pending') && (
+                    <div className="border border-amber-500/30 bg-amber-500/5 rounded-md p-3 text-xs flex items-start gap-2">
+                      <AlertCircle className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
                       <div>
-                        <strong>{reconciled.filter(r => r.source === 'pdf_struck').length} aluno(s)</strong> foram detectados como <em>tachados/riscados</em> no PDF e serão removidos da turma.
+                        Existem <strong>{reviewItems.filter(r => r.resolution === 'pending').length} registro(s)</strong> com inconsistências. Resolva-os na aba "Revisar" antes de confirmar a importação.
                       </div>
                     </div>
                   )}
-                  {reconciled.some(r => r.action === 'add' && (r.confidence ?? 1) < 0.8) && (
-                    <div className="border border-amber-500/30 bg-amber-500/5 rounded-md p-3 text-xs flex items-start gap-2">
-                      <AlertCircle className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
-                      <div>Alguns nomes têm <strong>baixa confiança</strong> de leitura. Revise e edite-os antes de aplicar.</div>
-                    </div>
-                  )}
 
-                  <div className="border rounded-lg overflow-hidden">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead className="w-10"></TableHead>
-                          <TableHead className="w-28">Ação</TableHead>
-                          <TableHead>Nome</TableHead>
-                          <TableHead className="w-56">Motivo</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {reconciled.map((r, index) => (
-                          <TableRow key={index}>
-                            <TableCell>
-                              {r.action !== 'keep' ? (
-                                <Checkbox
-                                  checked={r.selected}
-                                  onCheckedChange={() => toggleStudentSelection(index)}
-                                />
-                              ) : <span className="text-muted-foreground text-xs">—</span>}
-                            </TableCell>
-                            <TableCell>
-                              {r.action === 'keep' && <Badge className="bg-emerald-600 hover:bg-emerald-600">Manter</Badge>}
-                              {r.action === 'add' && <Badge className="bg-blue-600 hover:bg-blue-600">Adicionar</Badge>}
-                              {r.action === 'remove' && <Badge variant="destructive">Remover</Badge>}
-                            </TableCell>
-                            <TableCell>
-                              {r.action === 'add' ? (
+                  <Tabs defaultValue="active">
+                    <TabsList className="grid w-full grid-cols-3">
+                      <TabsTrigger value="active">Ativos ({activeItems.length})</TabsTrigger>
+                      <TabsTrigger value="removed">Removidos ({removedItems.length})</TabsTrigger>
+                      <TabsTrigger value="review">
+                        Revisar ({reviewItems.length})
+                        {reviewItems.some(r => r.resolution === 'pending') && (
+                          <span className="ml-1 inline-block w-2 h-2 rounded-full bg-amber-500" />
+                        )}
+                      </TabsTrigger>
+                    </TabsList>
+
+                    {/* ===== ACTIVE ===== */}
+                    <TabsContent value="active" className="border rounded-lg overflow-hidden mt-3">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead className="w-10"></TableHead>
+                            <TableHead>Nome</TableHead>
+                            <TableHead className="w-24">Situação</TableHead>
+                            <TableHead className="w-28">Status</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {activeItems.length === 0 ? (
+                            <TableRow><TableCell colSpan={4} className="text-center text-sm text-muted-foreground py-6">Nenhum aluno ativo detectado.</TableCell></TableRow>
+                          ) : activeItems.map((r, idx) => (
+                            <TableRow key={idx}>
+                              <TableCell>
+                                {r.action === 'add' ? (
+                                  <Checkbox
+                                    checked={r.selected}
+                                    onCheckedChange={() => setActiveItems(prev => prev.map((s, i) => i === idx ? { ...s, selected: !s.selected } : s))}
+                                  />
+                                ) : <span className="text-muted-foreground text-xs">—</span>}
+                              </TableCell>
+                              <TableCell>
+                                {r.action === 'add' ? (
+                                  <Input
+                                    value={r.full_name}
+                                    onChange={(e) => {
+                                      const v = e.target.value;
+                                      setActiveItems(prev => prev.map((s, i) => i === idx ? { ...s, full_name: v } : s));
+                                    }}
+                                    className="h-8 text-sm"
+                                  />
+                                ) : (
+                                  <span className="text-sm font-medium text-emerald-700">{r.full_name}</span>
+                                )}
+                              </TableCell>
+                              <TableCell><Badge variant="outline">{r.situacao || '—'}</Badge></TableCell>
+                              <TableCell>
+                                {r.action === 'add'
+                                  ? <Badge className="bg-blue-600 hover:bg-blue-600">Novo</Badge>
+                                  : <Badge className="bg-emerald-600 hover:bg-emerald-600">Já cadastrado</Badge>}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </TabsContent>
+
+                    {/* ===== REMOVED ===== */}
+                    <TabsContent value="removed" className="border rounded-lg overflow-hidden mt-3">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead className="w-10"></TableHead>
+                            <TableHead>Nome</TableHead>
+                            <TableHead className="w-40">Motivo</TableHead>
+                            <TableHead className="w-32">Cadastro</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {removedItems.length === 0 ? (
+                            <TableRow><TableCell colSpan={4} className="text-center text-sm text-muted-foreground py-6">Nenhum aluno removido detectado.</TableCell></TableRow>
+                          ) : removedItems.map((r, idx) => (
+                            <TableRow key={idx}>
+                              <TableCell>
+                                {r.existing_id ? (
+                                  <Checkbox
+                                    checked={r.selected}
+                                    onCheckedChange={() => setRemovedItems(prev => prev.map((s, i) => i === idx ? { ...s, selected: !s.selected } : s))}
+                                  />
+                                ) : <span className="text-muted-foreground text-xs">—</span>}
+                              </TableCell>
+                              <TableCell><span className="text-sm font-medium line-through text-destructive">{r.full_name}</span></TableCell>
+                              <TableCell className="text-xs">
+                                {r.reason === 'red' && 'Nome em vermelho'}
+                                {r.reason === 'strike' && 'Nome rachurado'}
+                                {r.reason === 'both' && 'Vermelho e rachurado'}
+                              </TableCell>
+                              <TableCell>
+                                {r.existing_id
+                                  ? <Badge variant="destructive">Será desativado</Badge>
+                                  : <Badge variant="outline">Não cadastrado</Badge>}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </TabsContent>
+
+                    {/* ===== REVIEW ===== */}
+                    <TabsContent value="review" className="border rounded-lg overflow-hidden mt-3">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Nome</TableHead>
+                            <TableHead className="w-60">Motivo</TableHead>
+                            <TableHead className="w-44">Decisão</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {reviewItems.length === 0 ? (
+                            <TableRow><TableCell colSpan={3} className="text-center text-sm text-muted-foreground py-6">Nenhuma inconsistência detectada.</TableCell></TableRow>
+                          ) : reviewItems.map((r, idx) => (
+                            <TableRow key={idx} className={r.resolution === 'pending' ? 'bg-amber-50/40 dark:bg-amber-950/10' : ''}>
+                              <TableCell>
                                 <Input
                                   value={r.full_name}
                                   onChange={(e) => {
                                     const v = e.target.value;
-                                    setReconciled(prev => prev.map((s, i) => i === index ? { ...s, full_name: v } : s));
+                                    setReviewItems(prev => prev.map((s, i) => i === idx ? { ...s, full_name: v } : s));
                                   }}
-                                  className={cn(
-                                    "h-8 text-sm font-medium",
-                                    (r.confidence ?? 1) < 0.8 && "border-amber-500"
-                                  )}
+                                  className="h-8 text-sm"
                                 />
-                              ) : (
-                                <span className={cn(
-                                  "font-medium text-sm",
-                                  r.action === 'remove' && "line-through text-destructive",
-                                  r.action === 'keep' && "text-emerald-700"
-                                )}>{r.full_name}</span>
-                              )}
-                            </TableCell>
-                            <TableCell className="text-xs text-muted-foreground">
-                              {r.source === 'pdf_struck' && <span className="text-destructive">🚫 {r.reason}</span>}
-                              {r.source === 'db_only' && <span>📋 {r.reason}</span>}
-                              {r.source === 'pdf_active' && r.action === 'add' && (
-                                <span className={cn((r.confidence ?? 1) < 0.8 && "text-amber-600")}>
-                                  ✨ {r.reason}{r.confidence != null && ` (${Math.round(r.confidence * 100)}%)`}
-                                </span>
-                              )}
-                              {r.source === 'pdf_active' && r.action === 'keep' && <span className="text-emerald-700">✓ {r.reason}</span>}
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
+                              </TableCell>
+                              <TableCell className="text-xs text-amber-700 dark:text-amber-400">
+                                <ul className="list-disc pl-4 space-y-0.5">
+                                  {r.reasons.map((reason, i) => <li key={i}>{reason}</li>)}
+                                </ul>
+                              </TableCell>
+                              <TableCell>
+                                <Select
+                                  value={r.resolution}
+                                  onValueChange={(v) => setReviewItems(prev => prev.map((s, i) => i === idx ? { ...s, resolution: v as any } : s))}
+                                >
+                                  <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Selecionar..." /></SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="pending">Pendente</SelectItem>
+                                    <SelectItem value="active">Marcar como ativo</SelectItem>
+                                    <SelectItem value="removed" disabled={!r.existing_id}>Marcar como removido</SelectItem>
+                                    <SelectItem value="ignore">Ignorar</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </TabsContent>
+                  </Tabs>
 
-                  <div className="flex justify-end gap-2">
+                  <div className="flex justify-end gap-2 pt-2">
                     <Button
                       variant="outline"
                       onClick={() => {
                         setIsImportDialogOpen(false);
-                        setExtractedStudents([]);
-                        setReconciled([]);
+                        setActiveItems([]);
+                        setRemovedItems([]);
+                        setReviewItems([]);
+                        setPdfStats(null);
                       }}
                     >
                       Cancelar
                     </Button>
                     <Button
                       onClick={handleSaveStudents}
-                      disabled={isSavingStudents || reconciled.filter(r => r.action !== 'keep' && r.selected).length === 0}
+                      disabled={
+                        isSavingStudents ||
+                        reviewItems.some(r => r.resolution === 'pending') ||
+                        (activeItems.filter(a => a.action === 'add' && a.selected).length === 0 &&
+                         removedItems.filter(r => r.selected && r.existing_id).length === 0 &&
+                         reviewItems.filter(r => r.resolution === 'active' || r.resolution === 'removed').length === 0)
+                      }
                     >
                       {isSavingStudents ? (
                         <>
@@ -1128,8 +1223,8 @@ const Classes = () => {
                         </>
                       ) : (
                         <>
-                          <Plus className="w-4 h-4 mr-2" />
-                          Aplicar Alterações
+                          <CheckCircle2 className="w-4 h-4 mr-2" />
+                          Confirmar Importação
                         </>
                       )}
                     </Button>
