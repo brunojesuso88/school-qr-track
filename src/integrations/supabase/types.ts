@@ -121,6 +121,39 @@ export type Database = {
         }
         Relationships: []
       }
+      management_signatures: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          is_default: boolean
+          name: string
+          role_label: string | null
+          storage_path: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_default?: boolean
+          name: string
+          role_label?: string | null
+          storage_path: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_default?: boolean
+          name?: string
+          role_label?: string | null
+          storage_path?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       mapping_class_subjects: {
         Row: {
           class_id: string | null
