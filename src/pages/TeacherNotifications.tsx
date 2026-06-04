@@ -162,12 +162,6 @@ export default function TeacherNotifications() {
   const [editingYear, setEditingYear] = useState<number | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
 
-  // Mapping data for Disciplinas / Turmas multi-select
-  const [subjectOptions, setSubjectOptions] = useState<string[]>([]);
-  const [classOptions, setClassOptions] = useState<{ value: string; group?: string }[]>([]);
-  const [selectedSubjects, setSelectedSubjects] = useState<string[]>([]);
-  const [selectedClasses, setSelectedClasses] = useState<string[]>([]);
-
   // Filters
   const [fTeacher, setFTeacher] = useState('');
   const [fStage, setFStage] = useState<'all' | NotificationStage>('all');
@@ -194,29 +188,6 @@ export default function TeacherNotifications() {
   };
 
   useEffect(() => { fetchRecords(); }, []);
-
-  useEffect(() => {
-    (async () => {
-      const [{ data: subs }, { data: cls }] = await Promise.all([
-        supabase.from('mapping_global_subjects').select('name').order('name'),
-        supabase.from('mapping_classes').select('name, shift').order('shift').order('name'),
-      ]);
-      const subjects = Array.from(new Set((subs || []).map((s: any) => s.name).filter(Boolean))).sort();
-      setSubjectOptions(subjects);
-      const classes = (cls || []).map((c: any) => ({
-        value: c.name,
-        group: SHIFT_LABELS[c.shift] || c.shift || 'Outros',
-      }));
-      setClassOptions(classes);
-    })();
-  }, []);
-
-  // Keep form.classes_subjects in sync with selections
-  useEffect(() => {
-    const composed = composeClassesSubjects(selectedSubjects, selectedClasses);
-    setForm((f) => (f.classes_subjects === composed ? f : { ...f, classes_subjects: composed }));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedSubjects, selectedClasses]);
 
   const previewData: NotificationData = useMemo(() => form, [form]);
   const previewYear = editingYear ?? year;
