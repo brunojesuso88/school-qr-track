@@ -88,34 +88,37 @@ function buildPrintHTML(data: NotificationData, docNumber: number, docYear: numb
   const stage = STAGE_TITLES[data.stage];
   const body = (customBody?.trim() || buildNotificationBody(data)).replace(/\n/g, '<br/>');
   const obligations = getResolvedObligations(data);
-  const fileTitle = `NOTIFICACAO_${(data.teacher_name || 'PROFESSOR').toUpperCase().replace(/\s+/g, '_')}_${docYear}`;
-  return `<!doctype html><html><head><meta charset="utf-8" /><title>${fileTitle}</title>
+  return `<!doctype html><html><head><meta charset="utf-8" /><title> </title>
 <style>
-  @page { size: A4 portrait; margin: 20mm 18mm; }
+  @page { size: A4 portrait; margin: 0; }
   * { box-sizing: border-box; }
-  body { font-family: "Times New Roman", Georgia, serif; color: #0B2E59; font-size: 12pt; line-height: 1.55; margin: 0; }
+  html, body { height: auto; }
+  body { font-family: "Times New Roman", Georgia, serif; color: #0B2E59; font-size: 11pt; line-height: 1.45; margin: 0; padding: 14mm 16mm; }
+  .sheet { page-break-inside: avoid; break-inside: avoid; transform-origin: top left; }
   .header { display: flex; align-items: center; gap: 16px; }
-  .header img { width: 115px; height: 115px; object-fit: contain; }
+  .header img { width: 95px; height: 95px; object-fit: contain; }
   .header .info { flex: 1; text-align: center; }
   .header .info .line { font-size: 10.5pt; letter-spacing: 1px; }
   .header .info .line.seduc { font-size: 9.5pt; letter-spacing: 0.4px; white-space: nowrap; }
-  .header .info .school { font-size: 11.5pt; font-weight: 700; color: #0D47A1; margin-top: 3px; }
-  .divider { height: 3px; background: linear-gradient(90deg,#0D47A1,#C62828); margin: 12px 0 20px; }
-  .title { text-align: center; margin-bottom: 16px; }
-  .title .t1 { font-size: 14pt; font-weight: 700; letter-spacing: 1px; }
-  .title .t2 { font-size: 10pt; color: #475569; margin-top: 3px; }
-  .title .meta { margin-top: 8px; font-size: 11pt; }
-  .section { margin-bottom: 14px; }
+  .header .info .school { font-size: 11pt; font-weight: 700; color: #0D47A1; margin-top: 3px; }
+  .divider { height: 3px; background: linear-gradient(90deg,#0D47A1,#C62828); margin: 8px 0 14px; }
+  .title { text-align: center; margin-bottom: 12px; }
+  .title .t1 { font-size: 13pt; font-weight: 700; letter-spacing: 1px; }
+  .title .t2 { font-size: 9.5pt; color: #475569; margin-top: 3px; }
+  .title .meta { margin-top: 6px; font-size: 10.5pt; }
+  .section { margin-bottom: 10px; }
   .section .label { font-weight: 700; color: #0D47A1; margin-bottom: 4px; }
   .body { text-align: justify; }
-  ul { margin: 0; padding-left: 22px; }
-  .signatures { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; margin-top: 56px; page-break-inside: avoid; }
+  ul { margin: 0; padding-left: 20px; }
+  ul li { margin-bottom: 2px; }
+  .signatures { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 32px; page-break-inside: avoid; }
   .sig { text-align: center; }
   .sig .line { border-top: 1px solid #0B2E59; padding-top: 6px; font-size: 11pt; }
   .sig .role { color: #475569; }
-  .footer { margin-top: 28px; border-top: 1px solid #e2e8f0; padding-top: 8px; text-align: center; font-size: 9.5pt; color: #64748b; font-style: italic; }
+  .footer { margin-top: 18px; border-top: 1px solid #e2e8f0; padding-top: 6px; text-align: center; font-size: 9pt; color: #64748b; font-style: italic; }
   @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
 </style></head><body>
+  <div class="sheet">
   <div class="header">
     <img src="${logoCepans}" alt="CEPANS" />
     <div class="info">
@@ -141,7 +144,30 @@ function buildPrintHTML(data: NotificationData, docNumber: number, docYear: numb
     <div class="sig"><div class="line"><strong>Ciente do(a) professor(a)</strong><div class="role">Data: ____/____/______</div></div></div>
   </div>
   <div class="footer">Documento de acompanhamento pedagógico-administrativo de uso interno da gestão escolar.</div>
-  <script>window.onload = () => { const imgs = document.images; let n = imgs.length; if(!n) return setTimeout(()=>window.print(), 200); for (const i of imgs) { if (i.complete) { if(--n===0) setTimeout(()=>window.print(), 200);} else { i.onload = i.onerror = () => { if(--n===0) setTimeout(()=>window.print(), 200); }; } } };<\/script>
+  </div>
+  <script>
+    function fitToOnePage(){
+      var sheet = document.querySelector('.sheet');
+      if(!sheet) return;
+      // A4 = 297mm tall. Body padding top+bottom = 28mm. Usable = 269mm ~= 1017px @ 96dpi.
+      var maxH = 1017;
+      var h = sheet.scrollHeight;
+      if(h > maxH){
+        var scale = Math.max(0.6, maxH / h);
+        sheet.style.transform = 'scale(' + scale + ')';
+        sheet.style.width = (100 / scale) + '%';
+      }
+    }
+    window.onload = () => {
+      const imgs = document.images; let n = imgs.length;
+      const go = () => { fitToOnePage(); setTimeout(()=>window.print(), 200); };
+      if(!n) return go();
+      for (const i of imgs) {
+        if (i.complete) { if(--n===0) go(); }
+        else { i.onload = i.onerror = () => { if(--n===0) go(); }; }
+      }
+    };
+  <\/script>
 </body></html>`;
 }
 
