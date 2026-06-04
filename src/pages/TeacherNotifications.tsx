@@ -119,7 +119,8 @@ function buildPrintHTML(
   * { box-sizing: border-box; }
   html, body { height: auto; }
   body { font-family: "Times New Roman", Georgia, serif; color: #0B2E59; font-size: 11pt; line-height: 1.45; margin: 0; padding: 14mm 16mm; }
-  .sheet { page-break-inside: avoid; break-inside: avoid; transform-origin: top left; }
+  .sheet { page-break-inside: avoid; break-inside: avoid; transform-origin: top left; display: flex; flex-direction: column; min-height: 269mm; }
+  .content { flex: 0 0 auto; }
   .header { display: flex; align-items: center; gap: 16px; }
   .header img { width: 95px; height: 95px; object-fit: contain; }
   .header .info { flex: 1; text-align: center; }
@@ -136,14 +137,15 @@ function buildPrintHTML(
   .body { text-align: justify; }
   ul { margin: 0; padding-left: 20px; }
   ul li { margin-bottom: 2px; }
-  .signatures { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 64px; page-break-inside: avoid; }
+  .signatures { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: auto; padding-top: 40px; page-break-inside: avoid; align-items: end; }
   .sig { text-align: center; }
   .sig .line { border-top: 1px solid #0B2E59; padding-top: 20px; font-size: 11pt; }
   .sig .role { color: #475569; }
-  .footer { margin-top: 18px; border-top: 1px solid #e2e8f0; padding-top: 6px; text-align: center; font-size: 9pt; color: #64748b; font-style: italic; }
+  .footer { margin-top: 14px; border-top: 1px solid #e2e8f0; padding-top: 6px; text-align: center; font-size: 9pt; color: #64748b; font-style: italic; flex: 0 0 auto; }
   @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
 </style></head><body>
   <div class="sheet">
+  <div class="content">
   <div class="header">
     <img src="${logoCepans}" alt="CEPANS" />
     <div class="info">
@@ -164,6 +166,7 @@ function buildPrintHTML(
   ${obligations.length ? `<div class="section"><div class="label">Obrigações acadêmicas não cumpridas</div><ul>${obligations.map((o) => `<li>${escapeHTML(o)}</li>`).join('')}</ul></div>` : ''}
   ${data.classes_subjects ? `<div class="section"><div class="label">Turmas / disciplina</div><div>${escapeHTML(data.classes_subjects)}</div></div>` : ''}
   ${data.teacher_justification ? `<div class="section"><div class="label">Justificativa apresentada pelo docente</div><div class="body" style="font-style:italic">${escapeHTML(data.teacher_justification)}</div></div>` : ''}
+  </div>
   <div class="signatures">
     <div class="sig">${sigHtml}<div class="line"><strong>${escapeHTML(directionLabel)}</strong>${sigName}</div></div>
     <div class="sig"><div class="line"><strong>Ciente do(a) professor(a)</strong><div class="role">Data: ____/____/______</div></div></div>
