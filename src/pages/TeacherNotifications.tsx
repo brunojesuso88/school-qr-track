@@ -219,6 +219,7 @@ export default function TeacherNotifications() {
   const [signatures, setSignatures] = useState<ManagementSignature[]>([]);
   const [selectedSignatureId, setSelectedSignatureId] = useState<string>('default');
   const [sigDialogOpen, setSigDialogOpen] = useState(false);
+  const [previewSignature, setPreviewSignature] = useState<SignatureForPrint | null>(null);
   const canManageSignatures = userRole === 'admin' || userRole === 'direction';
 
   // Filters
@@ -260,6 +261,18 @@ export default function TeacherNotifications() {
   useEffect(() => {
     if (canManageSignatures) refreshSignatures();
   }, [canManageSignatures]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const sig = await resolveSelectedSignature();
+      if (!cancelled) setPreviewSignature(sig);
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedSignatureId, signatures]);
 
   const previewData: NotificationData = useMemo(() => form, [form]);
   const previewYear = editingYear ?? year;
@@ -652,6 +665,7 @@ export default function TeacherNotifications() {
                     docNumber={previewDocNumber}
                     docYear={previewYear}
                     customBody={editingBody ? customBody : null}
+                    signature={previewSignature}
                   />
                 </div>
               </div>
@@ -732,6 +746,7 @@ export default function TeacherNotifications() {
               docNumber={previewDocNumber}
               docYear={previewYear}
               customBody={editingBody ? customBody : null}
+              signature={previewSignature}
             />
           </div>
         </DialogContent>
