@@ -13,12 +13,18 @@ interface Props {
   docNumber: number;
   docYear: number;
   customBody?: string | null;
+  signature?: {
+    dataUrl: string;
+    name: string;
+    role_label: string | null;
+  } | null;
 }
 
-export function NotificationPreview({ data, docNumber, docYear, customBody }: Props) {
+export function NotificationPreview({ data, docNumber, docYear, customBody, signature }: Props) {
   const stage = STAGE_TITLES[data.stage];
   const body = customBody && customBody.trim() ? customBody : buildNotificationBody(data);
   const obligations = getResolvedObligations(data);
+  const directionLabel = signature?.role_label?.trim() || 'Direção Escolar';
 
   return (
     <div
@@ -106,10 +112,20 @@ export function NotificationPreview({ data, docNumber, docYear, customBody }: Pr
       )}
 
       {/* Signatures */}
-      <div style={{ marginTop: 48, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 32 }}>
+      <div style={{ marginTop: 96, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 32, alignItems: 'end' }}>
         <div style={{ textAlign: 'center' }}>
+          {signature && (
+            <img
+              src={signature.dataUrl}
+              alt="Assinatura da gestão"
+              style={{ display: 'block', margin: '0 auto 2px', maxHeight: 52, maxWidth: '80%', objectFit: 'contain' }}
+            />
+          )}
           <div style={{ borderTop: '1px solid #0B2E59', paddingTop: 6, fontSize: 12 }}>
-            <strong>Direção Escolar</strong>
+            <strong>{directionLabel}</strong>
+            {signature && (
+              <div style={{ color: '#475569', fontSize: 11 }}>{signature.name}</div>
+            )}
           </div>
         </div>
         <div style={{ textAlign: 'center' }}>

@@ -1,46 +1,33 @@
-## Assinaturas da Gestão — Notificação Docente
+## Ajustes: assinaturas no final + prévia com imagem
 
-### Objetivo
-Permitir que Admin e Direção façam upload de imagens de assinatura (com nome do gestor), salvem para reutilização, marquem uma como padrão e a apliquem na notificação impressa — acima da linha "Direção Escolar".
+### 1. Assinaturas coladas no rodapé (impressão, 1 página)
+Em `buildPrintHTML` (`src/pages/TeacherNotifications.tsx`):
+- Tornar `.sheet` um flex column com altura mínima da área útil da A4 (`min-height: 269mm`).
+- Agrupar o conteúdo superior (header, título, body, motivo, obrigações, turmas, justificativa) num wrapper `.content`.
+- Aplicar `margin-top: auto` no bloco `.signatures` para empurrá-lo ao final.
+- Reduzir o `margin-top: 64px` atual das assinaturas (não é mais necessário) e manter `page-break-inside: avoid`.
+- Footer continua após as assinaturas, com espaçamento menor.
+- Manter o `fitToOnePage()` como salvaguarda caso o conteúdo seja muito longo.
 
-### Backend (Lovable Cloud)
+Resultado: assinaturas sempre no rodapé da página, independentemente do tamanho do conteúdo, em uma única página.
 
-1. **Bucket privado** `management-signatures` (uploads em PNG/JPG, ≤ 1 MB).
-2. **Tabela** `management_signatures`:
-   - `id`, `name` (texto, ex: "Profa. Maria Silva — Diretora"), `role_label` (opcional, ex: "Diretora"), `storage_path`, `is_default` (bool), `created_by`, `created_at`.
-   - RLS: SELECT/INSERT/UPDATE/DELETE liberado para `admin` e `direction` via `user_has_any_role`.
-   - GRANTs para `authenticated` e `service_role`.
-   - Trigger/constraint: ao marcar `is_default = true`, demais registros recebem `false` (única padrão global).
-3. Políticas no `storage.objects` para o bucket: leitura/escrita restrita a Admin/Direção; arquivos servidos via signed URL.
+### 2. Mostrar assinatura selecionada na prévia
+Atualmente `NotificationPreview` não recebe nem renderiza a imagem da assinatura.
 
-### UI — `src/pages/TeacherNotifications.tsx`
+Em `src/pages/TeacherNotifications.tsx`:
+- Novo estado `previewSignature: SignatureForPrint | null`.
+- `useEffect` reagindo a `[selectedSignatureId, signatures]` que chama `resolveSelectedSignature()` e atualiza `previewSignature` (com guard para evitar race condition).
+- Passar `signature={previewSignature}` para `<NotificationPreview ... />` (tanto inline quanto no dialog de prévia ampliada).
 
-1. Novo botão no topo da página: **"Assinaturas da gestão"** → abre dialog de gerenciamento.
-2. **Dialog "Gerenciar assinaturas"**:
-   - Lista as assinaturas salvas (preview da imagem + nome + badge "Padrão").
-   - Ações por item: **Definir como padrão**, **Excluir**.
-   - Formulário de upload: campo "Nome" (obrigatório), campo "Cargo/rótulo" (opcional, default "Direção Escolar"), input de arquivo (PNG/JPG, validação de tipo e tamanho), botão **Salvar**.
-3. **Seleção por notificação** (padrão + troca):
-   - Novo Select no painel da notificação: "Assinatura da gestão" — opção `Padrão (nome)` selecionada automaticamente, demais assinaturas listadas, mais opção **Sem assinatura**.
-   - Persistir apenas em estado local (não altera tabela `teacher_notifications`).
+Em `src/components/notifications/NotificationPreview.tsx`:
+- Aceitar nova prop opcional `signature?: { dataUrl: string; name: string; role_label: string | null } | null`.
+- No bloco de assinaturas, lado "Direção Escolar":
+  - Se `signature` existir: renderizar `<img>` (altura ~52px, `object-fit: contain`) centralizado acima da linha; usar `signature.role_label || 'Direção Escolar'` como rótulo; mostrar `signature.name` em cinza abaixo do rótulo.
+  - Sem assinatura: layout atual inalterado.
+- Para refletir o "rodapé": aumentar o `marginTop` da grid de assinaturas (ex.: `marginTop: 96`) para aproximar visualmente a prévia do documento impresso.
 
-### Renderização no documento impresso
+### Arquivos alterados
+- `src/pages/TeacherNotifications.tsx` — CSS do print + estado/efeito de prévia.
+- `src/components/notifications/NotificationPreview.tsx` — nova prop e renderização da imagem.
 
-Em `buildPrintHTML` (mesmo arquivo), no bloco `.signatures` lado "Direção Escolar":
-- Se houver assinatura escolhida, renderizar `<img>` com altura ~52px centralizada **acima da linha**, seguida do nome do gestor logo abaixo do rótulo "Direção Escolar".
-- Buscar a imagem como signed URL e embutir como `data:` base64 no HTML (evita CORS no `window.print`).
-- Sem assinatura selecionada: mantém layout atual.
-- Ajuste leve do espaçamento para não quebrar o "fit em 1 página" já existente.
-
-### Detalhes técnicos
-- Hook `useManagementSignatures()` com React Query: lista, cria (upload + insert), define padrão (update batch), exclui (delete row + remove do storage).
-- Conversão para base64 via `fetch(signedUrl).then(r => r.blob()).then(FileReader)` antes de chamar `buildPrintHTML`.
-- Validação client-side: tipo (`image/png`, `image/jpeg`), tamanho ≤ 1 MB, nome ≤ 80 chars.
-- Sem alterações em outras telas/funcionalidades.
-
-### Arquivos
-- Nova migration: tabela + RLS + GRANTs + trigger de "única padrão".
-- Novo bucket via `storage_create_bucket` + migration de policies.
-- `src/pages/TeacherNotifications.tsx` — UI, seletor, integração no print.
-- Novo `src/components/notifications/ManagementSignaturesDialog.tsx`.
-- Novo `src/hooks/useManagementSignatures.ts`.
+Sem mudanças de backend, schema ou outras telas.
