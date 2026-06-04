@@ -284,7 +284,7 @@ function buildPrintHTML(data: NotificationData, docNumber: number, docYear: numb
   ${data.classes_subjects ? `<div class="section"><div class="label">Turmas / disciplina</div><div>${escapeHTML(data.classes_subjects)}</div></div>` : ''}
   ${data.teacher_justification ? `<div class="section"><div class="label">Justificativa apresentada pelo docente</div><div class="body" style="font-style:italic">${escapeHTML(data.teacher_justification)}</div></div>` : ''}
   <div class="signatures">
-    <div class="sig"><div class="line"><strong>Bruno de Jesus Oliveira</strong><div class="role">Coordenador Pedagógico</div></div></div>
+    <div class="sig"><div class="line"><strong>Direção Escolar</strong><div class="role">Direção Escolar</div></div></div>
     <div class="sig"><div class="line"><strong>Ciente do(a) professor(a)</strong><div class="role">Data: ____/____/______</div></div></div>
   </div>
   <div class="footer">Documento de acompanhamento pedagógico-administrativo de uso interno da gestão escolar.</div>
