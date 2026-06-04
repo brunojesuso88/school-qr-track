@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { format } from 'date-fns';
-import { CalendarIcon, FileDown, Printer, Save, Trash2, Pencil, Eraser, Eye } from 'lucide-react';
+import { CalendarIcon, FileDown, Printer, Save, Trash2, Pencil, Eraser, Eye, PenLine } from 'lucide-react';
 import DashboardLayout from '@/components/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -37,6 +37,12 @@ import {
   todayBR,
 } from '@/lib/notificationTemplates';
 import { NotificationPreview } from '@/components/notifications/NotificationPreview';
+import {
+  ManagementSignaturesDialog,
+  loadSignatures,
+  getSignatureAsDataUrl,
+  type ManagementSignature,
+} from '@/components/notifications/ManagementSignaturesDialog';
 
 interface NotificationRecord extends NotificationData {
   id: string;
@@ -84,10 +90,29 @@ function DatePick({ value, onChange, placeholder }: { value: string; onChange: (
   );
 }
 
-function buildPrintHTML(data: NotificationData, docNumber: number, docYear: number, customBody: string | null) {
+interface SignatureForPrint {
+  dataUrl: string;
+  name: string;
+  role_label: string | null;
+}
+
+function buildPrintHTML(
+  data: NotificationData,
+  docNumber: number,
+  docYear: number,
+  customBody: string | null,
+  signature?: SignatureForPrint | null,
+) {
   const stage = STAGE_TITLES[data.stage];
   const body = (customBody?.trim() || buildNotificationBody(data)).replace(/\n/g, '<br/>');
   const obligations = getResolvedObligations(data);
+  const sigHtml = signature
+    ? `<img src="${signature.dataUrl}" alt="Assinatura" style="display:block;margin:0 auto 2px;max-height:56px;max-width:80%;object-fit:contain;" />`
+    : '';
+  const sigName = signature
+    ? `<div style="color:#475569;font-size:9.5pt;margin-top:2px;">${escapeHTML(signature.name)}</div>`
+    : '';
+  const directionLabel = signature?.role_label?.trim() || 'Direção Escolar';
   return `<!doctype html><html><head><meta charset="utf-8" /><title> </title>
 <style>
   @page { size: A4 portrait; margin: 0; }
@@ -140,7 +165,7 @@ function buildPrintHTML(data: NotificationData, docNumber: number, docYear: numb
   ${data.classes_subjects ? `<div class="section"><div class="label">Turmas / disciplina</div><div>${escapeHTML(data.classes_subjects)}</div></div>` : ''}
   ${data.teacher_justification ? `<div class="section"><div class="label">Justificativa apresentada pelo docente</div><div class="body" style="font-style:italic">${escapeHTML(data.teacher_justification)}</div></div>` : ''}
   <div class="signatures">
-    <div class="sig"><div class="line"><strong>Direção Escolar</strong></div></div>
+    <div class="sig">${sigHtml}<div class="line"><strong>${escapeHTML(directionLabel)}</strong>${sigName}</div></div>
     <div class="sig"><div class="line"><strong>Ciente do(a) professor(a)</strong><div class="role">Data: ____/____/______</div></div></div>
   </div>
   <div class="footer">Documento de acompanhamento pedagógico-administrativo de uso interno da gestão escolar.</div>
@@ -177,6 +202,7 @@ function escapeHTML(s: string): string {
 
 export default function TeacherNotifications() {
   const { user } = useAuth();
+  const { userRole } = useAuth() as any;
   const [form, setForm] = useState<NotificationData>(emptyForm);
   const [customBody, setCustomBody] = useState<string>('');
   const [editingBody, setEditingBody] = useState(false);
@@ -187,6 +213,10 @@ export default function TeacherNotifications() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingYear, setEditingYear] = useState<number | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [signatures, setSignatures] = useState<ManagementSignature[]>([]);
+  const [selectedSignatureId, setSelectedSignatureId] = useState<string>('default');
+  const [sigDialogOpen, setSigDialogOpen] = useState(false);
+  const canManageSignatures = userRole === 'admin' || userRole === 'direction';
 
   // Filters
   const [fTeacher, setFTeacher] = useState('');
@@ -214,6 +244,19 @@ export default function TeacherNotifications() {
   };
 
   useEffect(() => { fetchRecords(); }, []);
+
+  const refreshSignatures = async () => {
+    try {
+      const list = await loadSignatures();
+      setSignatures(list);
+    } catch {
+      // silently ignore (RLS may block non-admin/direction)
+    }
+  };
+
+  useEffect(() => {
+    if (canManageSignatures) refreshSignatures();
+  }, [canManageSignatures]);
 
   const previewData: NotificationData = useMemo(() => form, [form]);
   const previewYear = editingYear ?? year;
@@ -290,10 +333,25 @@ export default function TeacherNotifications() {
     }
   };
 
-  const handlePrint = () => {
+  const resolveSelectedSignature = async (): Promise<SignatureForPrint | null> => {
+    if (selectedSignatureId === 'none') return null;
+    let sig: ManagementSignature | undefined;
+    if (selectedSignatureId === 'default') {
+      sig = signatures.find((s) => s.is_default);
+    } else {
+      sig = signatures.find((s) => s.id === selectedSignatureId);
+    }
+    if (!sig) return null;
+    const dataUrl = await getSignatureAsDataUrl(sig.storage_path);
+    if (!dataUrl) return null;
+    return { dataUrl, name: sig.name, role_label: sig.role_label };
+  };
+
+  const handlePrint = async () => {
     const err = validate();
     if (err) { toast.error(err); return; }
-    const html = buildPrintHTML(form, editingId ? (previewDocNumber) : previewDocNumber, previewYear, customBody || null);
+    const sig = await resolveSelectedSignature();
+    const html = buildPrintHTML(form, previewDocNumber, previewYear, customBody || null, sig);
     const w = window.open('', '_blank', 'width=900,height=1000');
     if (!w) { toast.error('Permita pop-ups para imprimir.'); return; }
     w.document.write(html);
@@ -329,7 +387,8 @@ export default function TeacherNotifications() {
     fetchRecords();
   };
 
-  const printRecord = (r: NotificationRecord) => {
+  const printRecord = async (r: NotificationRecord) => {
+    const sig = await resolveSelectedSignature();
     const html = buildPrintHTML(
       {
         teacher_name: r.teacher_name,
@@ -345,6 +404,7 @@ export default function TeacherNotifications() {
       r.doc_number,
       r.doc_year,
       r.custom_body,
+      sig,
     );
     const w = window.open('', '_blank', 'width=900,height=1000');
     if (!w) return;
@@ -380,6 +440,12 @@ export default function TeacherNotifications() {
             <Badge variant="secondary" className="text-xs">
               Editando {formatDocNumber(previewDocNumber, previewYear)}
             </Badge>
+          )}
+          {canManageSignatures && (
+            <Button variant="outline" size="sm" onClick={() => setSigDialogOpen(true)}>
+              <PenLine className="w-4 h-4 mr-2" />
+              Assinaturas da Gestão
+            </Button>
           )}
         </div>
 
@@ -501,6 +567,32 @@ export default function TeacherNotifications() {
                     <span className="text-muted-foreground">Numeração do documento</span>
                     <span className="font-mono font-semibold">{formatDocNumber(previewDocNumber, previewYear)}</span>
                   </div>
+
+                  {canManageSignatures && (
+                    <div className="space-y-2">
+                      <Label>Assinatura da gestão (impressão)</Label>
+                      <Select value={selectedSignatureId} onValueChange={setSelectedSignatureId}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="default">
+                            Padrão{(() => {
+                              const d = signatures.find((s) => s.is_default);
+                              return d ? ` (${d.name})` : ' (nenhuma cadastrada)';
+                            })()}
+                          </SelectItem>
+                          {signatures.map((s) => (
+                            <SelectItem key={s.id} value={s.id}>
+                              {s.name}{s.is_default ? ' — padrão' : ''}
+                            </SelectItem>
+                          ))}
+                          <SelectItem value="none">Sem assinatura</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground">
+                        A assinatura aparece acima da linha "Direção Escolar" no documento impresso.
+                      </p>
+                    </div>
+                  )}
 
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
@@ -641,6 +733,12 @@ export default function TeacherNotifications() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <ManagementSignaturesDialog
+        open={sigDialogOpen}
+        onOpenChange={setSigDialogOpen}
+        onChanged={refreshSignatures}
+      />
     </DashboardLayout>
   );
 }
