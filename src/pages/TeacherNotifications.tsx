@@ -215,6 +215,7 @@ export default function TeacherNotifications() {
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingYear, setEditingYear] = useState<number | null>(null);
+  const [activeTab, setActiveTab] = useState<'new' | 'history'>('new');
   const [previewOpen, setPreviewOpen] = useState(false);
   const [signatures, setSignatures] = useState<ManagementSignature[]>([]);
   const [selectedSignatureId, setSelectedSignatureId] = useState<string>('default');
@@ -391,6 +392,7 @@ export default function TeacherNotifications() {
     setEditingYear(r.doc_year);
     setPreviewDocNumber(r.doc_number);
     setEditingBody(!!r.custom_body);
+    setActiveTab('new');
     window.scrollTo({ top: 0, behavior: 'smooth' });
     toast.info(`Editando ${formatDocNumber(r.doc_number, r.doc_year)}`);
   };
@@ -465,7 +467,7 @@ export default function TeacherNotifications() {
           )}
         </div>
 
-        <Tabs defaultValue="new">
+        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'new' | 'history')}>
           <TabsList>
             <TabsTrigger value="new">Nova Notificação</TabsTrigger>
             <TabsTrigger value="history">Histórico ({records.length})</TabsTrigger>

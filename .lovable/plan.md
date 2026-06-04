@@ -1,33 +1,15 @@
-## Ajustes: assinaturas no final + prévia com imagem
+# Corrigir botão Editar no histórico
 
-### 1. Assinaturas coladas no rodapé (impressão, 1 página)
-Em `buildPrintHTML` (`src/pages/TeacherNotifications.tsx`):
-- Tornar `.sheet` um flex column com altura mínima da área útil da A4 (`min-height: 269mm`).
-- Agrupar o conteúdo superior (header, título, body, motivo, obrigações, turmas, justificativa) num wrapper `.content`.
-- Aplicar `margin-top: auto` no bloco `.signatures` para empurrá-lo ao final.
-- Reduzir o `margin-top: 64px` atual das assinaturas (não é mais necessário) e manter `page-break-inside: avoid`.
-- Footer continua após as assinaturas, com espaçamento menor.
-- Manter o `fitToOnePage()` como salvaguarda caso o conteúdo seja muito longo.
+## Problema
+Em `src/pages/TeacherNotifications.tsx`, o componente `Tabs` é **não-controlado** (`defaultValue="new"`). Ao clicar em "Editar" na aba **Histórico**, a função `loadRecord` preenche o formulário corretamente e exibe o toast "Editando XXXX/YYYY", mas a aba ativa permanece em **Histórico** — então o usuário não vê o formulário sendo carregado e parece que o botão "não funciona".
 
-Resultado: assinaturas sempre no rodapé da página, independentemente do tamanho do conteúdo, em uma única página.
+## Correção
+Tornar o `Tabs` controlado e mudar para a aba `new` automaticamente quando o usuário clicar em "Editar".
 
-### 2. Mostrar assinatura selecionada na prévia
-Atualmente `NotificationPreview` não recebe nem renderiza a imagem da assinatura.
+### Alterações em `src/pages/TeacherNotifications.tsx`
+1. Adicionar estado `const [activeTab, setActiveTab] = useState<'new' | 'history'>('new');`
+2. Trocar `<Tabs defaultValue="new">` por `<Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'new' | 'history')}>`
+3. Em `loadRecord`, adicionar `setActiveTab('new');` antes do `window.scrollTo(...)` para que o formulário fique visível imediatamente após clicar em "Editar".
+4. (Opcional) Em `resetForm`/cancelar edição, manter o usuário na aba atual — sem mudança adicional necessária.
 
-Em `src/pages/TeacherNotifications.tsx`:
-- Novo estado `previewSignature: SignatureForPrint | null`.
-- `useEffect` reagindo a `[selectedSignatureId, signatures]` que chama `resolveSelectedSignature()` e atualiza `previewSignature` (com guard para evitar race condition).
-- Passar `signature={previewSignature}` para `<NotificationPreview ... />` (tanto inline quanto no dialog de prévia ampliada).
-
-Em `src/components/notifications/NotificationPreview.tsx`:
-- Aceitar nova prop opcional `signature?: { dataUrl: string; name: string; role_label: string | null } | null`.
-- No bloco de assinaturas, lado "Direção Escolar":
-  - Se `signature` existir: renderizar `<img>` (altura ~52px, `object-fit: contain`) centralizado acima da linha; usar `signature.role_label || 'Direção Escolar'` como rótulo; mostrar `signature.name` em cinza abaixo do rótulo.
-  - Sem assinatura: layout atual inalterado.
-- Para refletir o "rodapé": aumentar o `marginTop` da grid de assinaturas (ex.: `marginTop: 96`) para aproximar visualmente a prévia do documento impresso.
-
-### Arquivos alterados
-- `src/pages/TeacherNotifications.tsx` — CSS do print + estado/efeito de prévia.
-- `src/components/notifications/NotificationPreview.tsx` — nova prop e renderização da imagem.
-
-Sem mudanças de backend, schema ou outras telas.
+Nenhuma mudança de backend, schema ou lógica de negócios.
