@@ -215,6 +215,7 @@ export default function TeacherNotifications() {
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingYear, setEditingYear] = useState<number | null>(null);
+  const [activeTab, setActiveTab] = useState<'new' | 'history'>('new');
   const [previewOpen, setPreviewOpen] = useState(false);
   const [signatures, setSignatures] = useState<ManagementSignature[]>([]);
   const [selectedSignatureId, setSelectedSignatureId] = useState<string>('default');
