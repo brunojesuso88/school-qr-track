@@ -110,7 +110,6 @@ export function NotificationPreview({ data, docNumber, docYear, customBody }: Pr
         <div style={{ textAlign: 'center' }}>
           <div style={{ borderTop: '1px solid #0B2E59', paddingTop: 6, fontSize: 12 }}>
             <strong>Direção Escolar</strong>
-            <div style={{ color: '#475569' }}>Direção Escolar</div>
           </div>
         </div>
         <div style={{ textAlign: 'center' }}>
