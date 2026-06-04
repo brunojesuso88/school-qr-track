@@ -111,9 +111,9 @@ function buildPrintHTML(data: NotificationData, docNumber: number, docYear: numb
   .body { text-align: justify; }
   ul { margin: 0; padding-left: 20px; }
   ul li { margin-bottom: 2px; }
-  .signatures { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 32px; page-break-inside: avoid; }
+  .signatures { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 64px; page-break-inside: avoid; }
   .sig { text-align: center; }
-  .sig .line { border-top: 1px solid #0B2E59; padding-top: 6px; font-size: 11pt; }
+  .sig .line { border-top: 1px solid #0B2E59; padding-top: 20px; font-size: 11pt; }
   .sig .role { color: #475569; }
   .footer { margin-top: 18px; border-top: 1px solid #e2e8f0; padding-top: 6px; text-align: center; font-size: 9pt; color: #64748b; font-style: italic; }
   @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
