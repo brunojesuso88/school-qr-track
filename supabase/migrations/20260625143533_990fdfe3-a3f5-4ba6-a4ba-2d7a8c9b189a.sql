@@ -1,0 +1,1 @@
+ALTER TABLE public.teacher_notifications ADD COLUMN IF NOT EXISTS management_guidance text;
