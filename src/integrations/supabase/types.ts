@@ -867,6 +867,7 @@ export type Database = {
           doc_number: number
           doc_year: number
           id: string
+          management_guidance: string | null
           new_deadline: string
           obligations: string[]
           original_deadline: string
@@ -885,6 +886,7 @@ export type Database = {
           doc_number: number
           doc_year: number
           id?: string
+          management_guidance?: string | null
           new_deadline: string
           obligations?: string[]
           original_deadline: string
@@ -903,6 +905,7 @@ export type Database = {
           doc_number?: number
           doc_year?: number
           id?: string
+          management_guidance?: string | null
           new_deadline?: string
           obligations?: string[]
           original_deadline?: string
