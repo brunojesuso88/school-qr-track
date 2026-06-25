@@ -62,6 +62,7 @@ const emptyForm: NotificationData = {
   new_deadline: '',
   classes_subjects: '',
   teacher_justification: '',
+  management_guidance: '',
 };
 
 function DatePick({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder: string }) {
@@ -166,6 +167,7 @@ function buildPrintHTML(
   ${obligations.length ? `<div class="section"><div class="label">Obrigações acadêmicas não cumpridas</div><ul>${obligations.map((o) => `<li>${escapeHTML(o)}</li>`).join('')}</ul></div>` : ''}
   ${data.classes_subjects ? `<div class="section"><div class="label">Turmas / disciplina</div><div>${escapeHTML(data.classes_subjects)}</div></div>` : ''}
   ${data.teacher_justification ? `<div class="section"><div class="label">Justificativa apresentada pelo docente</div><div class="body" style="font-style:italic">${escapeHTML(data.teacher_justification)}</div></div>` : ''}
+  ${data.management_guidance ? `<div class="section"><div class="label">Orientação da Gestão Escolar</div><div class="body">${escapeHTML(data.management_guidance)}</div></div>` : ''}
   </div>
   <div class="signatures">
     <div class="sig">${sigHtml}<div class="line"><strong>${escapeHTML(directionLabel)}</strong>${sigName}</div></div>
@@ -314,6 +316,7 @@ export default function TeacherNotifications() {
             new_deadline: form.new_deadline,
             classes_subjects: form.classes_subjects || null,
             teacher_justification: form.teacher_justification || null,
+            management_guidance: form.management_guidance || null,
             custom_body: customBody || null,
           })
           .eq('id', editingId);
@@ -335,6 +338,7 @@ export default function TeacherNotifications() {
           new_deadline: form.new_deadline,
           classes_subjects: form.classes_subjects || null,
           teacher_justification: form.teacher_justification || null,
+          management_guidance: form.management_guidance || null,
           custom_body: customBody || null,
           created_by: user?.id ?? null,
         });
@@ -386,6 +390,7 @@ export default function TeacherNotifications() {
       new_deadline: r.new_deadline,
       classes_subjects: r.classes_subjects || '',
       teacher_justification: r.teacher_justification || '',
+      management_guidance: (r as any).management_guidance || '',
     });
     setCustomBody(r.custom_body || '');
     setEditingId(r.id);
@@ -418,6 +423,7 @@ export default function TeacherNotifications() {
         new_deadline: r.new_deadline,
         classes_subjects: r.classes_subjects,
         teacher_justification: r.teacher_justification,
+        management_guidance: (r as any).management_guidance,
       },
       r.doc_number,
       r.doc_year,
@@ -577,6 +583,17 @@ export default function TeacherNotifications() {
                       placeholder="Inserir justificativa (se houver)"
                       value={form.teacher_justification || ''}
                       onChange={(e) => setForm({ ...form, teacher_justification: e.target.value })}
+                      maxLength={1500}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Orientação da Gestão escolar</Label>
+                    <Textarea
+                      rows={3}
+                      placeholder="Inserir orientação da gestão (se houver)"
+                      value={form.management_guidance || ''}
+                      onChange={(e) => setForm({ ...form, management_guidance: e.target.value })}
                       maxLength={1500}
                     />
                   </div>
