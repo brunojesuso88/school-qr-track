@@ -55,6 +55,7 @@ export interface NotificationData {
   new_deadline: string;
   classes_subjects?: string | null;
   teacher_justification?: string | null;
+  management_guidance?: string | null;
 }
 
 export function buildNotificationBody(data: NotificationData): string {
