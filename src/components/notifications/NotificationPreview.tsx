@@ -111,6 +111,16 @@ export function NotificationPreview({ data, docNumber, docYear, customBody, sign
         </div>
       )}
 
+      {/* Orientação da Gestão Escolar */}
+      {data.management_guidance?.trim() && (
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ fontWeight: 700, color: '#0D47A1', marginBottom: 4 }}>
+            Orientação da Gestão Escolar
+          </div>
+          <div style={{ textAlign: 'justify' }}>{data.management_guidance}</div>
+        </div>
+      )}
+
       {/* Signatures */}
       <div style={{ marginTop: 96, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 32, alignItems: 'end' }}>
         <div style={{ textAlign: 'center' }}>
