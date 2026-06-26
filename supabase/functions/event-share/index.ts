@@ -3,6 +3,9 @@ import { createClient } from 'npm:@supabase/supabase-js@2';
 const DEFAULT_APP_BASE = 'https://school-qr-track.lovable.app';
 const APP_BASE = (Deno.env.get('APP_BASE_URL') || DEFAULT_APP_BASE).replace(/\/+$/, '');
 
+const CRAWLER_UA = /facebookexternalhit|Facebot|WhatsApp|Twitterbot|LinkedInBot|Slackbot|TelegramBot|Discordbot|SkypeUriPreview|Googlebot|bingbot|Applebot|embedly|redditbot|Pinterest|vkShare|W3C_Validator|Iframely/i;
+const isCrawler = (ua: string | null) => !!ua && CRAWLER_UA.test(ua);
+
 const escapeHtml = (s: string) =>
   s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
@@ -18,6 +21,7 @@ const renderHtml = (opts: {
   image?: string | null;
   shareUrl: string;
   appUrl: string;
+  includeRedirect?: boolean;
 }) => {
   const t = escapeHtml(opts.title);
   const d = escapeHtml(opts.description);
@@ -28,6 +32,9 @@ const renderHtml = (opts: {
     ? `\n    <meta property="og:image" content="${img}" />\n    <meta property="og:image:secure_url" content="${img}" />\n    <meta name="twitter:image" content="${img}" />`
     : '';
   const twitterCard = img ? 'summary_large_image' : 'summary';
+  const redirectTags = opts.includeRedirect
+    ? `\n    <meta http-equiv="refresh" content="0; url=${app}" />\n    <script>window.location.replace(${JSON.stringify(opts.appUrl)});</script>`
+    : '';
   return `<!doctype html>
 <html lang="pt-BR">
   <head>
@@ -42,9 +49,7 @@ const renderHtml = (opts: {
     <meta property="og:url" content="${u}" />${ogImage}
     <meta name="twitter:card" content="${twitterCard}" />
     <meta name="twitter:title" content="${t}" />
-    <meta name="twitter:description" content="${d}" />
-    <meta http-equiv="refresh" content="0; url=${app}" />
-    <script>window.location.replace(${JSON.stringify(opts.appUrl)});</script>
+    <meta name="twitter:description" content="${d}" />${redirectTags}
   </head>
   <body style="font-family:system-ui;padding:24px;color:#111">
     <h1>${t}</h1>
@@ -53,6 +58,26 @@ const renderHtml = (opts: {
   </body>
 </html>`;
 };
+
+const htmlResponse = (body: string) =>
+  new Response(body, {
+    headers: {
+      'Content-Type': 'text/html; charset=utf-8',
+      'X-Content-Type-Options': 'nosniff',
+      'Cache-Control': 'public, max-age=300',
+      'Access-Control-Allow-Origin': '*',
+    },
+  });
+
+const redirectResponse = (location: string) =>
+  new Response(null, {
+    status: 302,
+    headers: {
+      Location: location,
+      'Cache-Control': 'no-store',
+      'Access-Control-Allow-Origin': '*',
+    },
+  });
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -66,25 +91,31 @@ Deno.serve(async (req) => {
   const id = url.searchParams.get('id') || '';
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+  const ua = req.headers.get('user-agent');
+  const crawler = isCrawler(ua);
+
   const fwdHost = req.headers.get('x-forwarded-host');
   const fwdProto = req.headers.get('x-forwarded-proto') || 'https';
   const shareSelfUrl = fwdHost
     ? `${fwdProto}://${fwdHost}${url.pathname}${url.search}`
     : url.toString().replace(/^http:\/\//, 'https://');
-  const fallback = (path: string, title = 'Sistema de Gestão', desc = 'Conteúdo da escola') =>
-    new Response(
-      renderHtml({
-        title,
-        description: desc,
-        image: null,
-        shareUrl: shareSelfUrl,
-        appUrl: `${APP_BASE}${path}`,
-      }),
-      { headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'public, max-age=60' } },
-    );
+  const fallback = (path: string, title = 'Sistema de Gestão', desc = 'Conteúdo da escola') => {
+    const appUrl = `${APP_BASE}${path}`;
+    if (!crawler) return redirectResponse(appUrl);
+    return htmlResponse(renderHtml({
+      title, description: desc, image: null,
+      shareUrl: shareSelfUrl, appUrl, includeRedirect: false,
+    }));
+  };
 
   if (!uuidRe.test(id) || (type !== 'project' && type !== 'school')) {
     return fallback('/');
+  }
+
+  // Humanos: redirect HTTP nativo direto, sem renderizar HTML intermediário.
+  if (!crawler) {
+    const appPath = type === 'project' ? `/events?id=${id}` : `/school-events?id=${id}`;
+    return redirectResponse(`${APP_BASE}${appPath}`);
   }
 
   const supabase = createClient(
@@ -137,13 +168,8 @@ Deno.serve(async (req) => {
     image: imageUrl,
     shareUrl: shareSelfUrl,
     appUrl: `${APP_BASE}${appPath}`,
+    includeRedirect: false,
   });
 
-  return new Response(html, {
-    headers: {
-      'Content-Type': 'text/html; charset=utf-8',
-      'Cache-Control': 'public, max-age=300',
-      'Access-Control-Allow-Origin': '*',
-    },
-  });
+  return htmlResponse(html);
 });
