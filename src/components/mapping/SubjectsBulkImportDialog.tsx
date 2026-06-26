@@ -156,7 +156,7 @@ const SubjectsBulkImportDialog = ({ open, onOpenChange }: Props) => {
         if (Object.keys(patch).length === 0) continue;
         const { error } = await supabase
           .from("mapping_global_subjects")
-          .update(patch)
+          .update(patch as any)
           .eq("id", s.matchedId!);
         if (!error) updated++;
       }
