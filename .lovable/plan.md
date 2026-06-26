@@ -1,49 +1,33 @@
 ## Diagnóstico
 
-Auditei o fluxo do botão "Compartilhar link" (Projetos/Eventos e Eventos Escolares):
+A captura mostra o navegador do WhatsApp renderizando o **código-fonte HTML** da edge function `event-share` como texto puro, em vez de executar o redirecionamento. Causas combinadas:
 
-1. `EventCard.tsx` / `SchoolEventCard.tsx` copiam a URL `https://<projeto>.supabase.co/functions/v1/event-share?type=project|school&id=<uuid>`.
-2. A edge function `event-share` responde 200 com `og:title`, `og:description`, `og:image` (signed URL de 7 dias) corretos — **as miniaturas funcionam**.
-3. O HTML faz `window.location.replace` para `https://school-qr-track.lovable.app/events?id=<uuid>` (ou `/school-events?id=<uuid>`).
-
-**Aqui começa o erro:** `/events` e `/school-events` são rotas protegidas por `AdminRoute`. Quando o destinatário do link:
-
-- **Não está logado** → `AdminRoute` faz `<Navigate to="/auth" replace />` sem preservar a URL. O `?id=<uuid>` é descartado.
-- **Faz login em seguida** → `Auth.tsx` (linhas 50-52) sempre navega para `/home` ou `/dashboard`, ignorando o destino original. O usuário cai numa página completamente diferente.
-- **Já está logado** mas no domínio personalizado (`edunexusbruno.tech`) → o link força ir para `school-qr-track.lovable.app`, onde a sessão não existe (cookies/localStorage são separados por origem), e cai no `/auth` novamente, perdendo o id.
-
-Resumo: a miniatura funciona; o redirecionamento "perde" o `id` e a rota original em todos os cenários comuns de quem recebe o link.
+1. **Sem redirect HTTP real.** A função retorna `200 OK` com HTML que tenta redirecionar via `<meta http-equiv="refresh">` + `window.location.replace(...)`. O navegador in-app do WhatsApp (principalmente no iOS) frequentemente bloqueia/ignora ambos — quando isso acontece o usuário fica preso na página intermediária. Em alguns dispositivos a heurística do WhatsApp até trata o conteúdo como texto e exibe o HTML cru.
+2. **Mesma URL serve crawler e humano.** O bot do WhatsApp precisa do HTML com `og:*`, mas o ser humano precisa de redirect imediato. Hoje os dois recebem a mesma resposta, e o humano depende de JS/meta-refresh que o WhatsApp pode ignorar.
+3. **Sem fallback visível enquanto redireciona.** Mesmo quando o JS funciona, há um flash do HTML antes do replace.
 
 ## Solução
 
-Três correções pequenas e definitivas:
+Servir respostas diferentes baseadas no `User-Agent`, mantendo as miniaturas funcionando para crawlers e dando redirect HTTP nativo para humanos.
 
-### 1. `AdminRoute.tsx` — preservar destino antes do login
-- Importar `useLocation`.
-- No `<Navigate to="/auth" replace />`, passar `state={{ from: location }}` para que o destino original (`pathname + search`) sobreviva à navegação.
+### Alterações em `supabase/functions/event-share/index.ts`
 
-### 2. `Auth.tsx` — voltar para o destino após login
-- Importar `useLocation`.
-- No `useEffect` que faz `navigate('/home' | '/dashboard')`, ler `location.state?.from` e, se existir um `pathname` válido (e o usuário tiver papel para acessá-lo), navegar para `from.pathname + from.search` em vez do default.
-- Fallback continua sendo `/home` ou `/dashboard`.
+1. **Detectar crawler de preview** pelo `User-Agent`:
+   - Bots conhecidos (regex): `facebookexternalhit`, `Facebot`, `WhatsApp`, `Twitterbot`, `LinkedInBot`, `Slackbot`, `TelegramBot`, `Discordbot`, `SkypeUriPreview`, `Googlebot`, `bingbot`, `Applebot`, `embedly`, `redditbot`.
+2. **Se for crawler** → retornar o HTML atual com as meta tags `og:*` (sem `meta refresh` nem `<script>` — só metadata + link). Isso garante a miniatura.
+3. **Se for humano** → retornar **HTTP 302** com header `Location: <APP_BASE>/<rota>?id=<uuid>`. Redirect nativo do servidor é universal — funciona em qualquer navegador, inclusive no in-app do WhatsApp/iOS, e não há flash de HTML.
+4. **Fallback** (sem User-Agent ou erro) → manter o HTML com `<meta refresh>` + link clicável, como rede de segurança.
+5. **Endurecer Content-Type**: garantir `Content-Type: text/html; charset=utf-8` e adicionar `X-Content-Type-Options: nosniff` apenas na resposta HTML (no 302 não precisa de body).
 
-### 3. `event-share/index.ts` — respeitar o domínio que o usuário publicou
-- Em vez de fixar `PROJECT_BASE = 'https://school-qr-track.lovable.app'`, ler um override de `Deno.env.get('APP_BASE_URL')` (com fallback para `https://school-qr-track.lovable.app`).
-- Definir o secret `APP_BASE_URL = https://edunexusbruno.tech` para que os redirecionamentos usem o domínio personalizado, onde o usuário já tem sessão ativa.
-- Corrigir também o `canonical`/`og:url` no HTML para usar `https://<projeto>.supabase.co/functions/v1/event-share?...` (`x-forwarded-proto` + `x-forwarded-host`) em vez de `http://...` (hoje aparece "http" no canonical, o que prejudica o preview em algumas plataformas).
+### Por que isso resolve
 
-### Por que essa combinação resolve definitivamente
+- Crawlers continuam vendo `og:title`, `og:description`, `og:image` → miniatura preservada.
+- Humanos recebem redirect HTTP nativo → o navegador do WhatsApp navega direto para `https://edunexusbruno.tech/events?id=...` ou `/school-events?id=...` sem nunca renderizar a página intermediária.
+- Combinado com as correções já feitas em `AdminRoute` e `Auth`, o `?id=<uuid>` é preservado mesmo se for necessário logar.
 
-- A miniatura continua vindo da edge function (necessária para crawlers de WhatsApp/Facebook/LinkedIn que não executam JS).
-- O usuário cai no domínio onde já tem sessão, então `AdminRoute` libera direto e o `?id=<uuid>` abre o modal do evento/projeto correto.
-- Se ainda não estiver logado, o destino é preservado e ele é levado direto ao item após o login — sem cair em `/home` por engano.
+### Detalhes técnicos
 
-## Detalhes técnicos
-
-- Arquivos alterados:
-  - `src/components/AdminRoute.tsx` (≈3 linhas)
-  - `src/pages/Auth.tsx` (≈6 linhas no efeito de redirecionamento)
-  - `supabase/functions/event-share/index.ts` (PROJECT_BASE via env + canonical com https)
-- Novo secret de edge function: `APP_BASE_URL` (será solicitado com `add_secret`).
-- Sem mudanças de schema, RLS, ou storage. Sem impacto em links já compartilhados — eles passarão a redirecionar corretamente assim que a função for re-deploy.
-- O cache de preview do WhatsApp/Facebook permanece — capas alteradas só atualizam quando a plataforma re-faz o scrape.
+- Arquivo alterado: `supabase/functions/event-share/index.ts` (~30 linhas adicionadas).
+- Sem mudanças de schema, RLS, secrets, frontend ou storage.
+- Re-deploy da função aplica para todos os links já compartilhados.
+- Cache do WhatsApp/Facebook continua igual — previews antigos só atualizam quando a plataforma re-faz o scrape (pode-se forçar via [Facebook Sharing Debugger](https://developers.facebook.com/tools/debug/)).
