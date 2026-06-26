@@ -23,3 +23,6 @@ verify_jwt = false
 
 [functions.conflict-chat]
 verify_jwt = false
+
+[functions.event-share]
+verify_jwt = false

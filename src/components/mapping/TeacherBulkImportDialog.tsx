@@ -244,7 +244,7 @@ const TeacherBulkImportDialog = ({ open, onOpenChange }: TeacherBulkImportDialog
         if (Object.keys(patch).length === 0) continue;
         const { error: upErr } = await supabase
           .from("mapping_teachers")
-          .update(patch)
+          .update(patch as any)
           .eq("id", t.matchedTeacherId!);
         if (upErr) {
           console.error("Erro ao atualizar professor", t.name, upErr);

@@ -23,7 +23,8 @@ export default function SchoolEventCard({ event, onView, onEdit, onDelete }: Pro
   const [cover, setCover] = useState<string | null>(null);
 
   const handleShare = async () => {
-    const url = `${window.location.origin}/school-events?id=${event.id}`;
+    const base = import.meta.env.VITE_SUPABASE_URL as string;
+    const url = `${base}/functions/v1/event-share?type=school&id=${event.id}`;
     try {
       await navigator.clipboard.writeText(url);
       toast.success('Link copiado para a área de transferência');
