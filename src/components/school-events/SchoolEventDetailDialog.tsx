@@ -48,9 +48,9 @@ export default function SchoolEventDetailDialog({ open, onOpenChange, event }: P
         </DialogHeader>
 
         <div className="space-y-4">
-          <div className="aspect-video rounded-md overflow-hidden bg-muted border border-border flex items-center justify-center">
+          <div className="rounded-md overflow-hidden bg-muted border border-border flex items-center justify-center max-h-[60vh] min-h-[200px]">
             {cover ? (
-              <img src={cover} alt={event.name} className="w-full h-full object-cover" />
+              <img src={cover} alt={event.name} className="max-h-[60vh] w-auto max-w-full object-contain" />
             ) : (
               <ImageIcon className="w-12 h-12 text-muted-foreground/40" />
             )}
