@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -43,16 +43,22 @@ const Auth = () => {
   const [isLoading, setIsLoading] = useState(false);
   const { signIn, signUp, user, loading, userRole } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
 
   useEffect(() => {
     if (user && !loading) {
+      const from = (location.state as { from?: { pathname?: string; search?: string } } | null)?.from;
+      if (from?.pathname && from.pathname !== '/auth') {
+        navigate(`${from.pathname}${from.search ?? ''}`, { replace: true });
+        return;
+      }
       if (userRole === 'admin' || userRole === 'direction') {
-        navigate('/home');
+        navigate('/home', { replace: true });
       } else {
-        navigate('/dashboard');
+        navigate('/dashboard', { replace: true });
       }
     }
-  }, [user, loading, userRole, navigate]);
+  }, [user, loading, userRole, navigate, location.state]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
