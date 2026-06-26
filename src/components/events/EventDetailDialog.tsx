@@ -8,6 +8,15 @@ import { supabase } from '@/integrations/supabase/client';
 
 export default function EventDetailDialog({ open, onOpenChange, event }: { open: boolean; onOpenChange: (o: boolean) => void; event: SchoolEvent | null }) {
   const [thumbs, setThumbs] = useState<Record<string, string>>({});
+  const [cover, setCover] = useState<string | null>(null);
+
+  useEffect(() => {
+    const path = event?.cover_image || event?.images?.[0];
+    if (!path) { setCover(null); return; }
+    supabase.storage.from('school-events').createSignedUrl(path, 3600).then(({ data }) => {
+      setCover(data?.signedUrl ?? null);
+    });
+  }, [event]);
 
   useEffect(() => {
     if (!event) return;
@@ -42,6 +51,12 @@ export default function EventDetailDialog({ open, onOpenChange, event }: { open:
         </DialogHeader>
 
         <div className="space-y-5 pt-2">
+          {cover && (
+            <div className="rounded-md overflow-hidden bg-muted border border-border flex items-center justify-center max-h-[60vh] min-h-[200px]">
+              <img src={cover} alt={event.title} className="max-h-[60vh] w-auto max-w-full object-contain" />
+            </div>
+          )}
+
           {event.resumo_ia && <p className="italic text-muted-foreground border-l-2 border-primary pl-3">{event.resumo_ia}</p>}
 
           <div className="text-xs text-muted-foreground">
