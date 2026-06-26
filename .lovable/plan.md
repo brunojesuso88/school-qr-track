@@ -1,51 +1,49 @@
+## Diagnóstico
 
-## Problema
+Auditei o fluxo do botão "Compartilhar link" (Projetos/Eventos e Eventos Escolares):
 
-Hoje o botão "Compartilhar link" em **Projetos e Eventos** (`EventCard`) e **Eventos Escolares** (`SchoolEventCard`) copia uma URL do tipo `/events?id=…` ou `/school-events?id=…`. Como o app é uma SPA (apenas `index.html` estático) e o bucket `school-events` é **privado**, os crawlers de WhatsApp/Facebook/LinkedIn/Slack nunca conseguem ler uma `og:image` específica do item — então a miniatura sai vazia ou genérica.
+1. `EventCard.tsx` / `SchoolEventCard.tsx` copiam a URL `https://<projeto>.supabase.co/functions/v1/event-share?type=project|school&id=<uuid>`.
+2. A edge function `event-share` responde 200 com `og:title`, `og:description`, `og:image` (signed URL de 7 dias) corretos — **as miniaturas funcionam**.
+3. O HTML faz `window.location.replace` para `https://school-qr-track.lovable.app/events?id=<uuid>` (ou `/school-events?id=<uuid>`).
 
-Para que cada link compartilhado mostre a capa do evento/projeto correspondente, precisamos de uma resposta HTML renderizada no servidor com as meta tags `og:*` corretas. SPA + cliente não resolve.
+**Aqui começa o erro:** `/events` e `/school-events` são rotas protegidas por `AdminRoute`. Quando o destinatário do link:
+
+- **Não está logado** → `AdminRoute` faz `<Navigate to="/auth" replace />` sem preservar a URL. O `?id=<uuid>` é descartado.
+- **Faz login em seguida** → `Auth.tsx` (linhas 50-52) sempre navega para `/home` ou `/dashboard`, ignorando o destino original. O usuário cai numa página completamente diferente.
+- **Já está logado** mas no domínio personalizado (`edunexusbruno.tech`) → o link força ir para `school-qr-track.lovable.app`, onde a sessão não existe (cookies/localStorage são separados por origem), e cai no `/auth` novamente, perdendo o id.
+
+Resumo: a miniatura funciona; o redirecionamento "perde" o `id` e a rota original em todos os cenários comuns de quem recebe o link.
 
 ## Solução
 
-Criar uma **edge function pública** `event-share` que devolve um HTML mínimo com as meta tags Open Graph/Twitter Card preenchidas a partir do registro do banco, e em seguida redireciona o usuário humano para a rota real da SPA.
+Três correções pequenas e definitivas:
 
-O botão "Compartilhar link" passa a copiar a URL dessa edge function em vez da URL da SPA.
+### 1. `AdminRoute.tsx` — preservar destino antes do login
+- Importar `useLocation`.
+- No `<Navigate to="/auth" replace />`, passar `state={{ from: location }}` para que o destino original (`pathname + search`) sobreviva à navegação.
 
-### Comportamento da edge function
+### 2. `Auth.tsx` — voltar para o destino após login
+- Importar `useLocation`.
+- No `useEffect` que faz `navigate('/home' | '/dashboard')`, ler `location.state?.from` e, se existir um `pathname` válido (e o usuário tiver papel para acessá-lo), navegar para `from.pathname + from.search` em vez do default.
+- Fallback continua sendo `/home` ou `/dashboard`.
 
-Endpoint: `GET /functions/v1/event-share?type=project|school&id=<uuid>`
+### 3. `event-share/index.ts` — respeitar o domínio que o usuário publicou
+- Em vez de fixar `PROJECT_BASE = 'https://school-qr-track.lovable.app'`, ler um override de `Deno.env.get('APP_BASE_URL')` (com fallback para `https://school-qr-track.lovable.app`).
+- Definir o secret `APP_BASE_URL = https://edunexusbruno.tech` para que os redirecionamentos usem o domínio personalizado, onde o usuário já tem sessão ativa.
+- Corrigir também o `canonical`/`og:url` no HTML para usar `https://<projeto>.supabase.co/functions/v1/event-share?...` (`x-forwarded-proto` + `x-forwarded-host`) em vez de `http://...` (hoje aparece "http" no canonical, o que prejudica o preview em algumas plataformas).
 
-1. Busca o registro com **service role** (sem exigir login do crawler):
-   - `type=project` → tabela `school_events` (usada por `EventCard` / página *Projetos e Eventos*).
-   - `type=school`  → tabela `school_event_simple` (usada por `SchoolEventCard` / página *Eventos Escolares*).
-2. Gera uma **signed URL** longa (7 dias) para `cover_image` (ou primeira imagem em `images[]`) no bucket privado `school-events`. Como a função é chamada a cada novo scrape, a URL sempre estará válida na hora.
-3. Responde `text/html` com:
-   - `<title>` = nome/título do item
-   - `<meta name="description">` = resumo curto (descrição truncada em ~160 chars)
-   - `<meta property="og:title|og:description|og:image|og:url|og:type>` 
-   - `<meta name="twitter:card" content="summary_large_image">` + `twitter:title/description/image`
-   - `<meta http-equiv="refresh" content="0; url=/events?id=…">` para redirecionar o navegador humano
-   - Fallback `<script>location.replace(...)</script>` e um link clicável dentro do `<body>`
-4. Headers de cache: `Cache-Control: public, max-age=300` para acelerar re-scrapes.
-5. Se o item não tiver capa, omite `og:image` (preview sem miniatura é melhor do que miniatura quebrada).
-6. Se o id for inválido ou não existir, devolve HTML simples com redirecionamento para a página de listagem.
+### Por que essa combinação resolve definitivamente
 
-### Mudanças na UI
+- A miniatura continua vindo da edge function (necessária para crawlers de WhatsApp/Facebook/LinkedIn que não executam JS).
+- O usuário cai no domínio onde já tem sessão, então `AdminRoute` libera direto e o `?id=<uuid>` abre o modal do evento/projeto correto.
+- Se ainda não estiver logado, o destino é preservado e ele é levado direto ao item após o login — sem cair em `/home` por engano.
 
-- `src/components/events/EventCard.tsx`: `handleShare` passa a copiar
-  `${origin}/functions/v1/event-share?type=project&id=${event.id}`.
-- `src/components/school-events/SchoolEventCard.tsx`: idem com `type=school`.
-- Mensagem do toast permanece a mesma ("Link copiado…").
+## Detalhes técnicos
 
-### Detalhes técnicos
-
-- A função roda com `verify_jwt = false` no `supabase/config.toml` (crawlers não enviam JWT) e usa `SUPABASE_SERVICE_ROLE_KEY` apenas internamente para ler o registro e gerar a signed URL.
-- O retorno expõe somente título, descrição e capa — campos já considerados públicos em um link compartilhado pelo gestor. Nenhum dado sensível (alunos, ocorrências, etc.) entra no HTML.
-- Sanitização básica do título/descrição (escape de `<`, `>`, `&`, `"`) para evitar injeção nas meta tags.
-- URL da edge function montada via `import.meta.env.VITE_SUPABASE_URL` para apontar sempre ao ambiente correto.
-- Aviso pós-implantação: previews em WhatsApp/Telegram ficam em cache nos servidores deles; alterar a capa pode levar horas para refletir até que cada plataforma faça um novo scrape.
-
-### Fora de escopo
-
-- Não estamos tornando o bucket público nem criando preview de imagens compostas (ex.: card com título por cima da capa). Apenas a capa original é usada.
-- Não estamos adicionando rotas SSR ao app nem alterando o `index.html` sitewide.
+- Arquivos alterados:
+  - `src/components/AdminRoute.tsx` (≈3 linhas)
+  - `src/pages/Auth.tsx` (≈6 linhas no efeito de redirecionamento)
+  - `supabase/functions/event-share/index.ts` (PROJECT_BASE via env + canonical com https)
+- Novo secret de edge function: `APP_BASE_URL` (será solicitado com `add_secret`).
+- Sem mudanças de schema, RLS, ou storage. Sem impacto em links já compartilhados — eles passarão a redirecionar corretamente assim que a função for re-deploy.
+- O cache de preview do WhatsApp/Facebook permanece — capas alteradas só atualizam quando a plataforma re-faz o scrape.

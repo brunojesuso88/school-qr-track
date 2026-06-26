@@ -1,6 +1,7 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
-const PROJECT_BASE = 'https://school-qr-track.lovable.app';
+const DEFAULT_APP_BASE = 'https://school-qr-track.lovable.app';
+const APP_BASE = (Deno.env.get('APP_BASE_URL') || DEFAULT_APP_BASE).replace(/\/+$/, '');
 
 const escapeHtml = (s: string) =>
   s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -65,17 +66,19 @@ Deno.serve(async (req) => {
   const id = url.searchParams.get('id') || '';
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-  const baseOrigin = req.headers.get('x-forwarded-host')
-    ? `https://${req.headers.get('x-forwarded-host')}`
-    : PROJECT_BASE;
+  const fwdHost = req.headers.get('x-forwarded-host');
+  const fwdProto = req.headers.get('x-forwarded-proto') || 'https';
+  const shareSelfUrl = fwdHost
+    ? `${fwdProto}://${fwdHost}${url.pathname}${url.search}`
+    : url.toString().replace(/^http:\/\//, 'https://');
   const fallback = (path: string, title = 'Sistema de Gestão', desc = 'Conteúdo da escola') =>
     new Response(
       renderHtml({
         title,
         description: desc,
         image: null,
-        shareUrl: url.toString(),
-        appUrl: `${PROJECT_BASE}${path}`,
+        shareUrl: shareSelfUrl,
+        appUrl: `${APP_BASE}${path}`,
       }),
       { headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'public, max-age=60' } },
     );
@@ -132,8 +135,8 @@ Deno.serve(async (req) => {
     title: truncate(title, 90),
     description: truncate(description, 200),
     image: imageUrl,
-    shareUrl: url.toString(),
-    appUrl: `${PROJECT_BASE}${appPath}`,
+    shareUrl: shareSelfUrl,
+    appUrl: `${APP_BASE}${appPath}`,
   });
 
   return new Response(html, {
