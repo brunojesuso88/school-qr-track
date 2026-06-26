@@ -1,4 +1,4 @@
-import { Navigate } from 'react-router-dom';
+import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 
 interface AdminRouteProps {
@@ -7,6 +7,7 @@ interface AdminRouteProps {
 
 const AdminRoute = ({ children }: AdminRouteProps) => {
   const { user, loading, isDashboardUser, isStaffOnly } = useAuth();
+  const location = useLocation();
 
   if (loading) {
     return (
@@ -21,7 +22,7 @@ const AdminRoute = ({ children }: AdminRouteProps) => {
   }
 
   if (!user) {
-    return <Navigate to="/auth" replace />;
+    return <Navigate to="/auth" replace state={{ from: location }} />;
   }
 
   // Funcionário vai para página simplificada de QR
@@ -31,7 +32,7 @@ const AdminRoute = ({ children }: AdminRouteProps) => {
 
   // Apenas usuários do dashboard (admin, direção, professor) podem acessar
   if (!isDashboardUser) {
-    return <Navigate to="/auth" replace />;
+    return <Navigate to="/auth" replace state={{ from: location }} />;
   }
 
   return <>{children}</>;
