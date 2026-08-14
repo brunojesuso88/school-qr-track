@@ -3,6 +3,9 @@ project_id = "firhmtfjxagrmyltsypd"
 [functions.parse-students-pdf]
 verify_jwt = false
 
+[functions.parse-grades-pdf]
+verify_jwt = false
+
 [functions.parse-classes-pdf]
 verify_jwt = false
 

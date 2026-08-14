@@ -47,6 +47,7 @@ interface ReviewRow extends ExtractedRow {
   matched_name: string | null;
   match_score: number;
   flags: string[];
+  second_pass_value?: string | null;
 }
 
 const normalize = (s: unknown) =>
