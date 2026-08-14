@@ -130,6 +130,7 @@ const Classes = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { userRole } = useAuth();
   const canViewGuardianPhone = userRole === 'admin' || userRole === 'direction';
+  const canManageGrades = userRole === 'admin' || userRole === 'direction';
   const [classes, setClasses] = useState<ClassItem[]>([]);
   const [studentCounts, setStudentCounts] = useState<Record<string, number>>({});
   const [classesWithAttendance, setClassesWithAttendance] = useState<Set<string>>(new Set());
@@ -150,6 +151,9 @@ const Classes = () => {
   const [isSavingStudents, setIsSavingStudents] = useState(false);
   const [attendanceClass, setAttendanceClass] = useState<string | null>(null);
   const [summaryClass, setSummaryClass] = useState<string | null>(null);
+
+  // Boletim / notas
+  const [gradesClass, setGradesClass] = useState<ClassItem | null>(null);
   
   // Photo upload state
   const photoInputRef = useRef<HTMLInputElement>(null);
@@ -1346,6 +1350,13 @@ const Classes = () => {
           open={!!summaryClass}
           onOpenChange={(open) => !open && setSummaryClass(null)}
           className={summaryClass}
+        />
+
+        {/* Importação de boletim / notas */}
+        <GradesImportDialog
+          open={!!gradesClass}
+          onOpenChange={(open) => !open && setGradesClass(null)}
+          classItem={gradesClass}
         />
 
         {/* Attendance Dialog */}
