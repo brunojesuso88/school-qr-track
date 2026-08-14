@@ -144,28 +144,33 @@ function extractJson(content: string): any {
   return JSON.parse(text.slice(start, end + 1));
 }
 
-const SYSTEM_PROMPT = `Você extrai BOLETINS ESCOLARES (tabelas de notas) de PDFs com precisão absoluta.
+const SYSTEM_PROMPT = `Você extrai NOTAS de BOLETINS ESCOLARES (padrão SIAEP/SEDUC) em PDF com precisão absoluta.
+
+ESTRUTURA TÍPICA DO DOCUMENTO:
+- UMA PÁGINA POR ALUNO. O cabeçalho da página traz Aluno(a), código do aluno, escola e Turma.
+- Cada linha da grade é uma DISCIPLINA. As colunas são: 1º Período, 2º Período, 3º Período, 4º Período, Média Final, Rec. Final, Cons. Class, Pendência e Final.
+- Dentro de cada período existem DUAS subcolunas: "Nota" e "Faltas".
 
 REGRAS OBRIGATÓRIAS:
-1. Analise TODAS as páginas do documento, da primeira à última.
-2. Identifique os cabeçalhos: disciplinas (colunas ou linhas) e períodos/etapas (1º Bimestre, 2º Bimestre, 3º, 4º, Média, Final...).
-3. Reporte UMA entrada por célula da matriz aluno × disciplina × período.
-4. NUNCA invente uma nota. Se a célula estiver vazia, ilegível ou ausente, use raw_value = null.
-5. Preserve o valor exatamente como aparece no PDF em raw_value (inclusive vírgula decimal). Não arredonde, não converta, não recalcule médias.
-6. Notas zero (0, 0,0) são notas válidas e devem ser reportadas.
-7. Preserve os nomes dos alunos e das disciplinas exatamente como aparecem (com acentos).
-8. Se um aluno aparecer em mais de uma página (continuação de tabela), reporte as células de todas as páginas.
-9. confidence entre 0 e 1 indica sua certeza de leitura daquela célula (baixa quando o dígito está borrado, cortado, ou a coluna é ambígua).
-10. page = número da página (1-based) onde a célula foi lida.
+1. Analise TODAS as páginas, da primeira à última. Nenhuma página pode ser ignorada.
+2. IGNORE COMPLETAMENTE a subcoluna FALTAS. Nunca reporte faltas, nunca confunda um valor de faltas com nota. Separe as células pela POSIÇÃO da coluna: a primeira subcoluna do período é a Nota, a segunda é Faltas (descartar).
+3. Reporte UMA entrada por célula de NOTA: aluno × disciplina × período/etapa.
+4. NUNCA invente valores. Célula vazia => note_raw = null (significa "sem nota informada").
+5. "0,00" (ou 0, 0,0) escrito na célula é uma NOTA REAL igual a zero e deve ser reportado como note_raw "0,00". VAZIO NUNCA é zero e zero nunca é vazio.
+6. Preserve o valor exatamente como aparece (com vírgula decimal). Não arredonde, não converta, não recalcule médias.
+7. DESCUBRA as disciplinas dinamicamente lendo as linhas de cada página. NÃO assuma que a lista de disciplinas da primeira página vale para as outras: podem existir disciplinas preenchidas apenas em algumas páginas.
+8. Reporte também as colunas finais quando houver valor: use period exatamente "Média Final", "Rec. Final", "Cons. Class", "Pendência" ou "Final".
+9. Para cada linha informe student_name (exatamente como no PDF, com acentos), student_code (código/matrícula do cabeçalho quando existir), class_code (a Turma do cabeçalho) e page (1-based).
+10. confidence entre 0 e 1 = sua certeza da leitura daquela célula (use valor baixo quando o dígito estiver borrado/cortado ou a coluna for ambígua).
 
 Responda SOMENTE com JSON válido no formato:
 {
   "pages": number,
-  "periods": [{"label": "1º Bimestre", "kind": "period" | "final"}],
-  "subjects": ["Matemática", "Português"],
-  "students": ["NOME DO ALUNO"],
-  "rows": [{"student_name": "NOME", "subject": "Matemática", "period": "1º Bimestre", "raw_value": "8,5", "page": 1, "confidence": 0.98}],
-  "notes": ["observações sobre problemas de leitura, cortes de linha, colunas ambíguas"]
+  "periods": [{"label": "1º Período", "kind": "period" | "final"}],
+  "subjects": ["ARTE", "BIOLOGIA"],
+  "students": [{"name": "NOME DO ALUNO", "student_code": "123456", "class_code": "26RMM100", "page": 1}],
+  "rows": [{"student_name": "NOME", "student_code": "123456", "class_code": "26RMM100", "subject": "ARTE", "period": "1º Período", "note_raw": "3,17", "page": 1, "confidence": 0.98}],
+  "notes": ["observações sobre cortes de linha, colunas ambíguas, páginas sem aluno"]
 }`;
 
 function buildExtractionBody(pdfBase64: string, fileName: string, expected: ExpectedSubject[], students: ClassStudent[]) {
@@ -181,7 +186,7 @@ function buildExtractionBody(pdfBase64: string, fileName: string, expected: Expe
       {
         role: 'user',
         content: [
-          { type: 'text', text: `Extraia todas as notas deste boletim.\n${subjectHint}\n${studentHint}` },
+          { type: 'text', text: `Extraia todas as NOTAS deste boletim (uma página por aluno). Ignore a coluna Faltas.\n${subjectHint}\n${studentHint}` },
           { type: 'file', file: { filename: fileName || 'boletim.pdf', file_data: `data:application/pdf;base64,${pdfBase64}` } },
         ],
       },
@@ -193,14 +198,14 @@ function buildExtractionBody(pdfBase64: string, fileName: string, expected: Expe
 function buildReconciliationBody(pdfBase64: string, fileName: string, suspects: ReviewRow[]) {
   const list = suspects
     .slice(0, 120)
-    .map((r) => `- aluno: ${r.student_name} | disciplina: ${r.subject} | período: ${r.period} | lido: ${r.raw_value ?? 'VAZIO'} | página: ${r.page ?? '?'}`)
+      .map((r) => `- aluno: ${r.student_name} | disciplina: ${r.subject} | período: ${r.period} | lido: ${r.note_raw ?? 'VAZIO'} | página: ${r.source_page ?? '?'}`)
     .join('\n');
   return {
     messages: [
       {
         role: 'system',
-        content: `Você revisa células específicas de um boletim escolar em PDF. Releia SOMENTE as células listadas e confirme o valor exato. Se a célula estiver realmente vazia, retorne raw_value null. Nunca invente valores.
-Responda SOMENTE com JSON: {"rows":[{"student_name":"...","subject":"...","period":"...","raw_value":"8,5"|null,"confidence":0.0}]}`,
+        content: `Você revisa células específicas de um boletim escolar (padrão SIAEP) em PDF. Releia SOMENTE as células de NOTA listadas (ignore a coluna Faltas) e confirme o valor exato na página indicada. Se a célula estiver realmente vazia, retorne note_raw null. "0,00" é nota zero válida, diferente de vazio. Nunca invente valores.
+Responda SOMENTE com JSON: {"rows":[{"student_name":"...","subject":"...","period":"...","note_raw":"8,5"|null,"confidence":0.0}]}`,
       },
       {
         role: 'user',
