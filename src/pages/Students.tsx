@@ -1267,6 +1267,11 @@ const Students = () => {
             setRemovePhoto(false);
           }}
         />
+
+        <OccurrencesReportDialog
+          open={isOccurrencesReportOpen}
+          onOpenChange={setIsOccurrencesReportOpen}
+        />
       </div>
     </DashboardLayout>
   );
