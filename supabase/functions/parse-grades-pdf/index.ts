@@ -515,8 +515,9 @@ serve(async (req) => {
           const map2 = new Map<string, { raw_value: string | null; confidence: number | null }>();
           for (const r of payload2?.rows ?? []) {
             const key = `${normalize(r?.student_name)}||${normalize(r?.subject)}||${normalize(r?.period)}`;
+            const note = r?.note_raw != null ? String(r.note_raw) : (r?.raw_value != null ? String(r.raw_value) : null);
             map2.set(key, {
-              raw_value: r?.raw_value != null ? String(r.raw_value) : null,
+              raw_value: note,
               confidence: typeof r?.confidence === 'number' ? r.confidence : null,
             });
           }
