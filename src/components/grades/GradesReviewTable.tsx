@@ -78,7 +78,7 @@ export const GradesReviewTable = ({
                 ) : (
                   <div className="space-y-1">
                     <p className="text-[11px] text-destructive">PDF: {row.student_name}</p>
-                    <Select value="" onValueChange={(v) => onChangeStudent(index, v)}>
+                    <Select value={row.student_id ?? undefined} onValueChange={(v) => onChangeStudent(index, v)}>
                       <SelectTrigger className="h-8 text-xs">
                         <SelectValue placeholder="Selecionar aluno..." />
                       </SelectTrigger>
