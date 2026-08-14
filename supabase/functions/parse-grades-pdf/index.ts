@@ -1,0 +1,480 @@
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { requireAuth } from "../_shared/auth.ts";
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
+
+const MAX_PDF_SIZE_MB = 10;
+const MAX_PDF_SIZE_BYTES = MAX_PDF_SIZE_MB * 1024 * 1024;
+
+const PRIMARY_MODEL = 'google/gemini-2.5-pro';
+const FALLBACK_MODEL = 'google/gemini-2.5-flash';
+
+interface ClassStudent {
+  id: string;
+  full_name: string;
+  student_id?: string | null;
+}
+
+interface ExpectedSubject {
+  name: string;
+  weekly_classes?: number | null;
+}
+
+interface ExtractedRow {
+  student_name: string;
+  subject: string;
+  period: string;
+  raw_value: string | null;
+  page?: number | null;
+  confidence?: number | null;
+}
+
+interface ExtractionPayload {
+  pages?: number | null;
+  periods?: { label: string; kind?: string }[];
+  subjects?: string[];
+  students?: string[];
+  rows?: ExtractedRow[];
+  notes?: string[];
+}
+
+interface ReviewRow extends ExtractedRow {
+  value: number | null;
+  student_id: string | null;
+  matched_name: string | null;
+  match_score: number;
+  flags: string[];
+}
+
+const normalize = (s: unknown) =>
+  String(s ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9º°ª\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+function similarity(a: string, b: string): number {
+  if (!a || !b) return 0;
+  if (a === b) return 1;
+  const at = a.split(' ').filter(Boolean);
+  const bt = b.split(' ').filter(Boolean);
+  const inter = at.filter((t) => bt.includes(t)).length;
+  const tokenScore = (2 * inter) / (at.length + bt.length);
+  // bônus para prefixo comum (nomes abreviados no boletim)
+  const shorter = a.length <= b.length ? a : b;
+  const longer = a.length > b.length ? a : b;
+  const contains = longer.includes(shorter) ? 0.15 : 0;
+  return Math.min(1, tokenScore + contains);
+}
+
+function parseGradeValue(raw: string | null | undefined): { value: number | null; invalid: boolean } {
+  if (raw == null) return { value: null, invalid: false };
+  const text = String(raw).trim();
+  if (!text || ['-', '--', '—', 'n/a', 'na', 'nc', '*'].includes(text.toLowerCase())) {
+    return { value: null, invalid: false };
+  }
+  const cleaned = text.replace(/\s/g, '').replace(',', '.');
+  if (!/^\d{1,3}(\.\d{1,2})?$/.test(cleaned)) return { value: null, invalid: true };
+  const num = Number(cleaned);
+  if (!Number.isFinite(num)) return { value: null, invalid: true };
+  return { value: num, invalid: false };
+}
+
+async function callGateway(model: string, body: unknown, apiKey: string) {
+  return await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ...(body as Record<string, unknown>), model }),
+  });
+}
+
+async function callWithFallback(body: unknown, apiKey: string) {
+  let res = await callGateway(PRIMARY_MODEL, body, apiKey);
+  if (!res.ok && (res.status === 429 || res.status === 402 || res.status >= 500)) {
+    console.warn(`Modelo primário falhou (${res.status}); usando ${FALLBACK_MODEL}`);
+    res = await callGateway(FALLBACK_MODEL, body, apiKey);
+  }
+  return res;
+}
+
+function extractJson(content: string): any {
+  const fenced = content.match(/```(?:json)?\s*([\s\S]*?)```/);
+  const text = fenced ? fenced[1] : content;
+  const start = text.indexOf('{');
+  const end = text.lastIndexOf('}');
+  if (start === -1 || end === -1) throw new Error('Resposta da IA não contém JSON');
+  return JSON.parse(text.slice(start, end + 1));
+}
+
+const SYSTEM_PROMPT = `Você extrai BOLETINS ESCOLARES (tabelas de notas) de PDFs com precisão absoluta.
+
+REGRAS OBRIGATÓRIAS:
+1. Analise TODAS as páginas do documento, da primeira à última.
+2. Identifique os cabeçalhos: disciplinas (colunas ou linhas) e períodos/etapas (1º Bimestre, 2º Bimestre, 3º, 4º, Média, Final...).
+3. Reporte UMA entrada por célula da matriz aluno × disciplina × período.
+4. NUNCA invente uma nota. Se a célula estiver vazia, ilegível ou ausente, use raw_value = null.
+5. Preserve o valor exatamente como aparece no PDF em raw_value (inclusive vírgula decimal). Não arredonde, não converta, não recalcule médias.
+6. Notas zero (0, 0,0) são notas válidas e devem ser reportadas.
+7. Preserve os nomes dos alunos e das disciplinas exatamente como aparecem (com acentos).
+8. Se um aluno aparecer em mais de uma página (continuação de tabela), reporte as células de todas as páginas.
+9. confidence entre 0 e 1 indica sua certeza de leitura daquela célula (baixa quando o dígito está borrado, cortado, ou a coluna é ambígua).
+10. page = número da página (1-based) onde a célula foi lida.
+
+Responda SOMENTE com JSON válido no formato:
+{
+  "pages": number,
+  "periods": [{"label": "1º Bimestre", "kind": "period" | "final"}],
+  "subjects": ["Matemática", "Português"],
+  "students": ["NOME DO ALUNO"],
+  "rows": [{"student_name": "NOME", "subject": "Matemática", "period": "1º Bimestre", "raw_value": "8,5", "page": 1, "confidence": 0.98}],
+  "notes": ["observações sobre problemas de leitura, cortes de linha, colunas ambíguas"]
+}`;
+
+function buildExtractionBody(pdfBase64: string, fileName: string, expected: ExpectedSubject[], students: ClassStudent[]) {
+  const subjectHint = expected.length
+    ? `Disciplinas esperadas nesta turma (use-as apenas como referência de nomenclatura, não force o casamento): ${expected.map((s) => s.name).join(', ')}.`
+    : '';
+  const studentHint = students.length
+    ? `Alunos matriculados nesta turma (referência de nomenclatura; podem existir alunos no PDF que não estão nesta lista): ${students.map((s) => s.full_name).join(' | ')}.`
+    : '';
+  return {
+    messages: [
+      { role: 'system', content: SYSTEM_PROMPT },
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: `Extraia todas as notas deste boletim.\n${subjectHint}\n${studentHint}` },
+          { type: 'file', file: { filename: fileName || 'boletim.pdf', file_data: `data:application/pdf;base64,${pdfBase64}` } },
+        ],
+      },
+    ],
+    temperature: 0,
+  };
+}
+
+function buildReconciliationBody(pdfBase64: string, fileName: string, suspects: ReviewRow[]) {
+  const list = suspects
+    .slice(0, 120)
+    .map((r) => `- aluno: ${r.student_name} | disciplina: ${r.subject} | período: ${r.period} | lido: ${r.raw_value ?? 'VAZIO'} | página: ${r.page ?? '?'}`)
+    .join('\n');
+  return {
+    messages: [
+      {
+        role: 'system',
+        content: `Você revisa células específicas de um boletim escolar em PDF. Releia SOMENTE as células listadas e confirme o valor exato. Se a célula estiver realmente vazia, retorne raw_value null. Nunca invente valores.
+Responda SOMENTE com JSON: {"rows":[{"student_name":"...","subject":"...","period":"...","raw_value":"8,5"|null,"confidence":0.0}]}`,
+      },
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: `Confirme estas células suspeitas:\n${list}` },
+          { type: 'file', file: { filename: fileName || 'boletim.pdf', file_data: `data:application/pdf;base64,${pdfBase64}` } },
+        ],
+      },
+    ],
+    temperature: 0,
+  };
+}
+
+serve(async (req) => {
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders });
+  }
+
+  const json = (body: unknown, status = 200) =>
+    new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+
+  try {
+    const auth = await requireAuth(req, corsHeaders, ['admin', 'direction']);
+    if (auth instanceof Response) return auth;
+
+    const apiKey = Deno.env.get('LOVABLE_API_KEY');
+    if (!apiKey) return json({ success: false, error: 'IA não configurada no servidor' }, 500);
+
+    const body = await req.json().catch(() => null);
+    if (!body?.pdfBase64) return json({ success: false, error: 'PDF não enviado' }, 400);
+
+    const pdfBase64: string = body.pdfBase64;
+    const fileName: string = body.fileName || 'boletim.pdf';
+    const students: ClassStudent[] = Array.isArray(body.students) ? body.students : [];
+    const expected: ExpectedSubject[] = Array.isArray(body.expected_subjects) ? body.expected_subjects : [];
+    const scaleMax: number = Number(body.scale_max) > 0 ? Number(body.scale_max) : 10;
+
+    const approxBytes = Math.floor((pdfBase64.length * 3) / 4);
+    if (approxBytes > MAX_PDF_SIZE_BYTES) {
+      return json({ success: false, error: `PDF acima de ${MAX_PDF_SIZE_MB}MB` }, 413);
+    }
+
+    // ---------- Etapa 1: extração ----------
+    const res = await callWithFallback(buildExtractionBody(pdfBase64, fileName, expected, students), apiKey);
+    if (!res.ok) {
+      const text = await res.text();
+      console.error('Falha na extração:', res.status, text);
+      if (res.status === 402) return json({ success: false, error: 'Créditos de IA insuficientes para processar o PDF.' }, 402);
+      if (res.status === 429) return json({ success: false, error: 'Limite de uso da IA atingido. Tente novamente em instantes.' }, 429);
+      return json({ success: false, error: 'Não foi possível ler o PDF.' }, 502);
+    }
+    const aiJson = await res.json();
+    const content: string = aiJson?.choices?.[0]?.message?.content ?? '';
+    let payload: ExtractionPayload;
+    try {
+      payload = extractJson(content);
+    } catch (e) {
+      console.error('JSON inválido da IA:', e, content.slice(0, 500));
+      return json({ success: false, error: 'A IA retornou um formato inesperado. Tente novamente.' }, 502);
+    }
+
+    const issues: { level: 'error' | 'warning' | 'info'; code: string; message: string }[] = [];
+    const addIssue = (level: 'error' | 'warning' | 'info', code: string, message: string) =>
+      issues.push({ level, code, message });
+
+    (payload.notes || []).forEach((n) => addIssue('info', 'ai_note', String(n)));
+
+    // ---------- Etapa 2: checagens determinísticas ----------
+    const rawRows = Array.isArray(payload.rows) ? payload.rows : [];
+    if (rawRows.length === 0) {
+      return json({ success: false, error: 'Nenhuma nota foi encontrada no PDF. Verifique se o arquivo é um boletim tabular.' }, 422);
+    }
+
+    const studentIndex = students.map((s) => ({ ...s, norm: normalize(s.full_name) }));
+
+    // períodos
+    const periodMap = new Map<string, { label: string; kind: string }>();
+    for (const p of payload.periods || []) {
+      const label = String(p?.label ?? '').trim();
+      if (!label) continue;
+      const norm = normalize(label);
+      const kind = /final|media final|média final/.test(norm) ? 'final' : (p?.kind === 'final' ? 'final' : 'period');
+      if (!periodMap.has(norm)) periodMap.set(norm, { label, kind });
+    }
+    for (const r of rawRows) {
+      const label = String(r?.period ?? '').trim() || 'Sem período';
+      const norm = normalize(label);
+      if (!periodMap.has(norm)) periodMap.set(norm, { label, kind: /final/.test(norm) ? 'final' : 'unknown' });
+    }
+
+    // disciplinas
+    const subjectMap = new Map<string, { name: string; weekly_classes: number | null; matched_expected: string | null }>();
+    const expectedIndex = expected.map((e) => ({ ...e, norm: normalize(e.name) }));
+    const registerSubject = (name: string) => {
+      const clean = String(name ?? '').trim();
+      if (!clean) return;
+      const norm = normalize(clean);
+      if (subjectMap.has(norm)) return;
+      let best: { name: string; weekly_classes?: number | null } | null = null;
+      let bestScore = 0;
+      for (const e of expectedIndex) {
+        const score = similarity(norm, e.norm);
+        if (score > bestScore) { bestScore = score; best = e; }
+      }
+      const matched = bestScore >= 0.7 ? best : null;
+      subjectMap.set(norm, {
+        name: clean,
+        weekly_classes: matched?.weekly_classes ?? null,
+        matched_expected: matched?.name ?? null,
+      });
+    };
+    (payload.subjects || []).forEach(registerSubject);
+    rawRows.forEach((r) => registerSubject(r?.subject ?? ''));
+
+    // duplicidade de disciplinas (nomes distintos que normalizam para nomes muito parecidos)
+    const subjectEntries = [...subjectMap.entries()];
+    for (let i = 0; i < subjectEntries.length; i++) {
+      for (let j = i + 1; j < subjectEntries.length; j++) {
+        if (similarity(subjectEntries[i][0], subjectEntries[j][0]) >= 0.9) {
+          addIssue('warning', 'duplicate_subject', `Possível disciplina duplicada no PDF: "${subjectEntries[i][1].name}" e "${subjectEntries[j][1].name}".`);
+        }
+      }
+    }
+
+    // duplicidade de alunos no PDF
+    const pdfStudentNames = new Map<string, string>();
+    for (const r of rawRows) {
+      const norm = normalize(r?.student_name ?? '');
+      if (norm && !pdfStudentNames.has(norm)) pdfStudentNames.set(norm, String(r.student_name));
+    }
+    const pdfStudentList = [...pdfStudentNames.entries()];
+    for (let i = 0; i < pdfStudentList.length; i++) {
+      for (let j = i + 1; j < pdfStudentList.length; j++) {
+        if (similarity(pdfStudentList[i][0], pdfStudentList[j][0]) >= 0.92) {
+          addIssue('warning', 'duplicate_student', `Possível aluno duplicado no PDF: "${pdfStudentList[i][1]}" e "${pdfStudentList[j][1]}".`);
+        }
+      }
+    }
+
+    // linhas de revisão
+    const seenCells = new Map<string, number>();
+    const reviewRows: ReviewRow[] = [];
+    let emptyCells = 0;
+    let invalidValues = 0;
+
+    for (const r of rawRows) {
+      const studentName = String(r?.student_name ?? '').trim();
+      const subjectName = String(r?.subject ?? '').trim();
+      const periodLabel = String(r?.period ?? '').trim() || 'Sem período';
+      const flags: string[] = [];
+
+      const norm = normalize(studentName);
+      let matched: (typeof studentIndex)[number] | null = null;
+      let score = 0;
+      for (const s of studentIndex) {
+        const sc = similarity(norm, s.norm);
+        if (sc > score) { score = sc; matched = s; }
+      }
+      const confident = score >= 0.85;
+      if (!confident) flags.push('unmatched_student');
+      else if (score < 0.97) flags.push('fuzzy_student_match');
+
+      if (!subjectName) flags.push('missing_subject');
+      const { value, invalid } = parseGradeValue(r?.raw_value ?? null);
+      if (invalid) { flags.push('invalid_value'); invalidValues++; }
+      if (!invalid && value == null) { flags.push('empty_cell'); emptyCells++; }
+      if (value != null && (value < 0 || value > scaleMax)) flags.push('out_of_scale');
+
+      const conf = typeof r?.confidence === 'number' ? r.confidence : null;
+      if (conf != null && conf < 0.85) flags.push('low_confidence');
+
+      const cellKey = `${norm}||${normalize(subjectName)}||${normalize(periodLabel)}`;
+      const prev = seenCells.get(cellKey);
+      if (prev != null) {
+        flags.push('duplicate_cell');
+        const prevRow = reviewRows[prev];
+        if (prevRow && (prevRow.raw_value ?? null) !== (r?.raw_value ?? null)) {
+          prevRow.flags.push('conflicting_duplicate');
+          flags.push('conflicting_duplicate');
+          addIssue('error', 'conflicting_duplicate', `Valores diferentes para a mesma célula (${studentName} / ${subjectName} / ${periodLabel}).`);
+        }
+      }
+
+      const row: ReviewRow = {
+        student_name: studentName,
+        subject: subjectName,
+        period: periodLabel,
+        raw_value: r?.raw_value != null ? String(r.raw_value) : null,
+        page: typeof r?.page === 'number' ? r.page : null,
+        confidence: conf,
+        value,
+        student_id: confident && matched ? matched.id : null,
+        matched_name: confident && matched ? matched.full_name : null,
+        match_score: Number(score.toFixed(3)),
+        flags,
+      };
+      if (prev == null) seenCells.set(cellKey, reviewRows.length);
+      reviewRows.push(row);
+    }
+
+    // alunos da turma ausentes do PDF / alunos do PDF fora da turma
+    const matchedStudentIds = new Set(reviewRows.map((r) => r.student_id).filter(Boolean) as string[]);
+    const missingStudents = studentIndex.filter((s) => !matchedStudentIds.has(s.id));
+    if (missingStudents.length > 0) {
+      addIssue('warning', 'students_missing_in_pdf', `${missingStudents.length} aluno(s) da turma não foram encontrados no PDF: ${missingStudents.slice(0, 10).map((s) => s.full_name).join(', ')}${missingStudents.length > 10 ? '...' : ''}.`);
+    }
+    const unmatchedNames = [...new Set(reviewRows.filter((r) => !r.student_id).map((r) => r.student_name))];
+    if (unmatchedNames.length > 0) {
+      addIssue('error', 'unmatched_students', `${unmatchedNames.length} nome(s) do PDF não foram identificados na turma: ${unmatchedNames.slice(0, 10).join(', ')}${unmatchedNames.length > 10 ? '...' : ''}.`);
+    }
+
+    // disciplinas esperadas ausentes
+    const foundExpected = new Set([...subjectMap.values()].map((s) => s.matched_expected).filter(Boolean) as string[]);
+    const missingSubjects = expected.filter((e) => !foundExpected.has(e.name));
+    if (missingSubjects.length > 0) {
+      addIssue('warning', 'subjects_missing_in_pdf', `Disciplinas da turma não localizadas no boletim: ${missingSubjects.map((s) => s.name).join(', ')}.`);
+    }
+
+    // matriz incompleta (colunas desalinhadas / cortes de linha)
+    const expectedCells = pdfStudentNames.size * subjectMap.size * periodMap.size;
+    if (expectedCells > 0 && reviewRows.length < expectedCells) {
+      addIssue('warning', 'incomplete_matrix', `Matriz incompleta: esperadas ${expectedCells} células (alunos × disciplinas × períodos), lidas ${reviewRows.length}. Possível corte de linha ou coluna desalinhada.`);
+    }
+    if (invalidValues > 0) addIssue('error', 'invalid_values', `${invalidValues} valor(es) não numérico(s) exigem correção manual.`);
+    if (reviewRows.some((r) => r.flags.includes('out_of_scale'))) {
+      addIssue('error', 'out_of_scale', `Existem notas fora da escala 0–${scaleMax}.`);
+    }
+
+    // ---------- Etapa 3: reconciliação de células suspeitas ----------
+    const suspects = reviewRows.filter((r) =>
+      r.flags.includes('low_confidence') || r.flags.includes('invalid_value') ||
+      r.flags.includes('out_of_scale') || r.flags.includes('conflicting_duplicate'));
+
+    let reconciled = 0;
+    if (suspects.length > 0 && suspects.length <= 150) {
+      try {
+        const res2 = await callWithFallback(buildReconciliationBody(pdfBase64, fileName, suspects), apiKey);
+        if (res2.ok) {
+          const j2 = await res2.json();
+          const payload2 = extractJson(j2?.choices?.[0]?.message?.content ?? '');
+          const map2 = new Map<string, { raw_value: string | null; confidence: number | null }>();
+          for (const r of payload2?.rows ?? []) {
+            const key = `${normalize(r?.student_name)}||${normalize(r?.subject)}||${normalize(r?.period)}`;
+            map2.set(key, {
+              raw_value: r?.raw_value != null ? String(r.raw_value) : null,
+              confidence: typeof r?.confidence === 'number' ? r.confidence : null,
+            });
+          }
+          for (const row of suspects) {
+            const key = `${normalize(row.student_name)}||${normalize(row.subject)}||${normalize(row.period)}`;
+            const second = map2.get(key);
+            if (!second) continue;
+            reconciled++;
+            if ((second.raw_value ?? null) === (row.raw_value ?? null)) {
+              row.flags = row.flags.filter((f) => f !== 'low_confidence');
+              row.flags.push('reconciled_match');
+            } else {
+              row.flags.push('low_confidence', 'reconciliation_divergence');
+              row.second_pass_value = second.raw_value;
+              addIssue('error', 'reconciliation_divergence', `Divergência entre leituras (${row.student_name} / ${row.subject} / ${row.period}): "${row.raw_value ?? 'VAZIO'}" vs "${second.raw_value ?? 'VAZIO'}". Revise manualmente.`);
+            }
+          }
+        } else {
+          addIssue('warning', 'reconciliation_skipped', 'A segunda validação por IA não pôde ser executada; revise manualmente as células sinalizadas.');
+        }
+      } catch (e) {
+        console.error('Reconciliação falhou:', e);
+        addIssue('warning', 'reconciliation_skipped', 'A segunda validação por IA falhou; revise manualmente as células sinalizadas.');
+      }
+    } else if (suspects.length > 150) {
+      addIssue('warning', 'reconciliation_skipped', 'Muitas células suspeitas para reconciliação automática; revise manualmente.');
+    }
+
+    // dedupe flags
+    reviewRows.forEach((r) => { r.flags = [...new Set(r.flags)]; });
+
+    const stats = {
+      pages: typeof payload.pages === 'number' ? payload.pages : null,
+      students_detected: pdfStudentNames.size,
+      students_matched: matchedStudentIds.size,
+      students_unmatched: unmatchedNames.length,
+      students_in_class: students.length,
+      students_missing_in_pdf: missingStudents.length,
+      subjects: subjectMap.size,
+      periods: periodMap.size,
+      grades_read: reviewRows.filter((r) => r.value != null).length,
+      cells_total: reviewRows.length,
+      low_confidence: reviewRows.filter((r) => r.flags.includes('low_confidence')).length,
+      empty_cells: emptyCells,
+      invalid_values: invalidValues,
+      reconciled_cells: reconciled,
+      issues: issues.length,
+      errors: issues.filter((i) => i.level === 'error').length,
+      warnings: issues.filter((i) => i.level === 'warning').length,
+    };
+
+    return json({
+      success: true,
+      stats,
+      issues,
+      periods: [...periodMap.entries()].map(([norm, p], idx) => ({ normalized_label: norm, label: p.label, kind: p.kind, sort_order: idx })),
+      subjects: [...subjectMap.entries()].map(([norm, s], idx) => ({ normalized_name: norm, name: s.name, weekly_classes: s.weekly_classes, matched_expected: s.matched_expected, sort_order: idx })),
+      rows: reviewRows,
+      students_missing_in_pdf: missingStudents.map((s) => ({ id: s.id, full_name: s.full_name })),
+    });
+  } catch (error) {
+    console.error('parse-grades-pdf erro:', error);
+    return json({ success: false, error: 'Erro interno ao processar o boletim.' }, 500);
+  }
+});
