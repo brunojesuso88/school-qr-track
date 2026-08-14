@@ -525,7 +525,7 @@ serve(async (req) => {
             const second = map2.get(key);
             if (!second) continue;
             reconciled++;
-            if ((second.raw_value ?? null) === (row.raw_value ?? null)) {
+            if ((second.raw_value ?? null) === (row.note_raw ?? null)) {
               row.flags = row.flags.filter((f) => f !== 'low_confidence');
               row.flags.push('reconciled_match');
             } else {
@@ -549,7 +549,7 @@ serve(async (req) => {
     reviewRows.forEach((r) => { r.flags = [...new Set(r.flags)]; });
 
     const stats = {
-      pages: typeof payload.pages === 'number' ? payload.pages : null,
+      pages: declaredPages,
       students_detected: pdfStudentNames.size,
       students_matched: matchedStudentIds.size,
       students_unmatched: unmatchedNames.length,
@@ -561,6 +561,9 @@ serve(async (req) => {
       cells_total: reviewRows.length,
       low_confidence: reviewRows.filter((r) => r.flags.includes('low_confidence')).length,
       empty_cells: emptyCells,
+      explicit_zero_cells: explicitZeroCells,
+      absence_cells_ignored: droppedAbsenceCells,
+      class_codes: classCodeList,
       invalid_values: invalidValues,
       reconciled_cells: reconciled,
       issues: issues.length,
