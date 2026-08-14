@@ -13,6 +13,7 @@ import { Shield } from 'lucide-react';
 
 const Settings = () => {
   const { userRole, canAccessSettings, canManageUsers } = useAuth();
+  const canManageIra = userRole === 'admin' || userRole === 'direction';
 
   // Block access for teacher and staff
   if (!canAccessSettings) {
