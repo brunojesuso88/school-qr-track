@@ -6,11 +6,17 @@ import { cn } from '@/lib/utils';
 
 export interface ReviewRow {
   student_name: string;
+  student_code?: string | null;
+  class_code?: string | null;
   subject: string;
   period: string;
+  period_kind?: string | null;
   raw_value: string | null;
+  note_raw?: string | null;
+  note_numeric?: number | null;
   value: number | null;
   page: number | null;
+  source_page?: number | null;
   confidence: number | null;
   student_id: string | null;
   matched_name: string | null;
@@ -31,6 +37,7 @@ const FLAG_LABELS: Record<string, { label: string; variant: 'destructive' | 'sec
   duplicate_cell: { label: 'Célula duplicada', variant: 'secondary' },
   conflicting_duplicate: { label: 'Duplicidade conflitante', variant: 'destructive' },
   empty_cell: { label: 'Célula vazia', variant: 'outline' },
+  explicit_zero: { label: 'Nota zero registrada', variant: 'outline' },
   missing_subject: { label: 'Disciplina ausente', variant: 'destructive' },
   manual: { label: 'Corrigido manualmente', variant: 'outline' },
 };
@@ -50,14 +57,20 @@ export const GradesReviewTable = ({
   onChangeValue,
   conflictKeys,
 }: GradesReviewTableProps) => (
-  <ScrollArea className="h-[380px] rounded-md border">
+  <div className="space-y-2">
+    <p className="text-[11px] text-muted-foreground">
+      Legenda: célula vazia = <span className="font-medium">Não informado no boletim</span> · <span className="font-medium">0,00</span> = nota zero registrada ·
+      a coluna <span className="font-medium">Faltas</span> do boletim é ignorada e não é gravada.
+    </p>
+    <ScrollArea className="h-[380px] rounded-md border">
     <table className="w-full text-sm">
       <thead className="sticky top-0 bg-background z-10">
         <tr className="text-left text-xs text-muted-foreground border-b">
           <th className="py-2 px-3">Aluno</th>
           <th className="py-2 px-2">Disciplina</th>
-          <th className="py-2 px-2">Período</th>
+          <th className="py-2 px-2">Período / Etapa</th>
           <th className="py-2 px-2 w-24">Nota</th>
+          <th className="py-2 px-2 w-14">Pág.</th>
           <th className="py-2 px-2">Confiança / Alerta</th>
         </tr>
       </thead>
@@ -73,7 +86,9 @@ export const GradesReviewTable = ({
                 {row.student_id ? (
                   <div>
                     <p className="font-medium leading-tight">{row.matched_name}</p>
-                    <p className="text-[11px] text-muted-foreground">PDF: {row.student_name}</p>
+                    <p className="text-[11px] text-muted-foreground">
+                      PDF: {row.student_name}{row.student_code ? ` (${row.student_code})` : ''}
+                    </p>
                   </div>
                 ) : (
                   <div className="space-y-1">
@@ -101,6 +116,7 @@ export const GradesReviewTable = ({
                   onChange={(e) => onChangeValue(index, e.target.value)}
                 />
               </td>
+              <td className="py-2 px-2 text-[11px] text-muted-foreground">{row.source_page ?? row.page ?? '—'}</td>
               <td className="py-2 px-2">
                 <div className="flex flex-wrap gap-1 items-center">
                   {row.confidence != null && (
@@ -128,5 +144,6 @@ export const GradesReviewTable = ({
         })}
       </tbody>
     </table>
-  </ScrollArea>
+    </ScrollArea>
+  </div>
 );
