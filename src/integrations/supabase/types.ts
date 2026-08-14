@@ -91,6 +91,7 @@ export type Database = {
           description: string | null
           id: string
           location: string
+          mapping_class_id: string | null
           name: string
           photo_url: string | null
           shift: string
@@ -102,6 +103,7 @@ export type Database = {
           description?: string | null
           id?: string
           location?: string
+          mapping_class_id?: string | null
           name: string
           photo_url?: string | null
           shift?: string
@@ -113,13 +115,218 @@ export type Database = {
           description?: string | null
           id?: string
           location?: string
+          mapping_class_id?: string | null
           name?: string
           photo_url?: string | null
           shift?: string
           status?: string | null
           updated_at?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "classes_mapping_class_id_fkey"
+            columns: ["mapping_class_id"]
+            isOneToOne: false
+            referencedRelation: "mapping_classes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      grade_imports: {
+        Row: {
+          class_id: string
+          conflict_strategy: string
+          created_at: string
+          created_by: string | null
+          file_name: string | null
+          id: string
+          issues: Json
+          school_year: number
+          stats: Json
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          class_id: string
+          conflict_strategy?: string
+          created_at?: string
+          created_by?: string | null
+          file_name?: string | null
+          id?: string
+          issues?: Json
+          school_year?: number
+          stats?: Json
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          class_id?: string
+          conflict_strategy?: string
+          created_at?: string
+          created_by?: string | null
+          file_name?: string | null
+          id?: string
+          issues?: Json
+          school_year?: number
+          stats?: Json
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "grade_imports_class_id_fkey"
+            columns: ["class_id"]
+            isOneToOne: false
+            referencedRelation: "classes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      grade_periods: {
+        Row: {
+          class_id: string
+          created_at: string
+          id: string
+          kind: string
+          label: string
+          normalized_label: string
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          class_id: string
+          created_at?: string
+          id?: string
+          kind?: string
+          label: string
+          normalized_label: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          class_id?: string
+          created_at?: string
+          id?: string
+          kind?: string
+          label?: string
+          normalized_label?: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "grade_periods_class_id_fkey"
+            columns: ["class_id"]
+            isOneToOne: false
+            referencedRelation: "classes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      grade_subjects: {
+        Row: {
+          class_id: string
+          created_at: string
+          custom_ira_weight: number | null
+          id: string
+          include_in_ira: boolean
+          mapping_class_subject_id: string | null
+          name: string
+          normalized_name: string
+          sort_order: number
+          updated_at: string
+          weekly_classes: number | null
+        }
+        Insert: {
+          class_id: string
+          created_at?: string
+          custom_ira_weight?: number | null
+          id?: string
+          include_in_ira?: boolean
+          mapping_class_subject_id?: string | null
+          name: string
+          normalized_name: string
+          sort_order?: number
+          updated_at?: string
+          weekly_classes?: number | null
+        }
+        Update: {
+          class_id?: string
+          created_at?: string
+          custom_ira_weight?: number | null
+          id?: string
+          include_in_ira?: boolean
+          mapping_class_subject_id?: string | null
+          name?: string
+          normalized_name?: string
+          sort_order?: number
+          updated_at?: string
+          weekly_classes?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "grade_subjects_class_id_fkey"
+            columns: ["class_id"]
+            isOneToOne: false
+            referencedRelation: "classes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "grade_subjects_mapping_class_subject_id_fkey"
+            columns: ["mapping_class_subject_id"]
+            isOneToOne: false
+            referencedRelation: "mapping_class_subjects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ira_settings: {
+        Row: {
+          class_id: string
+          created_at: string
+          id: string
+          ira_period_id: string | null
+          scale_max: number
+          updated_at: string
+          updated_by: string | null
+          use_final_grade: boolean
+        }
+        Insert: {
+          class_id: string
+          created_at?: string
+          id?: string
+          ira_period_id?: string | null
+          scale_max?: number
+          updated_at?: string
+          updated_by?: string | null
+          use_final_grade?: boolean
+        }
+        Update: {
+          class_id?: string
+          created_at?: string
+          id?: string
+          ira_period_id?: string | null
+          scale_max?: number
+          updated_at?: string
+          updated_by?: string | null
+          use_final_grade?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ira_settings_class_id_fkey"
+            columns: ["class_id"]
+            isOneToOne: true
+            referencedRelation: "classes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ira_settings_ira_period_id_fkey"
+            columns: ["ira_period_id"]
+            isOneToOne: false
+            referencedRelation: "grade_periods"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       management_signatures: {
         Row: {
@@ -586,6 +793,80 @@ export type Database = {
           value?: Json
         }
         Relationships: []
+      }
+      student_grades: {
+        Row: {
+          confidence: number | null
+          created_at: string
+          flags: string[]
+          grade_period_id: string
+          grade_subject_id: string
+          id: string
+          import_id: string | null
+          raw_text: string | null
+          source: string
+          student_id: string
+          updated_at: string
+          value: number | null
+        }
+        Insert: {
+          confidence?: number | null
+          created_at?: string
+          flags?: string[]
+          grade_period_id: string
+          grade_subject_id: string
+          id?: string
+          import_id?: string | null
+          raw_text?: string | null
+          source?: string
+          student_id: string
+          updated_at?: string
+          value?: number | null
+        }
+        Update: {
+          confidence?: number | null
+          created_at?: string
+          flags?: string[]
+          grade_period_id?: string
+          grade_subject_id?: string
+          id?: string
+          import_id?: string | null
+          raw_text?: string | null
+          source?: string
+          student_id?: string
+          updated_at?: string
+          value?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "student_grades_grade_period_id_fkey"
+            columns: ["grade_period_id"]
+            isOneToOne: false
+            referencedRelation: "grade_periods"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "student_grades_grade_subject_id_fkey"
+            columns: ["grade_subject_id"]
+            isOneToOne: false
+            referencedRelation: "grade_subjects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "student_grades_import_id_fkey"
+            columns: ["import_id"]
+            isOneToOne: false
+            referencedRelation: "grade_imports"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "student_grades_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       student_paee: {
         Row: {

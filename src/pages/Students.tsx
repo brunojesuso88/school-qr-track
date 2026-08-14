@@ -25,6 +25,8 @@ import { StudentPhoto } from '@/components/StudentPhoto';
 import { useSignedPhotoUrl, clearPhotoUrlCache } from '@/hooks/useSignedPhotoUrl';
 import { CameraPhotoCapture } from '@/components/CameraPhotoCapture';
 import { OccurrencesReportDialog } from '@/components/OccurrencesReportDialog';
+import { useStudentsIra } from '@/hooks/useStudentsIra';
+import { formatIra } from '@/lib/ira';
 
 interface Student {
   id: string;
@@ -573,6 +575,11 @@ const Students = () => {
     return dateB.localeCompare(dateA);
   });
 
+  // IRA dos alunos visíveis, carregado em lote (poucas queries)
+  const { iraByStudent } = useStudentsIra(
+    filteredStudents.map((s) => ({ id: s.id, class: s.class })),
+  );
+
   const uniqueClasses = [...new Set(students.map((s) => s.class))];
 
   const getOccurrenceTypeLabel = (type: string) => {
@@ -958,6 +965,14 @@ const Students = () => {
                           {absenceCountMap.get(student.id) || 0} falta(s)
                         </span>
                       )}
+                      <span
+                        className="text-xs px-2 py-1 rounded-full font-medium bg-primary/10 text-primary"
+                        title={iraByStudent[student.id]?.status === 'ok'
+                          ? 'Índice de Rendimento Acadêmico'
+                          : iraByStudent[student.id]?.reason || 'IRA indisponível — abra o aluno na aba Notas'}
+                      >
+                        IRA: {formatIra(iraByStudent[student.id]?.value ?? null)}
+                      </span>
                     </div>
                   </div>
 

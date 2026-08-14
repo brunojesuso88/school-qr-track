@@ -10,13 +10,14 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { toast } from 'sonner';
-import { Plus, Edit2, Trash2, GraduationCap, Search, Users, Upload, FileText, Loader2, CheckCircle2, AlertCircle, ImagePlus, CalendarIcon, Download } from 'lucide-react';
+import { Plus, Edit2, Trash2, GraduationCap, Search, Users, Upload, FileText, Loader2, CheckCircle2, AlertCircle, ImagePlus, CalendarIcon, Download, BookOpen } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Checkbox } from '@/components/ui/checkbox';
 import { classSchema } from '@/lib/validations';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
+import { GradesImportDialog } from '@/components/grades/GradesImportDialog';
 import ClassAttendanceDialog from '@/components/ClassAttendanceDialog';
 import ClassSummaryDialog from '@/components/ClassSummaryDialog';
 import { format } from 'date-fns';
@@ -62,6 +63,7 @@ interface ClassItem {
   photo_url: string | null;
   created_at: string;
   location?: string;
+  mapping_class_id?: string | null;
 }
 
 interface PdfStudentBase {
@@ -130,6 +132,7 @@ const Classes = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { userRole } = useAuth();
   const canViewGuardianPhone = userRole === 'admin' || userRole === 'direction';
+  const canManageGrades = userRole === 'admin' || userRole === 'direction';
   const [classes, setClasses] = useState<ClassItem[]>([]);
   const [studentCounts, setStudentCounts] = useState<Record<string, number>>({});
   const [classesWithAttendance, setClassesWithAttendance] = useState<Set<string>>(new Set());
@@ -150,6 +153,9 @@ const Classes = () => {
   const [isSavingStudents, setIsSavingStudents] = useState(false);
   const [attendanceClass, setAttendanceClass] = useState<string | null>(null);
   const [summaryClass, setSummaryClass] = useState<string | null>(null);
+
+  // Boletim / notas
+  const [gradesClass, setGradesClass] = useState<ClassItem | null>(null);
   
   // Photo upload state
   const photoInputRef = useRef<HTMLInputElement>(null);
@@ -991,6 +997,20 @@ const Classes = () => {
                     </Button>
                   </div>
 
+                  {canManageGrades && (
+                    <div className="flex gap-2 mb-3" onClick={(e) => e.stopPropagation()}>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="flex-1"
+                        onClick={() => setGradesClass(classItem)}
+                      >
+                        <BookOpen className="w-3 h-3 mr-2" />
+                        Inserir boletim da turma
+                      </Button>
+                    </div>
+                  )}
+
                   <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
                     <Button variant="outline" size="sm" className="flex-1" onClick={() => handleEdit(classItem)}>
                       <Edit2 className="w-3 h-3 mr-1" />
@@ -1332,6 +1352,13 @@ const Classes = () => {
           open={!!summaryClass}
           onOpenChange={(open) => !open && setSummaryClass(null)}
           className={summaryClass}
+        />
+
+        {/* Importação de boletim / notas */}
+        <GradesImportDialog
+          open={!!gradesClass}
+          onOpenChange={(open) => !open && setGradesClass(null)}
+          classItem={gradesClass}
         />
 
         {/* Attendance Dialog */}

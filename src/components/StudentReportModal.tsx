@@ -6,11 +6,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
-import { Calendar, FileText, AlertCircle, CheckCircle, XCircle, Clock, Eye } from 'lucide-react';
+import { Calendar, FileText, AlertCircle, CheckCircle, XCircle, Clock, Eye, GraduationCap } from 'lucide-react';
 import { format, parse, startOfMonth, endOfMonth, startOfYear, endOfYear, differenceInYears } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { StudentPhoto } from '@/components/StudentPhoto';
+import { StudentGradesTab } from '@/components/grades/StudentGradesTab';
 
 interface Student {
   id: string;
@@ -216,20 +217,28 @@ export const StudentReportModal = ({ student, onClose }: StudentReportModalProps
         </DialogHeader>
 
         <Tabs defaultValue="attendance" className="mt-4">
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="attendance">
               <Calendar className="w-4 h-4 mr-2" />
-              Frequência
+              <span className="hidden sm:inline">Frequência</span>
+            </TabsTrigger>
+            <TabsTrigger value="grades">
+              <GraduationCap className="w-4 h-4 mr-2" />
+              Notas
             </TabsTrigger>
             <TabsTrigger value="occurrences">
               <FileText className="w-4 h-4 mr-2" />
-              Ocorrências ({occurrences.length})
+              <span className="hidden sm:inline">Ocorrências ({occurrences.length})</span>
             </TabsTrigger>
             <TabsTrigger value="medical" disabled={!student.has_medical_report}>
               <AlertCircle className="w-4 h-4 mr-2" />
-              Laudo
+              <span className="hidden sm:inline">Laudo</span>
             </TabsTrigger>
           </TabsList>
+
+          <TabsContent value="grades" className="mt-4">
+            <StudentGradesTab studentId={student.id} className={student.class} />
+          </TabsContent>
 
           <TabsContent value="attendance" className="mt-4 space-y-4">
             {loading ? (
