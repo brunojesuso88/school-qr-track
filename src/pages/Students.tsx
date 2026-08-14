@@ -575,6 +575,11 @@ const Students = () => {
     return dateB.localeCompare(dateA);
   });
 
+  // IRA dos alunos visíveis, carregado em lote (poucas queries)
+  const { iraByStudent } = useStudentsIra(
+    filteredStudents.map((s) => ({ id: s.id, class: s.class })),
+  );
+
   const uniqueClasses = [...new Set(students.map((s) => s.class))];
 
   const getOccurrenceTypeLabel = (type: string) => {
