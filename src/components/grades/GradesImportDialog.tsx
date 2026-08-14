@@ -310,7 +310,13 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
         class_id: classItem.id,
         label: p.label,
         normalized_label: p.normalized_label || normalize(p.label),
-        kind: ['period', 'final', 'unknown'].includes(p.kind) ? p.kind : 'unknown',
+        // Colunas finais do boletim (Média Final, Rec. Final, Cons. Class, Pendência, Final)
+        // são gravadas como 'final'; o tipo exato fica preservado no label.
+        kind: p.kind === 'period'
+          ? 'period'
+          : ['final', 'media_final', 'rec_final', 'cons_class', 'pendencia'].includes(p.kind)
+            ? 'final'
+            : 'unknown',
         sort_order: p.sort_order,
       }));
       const { data: periodRows, error: periodError } = await supabase
