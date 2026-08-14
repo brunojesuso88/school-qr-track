@@ -831,6 +831,7 @@ const Students = () => {
               </form>
             </DialogContent>
           </Dialog>
+          </div>
         </div>
 
         {/* Filters */}
