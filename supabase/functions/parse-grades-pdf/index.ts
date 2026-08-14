@@ -369,12 +369,16 @@ serve(async (req) => {
     const reviewRows: ReviewRow[] = [];
     let emptyCells = 0;
     let invalidValues = 0;
+    let explicitZeroCells = 0;
+    let filledCells = 0;
 
     for (const r of rawRows) {
       const studentName = String(r?.student_name ?? '').trim();
       const subjectName = String(r?.subject ?? '').trim();
-      const periodLabel = String(r?.period ?? '').trim() || 'Sem período';
+      const readPeriod = String(r?.period ?? '').trim() || 'Sem período';
+      const periodLabel = canonicalPeriod.get(readPeriod) ?? readPeriod;
       const flags: string[] = [];
+      const noteRaw = r?.note_raw != null ? String(r.note_raw) : (r?.raw_value != null ? String(r.raw_value) : null);
 
       const norm = normalize(studentName);
       let matched: (typeof studentIndex)[number] | null = null;
@@ -388,9 +392,13 @@ serve(async (req) => {
       else if (score < 0.97) flags.push('fuzzy_student_match');
 
       if (!subjectName) flags.push('missing_subject');
-      const { value, invalid } = parseGradeValue(r?.raw_value ?? null);
+      const { value, invalid } = parseGradeValue(noteRaw);
       if (invalid) { flags.push('invalid_value'); invalidValues++; }
       if (!invalid && value == null) { flags.push('empty_cell'); emptyCells++; }
+      if (value != null) {
+        filledCells++;
+        if (value === 0) { flags.push('explicit_zero'); explicitZeroCells++; }
+      }
       if (value != null && (value < 0 || value > scaleMax)) flags.push('out_of_scale');
 
       const conf = typeof r?.confidence === 'number' ? r.confidence : null;
@@ -401,7 +409,7 @@ serve(async (req) => {
       if (prev != null) {
         flags.push('duplicate_cell');
         const prevRow = reviewRows[prev];
-        if (prevRow && (prevRow.raw_value ?? null) !== (r?.raw_value ?? null)) {
+        if (prevRow && (prevRow.note_raw ?? null) !== noteRaw) {
           prevRow.flags.push('conflicting_duplicate');
           flags.push('conflicting_duplicate');
           addIssue('error', 'conflicting_duplicate', `Valores diferentes para a mesma célula (${studentName} / ${subjectName} / ${periodLabel}).`);
@@ -410,10 +418,16 @@ serve(async (req) => {
 
       const row: ReviewRow = {
         student_name: studentName,
+        student_code: r?.student_code != null ? String(r.student_code) : null,
+        class_code: r?.class_code != null ? String(r.class_code) : null,
         subject: subjectName,
         period: periodLabel,
-        raw_value: r?.raw_value != null ? String(r.raw_value) : null,
+        period_kind: periodMap.get(normalize(periodLabel))?.kind ?? 'unknown',
+        raw_value: noteRaw,
+        note_raw: noteRaw,
+        note_numeric: value,
         page: typeof r?.page === 'number' ? r.page : null,
+        source_page: typeof r?.page === 'number' ? r.page : null,
         confidence: conf,
         value,
         student_id: confident && matched ? matched.id : null,
@@ -423,6 +437,39 @@ serve(async (req) => {
       };
       if (prev == null) seenCells.set(cellKey, reviewRows.length);
       reviewRows.push(row);
+    }
+
+    // páginas × alunos: o boletim SIAEP tem exatamente 1 aluno por página
+    const declaredPages = typeof payload.pages === 'number' ? payload.pages : null;
+    const pagesSeen = [...studentsByPage.keys()].sort((a, b) => a - b);
+    const multiStudentPages = pagesSeen.filter((p) => (studentsByPage.get(p)?.size ?? 0) > 1);
+    if (multiStudentPages.length > 0) {
+      addIssue('error', 'multiple_students_per_page', `Páginas com mais de um aluno detectado (esperado 1 por página): ${multiStudentPages.slice(0, 10).join(', ')}.`);
+    }
+    const multiPageStudents = [...pagesByStudent.entries()].filter(([, pages]) => pages.size > 1);
+    if (multiPageStudents.length > 0) {
+      addIssue('warning', 'student_in_multiple_pages', `${multiPageStudents.length} aluno(s) apareceram em mais de uma página (possível duplicidade de página).`);
+    }
+    if (declaredPages != null) {
+      const emptyPages = [];
+      for (let p = 1; p <= declaredPages; p++) if (!studentsByPage.has(p)) emptyPages.push(p);
+      if (emptyPages.length > 0) {
+        addIssue('error', 'pages_without_student', `Páginas sem aluno identificado: ${emptyPages.slice(0, 15).join(', ')}${emptyPages.length > 15 ? '...' : ''}.`);
+      }
+      if (declaredPages !== pdfStudentNames.size) {
+        addIssue('warning', 'pages_students_mismatch', `O PDF tem ${declaredPages} página(s) mas ${pdfStudentNames.size} aluno(s) distinto(s) foram detectados (esperado 1 aluno por página).`);
+      }
+    }
+
+    // turma do cabeçalho
+    const classCodeList = [...classCodes.keys()];
+    if (expectedClassCode) {
+      const divergent = classCodeList.filter((c) => normalize(c) !== normalize(expectedClassCode));
+      if (divergent.length > 0) {
+        addIssue('error', 'class_code_mismatch', `Turma divergente no cabeçalho do PDF: encontrado ${divergent.slice(0, 5).join(', ')}; esperado ${expectedClassCode}.`);
+      }
+    } else if (classCodeList.length > 1) {
+      addIssue('warning', 'multiple_class_codes', `O PDF contém mais de uma turma no cabeçalho: ${classCodeList.slice(0, 5).join(', ')}.`);
     }
 
     // alunos da turma ausentes do PDF / alunos do PDF fora da turma
@@ -443,10 +490,10 @@ serve(async (req) => {
       addIssue('warning', 'subjects_missing_in_pdf', `Disciplinas da turma não localizadas no boletim: ${missingSubjects.map((s) => s.name).join(', ')}.`);
     }
 
-    // matriz incompleta (colunas desalinhadas / cortes de linha)
-    const expectedCells = pdfStudentNames.size * subjectMap.size * periodMap.size;
-    if (expectedCells > 0 && reviewRows.length < expectedCells) {
-      addIssue('warning', 'incomplete_matrix', `Matriz incompleta: esperadas ${expectedCells} células (alunos × disciplinas × períodos), lidas ${reviewRows.length}. Possível corte de linha ou coluna desalinhada.`);
+    // matriz de completude aluno × disciplina × período (células vazias são legítimas neste boletim)
+    const matrixCells = pdfStudentNames.size * subjectMap.size * periodMap.size;
+    if (matrixCells > 0) {
+      addIssue('info', 'completeness_matrix', `Matriz aluno × disciplina × período: ${matrixCells} combinações possíveis; ${filledCells} com nota, ${emptyCells} sem nota informada, ${explicitZeroCells} com nota 0,00 explícita. Células vazias são normais neste boletim.`);
     }
     if (invalidValues > 0) addIssue('error', 'invalid_values', `${invalidValues} valor(es) não numérico(s) exigem correção manual.`);
     if (reviewRows.some((r) => r.flags.includes('out_of_scale'))) {
