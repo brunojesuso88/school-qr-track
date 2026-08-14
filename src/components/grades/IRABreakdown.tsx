@@ -98,7 +98,6 @@ export const IRABreakdown = ({ ira, periodLabel }: IRABreakdownProps) => {
             {excluded.map((line) => (
               <li key={line.subjectId} className="text-xs text-muted-foreground">
                 <span className="font-medium text-foreground">{line.name}</span> — {line.reason}
-                {!line.includeReasonHidden && ''}
               </li>
             ))}
           </ul>
