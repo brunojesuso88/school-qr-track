@@ -93,6 +93,7 @@ export function buildIraInputs(
       includeInIra: subject.include_in_ira,
       customWeight: subject.custom_ira_weight,
       value: grade?.value ?? null,
+      rawText: grade?.raw_text ?? null,
     };
   });
 }
