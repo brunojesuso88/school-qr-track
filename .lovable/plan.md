@@ -1,18 +1,24 @@
-## Ajuste da capa no "Visualizar" de Eventos e Projetos
+## Relatório de Ocorrências por dia (aba Alunos)
 
-Hoje, ao abrir o modal de detalhes:
-- **Eventos** (`SchoolEventDetailDialog.tsx`): a capa fica num container `aspect-video` com `object-cover` → corta topo/base de imagens verticais.
-- **Projetos** (`EventDetailDialog.tsx`): nem exibe a capa no topo, só as fotos secundárias.
+Novo botão **"Relatório de Ocorrências"** no topo da página Alunos. O usuário escolhe uma data no calendário e o sistema gera um PDF com todas as ocorrências daquele dia, agrupadas por turma, mostrando o professor que registrou.
 
-### Mudanças
+### Fluxo
+1. Clique no botão abre um diálogo com calendário (mesmo padrão já usado nos formulários de ocorrência).
+2. Ao confirmar, o sistema busca as ocorrências da data escolhida junto com os dados do aluno (nome, matrícula, turma, turno).
+3. Se não houver registros no dia, aparece um aviso e nenhum PDF é gerado.
+4. Havendo registros, o PDF é baixado automaticamente com nome como `ocorrencias_2026-08-14.pdf`.
 
-**1. `src/components/school-events/SchoolEventDetailDialog.tsx`**
-- Trocar `object-cover` por `object-contain` no `<img>` da capa.
-- Manter o container com fundo `bg-muted` e altura máxima (ex.: `max-h-[60vh]`) em vez de `aspect-video` fixo, para que imagens em retrato ou paisagem apareçam inteiras, centralizadas, sem corte.
+### Conteúdo do PDF
+- Cabeçalho: nome da escola, título "Relatório de Ocorrências", data escolhida (dd/MM/aaaa) e total de ocorrências.
+- Uma seção por turma (ordem alfabética), com o turno ao lado do nome da turma.
+- Tabela por turma com colunas: Aluno, Matrícula, Tipo de ocorrência, Registrado por (professor), Descrição.
+- Ocorrências de atestado médico mostram o período (data inicial a data final).
+- Rodapé com paginação e data/hora de emissão.
 
-**2. `src/components/events/EventDetailDialog.tsx`** (Projetos)
-- Adicionar bloco de capa no topo do modal (usando `event.cover_image` ou primeira de `event.images`), com o mesmo padrão: container `bg-muted`, `max-h-[60vh]`, imagem com `object-contain` centralizada.
-- Carregar a signed URL da capa via `supabase.storage.from('school-events').createSignedUrl(...)` igual ao card.
-- Aplicar `object-contain` também nas miniaturas da grade de fotos se necessário (opcional — manter `object-cover` na grade está ok, pois é só thumbnail).
+### Detalhes técnicos
+- `src/pages/Students.tsx`: botão + estado do diálogo; novo componente `src/components/OccurrencesReportDialog.tsx` com o calendário e a geração.
+- Consulta: `occurrences` filtrando `date` igual à data selecionada, com join em `students` (`full_name, student_id, class, shift`); ocorrências de atestado que abrangem a data também podem ser incluídas via `end_date >= data`.
+- PDF gerado com `jsPDF` + `jspdf-autotable` (já usados em `MappingSummary.tsx`), agrupando por `class` e usando `teacher_name` na coluna "Registrado por".
+- Nome da escola vindo do hook existente `useSchoolName`.
 
-Sem alterações em backend, dados ou cards.
+Sem mudanças de banco de dados ou de permissões.
