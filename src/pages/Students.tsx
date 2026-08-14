@@ -24,6 +24,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { StudentPhoto } from '@/components/StudentPhoto';
 import { useSignedPhotoUrl, clearPhotoUrlCache } from '@/hooks/useSignedPhotoUrl';
 import { CameraPhotoCapture } from '@/components/CameraPhotoCapture';
+import { OccurrencesReportDialog } from '@/components/OccurrencesReportDialog';
 
 interface Student {
   id: string;
@@ -82,6 +83,7 @@ const Students = () => {
   const [filterClass, setFilterClass] = useState(classFromUrl || 'all');
   const [filterShift, setFilterShift] = useState('all');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isOccurrencesReportOpen, setIsOccurrencesReportOpen] = useState(false);
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [occurrencesStudent, setOccurrencesStudent] = useState<Student | null>(null);
@@ -589,6 +591,11 @@ const Students = () => {
             <h1 className="text-2xl font-semibold">Alunos</h1>
             <p className="text-muted-foreground">Gerenciar registros de alunos e QR codes</p>
           </div>
+          <div className="flex flex-wrap items-center gap-2">
+          <Button variant="outline" onClick={() => setIsOccurrencesReportOpen(true)}>
+            <FileText className="w-4 h-4 mr-2" />
+            Relatório de Ocorrências
+          </Button>
           <Dialog open={isDialogOpen} onOpenChange={(open) => {
             setIsDialogOpen(open);
             if (!open) {
@@ -825,6 +832,7 @@ const Students = () => {
               </form>
             </DialogContent>
           </Dialog>
+          </div>
         </div>
 
         {/* Filters */}
@@ -1258,6 +1266,11 @@ const Students = () => {
             setPhotoPreview(previewUrl);
             setRemovePhoto(false);
           }}
+        />
+
+        <OccurrencesReportDialog
+          open={isOccurrencesReportOpen}
+          onOpenChange={setIsOccurrencesReportOpen}
         />
       </div>
     </DashboardLayout>
