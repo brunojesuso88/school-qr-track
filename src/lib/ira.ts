@@ -3,6 +3,8 @@
  *
  * Fórmula: IRA = Σ(nota × peso) / Σ(peso)
  * Peso automático = carga semanal quando ela é 1, 2 ou 4 aulas.
+ * Disciplina selecionada sem nota lançada no período escolhido entra com 0,00
+ * (sinalizada como "nota não lançada"), sem alterar a nota original do boletim.
  * Cargas diferentes (3, 5, 6...) são inelegíveis até o administrador
  * definir explicitamente um "peso personalizado".
  *
@@ -12,6 +14,9 @@
 export const AUTO_WEIGHTS = [1, 2, 4] as const;
 
 export type IraStatus = 'ok' | 'no_subjects' | 'no_grades' | 'not_configured';
+
+/** Origem do valor usado no cálculo. */
+export type IraValueSource = 'reported' | 'missing_as_zero';
 
 export interface IraSubjectInput {
   subjectId: string;
@@ -23,6 +28,8 @@ export interface IraSubjectInput {
   customWeight: number | null;
   /** Nota do período configurado para o IRA (null = não informada). */
   value: number | null;
+  /** Texto original da célula (só para exibição/diagnóstico). */
+  rawText?: string | null;
 }
 
 export interface IraLine {
@@ -32,9 +39,14 @@ export interface IraLine {
   weight: number | null;
   weightSource: 'auto' | 'custom' | 'none';
   value: number | null;
+  /** Valor efetivamente usado no cálculo (0 quando a nota não foi lançada). */
+  usedValue: number | null;
+  valueSource: IraValueSource;
   product: number | null;
   eligible: boolean;
   reason?: string;
+  /** Rótulo curto de status para a interface. */
+  statusLabel?: string;
 }
 
 export interface IraResult {
@@ -44,6 +56,8 @@ export interface IraResult {
   totalWeight: number;
   totalProduct: number;
   lines: IraLine[];
+  /** Quantidade de disciplinas selecionadas sem nota lançada (contadas como 0,00). */
+  missingGradeCount: number;
 }
 
 /** Peso automático a partir da carga semanal. `null` quando a carga não é 1, 2 ou 4. */
@@ -85,6 +99,8 @@ export function calculateIra(
     const { weight, source } = resolveWeight(subject);
     let eligible = true;
     let reason: string | undefined;
+    const reported = subject.value != null && !Number.isNaN(subject.value);
+    const valueSource: IraValueSource = reported ? 'reported' : 'missing_as_zero';
 
     if (!subject.includeInIra) {
       eligible = false;
@@ -95,12 +111,16 @@ export function calculateIra(
         subject.weeklyClasses == null
           ? 'Carga semanal não informada'
           : `Carga semanal ${subject.weeklyClasses} não segue a regra 1/2/4 — defina um peso personalizado`;
-    } else if (subject.value == null || Number.isNaN(subject.value)) {
-      eligible = false;
-      reason = periodLabel
-        ? `Nota não disponível para o período selecionado (${periodLabel})`
-        : 'Nota não disponível para o período selecionado';
     }
+
+    const usedValue = eligible ? (reported ? (subject.value as number) : 0) : null;
+    const statusLabel = !subject.includeInIra
+      ? 'Fora do IRA'
+      : !eligible
+        ? reason
+        : reported
+          ? `Nota registrada: ${formatGrade(subject.value)}`
+          : 'Nota não lançada — considerada 0,00 no IRA';
 
     return {
       subjectId: subject.subjectId,
@@ -109,11 +129,18 @@ export function calculateIra(
       weight,
       weightSource: source,
       value: subject.value,
-      product: eligible && weight !== null && subject.value != null ? subject.value * weight : null,
+      usedValue,
+      valueSource,
+      product: eligible && weight !== null && usedValue != null ? usedValue * weight : null,
       eligible,
       reason,
+      statusLabel,
     };
   });
+
+  const missingGradeCount = lines.filter(
+    (l) => l.eligible && l.valueSource === 'missing_as_zero',
+  ).length;
 
   if (!hasPeriodConfigured) {
     return {
@@ -123,6 +150,7 @@ export function calculateIra(
       totalWeight: 0,
       totalProduct: 0,
       lines,
+      missingGradeCount: 0,
     };
   }
 
@@ -135,6 +163,7 @@ export function calculateIra(
       totalWeight: 0,
       totalProduct: 0,
       lines,
+      missingGradeCount,
     };
   }
 
@@ -147,11 +176,12 @@ export function calculateIra(
       value: null,
       status: 'no_grades',
       reason: periodLabel
-        ? `Nenhuma disciplina elegível possui nota válida no período selecionado (${periodLabel})`
-        : 'Nenhuma disciplina elegível possui nota válida',
+        ? `Nenhuma disciplina selecionada possui peso válido para o período (${periodLabel})`
+        : 'Nenhuma disciplina selecionada possui peso válido',
       totalWeight,
       totalProduct,
       lines,
+      missingGradeCount,
     };
   }
 
@@ -161,6 +191,7 @@ export function calculateIra(
     totalWeight,
     totalProduct,
     lines,
+    missingGradeCount,
   };
 }
 

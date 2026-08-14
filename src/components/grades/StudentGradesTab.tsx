@@ -65,6 +65,11 @@ export const StudentGradesTab = ({ studentId, className }: StudentGradesTabProps
               {iraPeriod && (
                 <p className="text-xs text-muted-foreground mt-1">Baseado em: {iraPeriod.label}</p>
               )}
+              {ira && ira.missingGradeCount > 0 && (
+                <p className="text-xs text-amber-600 mt-1">
+                  {ira.missingGradeCount} disciplina(s) selecionada(s) sem nota — consideradas 0,00 no IRA
+                </p>
+              )}
             </div>
             <Collapsible open={showBreakdown} onOpenChange={setShowBreakdown}>
               <CollapsibleTrigger asChild>

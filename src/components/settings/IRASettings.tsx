@@ -280,6 +280,16 @@ const IRASettings = () => {
                 </p>
               </div>
 
+              <Alert>
+                <Info className="w-4 h-4" />
+                <AlertTitle className="text-sm">Regra das notas não lançadas</AlertTitle>
+                <AlertDescription className="text-xs">
+                  Quando a nota do período selecionado estiver em branco no boletim, ela será considerada
+                  <strong> 0,00 </strong>no cálculo do IRA até que a nota seja lançada. A nota original do boletim
+                  não é alterada: na aba “Notas” a célula vazia continua aparecendo como “— (não informado)”.
+                </AlertDescription>
+              </Alert>
+
               <div className="rounded-md border divide-y">
                 {subjects.map((subject) => {
                   const autoEligible = isAutoWeightEligible(subject.weekly_classes);
@@ -302,6 +312,11 @@ const IRASettings = () => {
                             Peso: {weight ?? '—'}
                             {source === 'custom' && ' (personalizado)'}
                           </p>
+                          {subject.include_in_ira && (
+                            <p className="text-[11px] text-amber-600 mt-0.5">
+                              Participa do IRA · nota em branco no período escolhido = 0,00 no cálculo
+                            </p>
+                          )}
                         </div>
                       </div>
                       <div className="flex items-center gap-2">

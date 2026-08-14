@@ -17,6 +17,12 @@ export const IRABreakdown = ({ ira, periodLabel }: IRABreakdownProps) => {
         Nota usada no IRA: {periodLabel ? <strong>{periodLabel}</strong> : 'período não definido'}
       </div>
 
+      {ira.missingGradeCount > 0 && (
+        <div className="text-xs rounded-md border border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400 p-2">
+          {ira.missingGradeCount} disciplina(s) selecionada(s) sem nota — consideradas 0,00 no IRA até o lançamento da nota.
+        </div>
+      )}
+
       {eligible.length > 0 ? (
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -24,6 +30,7 @@ export const IRABreakdown = ({ ira, periodLabel }: IRABreakdownProps) => {
               <tr className="text-left text-xs text-muted-foreground border-b">
                 <th className="py-2 pr-2">Disciplina</th>
                 <th className="py-2 pr-2">Nota</th>
+                <th className="py-2 pr-2">Situação</th>
                 <th className="py-2 pr-2">Peso</th>
                 <th className="py-2 pr-2">Nota × Peso</th>
                 <th className="py-2">Contribuição</th>
@@ -33,7 +40,16 @@ export const IRABreakdown = ({ ira, periodLabel }: IRABreakdownProps) => {
               {eligible.map((line) => (
                 <tr key={line.subjectId} className="border-b last:border-0">
                   <td className="py-2 pr-2 font-medium">{line.name}</td>
-                  <td className="py-2 pr-2">{formatGrade(line.value)}</td>
+                  <td className={cn('py-2 pr-2', line.valueSource === 'missing_as_zero' && 'text-amber-600')}>
+                    {formatGrade(line.usedValue)}
+                  </td>
+                  <td className="py-2 pr-2 text-xs">
+                    {line.valueSource === 'missing_as_zero' ? (
+                      <span className="text-amber-600">nota não lançada → 0,00 usado no IRA</span>
+                    ) : (
+                      <span className="text-muted-foreground">nota registrada: {formatGrade(line.value)}</span>
+                    )}
+                  </td>
                   <td className="py-2 pr-2">
                     {line.weight}
                     {line.weightSource === 'custom' && (
@@ -54,6 +70,7 @@ export const IRABreakdown = ({ ira, periodLabel }: IRABreakdownProps) => {
             <tfoot>
               <tr className="font-medium">
                 <td className="py-2 pr-2">Total</td>
+                <td className="py-2 pr-2">—</td>
                 <td className="py-2 pr-2">—</td>
                 <td className="py-2 pr-2">{formatGrade(ira.totalWeight)}</td>
                 <td className="py-2 pr-2">{formatGrade(ira.totalProduct)}</td>
@@ -86,6 +103,11 @@ export const IRABreakdown = ({ ira, periodLabel }: IRABreakdownProps) => {
           </ul>
         </div>
       )}
+
+      <p className="text-xs text-muted-foreground">
+        Regra do IRA: disciplinas selecionadas sem nota lançada no período escolhido entram com 0,00.
+        A aba “Notas” continua mostrando a verdade do boletim (“—” quando não informado).
+      </p>
     </div>
   );
 };
