@@ -242,6 +242,7 @@ serve(async (req) => {
     const students: ClassStudent[] = Array.isArray(body.students) ? body.students : [];
     const expected: ExpectedSubject[] = Array.isArray(body.expected_subjects) ? body.expected_subjects : [];
     const scaleMax: number = Number(body.scale_max) > 0 ? Number(body.scale_max) : 10;
+    const expectedClassCode: string = String(body.class_code ?? body.class_name ?? '').trim();
 
     const approxBytes = Math.floor((pdfBase64.length * 3) / 4);
     if (approxBytes > MAX_PDF_SIZE_BYTES) {
@@ -274,27 +275,33 @@ serve(async (req) => {
     (payload.notes || []).forEach((n) => addIssue('info', 'ai_note', String(n)));
 
     // ---------- Etapa 2: checagens determinísticas ----------
-    const rawRows = Array.isArray(payload.rows) ? payload.rows : [];
+    const allRows = Array.isArray(payload.rows) ? payload.rows : [];
+    // A coluna FALTAS é descartada por completo (requisito do usuário).
+    const rawRows = allRows.filter((r) => !isAbsenceLabel(String(r?.period ?? '')) && !isAbsenceLabel(String(r?.subject ?? '')));
+    const droppedAbsenceCells = allRows.length - rawRows.length;
+    if (droppedAbsenceCells > 0) {
+      addIssue('info', 'absences_ignored', `${droppedAbsenceCells} célula(s) de faltas foram descartadas — o módulo de notas ignora faltas.`);
+    }
     if (rawRows.length === 0) {
       return json({ success: false, error: 'Nenhuma nota foi encontrada no PDF. Verifique se o arquivo é um boletim tabular.' }, 422);
     }
 
     const studentIndex = students.map((s) => ({ ...s, norm: normalize(s.full_name) }));
 
-    // períodos
+    // períodos / etapas (rótulos canônicos: 1º–4º Período + colunas finais)
     const periodMap = new Map<string, { label: string; kind: string }>();
-    for (const p of payload.periods || []) {
-      const label = String(p?.label ?? '').trim();
-      if (!label) continue;
-      const norm = normalize(label);
-      const kind = /final|media final|média final/.test(norm) ? 'final' : (p?.kind === 'final' ? 'final' : 'period');
-      if (!periodMap.has(norm)) periodMap.set(norm, { label, kind });
-    }
-    for (const r of rawRows) {
-      const label = String(r?.period ?? '').trim() || 'Sem período';
-      const norm = normalize(label);
-      if (!periodMap.has(norm)) periodMap.set(norm, { label, kind: /final/.test(norm) ? 'final' : 'unknown' });
-    }
+    const canonicalPeriod = new Map<string, string>(); // rótulo lido -> canônico
+    const registerPeriod = (rawLabel: string, hinted?: string | null) => {
+      const label = String(rawLabel ?? '').trim() || 'Sem período';
+      if (isAbsenceLabel(label)) return null;
+      const { kind, canonical } = classifyPeriod(label, hinted);
+      canonicalPeriod.set(label, canonical);
+      const norm = normalize(canonical);
+      if (!periodMap.has(norm)) periodMap.set(norm, { label: canonical, kind });
+      return canonical;
+    };
+    for (const p of payload.periods || []) registerPeriod(String(p?.label ?? ''), p?.kind ?? null);
+    for (const r of rawRows) registerPeriod(String(r?.period ?? ''), r?.period_kind ?? null);
 
     // disciplinas
     const subjectMap = new Map<string, { name: string; weekly_classes: number | null; matched_expected: string | null }>();
@@ -332,9 +339,21 @@ serve(async (req) => {
 
     // duplicidade de alunos no PDF
     const pdfStudentNames = new Map<string, string>();
+    const pagesByStudent = new Map<string, Set<number>>();
+    const studentsByPage = new Map<number, Set<string>>();
+    const classCodes = new Map<string, number>();
     for (const r of rawRows) {
       const norm = normalize(r?.student_name ?? '');
       if (norm && !pdfStudentNames.has(norm)) pdfStudentNames.set(norm, String(r.student_name));
+      const page = typeof r?.page === 'number' ? r.page : null;
+      if (norm && page != null) {
+        if (!pagesByStudent.has(norm)) pagesByStudent.set(norm, new Set());
+        pagesByStudent.get(norm)!.add(page);
+        if (!studentsByPage.has(page)) studentsByPage.set(page, new Set());
+        studentsByPage.get(page)!.add(norm);
+      }
+      const code = String(r?.class_code ?? '').trim();
+      if (code) classCodes.set(code, (classCodes.get(code) ?? 0) + 1);
     }
     const pdfStudentList = [...pdfStudentNames.entries()];
     for (let i = 0; i < pdfStudentList.length; i++) {
