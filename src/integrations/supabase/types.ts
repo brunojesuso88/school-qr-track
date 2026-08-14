@@ -1127,6 +1127,10 @@ export type Database = {
         Args: { _year: number }
         Returns: number
       }
+      update_student_photo: {
+        Args: { _photo_url: string; _student_id: string }
+        Returns: undefined
+      }
       user_has_any_role: {
         Args: { _roles: Database["public"]["Enums"]["app_role"][] }
         Returns: boolean
