@@ -31,6 +31,9 @@ interface ImportStats {
   cells_total: number;
   low_confidence: number;
   empty_cells: number;
+  explicit_zero_cells?: number;
+  absence_cells_ignored?: number;
+  class_codes?: string[];
   invalid_values: number;
   reconciled_cells: number;
   issues: number;
@@ -79,6 +82,24 @@ const parseValue = (raw: string | null): { value: number | null; invalid: boolea
   if (!/^\d{1,3}(\.\d{1,2})?$/.test(cleaned)) return { value: null, invalid: true };
   return { value: Number(cleaned), invalid: false };
 };
+
+const PERIOD_ORDER = ['1º período', '2º período', '3º período', '4º período', 'media final', 'rec final', 'cons class', 'pendencia', 'final'];
+const periodRank = (label: string) => {
+  const idx = PERIOD_ORDER.indexOf(normalize(label));
+  return idx === -1 ? PERIOD_ORDER.length : idx;
+};
+
+/** Revisão ordenada por aluno > disciplina > período/etapa. */
+const sortReviewRows = (rows: ReviewRow[]) =>
+  [...rows].sort((a, b) => {
+    const byStudent = (a.matched_name || a.student_name).localeCompare(b.matched_name || b.student_name, 'pt-BR');
+    if (byStudent !== 0) return byStudent;
+    const bySubject = a.subject.localeCompare(b.subject, 'pt-BR');
+    if (bySubject !== 0) return bySubject;
+    const byPeriod = periodRank(a.period) - periodRank(b.period);
+    if (byPeriod !== 0) return byPeriod;
+    return a.period.localeCompare(b.period, 'pt-BR');
+  });
 
 export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }: GradesImportDialogProps) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -207,6 +228,7 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
           pdfBase64,
           fileName: file.name,
           class_id: classItem.id,
+          class_code: classItem.name,
           students: students.map((s) => ({ id: s.id, full_name: s.full_name, student_id: s.student_id })),
           expected_subjects: expected.map((s) => ({ name: s.name, weekly_classes: s.weekly_classes })),
         },
@@ -215,7 +237,9 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
       if (fnError) throw new Error(fnError.message);
       if (!data?.success) throw new Error(data?.error || 'Não foi possível processar o boletim.');
 
-      const parsedRows: ReviewRow[] = (data.rows || []).map((r: ReviewRow) => ({ ...r, flags: r.flags || [], source: 'import' as const }));
+      const parsedRows: ReviewRow[] = sortReviewRows(
+        (data.rows || []).map((r: ReviewRow) => ({ ...r, flags: r.flags || [], source: 'import' as const })),
+      );
       setRows(parsedRows);
       setSubjects(data.subjects || []);
       setPeriods(data.periods || []);
@@ -250,9 +274,12 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
       const flags = row.flags.filter((f) => !['invalid_value', 'low_confidence', 'empty_cell', 'out_of_scale', 'reconciliation_divergence'].includes(f));
       if (invalid) flags.push('invalid_value');
       if (!invalid && value == null) flags.push('empty_cell');
+      if (value === 0) flags.push('explicit_zero');
       return {
         ...row,
         raw_value: raw || null,
+        note_raw: raw || null,
+        note_numeric: value,
         value,
         source: 'manual' as const,
         flags: [...new Set([...flags, 'manual'])],
@@ -475,9 +502,14 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
               {counter('Períodos', stats.periods)}
               {counter('Notas lidas', stats.grades_read)}
               {counter('Baixa confiança', stats.low_confidence, stats.low_confidence ? 'warning' : undefined)}
-              {counter('Células vazias', stats.empty_cells)}
+              {counter('Sem nota (vazias)', stats.empty_cells)}
+              {counter('Notas 0,00', stats.explicit_zero_cells ?? 0)}
               {counter('Inconsistências', stats.issues, stats.errors ? 'danger' : stats.warnings ? 'warning' : undefined)}
             </div>
+
+            <p className="text-[11px] text-muted-foreground">
+              Turma do cabeçalho: {stats.class_codes?.length ? stats.class_codes.join(', ') : '—'} · células de faltas ignoradas: {stats.absence_cells_ignored ?? 0}
+            </p>
 
             {issues.length > 0 && (
               <div className="space-y-2 max-h-40 overflow-y-auto">
