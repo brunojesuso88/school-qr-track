@@ -83,6 +83,7 @@ const Students = () => {
   const [filterClass, setFilterClass] = useState(classFromUrl || 'all');
   const [filterShift, setFilterShift] = useState('all');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isOccurrencesReportOpen, setIsOccurrencesReportOpen] = useState(false);
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [occurrencesStudent, setOccurrencesStudent] = useState<Student | null>(null);
