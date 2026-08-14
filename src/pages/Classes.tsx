@@ -17,6 +17,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { classSchema } from '@/lib/validations';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
+import { GradesImportDialog } from '@/components/grades/GradesImportDialog';
 import ClassAttendanceDialog from '@/components/ClassAttendanceDialog';
 import ClassSummaryDialog from '@/components/ClassSummaryDialog';
 import { format } from 'date-fns';
@@ -62,6 +63,7 @@ interface ClassItem {
   photo_url: string | null;
   created_at: string;
   location?: string;
+  mapping_class_id?: string | null;
 }
 
 interface PdfStudentBase {
