@@ -132,23 +132,23 @@ Deno.serve(async (req) => {
   if (type === 'project') {
     const { data } = await supabase
       .from('school_events')
-      .select('title, resumo_ia, enfoque, cover_image, images')
+      .select('title, cover_image, images')
       .eq('id', id)
       .maybeSingle();
     if (!data) return fallback('/events');
     title = data.title || 'Projeto escolar';
-    description = data.resumo_ia || data.enfoque || 'Projeto da escola';
+    description = 'Projeto da escola. Acesse o sistema para ver os detalhes.';
     coverPath = data.cover_image || (Array.isArray(data.images) ? data.images[0] as string : null);
     appPath = `/events?id=${id}`;
   } else {
     const { data } = await supabase
       .from('school_event_simple')
-      .select('name, description, cover_image, images')
+      .select('name, cover_image, images')
       .eq('id', id)
       .maybeSingle();
     if (!data) return fallback('/school-events');
     title = data.name || 'Evento escolar';
-    description = data.description || 'Evento da escola';
+    description = 'Evento da escola. Acesse o sistema para ver os detalhes.';
     coverPath = data.cover_image || (Array.isArray(data.images) ? data.images[0] as string : null);
     appPath = `/school-events?id=${id}`;
   }
@@ -158,7 +158,7 @@ Deno.serve(async (req) => {
     const { data: signed } = await supabase
       .storage
       .from('school-events')
-      .createSignedUrl(coverPath, 60 * 60 * 24 * 7);
+      .createSignedUrl(coverPath, 60 * 30);
     imageUrl = signed?.signedUrl ?? null;
   }
 
