@@ -27,7 +27,11 @@ interface ExtractedRow {
   student_name: string;
   subject: string;
   period: string;
-  raw_value: string | null;
+  raw_value?: string | null;
+  note_raw?: string | null;
+  student_code?: string | null;
+  class_code?: string | null;
+  period_kind?: string | null;
   page?: number | null;
   confidence?: number | null;
 }
@@ -36,18 +40,46 @@ interface ExtractionPayload {
   pages?: number | null;
   periods?: { label: string; kind?: string }[];
   subjects?: string[];
-  students?: string[];
+  students?: (string | { name?: string; student_code?: string | null; class_code?: string | null; page?: number | null })[];
   rows?: ExtractedRow[];
   notes?: string[];
 }
 
-interface ReviewRow extends ExtractedRow {
+interface ReviewRow extends Omit<ExtractedRow, 'raw_value' | 'note_raw'> {
+  raw_value: string | null;
+  note_raw: string | null;
+  note_numeric: number | null;
   value: number | null;
   student_id: string | null;
   matched_name: string | null;
   match_score: number;
   flags: string[];
   second_pass_value?: string | null;
+  source_page: number | null;
+}
+
+/** Períodos/etapas oficiais do boletim SIAEP e colunas finais. */
+const FINAL_COLUMN_PATTERNS: { kind: string; label: string; test: RegExp }[] = [
+  { kind: 'media_final', label: 'Média Final', test: /^(media|média)\s*final$/ },
+  { kind: 'rec_final', label: 'Rec. Final', test: /^rec\.?\s*final$/ },
+  { kind: 'cons_class', label: 'Cons. Class', test: /^cons\.?\s*class/ },
+  { kind: 'pendencia', label: 'Pendência', test: /^pendencia$/ },
+  { kind: 'final', label: 'Final', test: /^final$/ },
+];
+
+/** Detecta rótulos de coluna de FALTAS, que devem ser descartados por completo. */
+const isAbsenceLabel = (label: string) => /falta/.test(normalize(label));
+
+function classifyPeriod(label: string, hinted?: string | null): { kind: string; canonical: string } {
+  const norm = normalize(label);
+  const periodMatch = norm.match(/^([1-4])\s*(º|o|a|ª)?\s*(periodo|bimestre|etapa|trimestre)/);
+  if (periodMatch) return { kind: 'period', canonical: `${periodMatch[1]}º Período` };
+  for (const f of FINAL_COLUMN_PATTERNS) {
+    if (f.test.test(norm)) return { kind: f.kind, canonical: f.label };
+  }
+  if (hinted === 'final') return { kind: 'final', canonical: label };
+  if (/final/.test(norm)) return { kind: 'final', canonical: label };
+  return { kind: 'unknown', canonical: label };
 }
 
 const normalize = (s: unknown) =>
@@ -112,28 +144,33 @@ function extractJson(content: string): any {
   return JSON.parse(text.slice(start, end + 1));
 }
 
-const SYSTEM_PROMPT = `Você extrai BOLETINS ESCOLARES (tabelas de notas) de PDFs com precisão absoluta.
+const SYSTEM_PROMPT = `Você extrai NOTAS de BOLETINS ESCOLARES (padrão SIAEP/SEDUC) em PDF com precisão absoluta.
+
+ESTRUTURA TÍPICA DO DOCUMENTO:
+- UMA PÁGINA POR ALUNO. O cabeçalho da página traz Aluno(a), código do aluno, escola e Turma.
+- Cada linha da grade é uma DISCIPLINA. As colunas são: 1º Período, 2º Período, 3º Período, 4º Período, Média Final, Rec. Final, Cons. Class, Pendência e Final.
+- Dentro de cada período existem DUAS subcolunas: "Nota" e "Faltas".
 
 REGRAS OBRIGATÓRIAS:
-1. Analise TODAS as páginas do documento, da primeira à última.
-2. Identifique os cabeçalhos: disciplinas (colunas ou linhas) e períodos/etapas (1º Bimestre, 2º Bimestre, 3º, 4º, Média, Final...).
-3. Reporte UMA entrada por célula da matriz aluno × disciplina × período.
-4. NUNCA invente uma nota. Se a célula estiver vazia, ilegível ou ausente, use raw_value = null.
-5. Preserve o valor exatamente como aparece no PDF em raw_value (inclusive vírgula decimal). Não arredonde, não converta, não recalcule médias.
-6. Notas zero (0, 0,0) são notas válidas e devem ser reportadas.
-7. Preserve os nomes dos alunos e das disciplinas exatamente como aparecem (com acentos).
-8. Se um aluno aparecer em mais de uma página (continuação de tabela), reporte as células de todas as páginas.
-9. confidence entre 0 e 1 indica sua certeza de leitura daquela célula (baixa quando o dígito está borrado, cortado, ou a coluna é ambígua).
-10. page = número da página (1-based) onde a célula foi lida.
+1. Analise TODAS as páginas, da primeira à última. Nenhuma página pode ser ignorada.
+2. IGNORE COMPLETAMENTE a subcoluna FALTAS. Nunca reporte faltas, nunca confunda um valor de faltas com nota. Separe as células pela POSIÇÃO da coluna: a primeira subcoluna do período é a Nota, a segunda é Faltas (descartar).
+3. Reporte UMA entrada por célula de NOTA: aluno × disciplina × período/etapa.
+4. NUNCA invente valores. Célula vazia => note_raw = null (significa "sem nota informada").
+5. "0,00" (ou 0, 0,0) escrito na célula é uma NOTA REAL igual a zero e deve ser reportado como note_raw "0,00". VAZIO NUNCA é zero e zero nunca é vazio.
+6. Preserve o valor exatamente como aparece (com vírgula decimal). Não arredonde, não converta, não recalcule médias.
+7. DESCUBRA as disciplinas dinamicamente lendo as linhas de cada página. NÃO assuma que a lista de disciplinas da primeira página vale para as outras: podem existir disciplinas preenchidas apenas em algumas páginas.
+8. Reporte também as colunas finais quando houver valor: use period exatamente "Média Final", "Rec. Final", "Cons. Class", "Pendência" ou "Final".
+9. Para cada linha informe student_name (exatamente como no PDF, com acentos), student_code (código/matrícula do cabeçalho quando existir), class_code (a Turma do cabeçalho) e page (1-based).
+10. confidence entre 0 e 1 = sua certeza da leitura daquela célula (use valor baixo quando o dígito estiver borrado/cortado ou a coluna for ambígua).
 
 Responda SOMENTE com JSON válido no formato:
 {
   "pages": number,
-  "periods": [{"label": "1º Bimestre", "kind": "period" | "final"}],
-  "subjects": ["Matemática", "Português"],
-  "students": ["NOME DO ALUNO"],
-  "rows": [{"student_name": "NOME", "subject": "Matemática", "period": "1º Bimestre", "raw_value": "8,5", "page": 1, "confidence": 0.98}],
-  "notes": ["observações sobre problemas de leitura, cortes de linha, colunas ambíguas"]
+  "periods": [{"label": "1º Período", "kind": "period" | "final"}],
+  "subjects": ["ARTE", "BIOLOGIA"],
+  "students": [{"name": "NOME DO ALUNO", "student_code": "123456", "class_code": "26RMM100", "page": 1}],
+  "rows": [{"student_name": "NOME", "student_code": "123456", "class_code": "26RMM100", "subject": "ARTE", "period": "1º Período", "note_raw": "3,17", "page": 1, "confidence": 0.98}],
+  "notes": ["observações sobre cortes de linha, colunas ambíguas, páginas sem aluno"]
 }`;
 
 function buildExtractionBody(pdfBase64: string, fileName: string, expected: ExpectedSubject[], students: ClassStudent[]) {
@@ -149,7 +186,7 @@ function buildExtractionBody(pdfBase64: string, fileName: string, expected: Expe
       {
         role: 'user',
         content: [
-          { type: 'text', text: `Extraia todas as notas deste boletim.\n${subjectHint}\n${studentHint}` },
+          { type: 'text', text: `Extraia todas as NOTAS deste boletim (uma página por aluno). Ignore a coluna Faltas.\n${subjectHint}\n${studentHint}` },
           { type: 'file', file: { filename: fileName || 'boletim.pdf', file_data: `data:application/pdf;base64,${pdfBase64}` } },
         ],
       },
@@ -161,14 +198,14 @@ function buildExtractionBody(pdfBase64: string, fileName: string, expected: Expe
 function buildReconciliationBody(pdfBase64: string, fileName: string, suspects: ReviewRow[]) {
   const list = suspects
     .slice(0, 120)
-    .map((r) => `- aluno: ${r.student_name} | disciplina: ${r.subject} | período: ${r.period} | lido: ${r.raw_value ?? 'VAZIO'} | página: ${r.page ?? '?'}`)
+      .map((r) => `- aluno: ${r.student_name} | disciplina: ${r.subject} | período: ${r.period} | lido: ${r.note_raw ?? 'VAZIO'} | página: ${r.source_page ?? '?'}`)
     .join('\n');
   return {
     messages: [
       {
         role: 'system',
-        content: `Você revisa células específicas de um boletim escolar em PDF. Releia SOMENTE as células listadas e confirme o valor exato. Se a célula estiver realmente vazia, retorne raw_value null. Nunca invente valores.
-Responda SOMENTE com JSON: {"rows":[{"student_name":"...","subject":"...","period":"...","raw_value":"8,5"|null,"confidence":0.0}]}`,
+        content: `Você revisa células específicas de um boletim escolar (padrão SIAEP) em PDF. Releia SOMENTE as células de NOTA listadas (ignore a coluna Faltas) e confirme o valor exato na página indicada. Se a célula estiver realmente vazia, retorne note_raw null. "0,00" é nota zero válida, diferente de vazio. Nunca invente valores.
+Responda SOMENTE com JSON: {"rows":[{"student_name":"...","subject":"...","period":"...","note_raw":"8,5"|null,"confidence":0.0}]}`,
       },
       {
         role: 'user',
@@ -205,6 +242,7 @@ serve(async (req) => {
     const students: ClassStudent[] = Array.isArray(body.students) ? body.students : [];
     const expected: ExpectedSubject[] = Array.isArray(body.expected_subjects) ? body.expected_subjects : [];
     const scaleMax: number = Number(body.scale_max) > 0 ? Number(body.scale_max) : 10;
+    const expectedClassCode: string = String(body.class_code ?? body.class_name ?? '').trim();
 
     const approxBytes = Math.floor((pdfBase64.length * 3) / 4);
     if (approxBytes > MAX_PDF_SIZE_BYTES) {
@@ -237,27 +275,33 @@ serve(async (req) => {
     (payload.notes || []).forEach((n) => addIssue('info', 'ai_note', String(n)));
 
     // ---------- Etapa 2: checagens determinísticas ----------
-    const rawRows = Array.isArray(payload.rows) ? payload.rows : [];
+    const allRows = Array.isArray(payload.rows) ? payload.rows : [];
+    // A coluna FALTAS é descartada por completo (requisito do usuário).
+    const rawRows = allRows.filter((r) => !isAbsenceLabel(String(r?.period ?? '')) && !isAbsenceLabel(String(r?.subject ?? '')));
+    const droppedAbsenceCells = allRows.length - rawRows.length;
+    if (droppedAbsenceCells > 0) {
+      addIssue('info', 'absences_ignored', `${droppedAbsenceCells} célula(s) de faltas foram descartadas — o módulo de notas ignora faltas.`);
+    }
     if (rawRows.length === 0) {
       return json({ success: false, error: 'Nenhuma nota foi encontrada no PDF. Verifique se o arquivo é um boletim tabular.' }, 422);
     }
 
     const studentIndex = students.map((s) => ({ ...s, norm: normalize(s.full_name) }));
 
-    // períodos
+    // períodos / etapas (rótulos canônicos: 1º–4º Período + colunas finais)
     const periodMap = new Map<string, { label: string; kind: string }>();
-    for (const p of payload.periods || []) {
-      const label = String(p?.label ?? '').trim();
-      if (!label) continue;
-      const norm = normalize(label);
-      const kind = /final|media final|média final/.test(norm) ? 'final' : (p?.kind === 'final' ? 'final' : 'period');
-      if (!periodMap.has(norm)) periodMap.set(norm, { label, kind });
-    }
-    for (const r of rawRows) {
-      const label = String(r?.period ?? '').trim() || 'Sem período';
-      const norm = normalize(label);
-      if (!periodMap.has(norm)) periodMap.set(norm, { label, kind: /final/.test(norm) ? 'final' : 'unknown' });
-    }
+    const canonicalPeriod = new Map<string, string>(); // rótulo lido -> canônico
+    const registerPeriod = (rawLabel: string, hinted?: string | null) => {
+      const label = String(rawLabel ?? '').trim() || 'Sem período';
+      if (isAbsenceLabel(label)) return null;
+      const { kind, canonical } = classifyPeriod(label, hinted);
+      canonicalPeriod.set(label, canonical);
+      const norm = normalize(canonical);
+      if (!periodMap.has(norm)) periodMap.set(norm, { label: canonical, kind });
+      return canonical;
+    };
+    for (const p of payload.periods || []) registerPeriod(String(p?.label ?? ''), p?.kind ?? null);
+    for (const r of rawRows) registerPeriod(String(r?.period ?? ''), r?.period_kind ?? null);
 
     // disciplinas
     const subjectMap = new Map<string, { name: string; weekly_classes: number | null; matched_expected: string | null }>();
@@ -295,9 +339,21 @@ serve(async (req) => {
 
     // duplicidade de alunos no PDF
     const pdfStudentNames = new Map<string, string>();
+    const pagesByStudent = new Map<string, Set<number>>();
+    const studentsByPage = new Map<number, Set<string>>();
+    const classCodes = new Map<string, number>();
     for (const r of rawRows) {
       const norm = normalize(r?.student_name ?? '');
       if (norm && !pdfStudentNames.has(norm)) pdfStudentNames.set(norm, String(r.student_name));
+      const page = typeof r?.page === 'number' ? r.page : null;
+      if (norm && page != null) {
+        if (!pagesByStudent.has(norm)) pagesByStudent.set(norm, new Set());
+        pagesByStudent.get(norm)!.add(page);
+        if (!studentsByPage.has(page)) studentsByPage.set(page, new Set());
+        studentsByPage.get(page)!.add(norm);
+      }
+      const code = String(r?.class_code ?? '').trim();
+      if (code) classCodes.set(code, (classCodes.get(code) ?? 0) + 1);
     }
     const pdfStudentList = [...pdfStudentNames.entries()];
     for (let i = 0; i < pdfStudentList.length; i++) {
@@ -313,12 +369,16 @@ serve(async (req) => {
     const reviewRows: ReviewRow[] = [];
     let emptyCells = 0;
     let invalidValues = 0;
+    let explicitZeroCells = 0;
+    let filledCells = 0;
 
     for (const r of rawRows) {
       const studentName = String(r?.student_name ?? '').trim();
       const subjectName = String(r?.subject ?? '').trim();
-      const periodLabel = String(r?.period ?? '').trim() || 'Sem período';
+      const readPeriod = String(r?.period ?? '').trim() || 'Sem período';
+      const periodLabel = canonicalPeriod.get(readPeriod) ?? readPeriod;
       const flags: string[] = [];
+      const noteRaw = r?.note_raw != null ? String(r.note_raw) : (r?.raw_value != null ? String(r.raw_value) : null);
 
       const norm = normalize(studentName);
       let matched: (typeof studentIndex)[number] | null = null;
@@ -332,9 +392,13 @@ serve(async (req) => {
       else if (score < 0.97) flags.push('fuzzy_student_match');
 
       if (!subjectName) flags.push('missing_subject');
-      const { value, invalid } = parseGradeValue(r?.raw_value ?? null);
+      const { value, invalid } = parseGradeValue(noteRaw);
       if (invalid) { flags.push('invalid_value'); invalidValues++; }
       if (!invalid && value == null) { flags.push('empty_cell'); emptyCells++; }
+      if (value != null) {
+        filledCells++;
+        if (value === 0) { flags.push('explicit_zero'); explicitZeroCells++; }
+      }
       if (value != null && (value < 0 || value > scaleMax)) flags.push('out_of_scale');
 
       const conf = typeof r?.confidence === 'number' ? r.confidence : null;
@@ -345,7 +409,7 @@ serve(async (req) => {
       if (prev != null) {
         flags.push('duplicate_cell');
         const prevRow = reviewRows[prev];
-        if (prevRow && (prevRow.raw_value ?? null) !== (r?.raw_value ?? null)) {
+        if (prevRow && (prevRow.note_raw ?? null) !== noteRaw) {
           prevRow.flags.push('conflicting_duplicate');
           flags.push('conflicting_duplicate');
           addIssue('error', 'conflicting_duplicate', `Valores diferentes para a mesma célula (${studentName} / ${subjectName} / ${periodLabel}).`);
@@ -354,10 +418,16 @@ serve(async (req) => {
 
       const row: ReviewRow = {
         student_name: studentName,
+        student_code: r?.student_code != null ? String(r.student_code) : null,
+        class_code: r?.class_code != null ? String(r.class_code) : null,
         subject: subjectName,
         period: periodLabel,
-        raw_value: r?.raw_value != null ? String(r.raw_value) : null,
+        period_kind: periodMap.get(normalize(periodLabel))?.kind ?? 'unknown',
+        raw_value: noteRaw,
+        note_raw: noteRaw,
+        note_numeric: value,
         page: typeof r?.page === 'number' ? r.page : null,
+        source_page: typeof r?.page === 'number' ? r.page : null,
         confidence: conf,
         value,
         student_id: confident && matched ? matched.id : null,
@@ -367,6 +437,39 @@ serve(async (req) => {
       };
       if (prev == null) seenCells.set(cellKey, reviewRows.length);
       reviewRows.push(row);
+    }
+
+    // páginas × alunos: o boletim SIAEP tem exatamente 1 aluno por página
+    const declaredPages = typeof payload.pages === 'number' ? payload.pages : null;
+    const pagesSeen = [...studentsByPage.keys()].sort((a, b) => a - b);
+    const multiStudentPages = pagesSeen.filter((p) => (studentsByPage.get(p)?.size ?? 0) > 1);
+    if (multiStudentPages.length > 0) {
+      addIssue('error', 'multiple_students_per_page', `Páginas com mais de um aluno detectado (esperado 1 por página): ${multiStudentPages.slice(0, 10).join(', ')}.`);
+    }
+    const multiPageStudents = [...pagesByStudent.entries()].filter(([, pages]) => pages.size > 1);
+    if (multiPageStudents.length > 0) {
+      addIssue('warning', 'student_in_multiple_pages', `${multiPageStudents.length} aluno(s) apareceram em mais de uma página (possível duplicidade de página).`);
+    }
+    if (declaredPages != null) {
+      const emptyPages = [];
+      for (let p = 1; p <= declaredPages; p++) if (!studentsByPage.has(p)) emptyPages.push(p);
+      if (emptyPages.length > 0) {
+        addIssue('error', 'pages_without_student', `Páginas sem aluno identificado: ${emptyPages.slice(0, 15).join(', ')}${emptyPages.length > 15 ? '...' : ''}.`);
+      }
+      if (declaredPages !== pdfStudentNames.size) {
+        addIssue('warning', 'pages_students_mismatch', `O PDF tem ${declaredPages} página(s) mas ${pdfStudentNames.size} aluno(s) distinto(s) foram detectados (esperado 1 aluno por página).`);
+      }
+    }
+
+    // turma do cabeçalho
+    const classCodeList = [...classCodes.keys()];
+    if (expectedClassCode) {
+      const divergent = classCodeList.filter((c) => normalize(c) !== normalize(expectedClassCode));
+      if (divergent.length > 0) {
+        addIssue('error', 'class_code_mismatch', `Turma divergente no cabeçalho do PDF: encontrado ${divergent.slice(0, 5).join(', ')}; esperado ${expectedClassCode}.`);
+      }
+    } else if (classCodeList.length > 1) {
+      addIssue('warning', 'multiple_class_codes', `O PDF contém mais de uma turma no cabeçalho: ${classCodeList.slice(0, 5).join(', ')}.`);
     }
 
     // alunos da turma ausentes do PDF / alunos do PDF fora da turma
@@ -387,10 +490,10 @@ serve(async (req) => {
       addIssue('warning', 'subjects_missing_in_pdf', `Disciplinas da turma não localizadas no boletim: ${missingSubjects.map((s) => s.name).join(', ')}.`);
     }
 
-    // matriz incompleta (colunas desalinhadas / cortes de linha)
-    const expectedCells = pdfStudentNames.size * subjectMap.size * periodMap.size;
-    if (expectedCells > 0 && reviewRows.length < expectedCells) {
-      addIssue('warning', 'incomplete_matrix', `Matriz incompleta: esperadas ${expectedCells} células (alunos × disciplinas × períodos), lidas ${reviewRows.length}. Possível corte de linha ou coluna desalinhada.`);
+    // matriz de completude aluno × disciplina × período (células vazias são legítimas neste boletim)
+    const matrixCells = pdfStudentNames.size * subjectMap.size * periodMap.size;
+    if (matrixCells > 0) {
+      addIssue('info', 'completeness_matrix', `Matriz aluno × disciplina × período: ${matrixCells} combinações possíveis; ${filledCells} com nota, ${emptyCells} sem nota informada, ${explicitZeroCells} com nota 0,00 explícita. Células vazias são normais neste boletim.`);
     }
     if (invalidValues > 0) addIssue('error', 'invalid_values', `${invalidValues} valor(es) não numérico(s) exigem correção manual.`);
     if (reviewRows.some((r) => r.flags.includes('out_of_scale'))) {
@@ -412,8 +515,9 @@ serve(async (req) => {
           const map2 = new Map<string, { raw_value: string | null; confidence: number | null }>();
           for (const r of payload2?.rows ?? []) {
             const key = `${normalize(r?.student_name)}||${normalize(r?.subject)}||${normalize(r?.period)}`;
+            const note = r?.note_raw != null ? String(r.note_raw) : (r?.raw_value != null ? String(r.raw_value) : null);
             map2.set(key, {
-              raw_value: r?.raw_value != null ? String(r.raw_value) : null,
+              raw_value: note,
               confidence: typeof r?.confidence === 'number' ? r.confidence : null,
             });
           }
@@ -422,7 +526,7 @@ serve(async (req) => {
             const second = map2.get(key);
             if (!second) continue;
             reconciled++;
-            if ((second.raw_value ?? null) === (row.raw_value ?? null)) {
+            if ((second.raw_value ?? null) === (row.note_raw ?? null)) {
               row.flags = row.flags.filter((f) => f !== 'low_confidence');
               row.flags.push('reconciled_match');
             } else {
@@ -446,7 +550,7 @@ serve(async (req) => {
     reviewRows.forEach((r) => { r.flags = [...new Set(r.flags)]; });
 
     const stats = {
-      pages: typeof payload.pages === 'number' ? payload.pages : null,
+      pages: declaredPages,
       students_detected: pdfStudentNames.size,
       students_matched: matchedStudentIds.size,
       students_unmatched: unmatchedNames.length,
@@ -458,6 +562,9 @@ serve(async (req) => {
       cells_total: reviewRows.length,
       low_confidence: reviewRows.filter((r) => r.flags.includes('low_confidence')).length,
       empty_cells: emptyCells,
+      explicit_zero_cells: explicitZeroCells,
+      absence_cells_ignored: droppedAbsenceCells,
+      class_codes: classCodeList,
       invalid_values: invalidValues,
       reconciled_cells: reconciled,
       issues: issues.length,
