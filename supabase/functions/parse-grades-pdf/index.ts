@@ -27,7 +27,11 @@ interface ExtractedRow {
   student_name: string;
   subject: string;
   period: string;
-  raw_value: string | null;
+  raw_value?: string | null;
+  note_raw?: string | null;
+  student_code?: string | null;
+  class_code?: string | null;
+  period_kind?: string | null;
   page?: number | null;
   confidence?: number | null;
 }
@@ -36,18 +40,46 @@ interface ExtractionPayload {
   pages?: number | null;
   periods?: { label: string; kind?: string }[];
   subjects?: string[];
-  students?: string[];
+  students?: (string | { name?: string; student_code?: string | null; class_code?: string | null; page?: number | null })[];
   rows?: ExtractedRow[];
   notes?: string[];
 }
 
-interface ReviewRow extends ExtractedRow {
+interface ReviewRow extends Omit<ExtractedRow, 'raw_value' | 'note_raw'> {
+  raw_value: string | null;
+  note_raw: string | null;
+  note_numeric: number | null;
   value: number | null;
   student_id: string | null;
   matched_name: string | null;
   match_score: number;
   flags: string[];
   second_pass_value?: string | null;
+  source_page: number | null;
+}
+
+/** Períodos/etapas oficiais do boletim SIAEP e colunas finais. */
+const FINAL_COLUMN_PATTERNS: { kind: string; label: string; test: RegExp }[] = [
+  { kind: 'media_final', label: 'Média Final', test: /^(media|média)\s*final$/ },
+  { kind: 'rec_final', label: 'Rec. Final', test: /^rec\.?\s*final$/ },
+  { kind: 'cons_class', label: 'Cons. Class', test: /^cons\.?\s*class/ },
+  { kind: 'pendencia', label: 'Pendência', test: /^pendencia$/ },
+  { kind: 'final', label: 'Final', test: /^final$/ },
+];
+
+/** Detecta rótulos de coluna de FALTAS, que devem ser descartados por completo. */
+const isAbsenceLabel = (label: string) => /falta/.test(normalize(label));
+
+function classifyPeriod(label: string, hinted?: string | null): { kind: string; canonical: string } {
+  const norm = normalize(label);
+  const periodMatch = norm.match(/^([1-4])\s*(º|o|a|ª)?\s*(periodo|bimestre|etapa|trimestre)/);
+  if (periodMatch) return { kind: 'period', canonical: `${periodMatch[1]}º Período` };
+  for (const f of FINAL_COLUMN_PATTERNS) {
+    if (f.test.test(norm)) return { kind: f.kind, canonical: f.label };
+  }
+  if (hinted === 'final') return { kind: 'final', canonical: label };
+  if (/final/.test(norm)) return { kind: 'final', canonical: label };
+  return { kind: 'unknown', canonical: label };
 }
 
 const normalize = (s: unknown) =>
