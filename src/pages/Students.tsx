@@ -24,6 +24,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { StudentPhoto } from '@/components/StudentPhoto';
 import { useSignedPhotoUrl, clearPhotoUrlCache } from '@/hooks/useSignedPhotoUrl';
 import { CameraPhotoCapture } from '@/components/CameraPhotoCapture';
+import { OccurrencesReportDialog } from '@/components/OccurrencesReportDialog';
 
 interface Student {
   id: string;
@@ -589,6 +590,11 @@ const Students = () => {
             <h1 className="text-2xl font-semibold">Alunos</h1>
             <p className="text-muted-foreground">Gerenciar registros de alunos e QR codes</p>
           </div>
+          <div className="flex flex-wrap items-center gap-2">
+          <Button variant="outline" onClick={() => setIsOccurrencesReportOpen(true)}>
+            <FileText className="w-4 h-4 mr-2" />
+            Relatório de Ocorrências
+          </Button>
           <Dialog open={isDialogOpen} onOpenChange={(open) => {
             setIsDialogOpen(open);
             if (!open) {
