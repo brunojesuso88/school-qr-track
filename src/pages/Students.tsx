@@ -100,7 +100,7 @@ const Students = () => {
   const [filterOccurrences, setFilterOccurrences] = useState(false);
   const [occurrenceMap, setOccurrenceMap] = useState<Map<string, string>>(new Map());
   const [absenceCountMap, setAbsenceCountMap] = useState<Map<string, number>>(new Map());
-  const [sortByAbsences, setSortByAbsences] = useState<'none' | 'desc' | 'asc'>('none');
+  const [sortBy, setSortBy] = useState<'none' | 'absences-desc' | 'absences-asc' | 'ira-desc' | 'ira-asc'>('none');
 
   const [formData, setFormData] = useState({
     full_name: '',
@@ -582,10 +582,10 @@ const Students = () => {
     const matchesOccurrence = !filterOccurrences || occurrenceMap.has(student.id);
     return matchesSearch && matchesClass && matchesShift && matchesOccurrence;
   }).sort((a, b) => {
-    if (sortByAbsences !== 'none') {
+    if (sortBy === 'absences-desc' || sortBy === 'absences-asc') {
       const ca = absenceCountMap.get(a.id) || 0;
       const cb = absenceCountMap.get(b.id) || 0;
-      return sortByAbsences === 'desc' ? cb - ca : ca - cb;
+      return sortBy === 'absences-desc' ? cb - ca : ca - cb;
     }
     if (!filterOccurrences) return 0;
     const dateA = occurrenceMap.get(a.id) || '';
@@ -598,7 +598,23 @@ const Students = () => {
     filteredStudents.map((s) => ({ id: s.id, class: s.class })),
   );
 
-  const uniqueClasses = [...new Set(students.map((s) => s.class))];
+  // Aplica ordenação por IRA após o carregamento dos valores (assíncrono)
+  const displayStudents = sortBy === 'ira-desc' || sortBy === 'ira-asc'
+    ? [...filteredStudents].sort((a, b) => {
+        const va = iraByStudent[a.id]?.value ?? null;
+        const vb = iraByStudent[b.id]?.value ?? null;
+        // Alunos sem IRA ficam por último em ambos os modos
+        if (va === null && vb === null) return 0;
+        if (va === null) return 1;
+        if (vb === null) return -1;
+        return sortBy === 'ira-desc' ? vb - va : va - vb;
+      })
+    : filteredStudents;
+
+  // Turmas em ordem alfabética
+  const uniqueClasses = [...new Set(students.map((s) => s.class))]
+    .filter((c) => c && c.trim() !== '')
+    .sort((a, b) => a.localeCompare(b, 'pt-BR', { sensitivity: 'base' }));
 
   const getOccurrenceTypeLabel = (type: string) => {
     return OCCURRENCE_TYPES.find(t => t.value === type)?.label || type;
@@ -889,7 +905,7 @@ const Students = () => {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todas as Turmas</SelectItem>
-                  {uniqueClasses.filter((c) => c && c.trim() !== '').map((c) => (
+                  {uniqueClasses.map((c) => (
                     <SelectItem key={c} value={c}>{c}</SelectItem>
                   ))}
                 </SelectContent>
@@ -905,14 +921,16 @@ const Students = () => {
                   <SelectItem value="evening">Noite</SelectItem>
                 </SelectContent>
               </Select>
-              <Select value={sortByAbsences} onValueChange={(v) => setSortByAbsences(v as 'none' | 'desc' | 'asc')}>
+              <Select value={sortBy} onValueChange={(v) => setSortBy(v as 'none' | 'absences-desc' | 'absences-asc' | 'ira-desc' | 'ira-asc')}>
                 <SelectTrigger className="w-full sm:w-48">
-                  <SelectValue placeholder="Ordenar por faltas" />
+                  <SelectValue placeholder="Ordenar por" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">Sem ordenação</SelectItem>
-                  <SelectItem value="desc">Mais faltas primeiro</SelectItem>
-                  <SelectItem value="asc">Menos faltas primeiro</SelectItem>
+                  <SelectItem value="absences-desc">Mais faltas primeiro</SelectItem>
+                  <SelectItem value="absences-asc">Menos faltas primeiro</SelectItem>
+                  <SelectItem value="ira-desc">Maior IRA primeiro</SelectItem>
+                  <SelectItem value="ira-asc">Menor IRA primeiro</SelectItem>
                 </SelectContent>
               </Select>
               <div className="flex items-center gap-2 mt-3 sm:mt-0">
@@ -944,7 +962,7 @@ const Students = () => {
           </div>
         ) : filteredStudents.length > 0 ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {filteredStudents.map((student, index) => (
+            {displayStudents.map((student, index) => (
               <Card
                 key={student.id}
                 className={cn(
@@ -988,7 +1006,7 @@ const Students = () => {
                           Laudo
                         </span>
                       )}
-                      {sortByAbsences !== 'none' && (
+                      {(sortBy === 'absences-desc' || sortBy === 'absences-asc') && (
                         <span className="text-xs px-2 py-1 rounded-full font-medium bg-red-500/10 text-red-600">
                           {absenceCountMap.get(student.id) || 0} falta(s)
                         </span>
