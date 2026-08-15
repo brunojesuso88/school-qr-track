@@ -132,6 +132,9 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
   const [renamingClass, setRenamingClass] = useState(false);
   const [savedTotal, setSavedTotal] = useState(0);
   const cancelledRef = useRef(false);
+  const [autoAccept, setAutoAccept] = useState(false);
+  const [autoApprovedPage, setAutoApprovedPage] = useState<number | null>(null);
+  const autoRunRef = useRef<string | null>(null);
 
   const reset = useCallback(() => {
     setStep('select');
@@ -149,6 +152,9 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
     setClassDecision('resolved');
     setRenamingClass(false);
     setSavedTotal(0);
+    setAutoAccept(false);
+    setAutoApprovedPage(null);
+    autoRunRef.current = null;
     cancelledRef.current = false;
     if (fileInputRef.current) fileInputRef.current.value = '';
   }, []);
