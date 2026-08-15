@@ -1048,7 +1048,10 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
               <div className="rounded-lg border p-3 space-y-2">
                 <p className="text-sm font-medium flex items-center gap-2">
                   <AlertTriangle className="w-4 h-4 text-amber-600" />
-                  Já existem notas gravadas para este aluno em algumas disciplinas/períodos desta página
+                  Notas existentes divergem das notas do PDF em algumas disciplinas/períodos desta página
+                </p>
+                <p className="text-[11px] text-muted-foreground">
+                  Notas idênticas já gravadas são preservadas automaticamente e não exigem decisão.
                 </p>
                 <RadioGroup value={conflictStrategy} onValueChange={(v) => setConflictStrategy(v as 'keep' | 'overwrite')}>
                   <div className="flex items-center gap-2">
