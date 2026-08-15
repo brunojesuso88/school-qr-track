@@ -341,8 +341,12 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
         confirmed_pages: 0,
         ignored_pages: 0,
         notes_imported: 0,
+        auto_accept: autoAccept,
       };
       setSession(newSession);
+      if (autoAccept) {
+        await supabase.from('grade_import_sessions').update({ auto_accept: true }).eq('id', newSession.id);
+      }
       await processPage(newSession.id, 1);
     } catch (e) {
       console.error(e);
@@ -834,6 +838,11 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
         {step === 'saving' && (
           <div className="py-12 text-center space-y-3">
             <Loader2 className="w-10 h-10 mx-auto animate-spin text-primary" />
+            {autoAccept && autoApprovedPage != null && (
+              <p className="text-sm font-medium text-green-600">
+                ✓ Página {autoApprovedPage} aprovada automaticamente
+              </p>
+            )}
             <p className="text-sm text-muted-foreground">Gravando as notas desta página...</p>
           </div>
         )}
