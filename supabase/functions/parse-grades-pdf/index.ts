@@ -40,7 +40,15 @@ interface ExtractionPayload {
   pages?: number | null;
   periods?: { label: string; kind?: string }[];
   subjects?: string[];
-  students?: (string | { name?: string; student_code?: string | null; class_code?: string | null; page?: number | null })[];
+  students?: (string | {
+    name?: string;
+    student_code?: string | null;
+    class_code?: string | null;
+    page?: number | null;
+    birth_date?: string | null;
+    mother_name?: string | null;
+    father_name?: string | null;
+  })[];
   rows?: ExtractedRow[];
   notes?: string[];
 }
@@ -162,13 +170,14 @@ REGRAS OBRIGATÓRIAS:
 8. Reporte também as colunas finais quando houver valor: use period exatamente "Média Final", "Rec. Final", "Cons. Class", "Pendência" ou "Final".
 9. Para cada linha informe student_name (exatamente como no PDF, com acentos), student_code (código/matrícula do cabeçalho quando existir), class_code (a Turma do cabeçalho) e page (1-based).
 10. confidence entre 0 e 1 = sua certeza da leitura daquela célula (use valor baixo quando o dígito estiver borrado/cortado ou a coluna for ambígua).
+11. Para CADA página/aluno, extraia também os DADOS CADASTRAIS do cabeçalho, quando existirem: "Código" (exatamente como aparece, sem remover zeros à esquerda), "Data de Nascimento" (formato ISO AAAA-MM-DD), "Mãe" e "Pai" (nomes completos). Se um campo não existir na página, use null. NUNCA invente nomes ou datas.
 
 Responda SOMENTE com JSON válido no formato:
 {
   "pages": number,
   "periods": [{"label": "1º Período", "kind": "period" | "final"}],
   "subjects": ["ARTE", "BIOLOGIA"],
-  "students": [{"name": "NOME DO ALUNO", "student_code": "123456", "class_code": "26RMM100", "page": 1}],
+  "students": [{"name": "NOME DO ALUNO", "student_code": "123456", "class_code": "26RMM100", "page": 1, "birth_date": "2009-03-14", "mother_name": "NOME DA MAE", "father_name": "NOME DO PAI"}],
   "rows": [{"student_name": "NOME", "student_code": "123456", "class_code": "26RMM100", "subject": "ARTE", "period": "1º Período", "note_raw": "3,17", "page": 1, "confidence": 0.98}],
   "notes": ["observações sobre cortes de linha, colunas ambíguas, páginas sem aluno"]
 }`;
