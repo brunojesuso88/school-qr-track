@@ -153,30 +153,99 @@ Responda SOMENTE com JSON válido:
   "notes": ["observações sobre células ambíguas ou página sem aluno"]
 }`;
 
-async function callGateway(model: string, body: unknown, apiKey: string) {
+async function callGateway(model: string, body: unknown, apiKey: string, timeoutMs: number) {
   return await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ ...(body as Record<string, unknown>), model }),
-    signal: AbortSignal.timeout(GATEWAY_TIMEOUT_MS),
+    signal: AbortSignal.timeout(timeoutMs),
   });
 }
 
-async function callWithRetry(body: unknown, apiKey: string): Promise<Response | null> {
-  let last: Response | null = null;
-  for (let attempt = 1; attempt <= ATTEMPTS; attempt++) {
-    try {
-      const res = await callGateway(attempt === 1 ? PRIMARY_MODEL : FALLBACK_MODEL, body, apiKey);
-      if (res.ok) return res;
-      last = res;
-      if (res.status !== 429 && res.status < 500) return res;
+interface ReadOutcome {
+  parsed: any | null;
+  model: string;
+  status: number;
+  /** 'ok' | 'http' | 'timeout' | 'network' | 'bad_json' */
+  failure: 'ok' | 'http' | 'timeout' | 'network' | 'bad_json';
+}
+
+/** Uma única leitura da página com o modelo indicado. Sem loops. */
+async function readOnce(model: string, body: unknown, apiKey: string, timeoutMs: number): Promise<ReadOutcome> {
+  try {
+    const res = await callGateway(model, body, apiKey, timeoutMs);
+    if (!res.ok) {
       await res.text().catch(() => '');
-    } catch (e) {
-      console.error(`Tentativa ${attempt} falhou:`, e);
+      return { parsed: null, model, status: res.status, failure: 'http' };
     }
-    if (attempt < ATTEMPTS) await sleep(700 * attempt);
+    const aiJson = await res.json();
+    const content = String(aiJson?.choices?.[0]?.message?.content ?? '');
+    try {
+      return { parsed: extractJson(content), model, status: 200, failure: 'ok' };
+    } catch (_e) {
+      return { parsed: null, model, status: 200, failure: 'bad_json' };
+    }
+  } catch (e) {
+    const timedOut = e instanceof Error && /timeout|abort/i.test(e.message);
+    console.error(`Leitura com ${model} falhou:`, e);
+    return { parsed: null, model, status: 0, failure: timedOut ? 'timeout' : 'network' };
   }
-  return last;
+}
+
+/**
+ * Validações determinísticas locais sobre a leitura rápida.
+ * Retorna os motivos que justificam uma 2ª leitura com o modelo Pro.
+ */
+function suspicionReasons(parsed: any, expectedSubjectCount: number): string[] {
+  const reasons: string[] = [];
+  if (!parsed || typeof parsed !== 'object') return ['json_incompleto'];
+
+  const header = parsed.student ?? {};
+  const rows: any[] = Array.isArray(parsed.rows) ? parsed.rows : [];
+
+  if (!String(header.name ?? '').trim()) reasons.push('aluno_nao_identificado');
+  if (!String(header.class_code ?? '').trim()) reasons.push('turma_ausente');
+  if (!Array.isArray(parsed.rows)) reasons.push('json_incompleto');
+  if (rows.length === 0) reasons.push('nenhuma_linha_lida');
+
+  const seen = new Map<string, string | null>();
+  let lowConfidence = 0;
+
+  for (const r of rows) {
+    const subject = String(r?.subject ?? '').trim();
+    const periodLabel = String(r?.period ?? '').trim();
+    if (!subject) reasons.push('disciplina_ambigua');
+    if (!periodLabel) reasons.push('periodo_ambiguo');
+    if (isAbsenceLabel(subject) || isAbsenceLabel(periodLabel)) reasons.push('coluna_faltas_lida');
+    if (periodLabel && classifyPeriod(periodLabel, r?.period_kind ?? null).kind === 'unknown') {
+      reasons.push('periodo_invalido');
+    }
+
+    const raw = r?.note_raw ?? r?.raw_value ?? null;
+    const rawText = raw == null ? null : String(raw).trim() || null;
+    const { value, invalid } = parseGradeValue(rawText);
+    if (invalid) reasons.push('nota_invalida');
+    if (value != null && (value < 0 || value > 10)) reasons.push('nota_fora_da_escala');
+
+    const conf = typeof r?.confidence === 'number' ? r.confidence : null;
+    if (conf != null && conf < CONFIDENCE_ESCALATION_THRESHOLD) lowConfidence++;
+
+    const key = `${normalize(subject)}||${normalize(periodLabel)}`;
+    if (seen.has(key)) {
+      if (seen.get(key) !== rawText) reasons.push('duplicidade_conflitante');
+    } else {
+      seen.set(key, rawText);
+    }
+  }
+
+  if (lowConfidence > 0) reasons.push('baixa_confianca');
+
+  const subjectsRead = new Set(rows.map((r) => normalize(r?.subject ?? '')).filter(Boolean)).size;
+  if (expectedSubjectCount > 0 && subjectsRead > 0 && subjectsRead < Math.ceil(expectedSubjectCount * 0.5)) {
+    reasons.push('linhas_insuficientes');
+  }
+
+  return [...new Set(reasons)];
 }
 
 serve(async (req) => {
