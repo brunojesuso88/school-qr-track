@@ -377,20 +377,15 @@ serve(async (req) => {
     const single = await extractSinglePage(base64ToBytes(session.pdf_base64), pageNumber);
     if (!single) return json({ success: false, error: 'Não foi possível isolar esta página do PDF.' }, 400);
 
-    const subjectHint = expected.length
-      ? `Disciplinas esperadas nesta turma (referência de nomenclatura, não force o casamento): ${expected.map((s) => s.name).join(', ')}.`
-      : '';
-    const studentHint = students.length
-      ? `Alunos matriculados na turma (referência de nomenclatura; o aluno da página pode não estar nesta lista): ${students.map((s) => s.full_name).join(' | ')}.`
-      : '';
-
+    // Prompt enxuto: nada de lista de alunos nem de disciplinas da turma.
+    // O casamento de aluno e disciplina é feito localmente depois da extração.
     const body = {
       messages: [
         { role: 'system', content: SYSTEM_PROMPT },
         {
           role: 'user',
           content: [
-            { type: 'text', text: `Esta é a página ${pageNumber} de ${session.total_pages} do boletim. Extraia apenas as NOTAS desta página e os dados do cabeçalho. Ignore a coluna Faltas.\n${subjectHint}\n${studentHint}` },
+            { type: 'text', text: `Esta é a página ${pageNumber} do boletim. Extraia SOMENTE as notas desta página e os dados do cabeçalho (aluno, código, nascimento, mãe, pai, turma). Ignore a coluna Faltas.` },
             { type: 'file', file: { filename: `pagina-${pageNumber}.pdf`, file_data: `data:application/pdf;base64,${single.base64}` } },
           ],
         },
@@ -398,32 +393,64 @@ serve(async (req) => {
       temperature: 0,
     };
 
-    const res = await callWithRetry(body, apiKey);
-    if (!res || !res.ok) {
-      const status = res?.status ?? 0;
-      const message = status === 429
-        ? 'Limite de uso da IA atingido. Aguarde alguns instantes e processe a página novamente.'
-        : status === 402
-          ? 'Créditos de IA insuficientes para ler esta página.'
-          : `Falha ao ler a página ${pageNumber} (status ${status}).`;
+    const failPage = async (message: string) => {
       await admin.from('grade_import_session_pages')
         .update({ status: 'error', error: message })
         .eq('session_id', session.id).eq('page_number', pageNumber);
       return json({ success: false, error: message }, 200);
+    };
+
+    // 1ª leitura: Flash.
+    let outcome = await readOnce(FAST_MODEL, body, apiKey, FAST_TIMEOUT_MS);
+
+    // 429: no máximo 1 retry curto no próprio Flash. 402: sem retry.
+    if (outcome.failure === 'http' && outcome.status === 429) {
+      await sleep(1_200);
+      outcome = await readOnce(FAST_MODEL, body, apiKey, FAST_TIMEOUT_MS);
+      if (outcome.failure === 'http' && outcome.status === 429) {
+        return await failPage('Limite de uso da IA atingido. Aguarde alguns instantes e leia esta página novamente.');
+      }
+    }
+    if (outcome.failure === 'http' && outcome.status === 402) {
+      return await failPage('Créditos de IA insuficientes para ler esta página.');
     }
 
-    const aiJson = await res.json();
-    const content = aiJson?.choices?.[0]?.message?.content ?? '';
-    let parsed: any;
-    try {
-      parsed = extractJson(String(content));
-    } catch (_e) {
-      const message = `Não foi possível interpretar a leitura da página ${pageNumber}.`;
-      await admin.from('grade_import_session_pages')
-        .update({ status: 'error', error: message })
-        .eq('session_id', session.id).eq('page_number', pageNumber);
-      return json({ success: false, error: message }, 200);
+    let reasons: string[] = [];
+    let escalated = false;
+
+    const transientFailure = outcome.failure === 'timeout' || outcome.failure === 'network' ||
+      outcome.failure === 'bad_json' || (outcome.failure === 'http' && outcome.status >= 500);
+
+    if (outcome.failure === 'ok') {
+      reasons = suspicionReasons(outcome.parsed, expected.length);
     }
+
+    // 2ª leitura com Pro SOMENTE em erro transitório relevante ou sinais de dúvida. Nunca em loop.
+    if (transientFailure || (outcome.failure === 'ok' && reasons.length > 0)) {
+      const second = await readOnce(ESCALATION_MODEL, body, apiKey, ESCALATION_TIMEOUT_MS);
+      if (second.failure === 'ok') {
+        const secondReasons = suspicionReasons(second.parsed, expected.length);
+        // Mantém a leitura com menos problemas detectados.
+        if (outcome.failure !== 'ok' || secondReasons.length <= reasons.length) {
+          outcome = second;
+          reasons = secondReasons;
+        }
+        escalated = true;
+      } else if (outcome.failure !== 'ok') {
+        const message = second.failure === 'timeout'
+          ? `A leitura da página ${pageNumber} demorou demais. Tente ler esta página novamente.`
+          : second.status === 402
+            ? 'Créditos de IA insuficientes para ler esta página.'
+            : `Falha ao ler a página ${pageNumber}. Tente novamente.`;
+        return await failPage(message);
+      }
+    }
+
+    if (outcome.failure !== 'ok' || !outcome.parsed) {
+      return await failPage(`Não foi possível interpretar a leitura da página ${pageNumber}.`);
+    }
+
+    const parsed = outcome.parsed;
 
     // ---------- Normalização da prévia ----------
     const header = parsed.student ?? {};
