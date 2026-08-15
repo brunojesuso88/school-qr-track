@@ -634,6 +634,11 @@ serve(async (req) => {
         periods: periodMap.size,
       },
       notes: Array.isArray(parsed.notes) ? parsed.notes.slice(0, 10) : [],
+      reading: {
+        mode: escalated ? 'validated' : 'fast',
+        escalated,
+        reasons,
+      },
     };
 
     await admin.from('grade_import_session_pages')
