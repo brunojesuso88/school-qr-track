@@ -10,13 +10,15 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
+import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
-  Loader2, Upload, FileText, AlertTriangle, CheckCircle2, Info, GraduationCap, SkipForward, Pencil,
+  Loader2, Upload, FileText, AlertTriangle, CheckCircle2, Info, GraduationCap, SkipForward, Pencil, Zap,
 } from 'lucide-react';
 import { GradesReviewTable, ReviewRow } from './GradesReviewTable';
 import { GradesRegistrationAudit } from './GradesRegistrationAudit';
 import { GradesClassMismatchPanel } from './GradesClassMismatchPanel';
+import { evaluateAutoAccept } from './gradesAutoAccept';
 import {
   CONFLICT_LABELS, DetectedStudent, FieldDecision, RegistrationDecision,
   defaultRegistrationDecision, formatDate,
@@ -78,6 +80,7 @@ interface SessionState {
   confirmed_pages: number;
   ignored_pages: number;
   notes_imported: number;
+  auto_accept?: boolean;
 }
 
 interface GradesImportDialogProps {
