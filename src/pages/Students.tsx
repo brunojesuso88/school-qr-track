@@ -493,6 +493,10 @@ const Students = () => {
   };
 
   const handleDelete = async (id: string) => {
+    if (!canDeleteStudents) {
+      toast.error('Acesso negado: apenas administração e direção podem excluir alunos.');
+      return;
+    }
     if (!confirm('Tem certeza que deseja excluir este aluno?')) return;
 
     try {
