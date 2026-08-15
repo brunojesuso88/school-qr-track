@@ -318,6 +318,10 @@ const Classes = () => {
   };
 
   const handleDelete = async (id: string) => {
+    if (!canDeleteClasses) {
+      toast.error('Acesso negado: apenas administração e direção podem excluir turmas.');
+      return;
+    }
     if (!confirm('Tem certeza que deseja excluir esta turma?')) return;
 
     try {
