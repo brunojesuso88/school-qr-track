@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import {
@@ -233,7 +233,119 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
     void parsedRows;
   }, []);
 
-  const handleFile = async (file: File) => {
+  /** Carrega alunos da turma e disciplinas esperadas (contexto do job). */
+  const loadContext = useCallback(async () => {
+    if (!classItem) throw new Error('Turma não selecionada.');
+    const { data: studentsData, error: studentsError } = await supabase
+      .from('students')
+      .select('id, full_name, student_id, school_code, birth_date, mother_name, father_name')
+      .eq('class', classItem.name)
+      .order('full_name');
+    if (studentsError) throw studentsError;
+    const students = (studentsData || []) as {
+      id: string; full_name: string; student_id: string;
+      school_code: string | null; birth_date: string | null;
+      mother_name: string | null; father_name: string | null;
+    }[];
+    setClassStudents(students.map((s) => ({ id: s.id, full_name: s.full_name })));
+
+    let expected: { id: string; name: string; weekly_classes: number }[] = [];
+    if (classItem.mapping_class_id) {
+      const { data: subjData } = await supabase
+        .from('mapping_class_subjects')
+        .select('id, subject_name, weekly_classes')
+        .eq('class_id', classItem.mapping_class_id);
+      expected = (subjData || []).map((s: { id: string; subject_name: string; weekly_classes: number }) => ({
+        id: s.id, name: s.subject_name, weekly_classes: s.weekly_classes,
+      }));
+    }
+    setExpectedSubjects(expected);
+    return { students, expected };
+  }, [classItem]);
+
+  /** Alimenta a auditoria/conferência com o resultado consolidado do job. */
+  const applyResult = useCallback(async (data: {
+    rows?: ReviewRow[];
+    subjects?: ParsedSubject[];
+    periods?: ParsedPeriod[];
+    stats?: ImportStats | null;
+    issues?: ImportIssue[];
+    detected_students?: DetectedStudent[];
+    students_missing_in_pdf?: { id: string; full_name: string; student_id?: string | null }[];
+  }) => {
+    if (!classItem) return;
+    const parsedRows: ReviewRow[] = sortReviewRows(
+      (data.rows || []).map((r: ReviewRow) => ({ ...r, flags: r.flags || [], source: 'import' as const })),
+    );
+    setRows(parsedRows);
+    setSubjects(data.subjects || []);
+    setPeriods(data.periods || []);
+    setStats(data.stats || null);
+    setIssues(data.issues || []);
+
+    const detectedList: DetectedStudent[] = (data.detected_students || []).map((d: DetectedStudent) => ({
+      ...d,
+      conflicts: d.conflicts || [],
+      pages: d.pages || [],
+    }));
+    setDetected(detectedList);
+    setMissingInPdf(data.students_missing_in_pdf || []);
+    const initialDecisions: Record<string, RegistrationDecision> = {};
+    detectedList.forEach((d) => { initialDecisions[d.key] = defaultRegistrationDecision(d); });
+    setRegDecisions(initialDecisions);
+    setResolutions({});
+    setReviewTab(detectedList.some((d) => needsResolution(d)) ? 'conflicts' : 'grades');
+    await loadConflicts(classItem.id, parsedRows, data.subjects || [], data.periods || []);
+
+    // Deduplica turmas equivalentes vindas de blocos diferentes antes de decidir divergência.
+    const seen = new Set<string>();
+    const codes: string[] = ((data.stats?.class_codes || []) as string[])
+      .map((c) => String(c ?? '').trim())
+      .filter(Boolean)
+      .filter((c) => {
+        const key = normalize(c);
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+    setPdfClassNames(codes);
+    const divergent = codes.filter((c) => normalize(c) !== normalize(classItem.name));
+    setStep(divergent.length > 0 ? 'class-conflict' : 'review');
+  }, [classItem, loadConflicts]);
+
+  const fail = useCallback((message: string) => {
+    setError(message);
+    setStep('failed');
+  }, []);
+
+  /** Processa os blocos pendentes chamando a função repetidamente (nunca uma requisição longa). */
+  const runJob = useCallback(async (jobId: string) => {
+    let guard = 0;
+    // Cada chamada processa até 3 blocos de 3 páginas e retorna rápido.
+    while (guard++ < 200) {
+      if (cancelledRef.current) return;
+      const { data, error: fnError } = await supabase.functions.invoke('parse-grades-pdf', {
+        body: { action: 'process', job_id: jobId },
+      });
+      if (fnError) throw new Error(fnError.message);
+      if (!data?.success) throw new Error(data?.error || 'Falha ao processar o boletim.');
+
+      setJob(data as JobProgress);
+      setFailedPages(Array.isArray(data.failed_pages) ? data.failed_pages : []);
+
+      if (data.status === 'completed') {
+        if (!data.result) throw new Error('O processamento terminou sem resultado. Tente novamente.');
+        await applyResult(data.result);
+        return;
+      }
+      if (data.status === 'failed' || data.status === 'cancelled') {
+        throw new Error(data.error_message || 'O processamento do boletim falhou.');
+      }
+    }
+    throw new Error('O processamento excedeu o número de etapas previstas. Tente novamente.');
+  }, [applyResult]);
+
+  const startImport = async (file: File) => {
     if (!classItem) return;
     if (file.type !== 'application/pdf') {
       toast.error('Selecione um arquivo PDF.');
@@ -243,42 +355,22 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
       toast.error('O PDF deve ter no máximo 10MB.');
       return;
     }
+    pendingFileRef.current = file;
+    cancelledRef.current = false;
     setFileName(file.name);
     setError(null);
+    setJob(null);
+    setFailedPages([]);
     setStep('processing');
     setEffectiveName(classItem.name);
 
     try {
-      // Alunos da turma
-      const { data: studentsData, error: studentsError } = await supabase
-        .from('students')
-        .select('id, full_name, student_id, school_code, birth_date, mother_name, father_name')
-        .eq('class', classItem.name)
-        .order('full_name');
-      if (studentsError) throw studentsError;
-      const students = (studentsData || []) as {
-        id: string; full_name: string; student_id: string;
-        school_code: string | null; birth_date: string | null;
-        mother_name: string | null; father_name: string | null;
-      }[];
-      setClassStudents(students.map((s) => ({ id: s.id, full_name: s.full_name })));
-
-      // Disciplinas esperadas (mapeamento escolar, quando vinculado)
-      let expected: { id: string; name: string; weekly_classes: number }[] = [];
-      if (classItem.mapping_class_id) {
-        const { data: subjData } = await supabase
-          .from('mapping_class_subjects')
-          .select('id, subject_name, weekly_classes')
-          .eq('class_id', classItem.mapping_class_id);
-        expected = (subjData || []).map((s: { id: string; subject_name: string; weekly_classes: number }) => ({
-          id: s.id, name: s.subject_name, weekly_classes: s.weekly_classes,
-        }));
-      }
-      setExpectedSubjects(expected);
-
+      const { students, expected } = await loadContext();
       const pdfBase64 = await fileToBase64(file);
+
       const { data, error: fnError } = await supabase.functions.invoke('parse-grades-pdf', {
         body: {
+          action: 'create',
           pdfBase64,
           fileName: file.name,
           class_id: classItem.id,
@@ -295,43 +387,75 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
           expected_subjects: expected.map((s) => ({ name: s.name, weekly_classes: s.weekly_classes })),
         },
       });
-
       if (fnError) throw new Error(fnError.message);
-      if (!data?.success) throw new Error(data?.error || 'Não foi possível processar o boletim.');
+      if (!data?.success || !data.job_id) throw new Error(data?.error || 'Não foi possível iniciar o processamento.');
 
-      const parsedRows: ReviewRow[] = sortReviewRows(
-        (data.rows || []).map((r: ReviewRow) => ({ ...r, flags: r.flags || [], source: 'import' as const })),
-      );
-      setRows(parsedRows);
-      setSubjects(data.subjects || []);
-      setPeriods(data.periods || []);
-      setStats(data.stats || null);
-      setIssues(data.issues || []);
-
-      const detectedList: DetectedStudent[] = (data.detected_students || []).map((d: DetectedStudent) => ({
-        ...d,
-        conflicts: d.conflicts || [],
-        pages: d.pages || [],
-      }));
-      setDetected(detectedList);
-      setMissingInPdf(data.students_missing_in_pdf || []);
-      const initialDecisions: Record<string, RegistrationDecision> = {};
-      detectedList.forEach((d) => { initialDecisions[d.key] = defaultRegistrationDecision(d); });
-      setRegDecisions(initialDecisions);
-      setResolutions({});
-      setReviewTab(detectedList.some((d) => needsResolution(d)) ? 'conflicts' : 'grades');
-      await loadConflicts(classItem.id, parsedRows, data.subjects || [], data.periods || []);
-
-      const codes: string[] = (data.stats?.class_codes || []).filter(Boolean).map((c: string) => String(c).trim());
-      setPdfClassNames(codes);
-      const divergent = codes.filter((c) => normalize(c) !== normalize(classItem.name));
-      setStep(divergent.length > 0 ? 'class-conflict' : 'review');
+      setJob(data as JobProgress);
+      await runJob(data.job_id);
     } catch (e) {
       console.error(e);
-      setError(e instanceof Error ? e.message : 'Erro ao processar o PDF.');
-      setStep('select');
+      fail(e instanceof Error ? e.message : 'Erro ao processar o PDF.');
     }
   };
+
+  /** Retoma o job existente (sem reenviar o PDF) ou recria a partir do arquivo já escolhido. */
+  const handleRetry = async () => {
+    setError(null);
+    cancelledRef.current = false;
+    if (job?.job_id && job.status !== 'failed' && job.status !== 'cancelled') {
+      setStep('processing');
+      try {
+        await runJob(job.job_id);
+      } catch (e) {
+        console.error(e);
+        fail(e instanceof Error ? e.message : 'Erro ao retomar o processamento.');
+      }
+      return;
+    }
+    const file = pendingFileRef.current;
+    if (!file) {
+      setStep('select');
+      return;
+    }
+    await startImport(file);
+  };
+
+  /** Progresso real do job durante o processamento (2s, com backoff até 5s). */
+  useEffect(() => {
+    if (step !== 'processing' || !job?.job_id) return;
+    let cancelled = false;
+    let delay = 2000;
+    let timer: number | undefined;
+    const tick = async () => {
+      const { data } = await supabase
+        .from('grade_import_jobs')
+        .select('id, status, progress, total_pages, total_chunks, completed_chunks, failed_chunks, current_chunk, failed_pages, error_message')
+        .eq('id', job.job_id)
+        .maybeSingle();
+      if (cancelled) return;
+      if (data) {
+        setJob((prev) => (prev && prev.status === 'completed' ? prev : ({
+          job_id: data.id,
+          status: data.status as JobProgress['status'],
+          progress: data.progress,
+          total_pages: data.total_pages,
+          total_chunks: data.total_chunks,
+          completed_chunks: data.completed_chunks,
+          failed_chunks: data.failed_chunks,
+          current_chunk: data.current_chunk,
+          failed_pages: (data.failed_pages as number[]) || [],
+          error_message: data.error_message,
+        })));
+      }
+      delay = Math.min(5000, delay + 1000);
+      timer = window.setTimeout(tick, delay);
+    };
+    timer = window.setTimeout(tick, delay);
+    return () => {
+      cancelled = true;
+      if (timer) window.clearTimeout(timer);
+    };
+  }, [step, job?.job_id]);
 
   const pdfClassName = useMemo(() => {
     if (!classItem) return '';
