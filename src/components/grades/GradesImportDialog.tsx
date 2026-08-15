@@ -695,21 +695,50 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
               </div>
             )}
 
-            <div className="flex items-center justify-between gap-2 flex-wrap">
-              <p className="text-sm font-medium">Revisão ({rows.length} células)</p>
-              <div className="flex gap-2">
-                <Badge variant="outline">{importableRows.length} prontas para importar</Badge>
-                {blockingCount > 0 && <Badge variant="destructive">{blockingCount} exigem revisão</Badge>}
-              </div>
-            </div>
+            <Tabs value={reviewTab} onValueChange={setReviewTab}>
+              <TabsList className="w-full">
+                <TabsTrigger value="conflicts" className="flex-1 text-xs">
+                  Conflitos do boletim{pendingConflicts.length > 0 ? ` (${pendingConflicts.length})` : ''}
+                </TabsTrigger>
+                <TabsTrigger value="grades" className="flex-1 text-xs">Notas ({rows.length})</TabsTrigger>
+                <TabsTrigger value="registration" className="flex-1 text-xs">Atualização cadastral</TabsTrigger>
+              </TabsList>
 
-            <GradesReviewTable
-              rows={rows}
-              students={classStudents}
-              onChangeStudent={handleChangeStudent}
-              onChangeValue={handleChangeValue}
-              conflictKeys={conflictKeys}
-            />
+              <TabsContent value="conflicts" className="mt-3">
+                <GradesConflictsPanel
+                  detected={detected}
+                  missingInPdf={missingInPdf}
+                  classStudents={classStudents}
+                  resolutions={resolutions}
+                  onResolve={handleResolve}
+                />
+              </TabsContent>
+
+              <TabsContent value="grades" className="mt-3 space-y-3">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <p className="text-sm font-medium">Revisão ({rows.length} células)</p>
+                  <div className="flex gap-2">
+                    <Badge variant="outline">{importableRows.length} prontas para importar</Badge>
+                    {blockingCount > 0 && <Badge variant="destructive">{blockingCount} exigem revisão</Badge>}
+                  </div>
+                </div>
+                <GradesReviewTable
+                  rows={rows}
+                  students={classStudents}
+                  onChangeStudent={handleChangeStudent}
+                  onChangeValue={handleChangeValue}
+                  conflictKeys={conflictKeys}
+                />
+              </TabsContent>
+
+              <TabsContent value="registration" className="mt-3">
+                <GradesRegistrationAudit
+                  entries={detected}
+                  decisions={regDecisions}
+                  onDecide={handleRegistrationDecision}
+                />
+              </TabsContent>
+            </Tabs>
           </div>
         )}
 
@@ -727,7 +756,15 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
           {step === 'review' && (
             <>
               <Button variant="outline" onClick={() => handleClose(false)}>Cancelar (não grava nada)</Button>
-              <Button onClick={handleConfirm} disabled={importableRows.length === 0 || blockingCount > 0}>
+              {pendingConflicts.length > 0 && (
+                <p className="text-xs text-destructive mr-auto">
+                  Resolva os {pendingConflicts.length} conflito(s) de alunos para liberar a confirmação.
+                </p>
+              )}
+              <Button
+                onClick={handleConfirm}
+                disabled={importableRows.length === 0 || blockingCount > 0 || pendingConflicts.length > 0}
+              >
                 Confirmar importação
               </Button>
             </>
