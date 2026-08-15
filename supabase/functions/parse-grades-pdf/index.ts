@@ -1047,40 +1047,10 @@ serve(async (req) => {
           status: 'processing',
         };
 
-        if (done) {
-          if (completedChunks === 0) {
-            update.status = 'failed';
-            update.error_message = 'Nenhum bloco do PDF pôde ser lido pela IA. Tente novamente em instantes.';
-            update.pdf_base64 = null;
-          } else {
-            try {
-              const consolidated = consolidate(partials, job.total_pages);
-              const result = await finalize({
-                payload: consolidated,
-                students,
-                expected,
-                scaleMax: Number(ctx.scale_max) > 0 ? Number(ctx.scale_max) : 10,
-                expectedClassCode: String(ctx.class_code ?? ''),
-                totalChunks: job.total_chunks,
-                failedPages,
-                pdfBytes,
-                fileName: job.file_name ?? 'boletim.pdf',
-                apiKey,
-              });
-              update.status = 'completed';
-              update.progress = 100;
-              update.result_json = result as never;
-              update.issues_json = result.issues as never;
-              update.pdf_base64 = null;
-              update.current_chunk = job.total_chunks;
-            } catch (e) {
-              console.error('Falha ao consolidar o boletim:', e);
-              update.status = 'failed';
-              update.error_message = e instanceof Error ? e.message : 'Falha ao consolidar o boletim.';
-              update.pdf_base64 = null;
-            }
-          }
-        }
+        // A consolidação NÃO acontece aqui: ela roda na próxima chamada `process`
+        // (quando não há mais blocos pendentes), para nenhuma invocação exceder o
+        // limite de idle de 150s da plataforma.
+        if (done) update.current_chunk = job.total_chunks;
 
         const { data: updated, error: updError } = await db
           .from('grade_import_jobs')
@@ -1092,12 +1062,63 @@ serve(async (req) => {
 
         return json(jobPublic(updated, {
           remaining_chunks: Math.max(0, job.total_chunks - (updated.completed_chunks + updated.failed_chunks)),
-          ...(updated.status === 'completed' ? { result: updated.result_json } : {}),
+          needs_finalize: done,
         }));
       }
 
-      // Nada pendente: consolida se ainda não consolidou.
-      return json(jobPublic(job, { remaining_chunks: 0, ...(job.result_json ? { result: job.result_json } : {}) }));
+      // Nada pendente: consolida (uma invocação dedicada só para a consolidação).
+      if (job.result_json) {
+        return json(jobPublic({ ...job, status: 'completed', progress: 100 }, { remaining_chunks: 0, result: job.result_json }));
+      }
+
+      const failedPagesAll = [...new Set(failed.flatMap((f) => f.pages))].sort((a, b) => a - b);
+      const finalUpdate: Record<string, unknown> = { pdf_base64: null };
+
+      if (Object.keys(partials).length === 0) {
+        finalUpdate.status = 'failed';
+        finalUpdate.error_message = 'Nenhum bloco do PDF pôde ser lido pela IA. Tente novamente em instantes.';
+      } else {
+        try {
+          if (!job.pdf_base64) throw new Error('O arquivo temporário do boletim expirou. Envie o PDF novamente.');
+          const ctxFinal = job.context ?? {};
+          const studentsFinal: ClassStudent[] = Array.isArray(ctxFinal.students) ? ctxFinal.students : [];
+          const expectedFinal: ExpectedSubject[] = Array.isArray(ctxFinal.expected_subjects) ? ctxFinal.expected_subjects : [];
+          const result = await finalize({
+            payload: consolidate(partials, job.total_pages),
+            students: studentsFinal,
+            expected: expectedFinal,
+            scaleMax: Number(ctxFinal.scale_max) > 0 ? Number(ctxFinal.scale_max) : 10,
+            expectedClassCode: String(ctxFinal.class_code ?? ''),
+            totalChunks: job.total_chunks,
+            failedPages: failedPagesAll,
+            pdfBytes: base64ToBytes(job.pdf_base64),
+            fileName: job.file_name ?? 'boletim.pdf',
+            apiKey,
+          });
+          finalUpdate.status = 'completed';
+          finalUpdate.progress = 100;
+          finalUpdate.result_json = result as never;
+          finalUpdate.issues_json = result.issues as never;
+          finalUpdate.current_chunk = job.total_chunks;
+        } catch (e) {
+          console.error('Falha ao consolidar o boletim:', e);
+          finalUpdate.status = 'failed';
+          finalUpdate.error_message = e instanceof Error ? e.message : 'Falha ao consolidar o boletim.';
+        }
+      }
+
+      const { data: finalJob, error: finalErr } = await db
+        .from('grade_import_jobs')
+        .update(finalUpdate as never)
+        .eq('id', jobId)
+        .select('*')
+        .single();
+      if (finalErr) throw finalErr;
+
+      return json(jobPublic(finalJob, {
+        remaining_chunks: 0,
+        ...(finalJob.status === 'completed' ? { result: finalJob.result_json } : {}),
+      }));
     }
 
     return json({ success: false, error: 'Ação inválida' }, 400);
