@@ -25,8 +25,12 @@ const FALLBACK_MODEL = 'google/gemini-2.5-flash';
  */
 const CHUNK_PAGES = 3;
 const CHUNK_CONCURRENCY = 3;
-const CHUNKS_PER_CALL = 3;
+const CHUNKS_PER_CALL = 2;
 const CHUNK_ATTEMPTS = 3;
+/** Orçamento de tempo por invocação (o limite de idle da plataforma é 150s). */
+const CALL_BUDGET_MS = 95_000;
+/** Timeout de cada chamada de IA. */
+const GATEWAY_TIMEOUT_MS = 40_000;
 const MAX_RECONCILE_CELLS = 80;
 const MAX_RECONCILE_PAGES = 8;
 
@@ -154,13 +158,15 @@ async function callGateway(model: string, body: unknown, apiKey: string) {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ ...(body as Record<string, unknown>), model }),
+    signal: AbortSignal.timeout(GATEWAY_TIMEOUT_MS),
   });
 }
 
 /** Retry com backoff exponencial para 429/5xx (até CHUNK_ATTEMPTS tentativas). */
-async function callWithRetry(model: string, body: unknown, apiKey: string): Promise<Response | null> {
+async function callWithRetry(model: string, body: unknown, apiKey: string, deadline?: number): Promise<Response | null> {
   let last: Response | null = null;
   for (let attempt = 1; attempt <= CHUNK_ATTEMPTS; attempt++) {
+    if (deadline && Date.now() > deadline) return last;
     try {
       const res = await callGateway(attempt === CHUNK_ATTEMPTS ? PRIMARY_MODEL : model, body, apiKey);
       if (res.ok) return res;
@@ -170,7 +176,10 @@ async function callWithRetry(model: string, body: unknown, apiKey: string): Prom
     } catch (e) {
       console.error(`Tentativa ${attempt} falhou:`, e);
     }
-    if (attempt < CHUNK_ATTEMPTS) await sleep(800 * Math.pow(2, attempt - 1));
+    if (attempt < CHUNK_ATTEMPTS) {
+      if (deadline && Date.now() + 800 * Math.pow(2, attempt - 1) > deadline) return last;
+      await sleep(800 * Math.pow(2, attempt - 1));
+    }
   }
   return last;
 }
