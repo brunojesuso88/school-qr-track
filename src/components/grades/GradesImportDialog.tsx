@@ -10,6 +10,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Progress } from '@/components/ui/progress';
 import { Loader2, Upload, FileText, AlertTriangle, CheckCircle2, Info, GraduationCap } from 'lucide-react';
 import { GradesReviewTable, ReviewRow } from './GradesReviewTable';
 import { GradesConflictsPanel } from './GradesConflictsPanel';
@@ -145,6 +146,10 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
   const [effectiveName, setEffectiveName] = useState<string>('');
   const [pdfClassNames, setPdfClassNames] = useState<string[]>([]);
   const [renamingClass, setRenamingClass] = useState(false);
+  const pendingFileRef = useRef<File | null>(null);
+  const cancelledRef = useRef(false);
+  const [job, setJob] = useState<JobProgress | null>(null);
+  const [failedPages, setFailedPages] = useState<number[]>([]);
 
   const reset = useCallback(() => {
     setStep('select');
@@ -166,11 +171,18 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
     setEffectiveName('');
     setPdfClassNames([]);
     setRenamingClass(false);
+    setJob(null);
+    setFailedPages([]);
+    pendingFileRef.current = null;
+    cancelledRef.current = false;
     if (fileInputRef.current) fileInputRef.current.value = '';
   }, []);
 
   const handleClose = (value: boolean) => {
-    if (!value) reset();
+    if (!value) {
+      cancelledRef.current = true;
+      reset();
+    }
     onOpenChange(value);
   };
 
