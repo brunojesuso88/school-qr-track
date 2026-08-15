@@ -1081,7 +1081,7 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
                 <SkipForward className="w-4 h-4 mr-1" />
                 Ignorar página
               </Button>
-              <Button onClick={handleConfirmPage} disabled={!canConfirmPage}>
+              <Button onClick={() => handleConfirmPage('manual')} disabled={!canConfirmPage}>
                 Confirmar e próxima página
               </Button>
             </>
