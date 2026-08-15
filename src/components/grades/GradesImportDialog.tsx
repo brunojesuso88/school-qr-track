@@ -879,6 +879,44 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
               )}
               <Progress value={progress} className="flex-1 min-w-[160px]" />
             </div>
+
+            <div className="rounded-lg border p-3 space-y-2">
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <div className="flex items-center gap-2">
+                  <Switch id="auto-accept" checked={autoAccept} onCheckedChange={handleToggleAutoAccept} />
+                  <Label htmlFor="auto-accept" className="text-sm font-medium flex items-center gap-1">
+                    <Zap className="w-4 h-4 text-amber-500" />
+                    Aceitar automaticamente páginas sem erros
+                  </Label>
+                </div>
+                <Badge variant={autoAccept ? 'default' : 'outline'} className="text-[10px]">
+                  Modo automático: {autoAccept ? 'ATIVADO' : 'DESATIVADO'}
+                </Badge>
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                Páginas sem qualquer erro ou conflito serão gravadas automaticamente. Páginas com qualquer divergência
+                continuarão exigindo sua confirmação. Células vazias não são erro e faltas seguem ignoradas.
+              </p>
+              {autoAccept && (
+                autoEval.eligible && canConfirmPage ? (
+                  <Badge className="text-[10px] bg-green-600 hover:bg-green-600">⚡ Aprovada automaticamente</Badge>
+                ) : (
+                  <Alert variant="destructive">
+                    <AlertTriangle className="w-4 h-4" />
+                    <AlertTitle className="text-sm">
+                      Revisão obrigatória — {autoEval.reasons.length || 1} pendência(s)
+                    </AlertTitle>
+                    <AlertDescription className="text-xs">
+                      <ul className="list-disc pl-4">
+                        {(autoEval.reasons.length ? autoEval.reasons : ['Confirmação manual necessária']).map((r) => (
+                          <li key={r}>{r}</li>
+                        ))}
+                      </ul>
+                    </AlertDescription>
+                  </Alert>
+                )
+              )}
+            </div>
             {sessionSummary}
 
             {classDecision === 'pending' && preview.pdf_class_code && (
