@@ -221,6 +221,7 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
     setFileName(file.name);
     setError(null);
     setStep('processing');
+    setEffectiveName(classItem.name);
 
     try {
       // Alunos da turma
@@ -295,11 +296,69 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
       setResolutions({});
       setReviewTab(detectedList.some((d) => needsResolution(d)) ? 'conflicts' : 'grades');
       await loadConflicts(classItem.id, parsedRows, data.subjects || [], data.periods || []);
-      setStep('review');
+
+      const codes: string[] = (data.stats?.class_codes || []).filter(Boolean).map((c: string) => String(c).trim());
+      setPdfClassNames(codes);
+      const divergent = codes.filter((c) => normalize(c) !== normalize(classItem.name));
+      setStep(divergent.length > 0 ? 'class-conflict' : 'review');
     } catch (e) {
       console.error(e);
       setError(e instanceof Error ? e.message : 'Erro ao processar o PDF.');
       setStep('select');
+    }
+  };
+
+  const pdfClassName = useMemo(() => {
+    if (!classItem) return '';
+    return pdfClassNames.find((c) => normalize(c) !== normalize(classItem.name)) ?? pdfClassNames[0] ?? '';
+  }, [pdfClassNames, classItem]);
+
+  const classEvidence = useMemo(() => {
+    const matched = detected.filter((d) => d.student_id).length;
+    const total = detected.length || 1;
+    return { matched, strong: matched / total >= 0.6 && matched > 0 };
+  }, [detected]);
+
+  /** Renomeia a turma para o nome exato do PDF (com auditoria) — nunca automático. */
+  const handleRenameClass = async () => {
+    if (!classItem || !pdfClassName) return;
+    setRenamingClass(true);
+    setError(null);
+    try {
+      const { data: userData } = await supabase.auth.getUser();
+      const userId = userData?.user?.id ?? null;
+      const oldName = effectiveName || classItem.name;
+
+      const { error: classError } = await supabase
+        .from('classes')
+        .update({ name: pdfClassName })
+        .eq('id', classItem.id);
+      if (classError) throw classError;
+
+      const { error: studentsError } = await supabase
+        .from('students')
+        .update({ class: pdfClassName })
+        .eq('class', oldName);
+      if (studentsError) throw studentsError;
+
+      await supabase.from('audit_logs').insert({
+        user_id: userId,
+        action: 'UPDATE',
+        table_name: 'classes',
+        record_id: classItem.id,
+        old_data: { name: oldName } as never,
+        new_data: { name: pdfClassName, reason: 'Divergência de turma no boletim importado', file_name: fileName } as never,
+      });
+
+      setEffectiveName(pdfClassName);
+      setStep('review');
+      toast.success(`Turma renomeada para ${pdfClassName}.`);
+      onImported?.();
+    } catch (e) {
+      console.error(e);
+      setError(e instanceof Error ? e.message : 'Não foi possível alterar o nome da turma.');
+    } finally {
+      setRenamingClass(false);
     }
   };
 
