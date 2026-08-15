@@ -1000,7 +1000,12 @@ serve(async (req) => {
           try {
             const slice = await extractPages(pdfBytes, pageNumbers.map((p) => p - 1));
             if (!slice) throw new Error('Não foi possível isolar o bloco');
-            const res = await callWithRetry(FALLBACK_MODEL, buildExtractionBody(slice, job.file_name ?? 'boletim.pdf', expected, students), apiKey);
+            const res = await callWithRetry(
+              FALLBACK_MODEL,
+              buildExtractionBody(slice, job.file_name ?? 'boletim.pdf', expected, students),
+              apiKey,
+              callDeadline,
+            );
             if (!res || !res.ok) {
               const status = res?.status ?? 0;
               const detail = res ? await res.text().catch(() => '') : '';
