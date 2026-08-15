@@ -133,6 +133,7 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
   const [linkStudentId, setLinkStudentId] = useState<string | null>(null);
   const [regDecision, setRegDecision] = useState<RegistrationDecision | null>(null);
   const [conflictKeys, setConflictKeys] = useState<Set<string>>(new Set());
+  const [identicalKeys, setIdenticalKeys] = useState<Set<string>>(new Set());
   const [conflictStrategy, setConflictStrategy] = useState<'keep' | 'overwrite'>('keep');
   const [effectiveName, setEffectiveName] = useState('');
   const [classDecision, setClassDecision] = useState<'pending' | 'resolved'>('resolved');
@@ -155,6 +156,7 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
     setLinkStudentId(null);
     setRegDecision(null);
     setConflictKeys(new Set());
+    setIdenticalKeys(new Set());
     setConflictStrategy('keep');
     setClassDecision('resolved');
     setRenamingClass(false);
