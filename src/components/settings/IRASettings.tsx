@@ -11,6 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Loader2, Calculator, AlertTriangle, Link2, Info } from 'lucide-react';
 import { isAutoWeightEligible, resolveWeight, weightForWeeklyClasses } from '@/lib/ira';
+import { cn } from '@/lib/utils';
 
 interface ClassRow {
   id: string;
@@ -38,6 +39,7 @@ interface PeriodRow {
   id: string;
   label: string;
   kind: string;
+  normalized_label?: string;
 }
 
 const normalize = (s: string) =>
@@ -49,22 +51,31 @@ const IRASettings = () => {
   const [selectedClassId, setSelectedClassId] = useState<string>('');
   const [subjects, setSubjects] = useState<SubjectRow[]>([]);
   const [periods, setPeriods] = useState<PeriodRow[]>([]);
-  const [periodId, setPeriodId] = useState<string>('');
+  const [selectedPeriodIds, setSelectedPeriodIds] = useState<string[]>([]);
   const [useFinal, setUseFinal] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadingClass, setLoadingClass] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [applyingAll, setApplyingAll] = useState(false);
+  /** class_id -> possui boletim importado (grade_subjects) */
+  const [classesWithGrades, setClassesWithGrades] = useState<Set<string>>(new Set());
+  /** class_id -> possui configuração de IRA salva */
+  const [configuredClasses, setConfiguredClasses] = useState<Set<string>>(new Set());
 
   const selectedClass = useMemo(() => classes.find((c) => c.id === selectedClassId) ?? null, [classes, selectedClassId]);
 
   useEffect(() => {
     (async () => {
-      const [classesRes, mappingRes] = await Promise.all([
+      const [classesRes, mappingRes, subjRes, settingsRes] = await Promise.all([
         supabase.from('classes').select('id, name, shift, mapping_class_id').order('name'),
         supabase.from('mapping_classes').select('id, name, shift').order('name'),
+        supabase.from('grade_subjects').select('class_id'),
+        supabase.from('ira_settings').select('class_id'),
       ]);
       setClasses((classesRes.data || []) as unknown as ClassRow[]);
       setMappingClasses((mappingRes.data || []) as unknown as MappingClassRow[]);
+      setClassesWithGrades(new Set(((subjRes.data || []) as { class_id: string }[]).map((r) => r.class_id)));
+      setConfiguredClasses(new Set(((settingsRes.data || []) as { class_id: string }[]).map((r) => r.class_id)));
       setLoading(false);
     })();
   }, []);
@@ -73,13 +84,20 @@ const IRASettings = () => {
     setLoadingClass(true);
     const [subjRes, perRes, settingsRes] = await Promise.all([
       supabase.from('grade_subjects').select('id, name, weekly_classes, include_in_ira, custom_ira_weight, mapping_class_subject_id').eq('class_id', classId).order('sort_order'),
-      supabase.from('grade_periods').select('id, label, kind').eq('class_id', classId).order('sort_order'),
+      supabase.from('grade_periods').select('id, label, kind, normalized_label').eq('class_id', classId).order('sort_order'),
       supabase.from('ira_settings').select('*').eq('class_id', classId).maybeSingle(),
     ]);
     setSubjects((subjRes.data || []) as unknown as SubjectRow[]);
     setPeriods((perRes.data || []) as unknown as PeriodRow[]);
-    const settings = settingsRes.data as { ira_period_id: string | null; use_final_grade: boolean } | null;
-    setPeriodId(settings?.ira_period_id ?? '');
+    const settings = settingsRes.data as {
+      ira_period_id: string | null;
+      ira_period_ids: string[] | null;
+      use_final_grade: boolean;
+    } | null;
+    const ids = settings?.ira_period_ids && settings.ira_period_ids.length > 0
+      ? settings.ira_period_ids
+      : settings?.ira_period_id ? [settings.ira_period_id] : [];
+    setSelectedPeriodIds(ids);
     setUseFinal(settings?.use_final_grade ?? false);
     setLoadingClass(false);
   }, []);
@@ -143,13 +161,29 @@ const IRASettings = () => {
     }
   };
 
+  const togglePeriod = (id: string, checked: boolean) => {
+    setUseFinal(false);
+    setSelectedPeriodIds((prev) => (checked ? [...new Set([...prev, id])] : prev.filter((p) => p !== id)));
+  };
+
+  const orderedSelectedPeriods = useMemo(
+    () => periods.filter((p) => selectedPeriodIds.includes(p.id)),
+    [periods, selectedPeriodIds],
+  );
+
   const savePeriodSettings = async () => {
     if (!selectedClassId) return;
+    if (!useFinal && selectedPeriodIds.length === 0) {
+      toast.error('Selecione ao menos um período (ou a Nota Final) para o IRA.');
+      return;
+    }
     setSaving(true);
     const { data: userData } = await supabase.auth.getUser();
+    const ids = useFinal ? [] : selectedPeriodIds;
     const { error } = await supabase.from('ira_settings').upsert({
       class_id: selectedClassId,
-      ira_period_id: useFinal ? null : (periodId || null),
+      ira_period_ids: ids,
+      ira_period_id: ids[0] ?? null,
       use_final_grade: useFinal,
       updated_by: userData?.user?.id ?? null,
     }, { onConflict: 'class_id' });
@@ -158,7 +192,69 @@ const IRASettings = () => {
       toast.error('Não foi possível salvar a configuração.');
       return;
     }
+    setConfiguredClasses((prev) => new Set([...prev, selectedClassId]));
     toast.success('Configuração do IRA salva. O IRA é recalculado automaticamente.');
+  };
+
+  /** Replica a configuração atual para TODAS as turmas com boletim, casando períodos por rótulo. */
+  const applyToAllClasses = async () => {
+    if (!selectedClassId) return;
+    if (!useFinal && orderedSelectedPeriods.length === 0) {
+      toast.error('Selecione ao menos um período antes de aplicar a todas as turmas.');
+      return;
+    }
+    setApplyingAll(true);
+    try {
+      const targetIds = classes.map((c) => c.id).filter((id) => classesWithGrades.has(id));
+      const { data: allPeriods, error: perErr } = await supabase
+        .from('grade_periods')
+        .select('id, class_id, label, kind, normalized_label')
+        .in('class_id', targetIds);
+      if (perErr) throw perErr;
+      const rows = (allPeriods || []) as unknown as (PeriodRow & { class_id: string })[];
+      const wantedLabels = orderedSelectedPeriods.map((p) => normalize(p.label));
+
+      const { data: userData } = await supabase.auth.getUser();
+      const payload: Record<string, unknown>[] = [];
+      const skipped: string[] = [];
+      targetIds.forEach((classId) => {
+        const classPeriods = rows.filter((r) => r.class_id === classId);
+        if (useFinal) {
+          const hasFinal = classPeriods.some((p) => p.kind === 'final');
+          if (!hasFinal) { skipped.push(classId); return; }
+          payload.push({
+            class_id: classId, ira_period_ids: [], ira_period_id: null,
+            use_final_grade: true, updated_by: userData?.user?.id ?? null,
+          });
+          return;
+        }
+        const ids = wantedLabels
+          .map((label) => classPeriods.find((p) => normalize(p.label) === label)?.id)
+          .filter(Boolean) as string[];
+        if (ids.length === 0) { skipped.push(classId); return; }
+        payload.push({
+          class_id: classId, ira_period_ids: ids, ira_period_id: ids[0],
+          use_final_grade: false, updated_by: userData?.user?.id ?? null,
+        });
+      });
+
+      if (payload.length === 0) {
+        toast.error('Nenhuma turma compatível encontrada para aplicar a configuração.');
+        return;
+      }
+      const { error } = await supabase.from('ira_settings').upsert(payload as never, { onConflict: 'class_id' });
+      if (error) throw error;
+      setConfiguredClasses((prev) => new Set([...prev, ...payload.map((p) => p.class_id as string)]));
+      toast.success(
+        `Configuração aplicada a ${payload.length} turma(s).` +
+        (skipped.length > 0 ? ` ${skipped.length} turma(s) sem períodos equivalentes foram ignoradas.` : ''),
+      );
+    } catch (e) {
+      console.error(e);
+      toast.error('Não foi possível aplicar a configuração a todas as turmas.');
+    } finally {
+      setApplyingAll(false);
+    }
   };
 
   const hasFinalPeriod = periods.some((p) => p.kind === 'final');
@@ -189,12 +285,20 @@ const IRASettings = () => {
             <Label>Turma</Label>
             <Select value={selectedClassId} onValueChange={setSelectedClassId}>
               <SelectTrigger><SelectValue placeholder="Selecione a turma" /></SelectTrigger>
-              <SelectContent>
+              <SelectContent className="max-h-72">
                 {classes.map((c) => (
-                  <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                  <SelectItem key={c.id} value={c.id}>
+                    {c.name}
+                    {!classesWithGrades.has(c.id) && ' — sem boletim'}
+                    {classesWithGrades.has(c.id) && !configuredClasses.has(c.id) && ' — IRA não configurado'}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
+            <p className="text-xs text-muted-foreground">
+              {classes.length} turma(s) cadastradas · {classesWithGrades.size} com boletim importado ·{' '}
+              {[...classesWithGrades].filter((id) => configuredClasses.has(id)).length} com IRA configurado.
+            </p>
           </div>
 
           {selectedClass && (
@@ -255,28 +359,55 @@ const IRASettings = () => {
 
           {selectedClassId && !loadingClass && subjects.length > 0 && (
             <>
-              <div className="space-y-2">
-                <Label>Nota usada no IRA</Label>
-                <div className="flex flex-wrap items-center gap-3">
-                  <Select value={useFinal ? 'final' : periodId} onValueChange={(v) => {
-                    if (v === 'final') { setUseFinal(true); setPeriodId(''); }
-                    else { setUseFinal(false); setPeriodId(v); }
-                  }}>
-                    <SelectTrigger className="max-w-xs"><SelectValue placeholder="Selecione o período" /></SelectTrigger>
-                    <SelectContent>
-                      {hasFinalPeriod && <SelectItem value="final">Nota Final do boletim</SelectItem>}
-                      {periods.filter((p) => p.kind !== 'final').map((p) => (
-                        <SelectItem key={p.id} value={p.id}>{p.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+              <div className="space-y-3">
+                <Label>Notas usadas no IRA (pode selecionar mais de um período)</Label>
+                <div className="rounded-md border p-3 space-y-2">
+                  {hasFinalPeriod && (
+                    <label className="flex items-center gap-2 text-sm">
+                      <Checkbox
+                        checked={useFinal}
+                        onCheckedChange={(checked) => {
+                          setUseFinal(!!checked);
+                          if (checked) setSelectedPeriodIds([]);
+                        }}
+                      />
+                      Nota Final do boletim (ignora a seleção de bimestres)
+                    </label>
+                  )}
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    {periods.filter((p) => p.kind !== 'final').map((p) => (
+                      <label
+                        key={p.id}
+                        className={cn('flex items-center gap-2 text-sm', useFinal && 'opacity-50')}
+                      >
+                        <Checkbox
+                          disabled={useFinal}
+                          checked={selectedPeriodIds.includes(p.id)}
+                          onCheckedChange={(checked) => togglePeriod(p.id, !!checked)}
+                        />
+                        {p.label}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
                   <Button size="sm" onClick={savePeriodSettings} disabled={saving}>
                     {saving && <Loader2 className="w-3 h-3 mr-2 animate-spin" />}
-                    Salvar
+                    Salvar para esta turma
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={applyToAllClasses} disabled={applyingAll}>
+                    {applyingAll && <Loader2 className="w-3 h-3 mr-2 animate-spin" />}
+                    Aplicar a todas as turmas
                   </Button>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Todas as notas de todos os períodos continuam preservadas — a configuração apenas define qual delas entra no IRA.
+                  Com mais de um período selecionado, a nota de cada disciplina é a{' '}
+                  <strong>média aritmética</strong> dos períodos escolhidos
+                  {orderedSelectedPeriods.length > 0 && !useFinal && (
+                    <> ({orderedSelectedPeriods.map((p) => p.label).join(' + ')})</>
+                  )}
+                  . Todas as notas do boletim continuam preservadas — a configuração só define o que entra no IRA.
+                  “Aplicar a todas as turmas” casa os períodos pelo rótulo (ex.: “1º Período”) em cada turma com boletim.
                 </p>
               </div>
 
@@ -284,9 +415,9 @@ const IRASettings = () => {
                 <Info className="w-4 h-4" />
                 <AlertTitle className="text-sm">Regra das notas não lançadas</AlertTitle>
                 <AlertDescription className="text-xs">
-                  Quando a nota do período selecionado estiver em branco no boletim, ela será considerada
-                  <strong> 0,00 </strong>no cálculo do IRA até que a nota seja lançada. A nota original do boletim
-                  não é alterada: na aba “Notas” a célula vazia continua aparecendo como “— (não informado)”.
+                  Quando a nota de um período selecionado estiver em branco no boletim, ela será considerada
+                  <strong> 0,00 </strong>na média daquela disciplina até que a nota seja lançada. A nota original do
+                  boletim não é alterada: na aba “Notas” a célula vazia continua aparecendo como “— (não informado)”.
                 </AlertDescription>
               </Alert>
 
@@ -314,7 +445,7 @@ const IRASettings = () => {
                           </p>
                           {subject.include_in_ira && (
                             <p className="text-[11px] text-amber-600 mt-0.5">
-                              Participa do IRA · nota em branco no período escolhido = 0,00 no cálculo
+                              Participa do IRA · nota em branco em período selecionado = 0,00 no cálculo
                             </p>
                           )}
                         </div>
