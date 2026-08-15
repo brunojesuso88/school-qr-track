@@ -388,6 +388,38 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
       const { data: userData } = await supabase.auth.getUser();
       const userId = userData?.user?.id ?? null;
 
+      // 0. Alunos novos criados a partir do boletim (ação "Cadastrar novo aluno")
+      const shiftCode = classItem.shift === 'morning' ? 'M' : classItem.shift === 'afternoon' ? 'T' : 'N';
+      const createdIdByKey = new Map<string, string>();
+      const toCreate = detected.filter((d) => resolutions[d.key]?.action === 'create');
+      for (const d of toCreate) {
+        const initials = d.pdf_name.trim().split(/\s+/).filter(Boolean).map((p) => p[0].toUpperCase()).join('');
+        const { data: created, error: createError } = await supabase
+          .from('students')
+          .insert({
+            full_name: d.pdf_name,
+            student_id: `${initials}-${classItem.name}-${shiftCode}`,
+            class: classItem.name,
+            shift: classItem.shift as never,
+            qr_code: `STU-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`,
+            school_code: d.pdf_code,
+            birth_date: d.pdf_birth_date,
+            mother_name: d.pdf_mother_name,
+            father_name: d.pdf_father_name,
+            created_by: userId,
+          })
+          .select('id')
+          .single();
+        if (createError) throw createError;
+        createdIdByKey.set(d.key, created.id);
+      }
+
+      const rowsToSave = rows.map((row) => {
+        const key = normalize(row.student_name);
+        const createdId = createdIdByKey.get(key);
+        return createdId ? { ...row, student_id: createdId } : row;
+      });
+
       // 1. Períodos
       const periodPayload = periods.map((p) => ({
         class_id: classItem.id,
@@ -445,6 +477,17 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
       (subjectRows || []).forEach((s: { id: string; normalized_name: string }) => subjectIdByNorm.set(s.normalized_name, s.id));
 
       // 3. Registro da importação (histórico)
+      const auditResolutions = detected
+        .filter((d) => needsResolution(d))
+        .map((d) => ({
+          pdf_name: d.pdf_name,
+          pdf_code: d.pdf_code,
+          pages: d.pages,
+          conflicts: d.conflicts,
+          action: resolutions[d.key]?.action ?? null,
+          linked_student_id: createdIdByKey.get(d.key) ?? resolutions[d.key]?.student_id ?? null,
+        }));
+
       const { data: importRow, error: importError } = await supabase
         .from('grade_imports')
         .insert({
@@ -452,7 +495,7 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
           file_name: fileName,
           status: 'confirmed',
           conflict_strategy: conflictStrategy,
-          stats: (stats ?? {}) as never,
+          stats: { ...(stats ?? {}), student_resolutions: auditResolutions } as never,
           issues: issues as never,
           created_by: userId,
         })
@@ -461,7 +504,8 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
       if (importError) throw importError;
 
       // 4. Notas
-      const gradePayload = importableRows
+      const gradePayload = rowsToSave
+        .filter((r) => r.student_id && !r.flags.includes('invalid_value'))
         .map((row) => {
           const subjectId = subjectIdByNorm.get(normalize(row.subject));
           const periodId = periodIdByNorm.get(normalize(row.period));
@@ -493,9 +537,30 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
         if (gradesError) throw gradesError;
       }
 
+      // 5. Atualização cadastral (somente na confirmação final, conforme decisões do usuário)
+      let updatedRegistrations = 0;
+      for (const d of detected) {
+        const studentId = d.student_id;
+        if (!studentId || createdIdByKey.has(d.key)) continue;
+        const dec = regDecisions[d.key] ?? defaultRegistrationDecision(d);
+        const update: Record<string, string | null> = {};
+        if (d.pdf_code && dec.code === 'update') update.school_code = d.pdf_code;
+        if (d.pdf_birth_date && dec.birth_date === 'update') update.birth_date = d.pdf_birth_date;
+        if (d.pdf_mother_name && dec.mother === 'update') update.mother_name = d.pdf_mother_name;
+        if (d.pdf_father_name && dec.father === 'update') update.father_name = d.pdf_father_name;
+        if (Object.keys(update).length === 0) continue;
+        const { error: updError } = await supabase.from('students').update(update).eq('id', studentId);
+        if (updError) throw updError;
+        updatedRegistrations++;
+      }
+
       setSavedCount(finalPayload.length);
       setStep('done');
-      toast.success(`${finalPayload.length} nota(s) importada(s) para ${classItem.name}.`);
+      toast.success(
+        `${finalPayload.length} nota(s) importada(s) para ${classItem.name}.` +
+        (updatedRegistrations ? ` ${updatedRegistrations} cadastro(s) atualizado(s).` : '') +
+        (createdIdByKey.size ? ` ${createdIdByKey.size} aluno(s) cadastrado(s).` : ''),
+      );
       onImported?.();
     } catch (e) {
       console.error(e);
