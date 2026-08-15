@@ -9,46 +9,18 @@ import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Progress } from '@/components/ui/progress';
-import { Loader2, Upload, FileText, AlertTriangle, CheckCircle2, Info, GraduationCap } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import {
+  Loader2, Upload, FileText, AlertTriangle, CheckCircle2, Info, GraduationCap, SkipForward, Pencil,
+} from 'lucide-react';
 import { GradesReviewTable, ReviewRow } from './GradesReviewTable';
-import { GradesConflictsPanel } from './GradesConflictsPanel';
 import { GradesRegistrationAudit } from './GradesRegistrationAudit';
 import { GradesClassMismatchPanel } from './GradesClassMismatchPanel';
 import {
-  DetectedStudent, FieldDecision, RegistrationDecision, Resolution, ResolutionAction,
-  defaultRegistrationDecision, isResolved, needsResolution,
+  CONFLICT_LABELS, DetectedStudent, FieldDecision, RegistrationDecision,
+  defaultRegistrationDecision, formatDate,
 } from './gradesConflicts';
-
-interface ImportIssue {
-  level: 'error' | 'warning' | 'info';
-  code: string;
-  message: string;
-}
-
-interface ImportStats {
-  pages: number | null;
-  students_detected: number;
-  students_matched: number;
-  students_unmatched: number;
-  students_in_class: number;
-  students_missing_in_pdf: number;
-  subjects: number;
-  periods: number;
-  grades_read: number;
-  cells_total: number;
-  low_confidence: number;
-  empty_cells: number;
-  explicit_zero_cells?: number;
-  absence_cells_ignored?: number;
-  class_codes?: string[];
-  invalid_values: number;
-  reconciled_cells: number;
-  issues: number;
-  errors: number;
-  warnings: number;
-}
 
 interface ParsedSubject {
   normalized_name: string;
@@ -65,6 +37,44 @@ interface ParsedPeriod {
   sort_order: number;
 }
 
+interface PagePreview {
+  page: number;
+  total_pages: number;
+  pdf_class_code: string | null;
+  student: {
+    pdf_name: string;
+    pdf_code: string | null;
+    pdf_birth_date: string | null;
+    pdf_mother_name: string | null;
+    pdf_father_name: string | null;
+  };
+  detected: DetectedStudent;
+  subjects: ParsedSubject[];
+  periods: ParsedPeriod[];
+  rows: ReviewRow[];
+  stats: {
+    cells_total: number;
+    grades_read: number;
+    empty_cells: number;
+    explicit_zero_cells: number;
+    invalid_values: number;
+    low_confidence: number;
+    subjects: number;
+    periods: number;
+  };
+  notes: string[];
+}
+
+interface SessionState {
+  id: string;
+  file_name: string | null;
+  total_pages: number;
+  current_page: number;
+  confirmed_pages: number;
+  ignored_pages: number;
+  notes_imported: number;
+}
+
 interface GradesImportDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -72,20 +82,8 @@ interface GradesImportDialogProps {
   onImported?: () => void;
 }
 
-type Step = 'select' | 'processing' | 'class-conflict' | 'review' | 'saving' | 'done' | 'failed';
-
-interface JobProgress {
-  job_id: string;
-  status: 'queued' | 'processing' | 'completed' | 'failed' | 'cancelled';
-  progress: number;
-  total_pages: number;
-  total_chunks: number;
-  completed_chunks: number;
-  failed_chunks: number;
-  current_chunk: number | null;
-  failed_pages: number[];
-  error_message: string | null;
-}
+type Step = 'select' | 'resume' | 'processing' | 'page' | 'saving' | 'summary' | 'failed';
+type PageAction = 'link' | 'create' | 'ignore' | null;
 
 const normalize = (s: unknown) =>
   String(s ?? '')
@@ -105,75 +103,44 @@ const parseValue = (raw: string | null): { value: number | null; invalid: boolea
   return { value: Number(cleaned), invalid: false };
 };
 
-const PERIOD_ORDER = ['1º período', '2º período', '3º período', '4º período', 'media final', 'rec final', 'cons class', 'pendencia', 'final'];
-const periodRank = (label: string) => {
-  const idx = PERIOD_ORDER.indexOf(normalize(label));
-  return idx === -1 ? PERIOD_ORDER.length : idx;
-};
-
-/** Revisão ordenada por aluno > disciplina > período/etapa. */
-const sortReviewRows = (rows: ReviewRow[]) =>
-  [...rows].sort((a, b) => {
-    const byStudent = (a.matched_name || a.student_name).localeCompare(b.matched_name || b.student_name, 'pt-BR');
-    if (byStudent !== 0) return byStudent;
-    const bySubject = a.subject.localeCompare(b.subject, 'pt-BR');
-    if (bySubject !== 0) return bySubject;
-    const byPeriod = periodRank(a.period) - periodRank(b.period);
-    if (byPeriod !== 0) return byPeriod;
-    return a.period.localeCompare(b.period, 'pt-BR');
-  });
-
 export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }: GradesImportDialogProps) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [step, setStep] = useState<Step>('select');
-  const [fileName, setFileName] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const [stats, setStats] = useState<ImportStats | null>(null);
-  const [issues, setIssues] = useState<ImportIssue[]>([]);
+  const [session, setSession] = useState<SessionState | null>(null);
+  const [resumable, setResumable] = useState<SessionState | null>(null);
+  const [preview, setPreview] = useState<PagePreview | null>(null);
   const [rows, setRows] = useState<ReviewRow[]>([]);
-  const [subjects, setSubjects] = useState<ParsedSubject[]>([]);
-  const [periods, setPeriods] = useState<ParsedPeriod[]>([]);
+  const [editing, setEditing] = useState(false);
   const [classStudents, setClassStudents] = useState<{ id: string; full_name: string }[]>([]);
-  const [detected, setDetected] = useState<DetectedStudent[]>([]);
-  const [missingInPdf, setMissingInPdf] = useState<{ id: string; full_name: string; student_id?: string | null }[]>([]);
-  const [resolutions, setResolutions] = useState<Record<string, Resolution>>({});
-  const [regDecisions, setRegDecisions] = useState<Record<string, RegistrationDecision>>({});
-  const [reviewTab, setReviewTab] = useState('conflicts');
   const [expectedSubjects, setExpectedSubjects] = useState<{ id: string; name: string; weekly_classes: number }[]>([]);
+  const [pageAction, setPageAction] = useState<PageAction>(null);
+  const [linkStudentId, setLinkStudentId] = useState<string | null>(null);
+  const [regDecision, setRegDecision] = useState<RegistrationDecision | null>(null);
   const [conflictKeys, setConflictKeys] = useState<Set<string>>(new Set());
   const [conflictStrategy, setConflictStrategy] = useState<'keep' | 'overwrite'>('keep');
-  const [savedCount, setSavedCount] = useState(0);
-  const [effectiveName, setEffectiveName] = useState<string>('');
-  const [pdfClassNames, setPdfClassNames] = useState<string[]>([]);
+  const [effectiveName, setEffectiveName] = useState('');
+  const [classDecision, setClassDecision] = useState<'pending' | 'resolved'>('resolved');
   const [renamingClass, setRenamingClass] = useState(false);
-  const pendingFileRef = useRef<File | null>(null);
+  const [savedTotal, setSavedTotal] = useState(0);
   const cancelledRef = useRef(false);
-  const [job, setJob] = useState<JobProgress | null>(null);
-  const [failedPages, setFailedPages] = useState<number[]>([]);
 
   const reset = useCallback(() => {
     setStep('select');
-    setFileName('');
     setError(null);
-    setStats(null);
-    setIssues([]);
+    setSession(null);
+    setResumable(null);
+    setPreview(null);
     setRows([]);
-    setSubjects([]);
-    setPeriods([]);
-    setDetected([]);
-    setMissingInPdf([]);
-    setResolutions({});
-    setRegDecisions({});
-    setReviewTab('conflicts');
+    setEditing(false);
+    setPageAction(null);
+    setLinkStudentId(null);
+    setRegDecision(null);
     setConflictKeys(new Set());
     setConflictStrategy('keep');
-    setSavedCount(0);
-    setEffectiveName('');
-    setPdfClassNames([]);
+    setClassDecision('resolved');
     setRenamingClass(false);
-    setJob(null);
-    setFailedPages([]);
-    pendingFileRef.current = null;
+    setSavedTotal(0);
     cancelledRef.current = false;
     if (fileInputRef.current) fileInputRef.current.value = '';
   }, []);
@@ -189,51 +156,12 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
   const fileToBase64 = (file: File) =>
     new Promise<string>((resolve, reject) => {
       const reader = new FileReader();
-      reader.onload = () => {
-        const result = String(reader.result);
-        resolve(result.split(',')[1] ?? '');
-      };
+      reader.onload = () => resolve(String(reader.result).split(',')[1] ?? '');
       reader.onerror = reject;
       reader.readAsDataURL(file);
     });
 
-  const loadConflicts = useCallback(async (
-    classId: string,
-    parsedRows: ReviewRow[],
-    parsedSubjects: ParsedSubject[],
-    parsedPeriods: ParsedPeriod[],
-  ) => {
-    const [subjRes, perRes] = await Promise.all([
-      supabase.from('grade_subjects').select('id, normalized_name').eq('class_id', classId),
-      supabase.from('grade_periods').select('id, normalized_label').eq('class_id', classId),
-    ]);
-    const subjById = new Map<string, string>();
-    (subjRes.data || []).forEach((s: { id: string; normalized_name: string }) => subjById.set(s.id, s.normalized_name));
-    const perById = new Map<string, string>();
-    (perRes.data || []).forEach((p: { id: string; normalized_label: string }) => perById.set(p.id, p.normalized_label));
-    if (subjById.size === 0 || perById.size === 0) {
-      setConflictKeys(new Set());
-      return;
-    }
-    const { data } = await supabase
-      .from('student_grades')
-      .select('student_id, grade_subject_id, grade_period_id')
-      .in('grade_subject_id', [...subjById.keys()]);
-    const keys = new Set<string>();
-    (data || []).forEach((g: { student_id: string; grade_subject_id: string; grade_period_id: string }) => {
-      const subjNorm = subjById.get(g.grade_subject_id);
-      const perNorm = perById.get(g.grade_period_id);
-      if (!subjNorm || !perNorm) return;
-      const subject = parsedSubjects.find((s) => s.normalized_name === subjNorm);
-      const period = parsedPeriods.find((p) => p.normalized_label === perNorm);
-      if (!subject || !period) return;
-      keys.add(`${g.student_id}||${subject.name}||${period.label}`);
-    });
-    setConflictKeys(keys);
-    void parsedRows;
-  }, []);
-
-  /** Carrega alunos da turma e disciplinas esperadas (contexto do job). */
+  /** Alunos da turma + disciplinas esperadas (contexto persistido na sessão). */
   const loadContext = useCallback(async () => {
     if (!classItem) throw new Error('Turma não selecionada.');
     const { data: studentsData, error: studentsError } = await supabase
@@ -263,112 +191,116 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
     return { students, expected };
   }, [classItem]);
 
-  /** Alimenta a auditoria/conferência com o resultado consolidado do job. */
-  const applyResult = useCallback(async (data: {
-    rows?: ReviewRow[];
-    subjects?: ParsedSubject[];
-    periods?: ParsedPeriod[];
-    stats?: ImportStats | null;
-    issues?: ImportIssue[];
-    detected_students?: DetectedStudent[];
-    students_missing_in_pdf?: { id: string; full_name: string; student_id?: string | null }[];
-  }) => {
-    if (!classItem) return;
-    const parsedRows: ReviewRow[] = sortReviewRows(
-      (data.rows || []).map((r: ReviewRow) => ({ ...r, flags: r.flags || [], source: 'import' as const })),
-    );
-    setRows(parsedRows);
-    setSubjects(data.subjects || []);
-    setPeriods(data.periods || []);
-    setStats(data.stats || null);
-    setIssues(data.issues || []);
+  /** Notas já existentes para o aluno desta página (aluno + disciplina + período). */
+  const loadPageConflicts = useCallback(async (studentId: string | null, p: PagePreview) => {
+    if (!classItem || !studentId) { setConflictKeys(new Set()); return; }
+    const [subjRes, perRes] = await Promise.all([
+      supabase.from('grade_subjects').select('id, normalized_name').eq('class_id', classItem.id),
+      supabase.from('grade_periods').select('id, normalized_label').eq('class_id', classItem.id),
+    ]);
+    const subjById = new Map<string, string>();
+    (subjRes.data || []).forEach((s: { id: string; normalized_name: string }) => subjById.set(s.id, s.normalized_name));
+    const perById = new Map<string, string>();
+    (perRes.data || []).forEach((x: { id: string; normalized_label: string }) => perById.set(x.id, x.normalized_label));
+    if (subjById.size === 0 || perById.size === 0) { setConflictKeys(new Set()); return; }
+    const { data } = await supabase
+      .from('student_grades')
+      .select('student_id, grade_subject_id, grade_period_id')
+      .eq('student_id', studentId);
+    const keys = new Set<string>();
+    (data || []).forEach((g: { student_id: string; grade_subject_id: string; grade_period_id: string }) => {
+      const subjNorm = subjById.get(g.grade_subject_id);
+      const perNorm = perById.get(g.grade_period_id);
+      if (!subjNorm || !perNorm) return;
+      const subject = p.subjects.find((s) => s.normalized_name === subjNorm);
+      const period = p.periods.find((x) => x.normalized_label === perNorm);
+      if (!subject || !period) return;
+      keys.add(`${g.student_id}||${subject.name}||${period.label}`);
+    });
+    setConflictKeys(keys);
+  }, [classItem]);
 
-    const detectedList: DetectedStudent[] = (data.detected_students || []).map((d: DetectedStudent) => ({
-      ...d,
-      conflicts: d.conflicts || [],
-      pages: d.pages || [],
-    }));
-    setDetected(detectedList);
-    setMissingInPdf(data.students_missing_in_pdf || []);
-    const initialDecisions: Record<string, RegistrationDecision> = {};
-    detectedList.forEach((d) => { initialDecisions[d.key] = defaultRegistrationDecision(d); });
-    setRegDecisions(initialDecisions);
-    setResolutions({});
-    setReviewTab(detectedList.some((d) => needsResolution(d)) ? 'conflicts' : 'grades');
-    await loadConflicts(classItem.id, parsedRows, data.subjects || [], data.periods || []);
+  const applyPreview = useCallback(async (p: PagePreview) => {
+    setPreview(p);
+    setRows((p.rows || []).map((r) => ({ ...r, flags: r.flags || [], source: 'import' as const })));
+    setEditing(false);
+    setConflictStrategy('keep');
+    const detected = p.detected;
+    setPageAction(detected.student_id ? 'link' : null);
+    setLinkStudentId(detected.student_id ?? null);
+    setRegDecision(defaultRegistrationDecision(detected));
+    await loadPageConflicts(detected.student_id, p);
+    const pdfClass = (p.pdf_class_code ?? '').trim();
+    const divergent = Boolean(pdfClass) && normalize(pdfClass) !== normalize(effectiveName || classItem?.name || '');
+    setClassDecision(divergent ? 'pending' : 'resolved');
+    setStep('page');
+  }, [loadPageConflicts, effectiveName, classItem]);
 
-    // Deduplica turmas equivalentes vindas de blocos diferentes antes de decidir divergência.
-    const seen = new Set<string>();
-    const codes: string[] = ((data.stats?.class_codes || []) as string[])
-      .map((c) => String(c ?? '').trim())
-      .filter(Boolean)
-      .filter((c) => {
-        const key = normalize(c);
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      });
-    setPdfClassNames(codes);
-    const divergent = codes.filter((c) => normalize(c) !== normalize(classItem.name));
-    setStep(divergent.length > 0 ? 'class-conflict' : 'review');
-  }, [classItem, loadConflicts]);
-
-  const fail = useCallback((message: string) => {
-    setError(message);
-    setStep('failed');
-  }, []);
-
-  /** Processa os blocos pendentes chamando a função repetidamente (nunca uma requisição longa). */
-  const runJob = useCallback(async (jobId: string) => {
-    let guard = 0;
-    // Cada chamada processa até 3 blocos de 3 páginas e retorna rápido.
-    while (guard++ < 200) {
-      if (cancelledRef.current) return;
-      const { data, error: fnError } = await supabase.functions.invoke('parse-grades-pdf', {
-        body: { action: 'process', job_id: jobId },
+  /** Processa UMA página e abre a confirmação. */
+  const processPage = useCallback(async (sessionId: string, pageNumber: number) => {
+    setError(null);
+    setStep('processing');
+    setPreview(null);
+    try {
+      const { data, error: fnError } = await supabase.functions.invoke('parse-grade-page', {
+        body: { action: 'page', session_id: sessionId, page_number: pageNumber },
       });
       if (fnError) throw new Error(fnError.message);
-      if (!data?.success) throw new Error(data?.error || 'Falha ao processar o boletim.');
-
-      setJob(data as JobProgress);
-      setFailedPages(Array.isArray(data.failed_pages) ? data.failed_pages : []);
-
-      if (data.status === 'completed') {
-        if (!data.result) throw new Error('O processamento terminou sem resultado. Tente novamente.');
-        await applyResult(data.result);
-        return;
-      }
-      if (data.status === 'failed' || data.status === 'cancelled') {
-        throw new Error(data.error_message || 'O processamento do boletim falhou.');
-      }
+      if (!data?.success) throw new Error(data?.error || 'Falha ao ler a página.');
+      if (cancelledRef.current) return;
+      setSession((prev) => (prev ? { ...prev, current_page: pageNumber } : prev));
+      await applyPreview(data.preview as PagePreview);
+    } catch (e) {
+      console.error(e);
+      setError(e instanceof Error ? e.message : 'Erro ao ler a página.');
+      setStep('failed');
     }
-    throw new Error('O processamento excedeu o número de etapas previstas. Tente novamente.');
-  }, [applyResult]);
+  }, [applyPreview]);
+
+  /** Sessão em aberto para esta turma (retomada). */
+  useEffect(() => {
+    if (!open || !classItem) return;
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from('grade_import_sessions')
+        .select('id, file_name, total_pages, current_page, confirmed_pages, ignored_pages, notes_imported, status')
+        .eq('class_id', classItem.id)
+        .in('status', ['processing_page', 'awaiting_confirmation'])
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (cancelled || !data) return;
+      setResumable({
+        id: data.id,
+        file_name: data.file_name,
+        total_pages: data.total_pages,
+        current_page: data.current_page,
+        confirmed_pages: data.confirmed_pages,
+        ignored_pages: data.ignored_pages,
+        notes_imported: data.notes_imported,
+      });
+      setStep('resume');
+    })();
+    return () => { cancelled = true; };
+  }, [open, classItem]);
+
+  useEffect(() => {
+    if (open && classItem) setEffectiveName(classItem.name);
+  }, [open, classItem]);
 
   const startImport = async (file: File) => {
     if (!classItem) return;
-    if (file.type !== 'application/pdf') {
-      toast.error('Selecione um arquivo PDF.');
-      return;
-    }
-    if (file.size > 10 * 1024 * 1024) {
-      toast.error('O PDF deve ter no máximo 10MB.');
-      return;
-    }
-    pendingFileRef.current = file;
+    if (file.type !== 'application/pdf') { toast.error('Selecione um arquivo PDF.'); return; }
+    if (file.size > 15 * 1024 * 1024) { toast.error('O PDF deve ter no máximo 15MB.'); return; }
     cancelledRef.current = false;
-    setFileName(file.name);
     setError(null);
-    setJob(null);
-    setFailedPages([]);
+    setSavedTotal(0);
     setStep('processing');
-    setEffectiveName(classItem.name);
-
     try {
       const { students, expected } = await loadContext();
       const pdfBase64 = await fileToBase64(file);
-
-      const { data, error: fnError } = await supabase.functions.invoke('parse-grades-pdf', {
+      const { data, error: fnError } = await supabase.functions.invoke('parse-grade-page', {
         body: {
           action: 'create',
           pdfBase64,
@@ -376,139 +308,60 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
           class_id: classItem.id,
           class_code: classItem.name,
           students: students.map((s) => ({
-            id: s.id,
-            full_name: s.full_name,
-            student_id: s.student_id,
-            school_code: s.school_code,
-            birth_date: s.birth_date,
-            mother_name: s.mother_name,
-            father_name: s.father_name,
+            id: s.id, full_name: s.full_name, student_id: s.student_id,
+            school_code: s.school_code, birth_date: s.birth_date,
+            mother_name: s.mother_name, father_name: s.father_name,
           })),
           expected_subjects: expected.map((s) => ({ name: s.name, weekly_classes: s.weekly_classes })),
         },
       });
       if (fnError) throw new Error(fnError.message);
-      if (!data?.success || !data.job_id) throw new Error(data?.error || 'Não foi possível iniciar o processamento.');
-
-      setJob(data as JobProgress);
-      await runJob(data.job_id);
+      if (!data?.success) throw new Error(data?.error || 'Não foi possível iniciar a importação.');
+      const newSession: SessionState = {
+        id: data.session_id,
+        file_name: file.name,
+        total_pages: data.total_pages,
+        current_page: 1,
+        confirmed_pages: 0,
+        ignored_pages: 0,
+        notes_imported: 0,
+      };
+      setSession(newSession);
+      await processPage(newSession.id, 1);
     } catch (e) {
       console.error(e);
-      fail(e instanceof Error ? e.message : 'Erro ao processar o PDF.');
+      setError(e instanceof Error ? e.message : 'Erro ao iniciar a importação.');
+      setStep('failed');
     }
   };
 
-  /** Retoma o job existente (sem reenviar o PDF) ou recria a partir do arquivo já escolhido. */
-  const handleRetry = async () => {
-    setError(null);
+  /** Retoma na primeira página ainda não confirmada/ignorada. */
+  const resumeSession = async (target: SessionState) => {
     cancelledRef.current = false;
-    if (job?.job_id && job.status !== 'failed' && job.status !== 'cancelled') {
-      setStep('processing');
-      try {
-        await runJob(job.job_id);
-      } catch (e) {
-        console.error(e);
-        fail(e instanceof Error ? e.message : 'Erro ao retomar o processamento.');
-      }
-      return;
-    }
-    const file = pendingFileRef.current;
-    if (!file) {
-      setStep('select');
-      return;
-    }
-    await startImport(file);
-  };
-
-  /** Progresso real do job durante o processamento (2s, com backoff até 5s). */
-  useEffect(() => {
-    if (step !== 'processing' || !job?.job_id) return;
-    let cancelled = false;
-    let delay = 2000;
-    let timer: number | undefined;
-    const tick = async () => {
-      const { data } = await supabase
-        .from('grade_import_jobs')
-        .select('id, status, progress, total_pages, total_chunks, completed_chunks, failed_chunks, current_chunk, failed_pages, error_message')
-        .eq('id', job.job_id)
-        .maybeSingle();
-      if (cancelled) return;
-      if (data) {
-        setJob((prev) => (prev && prev.status === 'completed' ? prev : ({
-          job_id: data.id,
-          status: data.status as JobProgress['status'],
-          progress: data.progress,
-          total_pages: data.total_pages,
-          total_chunks: data.total_chunks,
-          completed_chunks: data.completed_chunks,
-          failed_chunks: data.failed_chunks,
-          current_chunk: data.current_chunk,
-          failed_pages: (data.failed_pages as number[]) || [],
-          error_message: data.error_message,
-        })));
-      }
-      delay = Math.min(5000, delay + 1000);
-      timer = window.setTimeout(tick, delay);
-    };
-    timer = window.setTimeout(tick, delay);
-    return () => {
-      cancelled = true;
-      if (timer) window.clearTimeout(timer);
-    };
-  }, [step, job?.job_id]);
-
-  const pdfClassName = useMemo(() => {
-    if (!classItem) return '';
-    return pdfClassNames.find((c) => normalize(c) !== normalize(classItem.name)) ?? pdfClassNames[0] ?? '';
-  }, [pdfClassNames, classItem]);
-
-  const classEvidence = useMemo(() => {
-    const matched = detected.filter((d) => d.student_id).length;
-    const total = detected.length || 1;
-    return { matched, strong: matched / total >= 0.6 && matched > 0 };
-  }, [detected]);
-
-  /** Renomeia a turma para o nome exato do PDF (com auditoria) — nunca automático. */
-  const handleRenameClass = async () => {
-    if (!classItem || !pdfClassName) return;
-    setRenamingClass(true);
-    setError(null);
+    setStep('processing');
     try {
-      const { data: userData } = await supabase.auth.getUser();
-      const userId = userData?.user?.id ?? null;
-      const oldName = effectiveName || classItem.name;
-
-      const { error: classError } = await supabase
-        .from('classes')
-        .update({ name: pdfClassName })
-        .eq('id', classItem.id);
-      if (classError) throw classError;
-
-      const { error: studentsError } = await supabase
-        .from('students')
-        .update({ class: pdfClassName })
-        .eq('class', oldName);
-      if (studentsError) throw studentsError;
-
-      await supabase.from('audit_logs').insert({
-        user_id: userId,
-        action: 'UPDATE',
-        table_name: 'classes',
-        record_id: classItem.id,
-        old_data: { name: oldName } as never,
-        new_data: { name: pdfClassName, reason: 'Divergência de turma no boletim importado', file_name: fileName } as never,
-      });
-
-      setEffectiveName(pdfClassName);
-      setStep('review');
-      toast.success(`Turma renomeada para ${pdfClassName}.`);
-      onImported?.();
+      await loadContext();
+      const { data: pages } = await supabase
+        .from('grade_import_session_pages')
+        .select('page_number, status')
+        .eq('session_id', target.id)
+        .order('page_number');
+      const next = (pages || []).find((p: { status: string }) => !['confirmed', 'ignored'].includes(p.status));
+      setSession(target);
+      setResumable(null);
+      if (!next) { setStep('summary'); return; }
+      await processPage(target.id, next.page_number);
     } catch (e) {
       console.error(e);
-      setError(e instanceof Error ? e.message : 'Não foi possível alterar o nome da turma.');
-    } finally {
-      setRenamingClass(false);
+      setError(e instanceof Error ? e.message : 'Erro ao retomar a sessão.');
+      setStep('failed');
     }
+  };
+
+  const discardSession = async (target: SessionState) => {
+    await supabase.functions.invoke('parse-grade-page', { body: { action: 'cancel', session_id: target.id } });
+    setResumable(null);
+    setStep('select');
   };
 
   const handleChangeStudent = (index: number, studentId: string | null) => {
@@ -528,7 +381,7 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
     setRows((prev) => prev.map((row, i) => {
       if (i !== index) return row;
       const { value, invalid } = parseValue(raw || null);
-      const flags = row.flags.filter((f) => !['invalid_value', 'low_confidence', 'empty_cell', 'out_of_scale', 'reconciliation_divergence'].includes(f));
+      const flags = row.flags.filter((f) => !['invalid_value', 'low_confidence', 'empty_cell', 'out_of_scale'].includes(f));
       if (invalid) flags.push('invalid_value');
       if (!invalid && value == null) flags.push('empty_cell');
       if (value === 0) flags.push('explicit_zero');
@@ -544,120 +397,122 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
     }));
   };
 
-  const blockingCount = useMemo(
-    () => rows.filter((r) => {
-      if (r.flags.includes('invalid_value')) return true;
-      if (r.student_id) return false;
-      const res = resolutions[normalize(r.student_name)];
-      if (res?.action === 'ignore' || res?.action === 'create') return false;
-      return r.value != null || Boolean(r.raw_value);
-    }).length,
-    [rows, resolutions],
+  const targetStudentId = useMemo(() => {
+    if (pageAction === 'link') return linkStudentId;
+    return null;
+  }, [pageAction, linkStudentId]);
+
+  const invalidCount = useMemo(() => rows.filter((r) => r.flags.includes('invalid_value')).length, [rows]);
+  const pageHasConflicts = useMemo(
+    () => rows.some((r) => targetStudentId && conflictKeys.has(`${targetStudentId}||${r.subject}||${r.period}`)),
+    [rows, conflictKeys, targetStudentId],
   );
 
-  const handleResolve = (key: string, action: ResolutionAction, studentId?: string | null) => {
-    setResolutions((prev) => ({ ...prev, [key]: { action, student_id: action === 'link' || action === 'confirm' ? studentId ?? null : null } }));
-    if (action === 'link' || action === 'confirm') {
-      const student = classStudents.find((s) => s.id === studentId);
-      setRows((prev) => prev.map((row) => (normalize(row.student_name) === key
-        ? {
-          ...row,
-          student_id: studentId ?? null,
-          matched_name: student?.full_name ?? row.matched_name,
-          flags: [...new Set([...row.flags.filter((f) => f !== 'unmatched_student'), action === 'link' ? 'manual' : 'fuzzy_student_match'])],
-        }
-        : row)));
-    } else {
-      setRows((prev) => prev.map((row) => (normalize(row.student_name) === key
-        ? { ...row, student_id: null, matched_name: null }
-        : row)));
+  const canConfirmPage =
+    classDecision === 'resolved' &&
+    invalidCount === 0 &&
+    (pageAction === 'create' || (pageAction === 'link' && Boolean(linkStudentId)));
+
+  /** Renomeia a turma para o nome do PDF (com auditoria) — nunca automático. */
+  const handleRenameClass = async () => {
+    if (!classItem || !preview?.pdf_class_code) return;
+    setRenamingClass(true);
+    try {
+      const { data: userData } = await supabase.auth.getUser();
+      const oldName = effectiveName || classItem.name;
+      const newName = preview.pdf_class_code.trim();
+      const { error: classError } = await supabase.from('classes').update({ name: newName }).eq('id', classItem.id);
+      if (classError) throw classError;
+      const { error: studentsError } = await supabase.from('students').update({ class: newName }).eq('class', oldName);
+      if (studentsError) throw studentsError;
+      await supabase.from('audit_logs').insert({
+        user_id: userData?.user?.id ?? null,
+        action: 'UPDATE',
+        table_name: 'classes',
+        record_id: classItem.id,
+        old_data: { name: oldName } as never,
+        new_data: { name: newName, reason: 'Divergência de turma no boletim importado (página a página)', page: preview.page } as never,
+      });
+      setEffectiveName(newName);
+      setClassDecision('resolved');
+      toast.success(`Turma renomeada para ${newName}.`);
+      onImported?.();
+    } catch (e) {
+      console.error(e);
+      setError(e instanceof Error ? e.message : 'Não foi possível alterar o nome da turma.');
+    } finally {
+      setRenamingClass(false);
     }
-    setDetected((prev) => prev.map((d) => (d.key === key
-      ? { ...d, student_id: action === 'link' || action === 'confirm' ? studentId ?? null : null }
-      : d)));
   };
 
-  const handleRegistrationDecision = (key: string, field: keyof RegistrationDecision, decision: FieldDecision) => {
-    setRegDecisions((prev) => ({
-      ...prev,
-      [key]: { ...(prev[key] ?? { code: 'keep', birth_date: 'keep', mother: 'keep', father: 'keep' }), [field]: decision },
-    }));
-  };
+  const advance = useCallback(async (updated: SessionState) => {
+    if (updated.current_page >= updated.total_pages) {
+      await supabase.from('grade_import_sessions')
+        .update({ status: 'completed', pdf_base64: null })
+        .eq('id', updated.id);
+      setStep('summary');
+      onImported?.();
+      return;
+    }
+    await processPage(updated.id, updated.current_page + 1);
+  }, [processPage, onImported]);
 
-  const pendingConflicts = useMemo(
-    () => detected.filter((d) => needsResolution(d) && !isResolved(d, resolutions[d.key])),
-    [detected, resolutions],
-  );
-
-  const importableRows = useMemo(() => rows.filter((r) => r.student_id && !r.flags.includes('invalid_value')), [rows]);
-  const hasConflicts = useMemo(
-    () => importableRows.some((r) => conflictKeys.has(`${r.student_id}||${r.subject}||${r.period}`)),
-    [importableRows, conflictKeys],
-  );
-
-  const handleConfirm = async () => {
-    if (!classItem) return;
+  /** Salva SOMENTE a página atual e segue para a próxima. */
+  const handleConfirmPage = async () => {
+    if (!classItem || !preview || !session) return;
     setStep('saving');
     setError(null);
     try {
       const { data: userData } = await supabase.auth.getUser();
       const userId = userData?.user?.id ?? null;
+      const detected = preview.detected;
+      let studentId = targetStudentId;
 
-      // 0. Alunos novos criados a partir do boletim (ação "Cadastrar novo aluno")
-      const shiftCode = classItem.shift === 'morning' ? 'M' : classItem.shift === 'afternoon' ? 'T' : 'N';
-      const createdIdByKey = new Map<string, string>();
-      const toCreate = detected.filter((d) => resolutions[d.key]?.action === 'create');
-      for (const d of toCreate) {
-        const initials = d.pdf_name.trim().split(/\s+/).filter(Boolean).map((p) => p[0].toUpperCase()).join('');
+      // Cadastro de aluno novo a partir do boletim
+      if (pageAction === 'create') {
+        const shiftCode = classItem.shift === 'morning' ? 'M' : classItem.shift === 'afternoon' ? 'T' : 'N';
+        const initials = detected.pdf_name.trim().split(/\s+/).filter(Boolean).map((p) => p[0].toUpperCase()).join('');
         const { data: created, error: createError } = await supabase
           .from('students')
           .insert({
-            full_name: d.pdf_name,
+            full_name: detected.pdf_name,
             student_id: `${initials}-${effectiveName || classItem.name}-${shiftCode}`,
             class: effectiveName || classItem.name,
             shift: classItem.shift as never,
             qr_code: `STU-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`,
-            school_code: d.pdf_code,
-            birth_date: d.pdf_birth_date,
-            mother_name: d.pdf_mother_name,
-            father_name: d.pdf_father_name,
+            school_code: detected.pdf_code,
+            birth_date: detected.pdf_birth_date,
+            mother_name: detected.pdf_mother_name,
+            father_name: detected.pdf_father_name,
             created_by: userId,
           })
           .select('id')
           .single();
         if (createError) throw createError;
-        createdIdByKey.set(d.key, created.id);
+        studentId = created.id;
       }
+      if (!studentId) throw new Error('Selecione o aluno correspondente antes de salvar a página.');
 
-      const rowsToSave = rows.map((row) => {
-        const key = normalize(row.student_name);
-        const createdId = createdIdByKey.get(key);
-        return createdId ? { ...row, student_id: createdId } : row;
-      });
-
-      // 1. Períodos
-      const periodPayload = periods.map((p) => ({
+      // Períodos e disciplinas desta página
+      const periodPayload = preview.periods.map((p) => ({
         class_id: classItem.id,
         label: p.label,
         normalized_label: p.normalized_label || normalize(p.label),
-        // Colunas finais do boletim (Média Final, Rec. Final, Cons. Class, Pendência, Final)
-        // são gravadas como 'final'; o tipo exato fica preservado no label.
         kind: p.kind === 'period'
           ? 'period'
-          : ['final', 'media_final', 'rec_final', 'cons_class', 'pendencia'].includes(p.kind)
-            ? 'final'
-            : 'unknown',
+          : ['final', 'media_final', 'rec_final', 'cons_class', 'pendencia'].includes(p.kind) ? 'final' : 'unknown',
         sort_order: p.sort_order,
       }));
-      const { data: periodRows, error: periodError } = await supabase
-        .from('grade_periods')
-        .upsert(periodPayload, { onConflict: 'class_id,normalized_label' })
-        .select('id, normalized_label');
-      if (periodError) throw periodError;
       const periodIdByNorm = new Map<string, string>();
-      (periodRows || []).forEach((p: { id: string; normalized_label: string }) => periodIdByNorm.set(p.normalized_label, p.id));
+      if (periodPayload.length > 0) {
+        const { data: periodRows, error: periodError } = await supabase
+          .from('grade_periods')
+          .upsert(periodPayload, { onConflict: 'class_id,normalized_label' })
+          .select('id, normalized_label');
+        if (periodError) throw periodError;
+        (periodRows || []).forEach((p: { id: string; normalized_label: string }) => periodIdByNorm.set(p.normalized_label, p.id));
+      }
 
-      // 2. Disciplinas (preserva include_in_ira já configurado)
       const { data: existingSubjects } = await supabase
         .from('grade_subjects')
         .select('id, normalized_name, include_in_ira, custom_ira_weight')
@@ -666,10 +521,8 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
       (existingSubjects || []).forEach((s: { normalized_name: string; include_in_ira: boolean; custom_ira_weight: number | null }) =>
         existingByNorm.set(s.normalized_name, { include_in_ira: s.include_in_ira, custom_ira_weight: s.custom_ira_weight }));
 
-      const subjectPayload = subjects.map((s) => {
-        const expected = s.matched_expected
-          ? expectedSubjects.find((e) => e.name === s.matched_expected)
-          : undefined;
+      const subjectPayload = preview.subjects.map((s) => {
+        const expected = s.matched_expected ? expectedSubjects.find((e) => e.name === s.matched_expected) : undefined;
         const previous = existingByNorm.get(s.normalized_name);
         const weekly = expected?.weekly_classes ?? s.weekly_classes ?? null;
         return {
@@ -683,50 +536,25 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
           sort_order: s.sort_order,
         };
       });
-      const { data: subjectRows, error: subjectError } = await supabase
-        .from('grade_subjects')
-        .upsert(subjectPayload, { onConflict: 'class_id,normalized_name' })
-        .select('id, normalized_name');
-      if (subjectError) throw subjectError;
       const subjectIdByNorm = new Map<string, string>();
-      (subjectRows || []).forEach((s: { id: string; normalized_name: string }) => subjectIdByNorm.set(s.normalized_name, s.id));
+      if (subjectPayload.length > 0) {
+        const { data: subjectRows, error: subjectError } = await supabase
+          .from('grade_subjects')
+          .upsert(subjectPayload, { onConflict: 'class_id,normalized_name' })
+          .select('id, normalized_name');
+        if (subjectError) throw subjectError;
+        (subjectRows || []).forEach((s: { id: string; normalized_name: string }) => subjectIdByNorm.set(s.normalized_name, s.id));
+      }
 
-      // 3. Registro da importação (histórico)
-      const auditResolutions = detected
-        .filter((d) => needsResolution(d))
-        .map((d) => ({
-          pdf_name: d.pdf_name,
-          pdf_code: d.pdf_code,
-          pages: d.pages,
-          conflicts: d.conflicts,
-          action: resolutions[d.key]?.action ?? null,
-          linked_student_id: createdIdByKey.get(d.key) ?? resolutions[d.key]?.student_id ?? null,
-        }));
-
-      const { data: importRow, error: importError } = await supabase
-        .from('grade_imports')
-        .insert({
-          class_id: classItem.id,
-          file_name: fileName,
-          status: 'confirmed',
-          conflict_strategy: conflictStrategy,
-          stats: { ...(stats ?? {}), student_resolutions: auditResolutions } as never,
-          issues: issues as never,
-          created_by: userId,
-        })
-        .select('id')
-        .single();
-      if (importError) throw importError;
-
-      // 4. Notas
-      const gradePayload = rowsToSave
-        .filter((r) => r.student_id && !r.flags.includes('invalid_value'))
+      // Notas da página (vazio = null; 0,00 = zero real; faltas nunca chegam aqui)
+      const payload = rows
+        .filter((r) => !r.flags.includes('invalid_value'))
         .map((row) => {
           const subjectId = subjectIdByNorm.get(normalize(row.subject));
           const periodId = periodIdByNorm.get(normalize(row.period));
-          if (!subjectId || !periodId || !row.student_id) return null;
+          if (!subjectId || !periodId) return null;
           return {
-            student_id: row.student_id,
+            student_id: studentId as string,
             grade_subject_id: subjectId,
             grade_period_id: periodId,
             value: row.value,
@@ -734,15 +562,14 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
             confidence: row.confidence,
             flags: row.flags,
             source: row.source === 'manual' ? 'manual' : 'import',
-            import_id: importRow.id,
-            conflictKey: `${row.student_id}||${row.subject}||${row.period}`,
+            conflictKey: `${studentId}||${row.subject}||${row.period}`,
           };
         })
         .filter(Boolean) as (Record<string, unknown> & { conflictKey: string })[];
 
       const filtered = conflictStrategy === 'keep'
-        ? gradePayload.filter((g) => !conflictKeys.has(g.conflictKey))
-        : gradePayload;
+        ? payload.filter((g) => !conflictKeys.has(g.conflictKey))
+        : payload;
       const finalPayload = filtered.map(({ conflictKey, ...rest }) => rest);
 
       if (finalPayload.length > 0) {
@@ -752,38 +579,79 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
         if (gradesError) throw gradesError;
       }
 
-      // 5. Atualização cadastral (somente na confirmação final, conforme decisões do usuário)
-      let updatedRegistrations = 0;
-      for (const d of detected) {
-        const studentId = d.student_id;
-        if (!studentId || createdIdByKey.has(d.key)) continue;
-        const dec = regDecisions[d.key] ?? defaultRegistrationDecision(d);
+      // Atualização cadastral conforme decisões explícitas (só quando o aluno já existia)
+      if (pageAction === 'link' && regDecision) {
         const update: { school_code?: string; birth_date?: string; mother_name?: string; father_name?: string } = {};
-        if (d.pdf_code && dec.code === 'update') update.school_code = d.pdf_code;
-        if (d.pdf_birth_date && dec.birth_date === 'update') update.birth_date = d.pdf_birth_date;
-        if (d.pdf_mother_name && dec.mother === 'update') update.mother_name = d.pdf_mother_name;
-        if (d.pdf_father_name && dec.father === 'update') update.father_name = d.pdf_father_name;
-        if (Object.keys(update).length === 0) continue;
-        const { error: updError } = await supabase.from('students').update(update).eq('id', studentId);
-        if (updError) throw updError;
-        updatedRegistrations++;
+        if (detected.pdf_code && regDecision.code === 'update') update.school_code = detected.pdf_code;
+        if (detected.pdf_birth_date && regDecision.birth_date === 'update') update.birth_date = detected.pdf_birth_date;
+        if (detected.pdf_mother_name && regDecision.mother === 'update') update.mother_name = detected.pdf_mother_name;
+        if (detected.pdf_father_name && regDecision.father === 'update') update.father_name = detected.pdf_father_name;
+        if (Object.keys(update).length > 0) {
+          const { error: updError } = await supabase.from('students').update(update).eq('id', studentId);
+          if (updError) throw updError;
+        }
       }
 
-      setSavedCount(finalPayload.length);
-      setStep('done');
-      toast.success(
-        `${finalPayload.length} nota(s) importada(s) para ${effectiveName || classItem.name}.` +
-        (updatedRegistrations ? ` ${updatedRegistrations} cadastro(s) atualizado(s).` : '') +
-        (createdIdByKey.size ? ` ${createdIdByKey.size} aluno(s) cadastrado(s).` : ''),
-      );
-      onImported?.();
+      await supabase.from('grade_import_session_pages')
+        .update({ status: 'confirmed', confirmed_by: userId, confirmed_at: new Date().toISOString() })
+        .eq('session_id', session.id).eq('page_number', preview.page);
+
+      const updated: SessionState = {
+        ...session,
+        current_page: preview.page,
+        confirmed_pages: session.confirmed_pages + 1,
+        notes_imported: session.notes_imported + finalPayload.length,
+      };
+      await supabase.from('grade_import_sessions').update({
+        confirmed_pages: updated.confirmed_pages,
+        notes_imported: updated.notes_imported,
+      }).eq('id', session.id);
+      setSession(updated);
+      setSavedTotal((prev) => prev + finalPayload.length);
+      toast.success(`Página ${preview.page}: ${finalPayload.length} nota(s) gravada(s).`);
+      await advance(updated);
     } catch (e) {
       console.error(e);
-      setError(e instanceof Error ? e.message : 'Erro ao gravar as notas.');
-      setStep('review');
-      toast.error('Não foi possível concluir a importação.');
+      setError(e instanceof Error ? e.message : 'Erro ao gravar a página.');
+      setStep('page');
+      toast.error('Não foi possível salvar esta página.');
     }
   };
+
+  const handleIgnorePage = async () => {
+    if (!session || !preview) return;
+    const { data: userData } = await supabase.auth.getUser();
+    await supabase.from('grade_import_session_pages')
+      .update({ status: 'ignored', confirmed_by: userData?.user?.id ?? null, confirmed_at: new Date().toISOString() })
+      .eq('session_id', session.id).eq('page_number', preview.page);
+    const updated: SessionState = {
+      ...session,
+      current_page: preview.page,
+      ignored_pages: session.ignored_pages + 1,
+    };
+    await supabase.from('grade_import_sessions').update({ ignored_pages: updated.ignored_pages }).eq('id', session.id);
+    setSession(updated);
+    toast.info(`Página ${preview.page} ignorada — nada foi gravado.`);
+    await advance(updated);
+  };
+
+  const handleCancelSession = async () => {
+    if (session) {
+      await supabase.functions.invoke('parse-grade-page', { body: { action: 'cancel', session_id: session.id } });
+      toast.info('Importação encerrada. As páginas já confirmadas foram mantidas.');
+    }
+    onImported?.();
+    handleClose(false);
+  };
+
+  const handleRetryPage = async () => {
+    if (!session) { setStep('select'); return; }
+    await processPage(session.id, session.current_page || 1);
+  };
+
+  const progress = session && session.total_pages > 0
+    ? Math.round(((preview?.page ?? session.current_page) / session.total_pages) * 100)
+    : 0;
 
   const counter = (label: string, value: number | string | null, tone?: 'danger' | 'warning') => (
     <div className="rounded-lg border p-2 text-center">
@@ -794,16 +662,27 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
     </div>
   );
 
+  const sessionSummary = session && (
+    <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+      {counter('Página atual', session.total_pages ? `${preview?.page ?? session.current_page}/${session.total_pages}` : null)}
+      {counter('Confirmadas', session.confirmed_pages)}
+      {counter('Ignoradas', session.ignored_pages)}
+      {counter('Notas importadas', session.notes_imported)}
+      {counter('Faltas', 'ignoradas')}
+    </div>
+  );
+
   return (
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="max-w-4xl max-h-[92vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <GraduationCap className="w-5 h-5" />
-            Inserir boletim da turma {classItem ? `— ${classItem.name}` : ''}
+            Inserir boletim da turma {classItem ? `— ${effectiveName || classItem.name}` : ''}
           </DialogTitle>
           <DialogDescription>
-            Selecionar PDF → Processando → Auditoria → Revisão → Confirmar importação. Nada é gravado antes da confirmação.
+            Importação página a página: cada página é lida isoladamente e só é gravada após a sua confirmação.
+            A coluna Faltas é sempre ignorada.
           </DialogDescription>
         </DialogHeader>
 
@@ -819,7 +698,7 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
             <div className="border-2 border-dashed rounded-lg p-8 text-center">
               <FileText className="w-12 h-12 mx-auto text-muted-foreground mb-3" />
               <p className="text-sm text-muted-foreground mb-4">
-                Envie o PDF do boletim desta turma (até 10MB). Todas as páginas serão analisadas.
+                Envie o PDF do boletim desta turma (até 15MB). As páginas serão lidas uma a uma, com confirmação sua a cada página.
               </p>
               <input
                 ref={fileInputRef}
@@ -849,53 +728,44 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
           </div>
         )}
 
-        {step === 'class-conflict' && classItem && (
-          <GradesClassMismatchPanel
-            systemName={effectiveName || classItem.name}
-            pdfName={pdfClassName}
-            allPdfNames={pdfClassNames}
-            strongEvidence={classEvidence.strong}
-            pdfStudents={detected.length}
-            matchedStudents={classEvidence.matched}
-            classStudents={classStudents.length}
-            sampleIdentifiers={detected.slice(0, 5).map((d) => ({
-              pdf_name: d.pdf_name, pdf_code: d.pdf_code, matched_name: d.matched_name,
-            }))}
-            renaming={renamingClass}
-            onRename={handleRenameClass}
-            onKeep={() => setStep('review')}
-            onCancel={() => handleClose(false)}
-          />
+        {step === 'resume' && resumable && (
+          <div className="space-y-4">
+            <Alert>
+              <Info className="w-4 h-4" />
+              <AlertTitle className="text-sm">Existe uma importação em andamento para esta turma</AlertTitle>
+              <AlertDescription className="text-xs space-y-1">
+                <p>Arquivo: {resumable.file_name || '—'}</p>
+                <p>
+                  Página {resumable.current_page} de {resumable.total_pages} ·
+                  {' '}{resumable.confirmed_pages} confirmada(s) · {resumable.ignored_pages} ignorada(s) ·
+                  {' '}{resumable.notes_imported} nota(s) já gravada(s).
+                </p>
+                <p>Retomar continua na primeira página ainda não confirmada. Nada já salvo é perdido.</p>
+              </AlertDescription>
+            </Alert>
+            <div className="flex flex-wrap gap-2">
+              <Button onClick={() => resumeSession(resumable)}>Retomar de onde parei</Button>
+              <Button variant="outline" onClick={() => discardSession(resumable)}>Encerrar e enviar outro PDF</Button>
+              <Button variant="ghost" onClick={() => handleClose(false)}>Fechar</Button>
+            </div>
+          </div>
         )}
 
         {step === 'processing' && (
-          <div className="py-8 space-y-4">
+          <div className="py-10 space-y-4">
             <div className="text-center space-y-2">
               <Loader2 className="w-10 h-10 mx-auto animate-spin text-primary" />
-              <p className="font-medium">Processando boletim...</p>
-              <p className="text-xs text-muted-foreground">{fileName}</p>
+              <p className="font-medium">
+                {session ? `Lendo a página ${session.current_page} de ${session.total_pages}...` : 'Preparando o boletim...'}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Apenas esta página é enviada para leitura. Nada é gravado nesta etapa.
+              </p>
             </div>
-            <Progress value={job?.progress ?? 0} />
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-              {counter('Páginas do PDF', job?.total_pages ?? null)}
-              {counter('Blocos concluídos', job ? `${job.completed_chunks}/${job.total_chunks}` : null)}
-              {counter('Bloco atual', job?.current_chunk ?? null)}
-              {counter('Blocos com falha', job?.failed_chunks ?? 0, job?.failed_chunks ? 'warning' : undefined)}
-            </div>
-            <p className="text-[11px] text-muted-foreground text-center">
-              Etapa: {job?.status === 'queued' ? 'preparando blocos' : 'lendo páginas e montando a matriz de notas'} ·
-              o PDF é lido em blocos de 3 páginas; nada é gravado nesta etapa.
-            </p>
-            {failedPages.length > 0 && (
-              <Alert>
-                <AlertTriangle className="w-4 h-4" />
-                <AlertDescription className="text-xs">
-                  Páginas ainda não lidas: {failedPages.join(', ')}.
-                </AlertDescription>
-              </Alert>
-            )}
+            <Progress value={progress} />
+            {sessionSummary}
             <div className="text-center">
-              <Button variant="ghost" size="sm" onClick={() => handleClose(false)}>Cancelar</Button>
+              <Button variant="ghost" size="sm" onClick={handleCancelSession}>Cancelar importação</Button>
             </div>
           </div>
         )}
@@ -903,7 +773,7 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
         {step === 'saving' && (
           <div className="py-12 text-center space-y-3">
             <Loader2 className="w-10 h-10 mx-auto animate-spin text-primary" />
-            <p className="text-sm text-muted-foreground">Gravando disciplinas, períodos e notas...</p>
+            <p className="text-sm text-muted-foreground">Gravando as notas desta página...</p>
           </div>
         )}
 
@@ -911,115 +781,162 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
           <div className="space-y-4">
             <Alert variant="destructive">
               <AlertTriangle className="w-4 h-4" />
-              <AlertTitle className="text-sm">O processamento do boletim não foi concluído</AlertTitle>
+              <AlertTitle className="text-sm">Esta página não pôde ser lida</AlertTitle>
               <AlertDescription className="text-xs space-y-1">
                 <p>Causa: {error ?? 'erro desconhecido'}</p>
-                <p>Arquivo: {fileName || '—'}</p>
-                {job && (
-                  <p>
-                    Blocos concluídos: {job.completed_chunks} de {job.total_chunks} ·
-                    {' '}páginas do PDF: {job.total_pages} · blocos com falha: {job.failed_chunks}
-                  </p>
-                )}
-                {failedPages.length > 0 && <p>Páginas afetadas: {failedPages.join(', ')}</p>}
-                <p>Nenhuma nota foi gravada.</p>
+                <p>Nenhuma nota foi gravada nesta página. As páginas já confirmadas permanecem salvas.</p>
               </AlertDescription>
             </Alert>
-            <div className="flex gap-2">
-              <Button onClick={handleRetry}>Tentar novamente</Button>
-              <Button variant="outline" onClick={() => handleClose(false)}>Cancelar</Button>
+            <div className="flex flex-wrap gap-2">
+              <Button onClick={handleRetryPage}>Tentar ler novamente</Button>
+              {session && preview && (
+                <Button variant="outline" onClick={handleIgnorePage}>Ignorar esta página</Button>
+              )}
+              {session && !preview && session.current_page < session.total_pages && (
+                <Button variant="outline" onClick={() => processPage(session.id, session.current_page + 1)}>
+                  Pular para a próxima página
+                </Button>
+              )}
+              <Button variant="ghost" onClick={handleCancelSession}>Encerrar importação</Button>
             </div>
           </div>
         )}
 
-        {step === 'review' && stats && (
+        {step === 'page' && preview && classItem && (
           <div className="space-y-4">
-            <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
-              {counter('Páginas', stats.pages)}
-              {counter('Alunos detectados', stats.students_detected)}
-              {counter('Alunos vinculados', stats.students_matched)}
-              {counter('Não identificados', stats.students_unmatched, stats.students_unmatched ? 'danger' : undefined)}
-              {counter('Disciplinas', stats.subjects)}
-              {counter('Períodos', stats.periods)}
-              {counter('Notas lidas', stats.grades_read)}
-              {counter('Baixa confiança', stats.low_confidence, stats.low_confidence ? 'warning' : undefined)}
-              {counter('Sem nota (vazias)', stats.empty_cells)}
-              {counter('Notas 0,00', stats.explicit_zero_cells ?? 0)}
-              {counter('Inconsistências', stats.issues, stats.errors ? 'danger' : stats.warnings ? 'warning' : undefined)}
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <Badge variant="secondary" className="text-xs">
+                Página {preview.page} de {preview.total_pages}
+              </Badge>
+              <Progress value={progress} className="flex-1 min-w-[160px]" />
+            </div>
+            {sessionSummary}
+
+            {classDecision === 'pending' && preview.pdf_class_code && (
+              <GradesClassMismatchPanel
+                systemName={effectiveName || classItem.name}
+                pdfName={preview.pdf_class_code}
+                allPdfNames={[preview.pdf_class_code]}
+                strongEvidence={Boolean(preview.detected.student_id)}
+                pdfStudents={1}
+                matchedStudents={preview.detected.student_id ? 1 : 0}
+                classStudents={classStudents.length}
+                sampleIdentifiers={[{
+                  pdf_name: preview.detected.pdf_name,
+                  pdf_code: preview.detected.pdf_code,
+                  matched_name: preview.detected.matched_name,
+                }]}
+                renaming={renamingClass}
+                onRename={handleRenameClass}
+                onKeep={() => setClassDecision('resolved')}
+                onCancel={handleCancelSession}
+              />
+            )}
+
+            <div className="rounded-lg border p-3 space-y-1">
+              <p className="text-sm font-medium">Aluno detectado nesta página</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 text-xs">
+                <p><span className="text-muted-foreground">Nome:</span> <span className="font-medium">{preview.student.pdf_name || '—'}</span></p>
+                <p><span className="text-muted-foreground">Código:</span> {preview.student.pdf_code || '—'}</p>
+                <p><span className="text-muted-foreground">Data de nascimento:</span> {formatDate(preview.student.pdf_birth_date)}</p>
+                <p><span className="text-muted-foreground">Turma no PDF:</span> {preview.pdf_class_code || '—'}</p>
+                <p><span className="text-muted-foreground">Mãe:</span> {preview.student.pdf_mother_name || '—'}</p>
+                <p><span className="text-muted-foreground">Pai:</span> {preview.student.pdf_father_name || '—'}</p>
+              </div>
+              {preview.detected.conflicts.length > 0 && (
+                <div className="flex flex-wrap gap-1 pt-1">
+                  {preview.detected.conflicts.map((c) => (
+                    <Badge key={c} variant={c === 'not_in_class' ? 'destructive' : 'secondary'} className="text-[10px]">
+                      {CONFLICT_LABELS[c] ?? c}
+                    </Badge>
+                  ))}
+                </div>
+              )}
             </div>
 
-            {failedPages.length > 0 && (
-              <Alert variant="destructive">
-                <AlertTriangle className="w-4 h-4" />
-                <AlertTitle className="text-sm">Páginas não processadas</AlertTitle>
-                <AlertDescription className="text-xs">
-                  As páginas {failedPages.join(', ')} não puderam ser lidas pela IA. A revisão abaixo contém apenas as
-                  páginas processadas — confira essas páginas manualmente ou reenvie o PDF depois.
-                </AlertDescription>
-              </Alert>
-            )}
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+              {counter('Notas lidas', preview.stats.grades_read)}
+              {counter('Células vazias', preview.stats.empty_cells)}
+              {counter('Notas 0,00', preview.stats.explicit_zero_cells)}
+              {counter('Baixa confiança', preview.stats.low_confidence, preview.stats.low_confidence ? 'warning' : undefined)}
+              {counter('Valores inválidos', preview.stats.invalid_values, preview.stats.invalid_values ? 'danger' : undefined)}
+            </div>
 
-            <p className="text-[11px] text-muted-foreground">
-              Turma do cabeçalho: {stats.class_codes?.length ? stats.class_codes.join(', ') : '—'} · células de faltas ignoradas: {stats.absence_cells_ignored ?? 0}
-            </p>
-
-            {issues.length > 0 && (
-              <div className="space-y-2 max-h-40 overflow-y-auto">
-                {issues.map((issue, i) => (
-                  <Alert key={i} variant={issue.level === 'error' ? 'destructive' : 'default'}>
-                    {issue.level === 'error' ? <AlertTriangle className="w-4 h-4" /> : <Info className="w-4 h-4" />}
-                    <AlertDescription className="text-xs">{issue.message}</AlertDescription>
-                  </Alert>
-                ))}
+            <div className="rounded-lg border p-3 space-y-2">
+              <p className="text-sm font-medium">Aluno correspondente no sistema</p>
+              <div className="flex flex-wrap items-center gap-2">
+                <Select
+                  value={pageAction === 'link' ? linkStudentId ?? undefined : undefined}
+                  onValueChange={(v) => { setPageAction('link'); setLinkStudentId(v); }}
+                >
+                  <SelectTrigger className="h-8 w-[260px] text-xs">
+                    <SelectValue placeholder="Vincular a aluno existente..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {classStudents.map((s) => (
+                      <SelectItem key={s.id} value={s.id}>{s.full_name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button size="sm" variant={pageAction === 'create' ? 'default' : 'outline'}
+                  onClick={() => { setPageAction('create'); setLinkStudentId(null); }}>
+                  Cadastrar novo aluno
+                </Button>
+                {preview.detected.status !== 'unmatched' && (
+                  <span className="text-[11px] text-muted-foreground">
+                    Sugestão do sistema: {preview.detected.matched_name} ({(preview.detected.match_score * 100).toFixed(0)}%)
+                  </span>
+                )}
               </div>
-            )}
+              {pageAction === 'create' && (
+                <p className="text-[11px] text-muted-foreground">
+                  O aluno será cadastrado nesta turma com nome, Código, nascimento, Mãe e Pai lidos do boletim.
+                </p>
+              )}
+              {!pageAction && (
+                <p className="text-[11px] text-destructive">
+                  Escolha vincular a um aluno existente, cadastrar novo aluno ou ignorar esta página.
+                </p>
+              )}
+            </div>
 
-            {hasConflicts && (
+            {pageHasConflicts && (
               <div className="rounded-lg border p-3 space-y-2">
                 <p className="text-sm font-medium flex items-center gap-2">
                   <AlertTriangle className="w-4 h-4 text-amber-600" />
-                  Já existem notas para algumas combinações aluno + disciplina + período
+                  Já existem notas gravadas para este aluno em algumas disciplinas/períodos desta página
                 </p>
                 <RadioGroup value={conflictStrategy} onValueChange={(v) => setConflictStrategy(v as 'keep' | 'overwrite')}>
                   <div className="flex items-center gap-2">
-                    <RadioGroupItem value="keep" id="conflict-keep" />
-                    <Label htmlFor="conflict-keep" className="text-sm font-normal">Manter as notas existentes (recomendado)</Label>
+                    <RadioGroupItem value="keep" id="page-conflict-keep" />
+                    <Label htmlFor="page-conflict-keep" className="text-sm font-normal">Manter as notas existentes</Label>
                   </div>
                   <div className="flex items-center gap-2">
-                    <RadioGroupItem value="overwrite" id="conflict-overwrite" />
-                    <Label htmlFor="conflict-overwrite" className="text-sm font-normal">Sobrescrever com as notas deste PDF</Label>
+                    <RadioGroupItem value="overwrite" id="page-conflict-overwrite" />
+                    <Label htmlFor="page-conflict-overwrite" className="text-sm font-normal">Substituir pelas notas do PDF</Label>
                   </div>
                 </RadioGroup>
               </div>
             )}
 
-            <Tabs value={reviewTab} onValueChange={setReviewTab}>
-              <TabsList className="w-full">
-                <TabsTrigger value="conflicts" className="flex-1 text-xs">
-                  Conflitos do boletim{pendingConflicts.length > 0 ? ` (${pendingConflicts.length})` : ''}
-                </TabsTrigger>
-                <TabsTrigger value="grades" className="flex-1 text-xs">Notas ({rows.length})</TabsTrigger>
-                <TabsTrigger value="registration" className="flex-1 text-xs">Atualização cadastral</TabsTrigger>
-              </TabsList>
+            {pageAction === 'link' && linkStudentId === preview.detected.student_id && regDecision && (
+              <GradesRegistrationAudit
+                entries={[preview.detected]}
+                decisions={{ [preview.detected.key]: regDecision }}
+                onDecide={(_key, field, decision) =>
+                  setRegDecision((prev) => ({ ...(prev ?? defaultRegistrationDecision(preview.detected)), [field]: decision }))}
+              />
+            )}
 
-              <TabsContent value="conflicts" className="mt-3">
-                <GradesConflictsPanel
-                  detected={detected}
-                  missingInPdf={missingInPdf}
-                  classStudents={classStudents}
-                  resolutions={resolutions}
-                  onResolve={handleResolve}
-                />
-              </TabsContent>
-
-              <TabsContent value="grades" className="mt-3 space-y-3">
-                <div className="flex items-center justify-between gap-2 flex-wrap">
-                  <p className="text-sm font-medium">Revisão ({rows.length} células)</p>
-                  <div className="flex gap-2">
-                    <Badge variant="outline">{importableRows.length} prontas para importar</Badge>
-                    {blockingCount > 0 && <Badge variant="destructive">{blockingCount} exigem revisão</Badge>}
-                  </div>
-                </div>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <p className="text-sm font-medium">Notas desta página ({rows.length} células)</p>
+                <Button size="sm" variant={editing ? 'default' : 'outline'} onClick={() => setEditing((v) => !v)}>
+                  <Pencil className="w-3.5 h-3.5 mr-1" />
+                  {editing ? 'Concluir correções' : 'Corrigir antes de salvar'}
+                </Button>
+              </div>
+              {editing ? (
                 <GradesReviewTable
                   rows={rows}
                   students={classStudents}
@@ -1027,47 +944,80 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
                   onChangeValue={handleChangeValue}
                   conflictKeys={conflictKeys}
                 />
-              </TabsContent>
+              ) : (
+                <div className="rounded-md border overflow-x-auto max-h-[320px] overflow-y-auto">
+                  <table className="w-full text-xs">
+                    <thead className="sticky top-0 bg-background">
+                      <tr className="text-left text-muted-foreground border-b">
+                        <th className="py-2 px-3">Disciplina</th>
+                        {preview.periods.map((p) => (
+                          <th key={p.normalized_label} className="py-2 px-2 whitespace-nowrap">{p.label}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {preview.subjects.map((s) => (
+                        <tr key={s.normalized_name} className="border-b last:border-0">
+                          <td className="py-1.5 px-3 font-medium whitespace-nowrap">{s.name}</td>
+                          {preview.periods.map((p) => {
+                            const row = rows.find((r) => normalize(r.subject) === s.normalized_name && normalize(r.period) === p.normalized_label);
+                            return (
+                              <td key={p.normalized_label} className="py-1.5 px-2 whitespace-nowrap">
+                                {row?.raw_value ?? <span className="text-muted-foreground">—</span>}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              <p className="text-[11px] text-muted-foreground">
+                “—” = célula vazia no boletim (será salva como sem nota) · “0,00” = nota zero real ·
+                a coluna Faltas do boletim é totalmente ignorada.
+              </p>
+            </div>
 
-              <TabsContent value="registration" className="mt-3">
-                <GradesRegistrationAudit
-                  entries={detected}
-                  decisions={regDecisions}
-                  onDecide={handleRegistrationDecision}
-                />
-              </TabsContent>
-            </Tabs>
+            {preview.notes.length > 0 && (
+              <Alert>
+                <Info className="w-4 h-4" />
+                <AlertDescription className="text-xs">
+                  {preview.notes.join(' · ')}
+                </AlertDescription>
+              </Alert>
+            )}
           </div>
         )}
 
-        {step === 'done' && (
-          <div className="py-10 text-center space-y-3">
+        {step === 'summary' && (
+          <div className="py-8 text-center space-y-3">
             <CheckCircle2 className="w-12 h-12 mx-auto text-green-600" />
             <p className="font-medium">Importação concluída</p>
             <p className="text-sm text-muted-foreground">
-              {savedCount} nota(s) gravada(s). As notas já aparecem na aba “Notas” de cada aluno.
+              {session?.confirmed_pages ?? 0} página(s) confirmada(s) · {session?.ignored_pages ?? 0} ignorada(s) ·
+              {' '}{savedTotal} nota(s) gravada(s) nesta sessão.
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Nenhuma gravação adicional foi feita. As notas já aparecem na aba “Notas” de cada aluno.
             </p>
           </div>
         )}
 
         <DialogFooter className="gap-2">
-          {step === 'review' && (
+          {step === 'page' && (
             <>
-              <Button variant="outline" onClick={() => handleClose(false)}>Cancelar (não grava nada)</Button>
-              {pendingConflicts.length > 0 && (
-                <p className="text-xs text-destructive mr-auto">
-                  Resolva os {pendingConflicts.length} conflito(s) de alunos para liberar a confirmação.
-                </p>
-              )}
-              <Button
-                onClick={handleConfirm}
-                disabled={importableRows.length === 0 || blockingCount > 0 || pendingConflicts.length > 0}
-              >
-                Confirmar importação
+              <Button variant="ghost" onClick={handleCancelSession}>Cancelar importação</Button>
+              <Button variant="outline" onClick={handleIgnorePage}>
+                <SkipForward className="w-4 h-4 mr-1" />
+                Ignorar página
+              </Button>
+              <Button onClick={handleConfirmPage} disabled={!canConfirmPage}>
+                Confirmar e próxima página
               </Button>
             </>
           )}
-          {step === 'done' && <Button onClick={() => handleClose(false)}>Fechar</Button>}
+          {step === 'summary' && <Button onClick={() => handleClose(false)}>Fechar</Button>}
           {step === 'select' && <Button variant="outline" onClick={() => handleClose(false)}>Fechar</Button>}
         </DialogFooter>
       </DialogContent>
