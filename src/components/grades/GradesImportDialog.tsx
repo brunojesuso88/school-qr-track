@@ -330,9 +330,50 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
   };
 
   const blockingCount = useMemo(
-    () => rows.filter((r) => r.flags.includes('invalid_value') || (!r.student_id && (r.value != null || r.raw_value))).length,
-    [rows],
+    () => rows.filter((r) => {
+      if (r.flags.includes('invalid_value')) return true;
+      if (r.student_id) return false;
+      const res = resolutions[normalize(r.student_name)];
+      if (res?.action === 'ignore' || res?.action === 'create') return false;
+      return r.value != null || Boolean(r.raw_value);
+    }).length,
+    [rows, resolutions],
   );
+
+  const handleResolve = (key: string, action: ResolutionAction, studentId?: string | null) => {
+    setResolutions((prev) => ({ ...prev, [key]: { action, student_id: action === 'link' || action === 'confirm' ? studentId ?? null : null } }));
+    if (action === 'link' || action === 'confirm') {
+      const student = classStudents.find((s) => s.id === studentId);
+      setRows((prev) => prev.map((row) => (normalize(row.student_name) === key
+        ? {
+          ...row,
+          student_id: studentId ?? null,
+          matched_name: student?.full_name ?? row.matched_name,
+          flags: [...new Set([...row.flags.filter((f) => f !== 'unmatched_student'), action === 'link' ? 'manual' : 'fuzzy_student_match'])],
+        }
+        : row)));
+    } else {
+      setRows((prev) => prev.map((row) => (normalize(row.student_name) === key
+        ? { ...row, student_id: null, matched_name: null }
+        : row)));
+    }
+    setDetected((prev) => prev.map((d) => (d.key === key
+      ? { ...d, student_id: action === 'link' || action === 'confirm' ? studentId ?? null : null }
+      : d)));
+  };
+
+  const handleRegistrationDecision = (key: string, field: keyof RegistrationDecision, decision: FieldDecision) => {
+    setRegDecisions((prev) => ({
+      ...prev,
+      [key]: { ...(prev[key] ?? { code: 'keep', birth_date: 'keep', mother: 'keep', father: 'keep' }), [field]: decision },
+    }));
+  };
+
+  const pendingConflicts = useMemo(
+    () => detected.filter((d) => needsResolution(d) && !isResolved(d, resolutions[d.key])),
+    [detected, resolutions],
+  );
+
   const importableRows = useMemo(() => rows.filter((r) => r.student_id && !r.flags.includes('invalid_value')), [rows]);
   const hasConflicts = useMemo(
     () => importableRows.some((r) => conflictKeys.has(`${r.student_id}||${r.subject}||${r.period}`)),
