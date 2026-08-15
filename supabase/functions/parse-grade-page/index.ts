@@ -66,14 +66,6 @@ function parseGradeValue(raw: string | null | undefined): { value: number | null
   return { value: num, invalid: false };
 }
 
-const FINAL_COLUMN_PATTERNS: { kind: string; label: string; test: RegExp }[] = [
-  { kind: 'media_final', label: 'Média Final', test: /^(media|média)\s*final$/ },
-  { kind: 'rec_final', label: 'Rec. Final', test: /^rec\.?\s*final$/ },
-  { kind: 'cons_class', label: 'Cons. Class', test: /^cons\.?\s*class/ },
-  { kind: 'pendencia', label: 'Pendencia$/'.length ? /^pendencia$/ : /^pendencia$/ } as never,
-  { kind: 'final', label: 'Final', test: /^final$/ },
-];
-
 const isAbsenceLabel = (label: string) => /falta/.test(normalize(label));
 
 function classifyPeriod(label: string, hinted?: string | null): { kind: string; canonical: string } {
