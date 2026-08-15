@@ -111,6 +111,13 @@ const parseValue = (raw: string | null): { value: number | null; invalid: boolea
   return { value: Number(cleaned), invalid: false };
 };
 
+/** Comparação semântica de notas: 7,5 == 7,50; 0 == 0,00; null == vazio. */
+export const sameGradeValue = (a: number | null, b: number | null) => {
+  if (a == null && b == null) return true;
+  if (a == null || b == null) return false;
+  return Math.round(a * 100) === Math.round(b * 100);
+};
+
 export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }: GradesImportDialogProps) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [step, setStep] = useState<Step>('select');
