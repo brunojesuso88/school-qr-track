@@ -921,14 +921,16 @@ const Students = () => {
                   <SelectItem value="evening">Noite</SelectItem>
                 </SelectContent>
               </Select>
-              <Select value={sortByAbsences} onValueChange={(v) => setSortByAbsences(v as 'none' | 'desc' | 'asc')}>
+              <Select value={sortBy} onValueChange={(v) => setSortBy(v as 'none' | 'absences-desc' | 'absences-asc' | 'ira-desc' | 'ira-asc')}>
                 <SelectTrigger className="w-full sm:w-48">
-                  <SelectValue placeholder="Ordenar por faltas" />
+                  <SelectValue placeholder="Ordenar por" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">Sem ordenação</SelectItem>
-                  <SelectItem value="desc">Mais faltas primeiro</SelectItem>
-                  <SelectItem value="asc">Menos faltas primeiro</SelectItem>
+                  <SelectItem value="absences-desc">Mais faltas primeiro</SelectItem>
+                  <SelectItem value="absences-asc">Menos faltas primeiro</SelectItem>
+                  <SelectItem value="ira-desc">Maior IRA primeiro</SelectItem>
+                  <SelectItem value="ira-asc">Menor IRA primeiro</SelectItem>
                 </SelectContent>
               </Select>
               <div className="flex items-center gap-2 mt-3 sm:mt-0">
