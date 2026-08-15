@@ -14,6 +14,7 @@ import { Loader2, Upload, FileText, AlertTriangle, CheckCircle2, Info, Graduatio
 import { GradesReviewTable, ReviewRow } from './GradesReviewTable';
 import { GradesConflictsPanel } from './GradesConflictsPanel';
 import { GradesRegistrationAudit } from './GradesRegistrationAudit';
+import { GradesClassMismatchPanel } from './GradesClassMismatchPanel';
 import {
   DetectedStudent, FieldDecision, RegistrationDecision, Resolution, ResolutionAction,
   defaultRegistrationDecision, isResolved, needsResolution,
@@ -70,7 +71,7 @@ interface GradesImportDialogProps {
   onImported?: () => void;
 }
 
-type Step = 'select' | 'processing' | 'review' | 'saving' | 'done';
+type Step = 'select' | 'processing' | 'class-conflict' | 'review' | 'saving' | 'done';
 
 const normalize = (s: unknown) =>
   String(s ?? '')
@@ -128,6 +129,9 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
   const [conflictKeys, setConflictKeys] = useState<Set<string>>(new Set());
   const [conflictStrategy, setConflictStrategy] = useState<'keep' | 'overwrite'>('keep');
   const [savedCount, setSavedCount] = useState(0);
+  const [effectiveName, setEffectiveName] = useState<string>('');
+  const [pdfClassNames, setPdfClassNames] = useState<string[]>([]);
+  const [renamingClass, setRenamingClass] = useState(false);
 
   const reset = useCallback(() => {
     setStep('select');
@@ -146,6 +150,9 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
     setConflictKeys(new Set());
     setConflictStrategy('keep');
     setSavedCount(0);
+    setEffectiveName('');
+    setPdfClassNames([]);
+    setRenamingClass(false);
     if (fileInputRef.current) fileInputRef.current.value = '';
   }, []);
 
