@@ -10,13 +10,15 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
+import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
-  Loader2, Upload, FileText, AlertTriangle, CheckCircle2, Info, GraduationCap, SkipForward, Pencil,
+  Loader2, Upload, FileText, AlertTriangle, CheckCircle2, Info, GraduationCap, SkipForward, Pencil, Zap,
 } from 'lucide-react';
 import { GradesReviewTable, ReviewRow } from './GradesReviewTable';
 import { GradesRegistrationAudit } from './GradesRegistrationAudit';
 import { GradesClassMismatchPanel } from './GradesClassMismatchPanel';
+import { evaluateAutoAccept } from './gradesAutoAccept';
 import {
   CONFLICT_LABELS, DetectedStudent, FieldDecision, RegistrationDecision,
   defaultRegistrationDecision, formatDate,
@@ -78,6 +80,7 @@ interface SessionState {
   confirmed_pages: number;
   ignored_pages: number;
   notes_imported: number;
+  auto_accept?: boolean;
 }
 
 interface GradesImportDialogProps {
@@ -129,6 +132,9 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
   const [renamingClass, setRenamingClass] = useState(false);
   const [savedTotal, setSavedTotal] = useState(0);
   const cancelledRef = useRef(false);
+  const [autoAccept, setAutoAccept] = useState(false);
+  const [autoApprovedPage, setAutoApprovedPage] = useState<number | null>(null);
+  const autoRunRef = useRef<string | null>(null);
 
   const reset = useCallback(() => {
     setStep('select');
@@ -146,6 +152,9 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
     setClassDecision('resolved');
     setRenamingClass(false);
     setSavedTotal(0);
+    setAutoAccept(false);
+    setAutoApprovedPage(null);
+    autoRunRef.current = null;
     cancelledRef.current = false;
     if (fileInputRef.current) fileInputRef.current.value = '';
   }, []);
@@ -269,7 +278,7 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
     (async () => {
       const { data } = await supabase
         .from('grade_import_sessions')
-        .select('id, file_name, total_pages, current_page, confirmed_pages, ignored_pages, notes_imported, status')
+        .select('id, file_name, total_pages, current_page, confirmed_pages, ignored_pages, notes_imported, status, auto_accept')
         .eq('class_id', classItem.id)
         .in('status', ['processing_page', 'awaiting_confirmation'])
         .order('created_at', { ascending: false })
@@ -284,7 +293,9 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
         confirmed_pages: data.confirmed_pages,
         ignored_pages: data.ignored_pages,
         notes_imported: data.notes_imported,
+        auto_accept: Boolean(data.auto_accept),
       });
+      setAutoAccept(Boolean(data.auto_accept));
       setStep('resume');
     })();
     return () => { cancelled = true; };
@@ -330,8 +341,12 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
         confirmed_pages: 0,
         ignored_pages: 0,
         notes_imported: 0,
+        auto_accept: autoAccept,
       };
       setSession(newSession);
+      if (autoAccept) {
+        await supabase.from('grade_import_sessions').update({ auto_accept: true }).eq('id', newSession.id);
+      }
       await processPage(newSession.id, 1);
     } catch (e) {
       console.error(e);
@@ -418,6 +433,29 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
     invalidCount === 0 &&
     (pageAction === 'create' || (pageAction === 'link' && Boolean(linkStudentId)));
 
+  /** Avaliação estrita da autoaceitação da página atual (não grava nada). */
+  const autoEval = useMemo(() => {
+    if (!preview) return { eligible: false, reasons: [] as string[] };
+    return evaluateAutoAccept({
+      detected: preview.detected,
+      rows,
+      classDecisionPending: classDecision === 'pending',
+      pageHasExistingGrades: pageHasConflicts,
+      linkedStudentId: pageAction === 'link' ? linkStudentId : null,
+      suggestedStudentId: preview.detected.student_id,
+      regDecision,
+    });
+  }, [preview, rows, classDecision, pageHasConflicts, pageAction, linkStudentId, regDecision]);
+
+  /** Persiste a preferência na sessão para valer também ao retomar. */
+  const handleToggleAutoAccept = async (value: boolean) => {
+    setAutoAccept(value);
+    if (session) {
+      await supabase.from('grade_import_sessions').update({ auto_accept: value }).eq('id', session.id);
+      setSession((prev) => (prev ? { ...prev, auto_accept: value } : prev));
+    }
+  };
+
   /** Renomeia a turma para o nome do PDF (com auditoria) — nunca automático. */
   const handleRenameClass = async () => {
     if (!classItem || !preview?.pdf_class_code) return;
@@ -463,7 +501,7 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
   }, [processPage, onImported]);
 
   /** Salva SOMENTE a página atual e segue para a próxima. */
-  const handleConfirmPage = async () => {
+  const handleConfirmPage = async (mode: 'manual' | 'auto' = 'manual') => {
     if (!classItem || !preview || !session) return;
     setStep('saving');
     setError(null);
@@ -598,7 +636,12 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
       }
 
       await supabase.from('grade_import_session_pages')
-        .update({ status: 'confirmed', confirmed_by: userId, confirmed_at: new Date().toISOString() })
+        .update({
+          status: 'confirmed',
+          confirmed_by: userId,
+          confirmed_at: new Date().toISOString(),
+          confirmation_mode: mode === 'auto' ? 'auto' : 'manual',
+        })
         .eq('session_id', session.id).eq('page_number', preview.page);
 
       const updated: SessionState = {
@@ -613,7 +656,11 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
       }).eq('id', session.id);
       setSession(updated);
       setSavedTotal((prev) => prev + finalPayload.length);
-      toast.success(`Página ${preview.page}: ${finalPayload.length} nota(s) gravada(s).`);
+      toast.success(
+        mode === 'auto'
+          ? `Página ${preview.page} aprovada automaticamente: ${finalPayload.length} nota(s) gravada(s).`
+          : `Página ${preview.page}: ${finalPayload.length} nota(s) gravada(s).`,
+      );
       await advance(updated);
     } catch (e) {
       console.error(e);
@@ -641,6 +688,7 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
   };
 
   const handleCancelSession = async () => {
+    autoRunRef.current = 'stopped';
     if (session) {
       await supabase.functions.invoke('parse-grade-page', { body: { action: 'cancel', session_id: session.id } });
       toast.info('Importação encerrada. As páginas já confirmadas foram mantidas.');
@@ -653,6 +701,18 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
     if (!session) { setStep('select'); return; }
     await processPage(session.id, session.current_page || 1);
   };
+
+  /** Autoaceitação: grava e avança sozinho apenas quando a página é 100% elegível. */
+  useEffect(() => {
+    if (!autoAccept || step !== 'page' || !preview || !session) return;
+    const key = `${session.id}:${preview.page}`;
+    if (autoRunRef.current === key) return;
+    if (!autoEval.eligible || !canConfirmPage) return;
+    autoRunRef.current = key;
+    setAutoApprovedPage(preview.page);
+    void handleConfirmPage('auto');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoAccept, step, preview, session, autoEval.eligible, canConfirmPage]);
 
   const progress = session && session.total_pages > 0
     ? Math.round(((preview?.page ?? session.current_page) / session.total_pages) * 100)
@@ -778,6 +838,11 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
         {step === 'saving' && (
           <div className="py-12 text-center space-y-3">
             <Loader2 className="w-10 h-10 mx-auto animate-spin text-primary" />
+            {autoAccept && autoApprovedPage != null && (
+              <p className="text-sm font-medium text-green-600">
+                ✓ Página {autoApprovedPage} aprovada automaticamente
+              </p>
+            )}
             <p className="text-sm text-muted-foreground">Gravando as notas desta página...</p>
           </div>
         )}
@@ -822,6 +887,44 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
                 </Badge>
               )}
               <Progress value={progress} className="flex-1 min-w-[160px]" />
+            </div>
+
+            <div className="rounded-lg border p-3 space-y-2">
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <div className="flex items-center gap-2">
+                  <Switch id="auto-accept" checked={autoAccept} onCheckedChange={handleToggleAutoAccept} />
+                  <Label htmlFor="auto-accept" className="text-sm font-medium flex items-center gap-1">
+                    <Zap className="w-4 h-4 text-amber-500" />
+                    Aceitar automaticamente páginas sem erros
+                  </Label>
+                </div>
+                <Badge variant={autoAccept ? 'default' : 'outline'} className="text-[10px]">
+                  Modo automático: {autoAccept ? 'ATIVADO' : 'DESATIVADO'}
+                </Badge>
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                Páginas sem qualquer erro ou conflito serão gravadas automaticamente. Páginas com qualquer divergência
+                continuarão exigindo sua confirmação. Células vazias não são erro e faltas seguem ignoradas.
+              </p>
+              {autoAccept && (
+                autoEval.eligible && canConfirmPage ? (
+                  <Badge className="text-[10px] bg-green-600 hover:bg-green-600">⚡ Aprovada automaticamente</Badge>
+                ) : (
+                  <Alert variant="destructive">
+                    <AlertTriangle className="w-4 h-4" />
+                    <AlertTitle className="text-sm">
+                      Revisão obrigatória — {autoEval.reasons.length || 1} pendência(s)
+                    </AlertTitle>
+                    <AlertDescription className="text-xs">
+                      <ul className="list-disc pl-4">
+                        {(autoEval.reasons.length ? autoEval.reasons : ['Confirmação manual necessária']).map((r) => (
+                          <li key={r}>{r}</li>
+                        ))}
+                      </ul>
+                    </AlertDescription>
+                  </Alert>
+                )
+              )}
             </div>
             {sessionSummary}
 
@@ -1025,7 +1128,7 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
                 <SkipForward className="w-4 h-4 mr-1" />
                 Ignorar página
               </Button>
-              <Button onClick={handleConfirmPage} disabled={!canConfirmPage}>
+              <Button onClick={() => handleConfirmPage('manual')} disabled={!canConfirmPage}>
                 Confirmar e próxima página
               </Button>
             </>

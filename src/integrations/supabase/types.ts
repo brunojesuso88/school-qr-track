@@ -211,6 +211,7 @@ export type Database = {
       }
       grade_import_session_pages: {
         Row: {
+          confirmation_mode: string | null
           confirmed_at: string | null
           confirmed_by: string | null
           created_at: string
@@ -223,6 +224,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          confirmation_mode?: string | null
           confirmed_at?: string | null
           confirmed_by?: string | null
           created_at?: string
@@ -235,6 +237,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          confirmation_mode?: string | null
           confirmed_at?: string | null
           confirmed_by?: string | null
           created_at?: string
@@ -258,6 +261,7 @@ export type Database = {
       }
       grade_import_sessions: {
         Row: {
+          auto_accept: boolean
           class_id: string
           confirmed_pages: number
           context: Json
@@ -275,6 +279,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          auto_accept?: boolean
           class_id: string
           confirmed_pages?: number
           context?: Json
@@ -292,6 +297,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          auto_accept?: boolean
           class_id?: string
           confirmed_pages?: number
           context?: Json
