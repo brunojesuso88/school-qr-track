@@ -541,6 +541,9 @@ serve(async (req) => {
       if (confidence != null && confidence < 0.7) flags.push('low_confidence');
       if (status === 'fuzzy') flags.push('fuzzy_student_match');
       if (status === 'unmatched') flags.push('unmatched_student');
+      if (escalated && (invalid || (confidence != null && confidence < CONFIDENCE_ESCALATION_THRESHOLD))) {
+        flags.push('second_reading');
+      }
       return [{
         student_name: pdfName,
         student_code: header.student_code ?? null,
