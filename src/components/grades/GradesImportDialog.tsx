@@ -474,7 +474,7 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
   }, [processPage, onImported]);
 
   /** Salva SOMENTE a página atual e segue para a próxima. */
-  const handleConfirmPage = async () => {
+  const handleConfirmPage = async (mode: 'manual' | 'auto' = 'manual') => {
     if (!classItem || !preview || !session) return;
     setStep('saving');
     setError(null);
@@ -609,7 +609,12 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
       }
 
       await supabase.from('grade_import_session_pages')
-        .update({ status: 'confirmed', confirmed_by: userId, confirmed_at: new Date().toISOString() })
+        .update({
+          status: 'confirmed',
+          confirmed_by: userId,
+          confirmed_at: new Date().toISOString(),
+          confirmation_mode: mode === 'auto' ? 'auto' : 'manual',
+        })
         .eq('session_id', session.id).eq('page_number', preview.page);
 
       const updated: SessionState = {
@@ -624,7 +629,11 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
       }).eq('id', session.id);
       setSession(updated);
       setSavedTotal((prev) => prev + finalPayload.length);
-      toast.success(`Página ${preview.page}: ${finalPayload.length} nota(s) gravada(s).`);
+      toast.success(
+        mode === 'auto'
+          ? `Página ${preview.page} aprovada automaticamente: ${finalPayload.length} nota(s) gravada(s).`
+          : `Página ${preview.page}: ${finalPayload.length} nota(s) gravada(s).`,
+      );
       await advance(updated);
     } catch (e) {
       console.error(e);
