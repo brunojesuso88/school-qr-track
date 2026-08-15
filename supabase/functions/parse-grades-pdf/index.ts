@@ -16,6 +16,10 @@ interface ClassStudent {
   id: string;
   full_name: string;
   student_id?: string | null;
+  school_code?: string | null;
+  birth_date?: string | null;
+  mother_name?: string | null;
+  father_name?: string | null;
 }
 
 interface ExpectedSubject {
