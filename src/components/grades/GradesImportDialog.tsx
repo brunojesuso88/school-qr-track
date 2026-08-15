@@ -464,8 +464,8 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
           .from('students')
           .insert({
             full_name: d.pdf_name,
-            student_id: `${initials}-${classItem.name}-${shiftCode}`,
-            class: classItem.name,
+            student_id: `${initials}-${effectiveName || classItem.name}-${shiftCode}`,
+            class: effectiveName || classItem.name,
             shift: classItem.shift as never,
             qr_code: `STU-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`,
             school_code: d.pdf_code,
@@ -623,7 +623,7 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
       setSavedCount(finalPayload.length);
       setStep('done');
       toast.success(
-        `${finalPayload.length} nota(s) importada(s) para ${classItem.name}.` +
+        `${finalPayload.length} nota(s) importada(s) para ${effectiveName || classItem.name}.` +
         (updatedRegistrations ? ` ${updatedRegistrations} cadastro(s) atualizado(s).` : '') +
         (createdIdByKey.size ? ` ${createdIdByKey.size} aluno(s) cadastrado(s).` : ''),
       );
@@ -698,6 +698,25 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
               </Alert>
             )}
           </div>
+        )}
+
+        {step === 'class-conflict' && classItem && (
+          <GradesClassMismatchPanel
+            systemName={effectiveName || classItem.name}
+            pdfName={pdfClassName}
+            allPdfNames={pdfClassNames}
+            strongEvidence={classEvidence.strong}
+            pdfStudents={detected.length}
+            matchedStudents={classEvidence.matched}
+            classStudents={classStudents.length}
+            sampleIdentifiers={detected.slice(0, 5).map((d) => ({
+              pdf_name: d.pdf_name, pdf_code: d.pdf_code, matched_name: d.matched_name,
+            }))}
+            renaming={renamingClass}
+            onRename={handleRenameClass}
+            onKeep={() => setStep('review')}
+            onCancel={() => handleClose(false)}
+          />
         )}
 
         {(step === 'processing' || step === 'saving') && (
