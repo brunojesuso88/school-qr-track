@@ -495,17 +495,31 @@ serve(async (req) => {
     (parsed.subjects ?? []).forEach((s: string) => registerSubject(s));
 
     // Casamento do aluno
+    // Casamento local, nesta ordem: código exato -> nome normalizado exato -> similaridade.
     const normName = normalize(pdfName);
     let matchedStudent: ClassStudent | null = null;
     let matchScore = 0;
-    for (const s of students) {
-      const score = similarity(normName, normalize(s.full_name));
-      if (score > matchScore) { matchScore = score; matchedStudent = s; }
-    }
-    const codeMatch = header.student_code
-      ? students.find((s) => (s.school_code ?? '').trim() === String(header.student_code).trim() && Boolean(s.school_code))
+
+    const pdfCode = String(header.student_code ?? '').trim();
+    const codeMatch = pdfCode
+      ? students.find((s) => Boolean(s.school_code) && String(s.school_code).trim() === pdfCode)
       : undefined;
-    if (codeMatch) { matchedStudent = codeMatch; matchScore = Math.max(matchScore, 0.99); }
+
+    if (codeMatch) {
+      matchedStudent = codeMatch;
+      matchScore = 1;
+    } else {
+      const exactName = normName ? students.find((s) => normalize(s.full_name) === normName) : undefined;
+      if (exactName) {
+        matchedStudent = exactName;
+        matchScore = 1;
+      } else {
+        for (const s of students) {
+          const score = similarity(normName, normalize(s.full_name));
+          if (score > matchScore) { matchScore = score; matchedStudent = s; }
+        }
+      }
+    }
 
     const status: 'matched' | 'fuzzy' | 'unmatched' =
       matchScore >= 0.95 ? 'matched' : matchScore >= 0.6 ? 'fuzzy' : 'unmatched';
