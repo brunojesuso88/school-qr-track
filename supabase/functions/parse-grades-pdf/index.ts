@@ -144,12 +144,71 @@ async function callGateway(model: string, body: unknown, apiKey: string) {
 }
 
 async function callWithFallback(body: unknown, apiKey: string) {
-  let res = await callGateway(PRIMARY_MODEL, body, apiKey);
+  return await callWithFallbackFrom(PRIMARY_MODEL, body, apiKey);
+}
+
+async function callWithFallbackFrom(primary: string, body: unknown, apiKey: string) {
+  let res = await callGateway(primary, body, apiKey);
   if (!res.ok && (res.status === 429 || res.status === 402 || res.status >= 500)) {
-    console.warn(`Modelo primário falhou (${res.status}); usando ${FALLBACK_MODEL}`);
-    res = await callGateway(FALLBACK_MODEL, body, apiKey);
+    console.warn(`Modelo ${primary} falhou (${res.status}); usando ${FALLBACK_MODEL}`);
+    res = await callGateway(primary === FALLBACK_MODEL ? PRIMARY_MODEL : FALLBACK_MODEL, body, apiKey);
   }
   return res;
+}
+
+function base64ToBytes(b64: string): Uint8Array {
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return bytes;
+}
+
+function bytesToBase64(bytes: Uint8Array): string {
+  let bin = '';
+  const step = 0x8000;
+  for (let i = 0; i < bytes.length; i += step) {
+    bin += String.fromCharCode(...bytes.subarray(i, i + step));
+  }
+  return btoa(bin);
+}
+
+/** Divide o PDF em blocos de CHUNK_PAGES páginas. Retorna [] se não for possível dividir. */
+async function splitPdf(pdfBase64: string): Promise<{ base64: string; startPage: number; pages: number }[]> {
+  try {
+    const src = await PDFDocument.load(base64ToBytes(pdfBase64), { ignoreEncryption: true });
+    const total = src.getPageCount();
+    if (total <= CHUNK_PAGES) return [];
+    const chunks: { base64: string; startPage: number; pages: number }[] = [];
+    for (let start = 0; start < total; start += CHUNK_PAGES) {
+      const indices: number[] = [];
+      for (let i = start; i < Math.min(start + CHUNK_PAGES, total); i++) indices.push(i);
+      const out = await PDFDocument.create();
+      const copied = await out.copyPages(src, indices);
+      copied.forEach((p) => out.addPage(p));
+      chunks.push({
+        base64: bytesToBase64(await out.save()),
+        startPage: start + 1,
+        pages: indices.length,
+      });
+    }
+    return chunks;
+  } catch (e) {
+    console.error('Não foi possível dividir o PDF; processando inteiro:', e);
+    return [];
+  }
+}
+
+async function mapWithConcurrency<T, R>(items: T[], limit: number, fn: (item: T, index: number) => Promise<R>): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let cursor = 0;
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (cursor < items.length) {
+      const i = cursor++;
+      results[i] = await fn(items[i], i);
+    }
+  });
+  await Promise.all(workers);
+  return results;
 }
 
 function extractJson(content: string): any {
