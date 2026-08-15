@@ -132,6 +132,83 @@ export type Database = {
           },
         ]
       }
+      grade_import_jobs: {
+        Row: {
+          class_id: string
+          completed_chunks: number
+          context: Json
+          created_at: string
+          created_by: string | null
+          current_chunk: number | null
+          error_message: string | null
+          failed_chunks: number
+          failed_pages: Json
+          file_name: string | null
+          id: string
+          issues_json: Json
+          partials: Json
+          pdf_base64: string | null
+          progress: number
+          result_json: Json | null
+          status: string
+          total_chunks: number
+          total_pages: number
+          updated_at: string
+        }
+        Insert: {
+          class_id: string
+          completed_chunks?: number
+          context?: Json
+          created_at?: string
+          created_by?: string | null
+          current_chunk?: number | null
+          error_message?: string | null
+          failed_chunks?: number
+          failed_pages?: Json
+          file_name?: string | null
+          id?: string
+          issues_json?: Json
+          partials?: Json
+          pdf_base64?: string | null
+          progress?: number
+          result_json?: Json | null
+          status?: string
+          total_chunks?: number
+          total_pages?: number
+          updated_at?: string
+        }
+        Update: {
+          class_id?: string
+          completed_chunks?: number
+          context?: Json
+          created_at?: string
+          created_by?: string | null
+          current_chunk?: number | null
+          error_message?: string | null
+          failed_chunks?: number
+          failed_pages?: Json
+          file_name?: string | null
+          id?: string
+          issues_json?: Json
+          partials?: Json
+          pdf_base64?: string | null
+          progress?: number
+          result_json?: Json | null
+          status?: string
+          total_chunks?: number
+          total_pages?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "grade_import_jobs_class_id_fkey"
+            columns: ["class_id"]
+            isOneToOne: false
+            referencedRelation: "classes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       grade_imports: {
         Row: {
           class_id: string
