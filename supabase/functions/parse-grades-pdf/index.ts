@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { requireAuth } from "../_shared/auth.ts";
+import { PDFDocument } from "npm:pdf-lib@1.17.1";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -11,6 +12,10 @@ const MAX_PDF_SIZE_BYTES = MAX_PDF_SIZE_MB * 1024 * 1024;
 
 const PRIMARY_MODEL = 'google/gemini-2.5-pro';
 const FALLBACK_MODEL = 'google/gemini-2.5-flash';
+// Boletins SIAEP têm 1 página por aluno; PDFs grandes (40+ páginas) estouram o
+// idle timeout (150s) numa única chamada. Dividimos em blocos processados em paralelo.
+const CHUNK_PAGES = 5;
+const CHUNK_CONCURRENCY = 4;
 
 interface ClassStudent {
   id: string;
@@ -139,12 +144,71 @@ async function callGateway(model: string, body: unknown, apiKey: string) {
 }
 
 async function callWithFallback(body: unknown, apiKey: string) {
-  let res = await callGateway(PRIMARY_MODEL, body, apiKey);
+  return await callWithFallbackFrom(PRIMARY_MODEL, body, apiKey);
+}
+
+async function callWithFallbackFrom(primary: string, body: unknown, apiKey: string) {
+  let res = await callGateway(primary, body, apiKey);
   if (!res.ok && (res.status === 429 || res.status === 402 || res.status >= 500)) {
-    console.warn(`Modelo primário falhou (${res.status}); usando ${FALLBACK_MODEL}`);
-    res = await callGateway(FALLBACK_MODEL, body, apiKey);
+    console.warn(`Modelo ${primary} falhou (${res.status}); usando ${FALLBACK_MODEL}`);
+    res = await callGateway(primary === FALLBACK_MODEL ? PRIMARY_MODEL : FALLBACK_MODEL, body, apiKey);
   }
   return res;
+}
+
+function base64ToBytes(b64: string): Uint8Array {
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return bytes;
+}
+
+function bytesToBase64(bytes: Uint8Array): string {
+  let bin = '';
+  const step = 0x8000;
+  for (let i = 0; i < bytes.length; i += step) {
+    bin += String.fromCharCode(...bytes.subarray(i, i + step));
+  }
+  return btoa(bin);
+}
+
+/** Divide o PDF em blocos de CHUNK_PAGES páginas. Retorna [] se não for possível dividir. */
+async function splitPdf(pdfBase64: string): Promise<{ base64: string; startPage: number; pages: number }[]> {
+  try {
+    const src = await PDFDocument.load(base64ToBytes(pdfBase64), { ignoreEncryption: true });
+    const total = src.getPageCount();
+    if (total <= CHUNK_PAGES) return [];
+    const chunks: { base64: string; startPage: number; pages: number }[] = [];
+    for (let start = 0; start < total; start += CHUNK_PAGES) {
+      const indices: number[] = [];
+      for (let i = start; i < Math.min(start + CHUNK_PAGES, total); i++) indices.push(i);
+      const out = await PDFDocument.create();
+      const copied = await out.copyPages(src, indices);
+      copied.forEach((p) => out.addPage(p));
+      chunks.push({
+        base64: bytesToBase64(await out.save()),
+        startPage: start + 1,
+        pages: indices.length,
+      });
+    }
+    return chunks;
+  } catch (e) {
+    console.error('Não foi possível dividir o PDF; processando inteiro:', e);
+    return [];
+  }
+}
+
+async function mapWithConcurrency<T, R>(items: T[], limit: number, fn: (item: T, index: number) => Promise<R>): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let cursor = 0;
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (cursor < items.length) {
+      const i = cursor++;
+      results[i] = await fn(items[i], i);
+    }
+  });
+  await Promise.all(workers);
+  return results;
 }
 
 function extractJson(content: string): any {
@@ -262,28 +326,86 @@ serve(async (req) => {
       return json({ success: false, error: `PDF acima de ${MAX_PDF_SIZE_MB}MB` }, 413);
     }
 
-    // ---------- Etapa 1: extração ----------
-    const res = await callWithFallback(buildExtractionBody(pdfBase64, fileName, expected, students), apiKey);
-    if (!res.ok) {
-      const text = await res.text();
-      console.error('Falha na extração:', res.status, text);
-      if (res.status === 402) return json({ success: false, error: 'Créditos de IA insuficientes para processar o PDF.' }, 402);
-      if (res.status === 429) return json({ success: false, error: 'Limite de uso da IA atingido. Tente novamente em instantes.' }, 429);
-      return json({ success: false, error: 'Não foi possível ler o PDF.' }, 502);
-    }
-    const aiJson = await res.json();
-    const content: string = aiJson?.choices?.[0]?.message?.content ?? '';
+    // ---------- Etapa 1: extração (em blocos paralelos para PDFs longos) ----------
+    const chunks = await splitPdf(pdfBase64);
+    const chunked = chunks.length > 1;
     let payload: ExtractionPayload;
-    try {
-      payload = extractJson(content);
-    } catch (e) {
-      console.error('JSON inválido da IA:', e, content.slice(0, 500));
-      return json({ success: false, error: 'A IA retornou um formato inesperado. Tente novamente.' }, 502);
+    const chunkFailures: string[] = [];
+
+    if (!chunked) {
+      const res = await callWithFallback(buildExtractionBody(pdfBase64, fileName, expected, students), apiKey);
+      if (!res.ok) {
+        const text = await res.text();
+        console.error('Falha na extração:', res.status, text);
+        if (res.status === 402) return json({ success: false, error: 'Créditos de IA insuficientes para processar o PDF.' }, 402);
+        if (res.status === 429) return json({ success: false, error: 'Limite de uso da IA atingido. Tente novamente em instantes.' }, 429);
+        return json({ success: false, error: 'Não foi possível ler o PDF.' }, 502);
+      }
+      const aiJson = await res.json();
+      const content: string = aiJson?.choices?.[0]?.message?.content ?? '';
+      try {
+        payload = extractJson(content);
+      } catch (e) {
+        console.error('JSON inválido da IA:', e, content.slice(0, 500));
+        return json({ success: false, error: 'A IA retornou um formato inesperado. Tente novamente.' }, 502);
+      }
+    } else {
+      console.log(`PDF dividido em ${chunks.length} bloco(s) de até ${CHUNK_PAGES} páginas`);
+      const partials = await mapWithConcurrency(chunks, CHUNK_CONCURRENCY, async (chunk) => {
+        try {
+          // Blocos pequenos: o modelo rápido evita o idle timeout de 150s.
+          const r = await callWithFallbackFrom(
+            FALLBACK_MODEL,
+            buildExtractionBody(chunk.base64, fileName, expected, students),
+            apiKey,
+          );
+          if (!r.ok) {
+            const t = await r.text();
+            console.error(`Bloco p.${chunk.startPage} falhou:`, r.status, t.slice(0, 300));
+            chunkFailures.push(`páginas ${chunk.startPage}-${chunk.startPage + chunk.pages - 1} (HTTP ${r.status})`);
+            return null;
+          }
+          const j = await r.json();
+          const parsed = extractJson(j?.choices?.[0]?.message?.content ?? '') as ExtractionPayload;
+          const offset = chunk.startPage - 1;
+          const fixPage = (p: unknown) => {
+            const n = typeof p === 'number' ? p : Number(p);
+            return Number.isFinite(n) && n > 0 ? n + offset : chunk.startPage;
+          };
+          (parsed.rows || []).forEach((r2: any) => { r2.page = fixPage(r2?.page); });
+          (parsed.students || []).forEach((s: any) => { s.page = fixPage(s?.page); });
+          return parsed;
+        } catch (e) {
+          console.error(`Erro no bloco p.${chunk.startPage}:`, e);
+          chunkFailures.push(`páginas ${chunk.startPage}-${chunk.startPage + chunk.pages - 1}`);
+          return null;
+        }
+      });
+
+      const ok = partials.filter((p): p is ExtractionPayload => !!p);
+      if (ok.length === 0) {
+        return json({ success: false, error: 'Não foi possível ler o PDF. Tente novamente ou envie um arquivo menor.' }, 502);
+      }
+      payload = {
+        pages: chunks.reduce((sum, c) => sum + c.pages, 0),
+        periods: ok.flatMap((p) => p.periods || []),
+        subjects: [...new Set(ok.flatMap((p) => p.subjects || []))],
+        students: ok.flatMap((p) => p.students || []),
+        rows: ok.flatMap((p) => p.rows || []),
+        notes: ok.flatMap((p) => p.notes || []),
+      } as ExtractionPayload;
     }
 
     const issues: { level: 'error' | 'warning' | 'info'; code: string; message: string }[] = [];
     const addIssue = (level: 'error' | 'warning' | 'info', code: string, message: string) =>
       issues.push({ level, code, message });
+
+    if (chunked) {
+      addIssue('info', 'chunked_extraction', `PDF longo processado em ${chunks.length} bloco(s) de até ${CHUNK_PAGES} páginas.`);
+      if (chunkFailures.length) {
+        addIssue('error', 'chunk_failed', `Alguns trechos não puderam ser lidos: ${chunkFailures.join('; ')}. Reenvie o PDF ou revise manualmente essas páginas.`);
+      }
+    }
 
     (payload.notes || []).forEach((n) => addIssue('info', 'ai_note', String(n)));
 
@@ -519,7 +641,10 @@ serve(async (req) => {
       r.flags.includes('out_of_scale') || r.flags.includes('conflicting_duplicate'));
 
     let reconciled = 0;
-    if (suspects.length > 0 && suspects.length <= 150) {
+    if (chunked && suspects.length > 0) {
+      // Em PDFs longos a segunda passada estouraria o tempo limite da função.
+      addIssue('warning', 'reconciliation_skipped', 'PDF longo: a segunda validação por IA foi ignorada para não exceder o tempo limite; revise manualmente as células sinalizadas.');
+    } else if (suspects.length > 0 && suspects.length <= 150) {
       try {
         const res2 = await callWithFallback(buildReconciliationBody(pdfBase64, fileName, suspects), apiKey);
         if (res2.ok) {
