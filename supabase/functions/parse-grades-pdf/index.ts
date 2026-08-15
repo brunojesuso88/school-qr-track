@@ -964,7 +964,7 @@ serve(async (req) => {
       for (let i = 0; i < job.total_chunks; i++) if (!attempted.has(i)) pending.push(i);
       const batch = pending.slice(0, CHUNKS_PER_CALL);
 
-      if (batch.length > 0) {
+      {
         if (!job.pdf_base64) {
           await db.from('grade_import_jobs').update({
             status: 'failed',
@@ -973,9 +973,11 @@ serve(async (req) => {
           return json({ success: false, error: 'O arquivo temporário do boletim expirou. Envie o PDF novamente.' }, 410);
         }
 
-        await db.from('grade_import_jobs')
-          .update({ status: 'processing', current_chunk: batch[0] + 1 })
-          .eq('id', jobId);
+        if (batch.length > 0) {
+          await db.from('grade_import_jobs')
+            .update({ status: 'processing', current_chunk: batch[0] + 1 })
+            .eq('id', jobId);
+        }
 
         const pdfBytes = base64ToBytes(job.pdf_base64);
         const ctx = job.context ?? {};
