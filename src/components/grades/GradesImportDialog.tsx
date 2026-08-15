@@ -14,6 +14,7 @@ import { Loader2, Upload, FileText, AlertTriangle, CheckCircle2, Info, Graduatio
 import { GradesReviewTable, ReviewRow } from './GradesReviewTable';
 import { GradesConflictsPanel } from './GradesConflictsPanel';
 import { GradesRegistrationAudit } from './GradesRegistrationAudit';
+import { GradesClassMismatchPanel } from './GradesClassMismatchPanel';
 import {
   DetectedStudent, FieldDecision, RegistrationDecision, Resolution, ResolutionAction,
   defaultRegistrationDecision, isResolved, needsResolution,
@@ -70,7 +71,7 @@ interface GradesImportDialogProps {
   onImported?: () => void;
 }
 
-type Step = 'select' | 'processing' | 'review' | 'saving' | 'done';
+type Step = 'select' | 'processing' | 'class-conflict' | 'review' | 'saving' | 'done';
 
 const normalize = (s: unknown) =>
   String(s ?? '')
@@ -128,6 +129,9 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
   const [conflictKeys, setConflictKeys] = useState<Set<string>>(new Set());
   const [conflictStrategy, setConflictStrategy] = useState<'keep' | 'overwrite'>('keep');
   const [savedCount, setSavedCount] = useState(0);
+  const [effectiveName, setEffectiveName] = useState<string>('');
+  const [pdfClassNames, setPdfClassNames] = useState<string[]>([]);
+  const [renamingClass, setRenamingClass] = useState(false);
 
   const reset = useCallback(() => {
     setStep('select');
@@ -146,6 +150,9 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
     setConflictKeys(new Set());
     setConflictStrategy('keep');
     setSavedCount(0);
+    setEffectiveName('');
+    setPdfClassNames([]);
+    setRenamingClass(false);
     if (fileInputRef.current) fileInputRef.current.value = '';
   }, []);
 
@@ -214,6 +221,7 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
     setFileName(file.name);
     setError(null);
     setStep('processing');
+    setEffectiveName(classItem.name);
 
     try {
       // Alunos da turma
@@ -288,11 +296,69 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
       setResolutions({});
       setReviewTab(detectedList.some((d) => needsResolution(d)) ? 'conflicts' : 'grades');
       await loadConflicts(classItem.id, parsedRows, data.subjects || [], data.periods || []);
-      setStep('review');
+
+      const codes: string[] = (data.stats?.class_codes || []).filter(Boolean).map((c: string) => String(c).trim());
+      setPdfClassNames(codes);
+      const divergent = codes.filter((c) => normalize(c) !== normalize(classItem.name));
+      setStep(divergent.length > 0 ? 'class-conflict' : 'review');
     } catch (e) {
       console.error(e);
       setError(e instanceof Error ? e.message : 'Erro ao processar o PDF.');
       setStep('select');
+    }
+  };
+
+  const pdfClassName = useMemo(() => {
+    if (!classItem) return '';
+    return pdfClassNames.find((c) => normalize(c) !== normalize(classItem.name)) ?? pdfClassNames[0] ?? '';
+  }, [pdfClassNames, classItem]);
+
+  const classEvidence = useMemo(() => {
+    const matched = detected.filter((d) => d.student_id).length;
+    const total = detected.length || 1;
+    return { matched, strong: matched / total >= 0.6 && matched > 0 };
+  }, [detected]);
+
+  /** Renomeia a turma para o nome exato do PDF (com auditoria) — nunca automático. */
+  const handleRenameClass = async () => {
+    if (!classItem || !pdfClassName) return;
+    setRenamingClass(true);
+    setError(null);
+    try {
+      const { data: userData } = await supabase.auth.getUser();
+      const userId = userData?.user?.id ?? null;
+      const oldName = effectiveName || classItem.name;
+
+      const { error: classError } = await supabase
+        .from('classes')
+        .update({ name: pdfClassName })
+        .eq('id', classItem.id);
+      if (classError) throw classError;
+
+      const { error: studentsError } = await supabase
+        .from('students')
+        .update({ class: pdfClassName })
+        .eq('class', oldName);
+      if (studentsError) throw studentsError;
+
+      await supabase.from('audit_logs').insert({
+        user_id: userId,
+        action: 'UPDATE',
+        table_name: 'classes',
+        record_id: classItem.id,
+        old_data: { name: oldName } as never,
+        new_data: { name: pdfClassName, reason: 'Divergência de turma no boletim importado', file_name: fileName } as never,
+      });
+
+      setEffectiveName(pdfClassName);
+      setStep('review');
+      toast.success(`Turma renomeada para ${pdfClassName}.`);
+      onImported?.();
+    } catch (e) {
+      console.error(e);
+      setError(e instanceof Error ? e.message : 'Não foi possível alterar o nome da turma.');
+    } finally {
+      setRenamingClass(false);
     }
   };
 
@@ -398,8 +464,8 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
           .from('students')
           .insert({
             full_name: d.pdf_name,
-            student_id: `${initials}-${classItem.name}-${shiftCode}`,
-            class: classItem.name,
+            student_id: `${initials}-${effectiveName || classItem.name}-${shiftCode}`,
+            class: effectiveName || classItem.name,
             shift: classItem.shift as never,
             qr_code: `STU-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`,
             school_code: d.pdf_code,
@@ -557,7 +623,7 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
       setSavedCount(finalPayload.length);
       setStep('done');
       toast.success(
-        `${finalPayload.length} nota(s) importada(s) para ${classItem.name}.` +
+        `${finalPayload.length} nota(s) importada(s) para ${effectiveName || classItem.name}.` +
         (updatedRegistrations ? ` ${updatedRegistrations} cadastro(s) atualizado(s).` : '') +
         (createdIdByKey.size ? ` ${createdIdByKey.size} aluno(s) cadastrado(s).` : ''),
       );
@@ -632,6 +698,25 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
               </Alert>
             )}
           </div>
+        )}
+
+        {step === 'class-conflict' && classItem && (
+          <GradesClassMismatchPanel
+            systemName={effectiveName || classItem.name}
+            pdfName={pdfClassName}
+            allPdfNames={pdfClassNames}
+            strongEvidence={classEvidence.strong}
+            pdfStudents={detected.length}
+            matchedStudents={classEvidence.matched}
+            classStudents={classStudents.length}
+            sampleIdentifiers={detected.slice(0, 5).map((d) => ({
+              pdf_name: d.pdf_name, pdf_code: d.pdf_code, matched_name: d.matched_name,
+            }))}
+            renaming={renamingClass}
+            onRename={handleRenameClass}
+            onKeep={() => setStep('review')}
+            onCancel={() => handleClose(false)}
+          />
         )}
 
         {(step === 'processing' || step === 'saving') && (
