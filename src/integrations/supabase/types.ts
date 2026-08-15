@@ -209,6 +209,115 @@ export type Database = {
           },
         ]
       }
+      grade_import_session_pages: {
+        Row: {
+          confirmed_at: string | null
+          confirmed_by: string | null
+          created_at: string
+          error: string | null
+          id: string
+          page_number: number
+          preview_json: Json | null
+          session_id: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          confirmed_at?: string | null
+          confirmed_by?: string | null
+          created_at?: string
+          error?: string | null
+          id?: string
+          page_number: number
+          preview_json?: Json | null
+          session_id: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          confirmed_at?: string | null
+          confirmed_by?: string | null
+          created_at?: string
+          error?: string | null
+          id?: string
+          page_number?: number
+          preview_json?: Json | null
+          session_id?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "grade_import_session_pages_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "grade_import_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      grade_import_sessions: {
+        Row: {
+          class_id: string
+          confirmed_pages: number
+          context: Json
+          created_at: string
+          created_by: string | null
+          current_page: number
+          current_preview: Json | null
+          file_name: string | null
+          id: string
+          ignored_pages: number
+          notes_imported: number
+          pdf_base64: string | null
+          status: string
+          total_pages: number
+          updated_at: string
+        }
+        Insert: {
+          class_id: string
+          confirmed_pages?: number
+          context?: Json
+          created_at?: string
+          created_by?: string | null
+          current_page?: number
+          current_preview?: Json | null
+          file_name?: string | null
+          id?: string
+          ignored_pages?: number
+          notes_imported?: number
+          pdf_base64?: string | null
+          status?: string
+          total_pages?: number
+          updated_at?: string
+        }
+        Update: {
+          class_id?: string
+          confirmed_pages?: number
+          context?: Json
+          created_at?: string
+          created_by?: string | null
+          current_page?: number
+          current_preview?: Json | null
+          file_name?: string | null
+          id?: string
+          ignored_pages?: number
+          notes_imported?: number
+          pdf_base64?: string | null
+          status?: string
+          total_pages?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "grade_import_sessions_class_id_fkey"
+            columns: ["class_id"]
+            isOneToOne: false
+            referencedRelation: "classes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       grade_imports: {
         Row: {
           class_id: string

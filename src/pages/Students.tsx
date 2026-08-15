@@ -36,6 +36,8 @@ interface Student {
   shift: string;
   guardian_name: string;
   guardian_phone: string;
+  mother_name?: string | null;
+  father_name?: string | null;
   photo_url: string | null;
   qr_code: string;
   status: string;
@@ -106,6 +108,8 @@ const Students = () => {
     shift: 'morning',
     guardian_name: '',
     guardian_phone: '',
+    mother_name: '',
+    father_name: '',
     status: 'active',
     has_medical_report: false,
     medical_report_details: '',
@@ -324,6 +328,8 @@ const Students = () => {
           guardian_phone: validationData.guardian_phone ? validationData.guardian_phone : null,
           status: validationData.status,
           student_id: studentId,
+          mother_name: formData.mother_name.trim() || null,
+          father_name: formData.father_name.trim() || null,
           
           has_medical_report: validationData.has_medical_report,
           medical_report_details: validationData.medical_report_details,
@@ -356,6 +362,8 @@ const Students = () => {
             guardian_phone: validationData.guardian_phone ? validationData.guardian_phone : null,
             status: validationData.status,
             student_id: studentId,
+            mother_name: formData.mother_name.trim() || null,
+            father_name: formData.father_name.trim() || null,
             
             qr_code: qrCode,
             has_medical_report: validationData.has_medical_report,
@@ -476,6 +484,8 @@ const Students = () => {
       shift: student.shift,
       guardian_name: student.guardian_name ?? '',
       guardian_phone: student.guardian_phone ?? '',
+      mother_name: student.mother_name ?? '',
+      father_name: student.father_name ?? '',
       status: student.status || 'active',
       has_medical_report: student.has_medical_report || false,
       medical_report_details: student.medical_report_details || '',
@@ -517,6 +527,8 @@ const Students = () => {
       shift: 'morning',
       guardian_name: '',
       guardian_phone: '',
+      mother_name: '',
+      father_name: '',
       status: 'active',
       has_medical_report: false,
       medical_report_details: '',
@@ -790,13 +802,23 @@ const Students = () => {
                     </Select>
                   </div>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="guardian_name">Nome do Responsável - Opcional</Label>
-                  <Input
-                    id="guardian_name"
-                    value={formData.guardian_name}
-                    onChange={(e) => setFormData({ ...formData, guardian_name: e.target.value })}
-                  />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="mother_name">Mãe - Opcional</Label>
+                    <Input
+                      id="mother_name"
+                      value={formData.mother_name}
+                      onChange={(e) => setFormData({ ...formData, mother_name: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="father_name">Pai - Opcional</Label>
+                    <Input
+                      id="father_name"
+                      value={formData.father_name}
+                      onChange={(e) => setFormData({ ...formData, father_name: e.target.value })}
+                    />
+                  </div>
                 </div>
                 {canViewGuardianPhone && (
                   <div className="space-y-2">
@@ -985,7 +1007,12 @@ const Students = () => {
                   <div className="text-xs space-y-1 text-muted-foreground mb-4">
                     <p><span className="font-medium text-foreground">Turma:</span> {student.class}</p>
                     <p><span className="font-medium text-foreground">Turno:</span> {student.shift === 'morning' ? 'Manhã' : student.shift === 'afternoon' ? 'Tarde' : 'Noite'}</p>
-                    <p><span className="font-medium text-foreground">Responsável:</span> {student.guardian_name}</p>
+                    {student.mother_name && (
+                      <p><span className="font-medium text-foreground">Mãe:</span> {student.mother_name}</p>
+                    )}
+                    {student.father_name && (
+                      <p><span className="font-medium text-foreground">Pai:</span> {student.father_name}</p>
+                    )}
                     {student.birth_date && (
                       <p><span className="font-medium text-foreground">Nascimento:</span> {format(parse(student.birth_date, 'yyyy-MM-dd', new Date()), 'dd/MM/yyyy')}</p>
                     )}
