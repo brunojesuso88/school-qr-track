@@ -543,7 +543,7 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
         const studentId = d.student_id;
         if (!studentId || createdIdByKey.has(d.key)) continue;
         const dec = regDecisions[d.key] ?? defaultRegistrationDecision(d);
-        const update: Record<string, string | null> = {};
+        const update: { school_code?: string; birth_date?: string; mother_name?: string; father_name?: string } = {};
         if (d.pdf_code && dec.code === 'update') update.school_code = d.pdf_code;
         if (d.pdf_birth_date && dec.birth_date === 'update') update.birth_date = d.pdf_birth_date;
         if (d.pdf_mother_name && dec.mother === 'update') update.mother_name = d.pdf_mother_name;
