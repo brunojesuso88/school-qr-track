@@ -17,10 +17,13 @@ const corsHeaders = {
  */
 
 const MAX_PDF_SIZE_BYTES = 15 * 1024 * 1024;
-const PRIMARY_MODEL = 'google/gemini-2.5-pro';
-const FALLBACK_MODEL = 'google/gemini-2.5-flash';
-const GATEWAY_TIMEOUT_MS = 60_000;
-const ATTEMPTS = 3;
+/** Leitura normal: Flash (rápido). Pro só entra como 2ª leitura em caso de dúvida. */
+const FAST_MODEL = 'google/gemini-2.5-flash';
+const ESCALATION_MODEL = 'google/gemini-2.5-pro';
+const FAST_TIMEOUT_MS = 45_000;
+const ESCALATION_TIMEOUT_MS = 70_000;
+/** Limiar de confiança abaixo do qual a página é reencaminhada ao modelo Pro. */
+const CONFIDENCE_ESCALATION_THRESHOLD = 0.85;
 
 interface ClassStudent {
   id: string;
@@ -150,30 +153,99 @@ Responda SOMENTE com JSON válido:
   "notes": ["observações sobre células ambíguas ou página sem aluno"]
 }`;
 
-async function callGateway(model: string, body: unknown, apiKey: string) {
+async function callGateway(model: string, body: unknown, apiKey: string, timeoutMs: number) {
   return await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ ...(body as Record<string, unknown>), model }),
-    signal: AbortSignal.timeout(GATEWAY_TIMEOUT_MS),
+    signal: AbortSignal.timeout(timeoutMs),
   });
 }
 
-async function callWithRetry(body: unknown, apiKey: string): Promise<Response | null> {
-  let last: Response | null = null;
-  for (let attempt = 1; attempt <= ATTEMPTS; attempt++) {
-    try {
-      const res = await callGateway(attempt === 1 ? PRIMARY_MODEL : FALLBACK_MODEL, body, apiKey);
-      if (res.ok) return res;
-      last = res;
-      if (res.status !== 429 && res.status < 500) return res;
+interface ReadOutcome {
+  parsed: any | null;
+  model: string;
+  status: number;
+  /** 'ok' | 'http' | 'timeout' | 'network' | 'bad_json' */
+  failure: 'ok' | 'http' | 'timeout' | 'network' | 'bad_json';
+}
+
+/** Uma única leitura da página com o modelo indicado. Sem loops. */
+async function readOnce(model: string, body: unknown, apiKey: string, timeoutMs: number): Promise<ReadOutcome> {
+  try {
+    const res = await callGateway(model, body, apiKey, timeoutMs);
+    if (!res.ok) {
       await res.text().catch(() => '');
-    } catch (e) {
-      console.error(`Tentativa ${attempt} falhou:`, e);
+      return { parsed: null, model, status: res.status, failure: 'http' };
     }
-    if (attempt < ATTEMPTS) await sleep(700 * attempt);
+    const aiJson = await res.json();
+    const content = String(aiJson?.choices?.[0]?.message?.content ?? '');
+    try {
+      return { parsed: extractJson(content), model, status: 200, failure: 'ok' };
+    } catch (_e) {
+      return { parsed: null, model, status: 200, failure: 'bad_json' };
+    }
+  } catch (e) {
+    const timedOut = e instanceof Error && /timeout|abort/i.test(e.message);
+    console.error(`Leitura com ${model} falhou:`, e);
+    return { parsed: null, model, status: 0, failure: timedOut ? 'timeout' : 'network' };
   }
-  return last;
+}
+
+/**
+ * Validações determinísticas locais sobre a leitura rápida.
+ * Retorna os motivos que justificam uma 2ª leitura com o modelo Pro.
+ */
+function suspicionReasons(parsed: any, expectedSubjectCount: number): string[] {
+  const reasons: string[] = [];
+  if (!parsed || typeof parsed !== 'object') return ['json_incompleto'];
+
+  const header = parsed.student ?? {};
+  const rows: any[] = Array.isArray(parsed.rows) ? parsed.rows : [];
+
+  if (!String(header.name ?? '').trim()) reasons.push('aluno_nao_identificado');
+  if (!String(header.class_code ?? '').trim()) reasons.push('turma_ausente');
+  if (!Array.isArray(parsed.rows)) reasons.push('json_incompleto');
+  if (rows.length === 0) reasons.push('nenhuma_linha_lida');
+
+  const seen = new Map<string, string | null>();
+  let lowConfidence = 0;
+
+  for (const r of rows) {
+    const subject = String(r?.subject ?? '').trim();
+    const periodLabel = String(r?.period ?? '').trim();
+    if (!subject) reasons.push('disciplina_ambigua');
+    if (!periodLabel) reasons.push('periodo_ambiguo');
+    if (isAbsenceLabel(subject) || isAbsenceLabel(periodLabel)) reasons.push('coluna_faltas_lida');
+    if (periodLabel && classifyPeriod(periodLabel, r?.period_kind ?? null).kind === 'unknown') {
+      reasons.push('periodo_invalido');
+    }
+
+    const raw = r?.note_raw ?? r?.raw_value ?? null;
+    const rawText = raw == null ? null : String(raw).trim() || null;
+    const { value, invalid } = parseGradeValue(rawText);
+    if (invalid) reasons.push('nota_invalida');
+    if (value != null && (value < 0 || value > 10)) reasons.push('nota_fora_da_escala');
+
+    const conf = typeof r?.confidence === 'number' ? r.confidence : null;
+    if (conf != null && conf < CONFIDENCE_ESCALATION_THRESHOLD) lowConfidence++;
+
+    const key = `${normalize(subject)}||${normalize(periodLabel)}`;
+    if (seen.has(key)) {
+      if (seen.get(key) !== rawText) reasons.push('duplicidade_conflitante');
+    } else {
+      seen.set(key, rawText);
+    }
+  }
+
+  if (lowConfidence > 0) reasons.push('baixa_confianca');
+
+  const subjectsRead = new Set(rows.map((r) => normalize(r?.subject ?? '')).filter(Boolean)).size;
+  if (expectedSubjectCount > 0 && subjectsRead > 0 && subjectsRead < Math.ceil(expectedSubjectCount * 0.5)) {
+    reasons.push('linhas_insuficientes');
+  }
+
+  return [...new Set(reasons)];
 }
 
 serve(async (req) => {
@@ -305,20 +377,15 @@ serve(async (req) => {
     const single = await extractSinglePage(base64ToBytes(session.pdf_base64), pageNumber);
     if (!single) return json({ success: false, error: 'Não foi possível isolar esta página do PDF.' }, 400);
 
-    const subjectHint = expected.length
-      ? `Disciplinas esperadas nesta turma (referência de nomenclatura, não force o casamento): ${expected.map((s) => s.name).join(', ')}.`
-      : '';
-    const studentHint = students.length
-      ? `Alunos matriculados na turma (referência de nomenclatura; o aluno da página pode não estar nesta lista): ${students.map((s) => s.full_name).join(' | ')}.`
-      : '';
-
+    // Prompt enxuto: nada de lista de alunos nem de disciplinas da turma.
+    // O casamento de aluno e disciplina é feito localmente depois da extração.
     const body = {
       messages: [
         { role: 'system', content: SYSTEM_PROMPT },
         {
           role: 'user',
           content: [
-            { type: 'text', text: `Esta é a página ${pageNumber} de ${session.total_pages} do boletim. Extraia apenas as NOTAS desta página e os dados do cabeçalho. Ignore a coluna Faltas.\n${subjectHint}\n${studentHint}` },
+            { type: 'text', text: `Esta é a página ${pageNumber} do boletim. Extraia SOMENTE as notas desta página e os dados do cabeçalho (aluno, código, nascimento, mãe, pai, turma). Ignore a coluna Faltas.` },
             { type: 'file', file: { filename: `pagina-${pageNumber}.pdf`, file_data: `data:application/pdf;base64,${single.base64}` } },
           ],
         },
@@ -326,32 +393,64 @@ serve(async (req) => {
       temperature: 0,
     };
 
-    const res = await callWithRetry(body, apiKey);
-    if (!res || !res.ok) {
-      const status = res?.status ?? 0;
-      const message = status === 429
-        ? 'Limite de uso da IA atingido. Aguarde alguns instantes e processe a página novamente.'
-        : status === 402
-          ? 'Créditos de IA insuficientes para ler esta página.'
-          : `Falha ao ler a página ${pageNumber} (status ${status}).`;
+    const failPage = async (message: string) => {
       await admin.from('grade_import_session_pages')
         .update({ status: 'error', error: message })
         .eq('session_id', session.id).eq('page_number', pageNumber);
       return json({ success: false, error: message }, 200);
+    };
+
+    // 1ª leitura: Flash.
+    let outcome = await readOnce(FAST_MODEL, body, apiKey, FAST_TIMEOUT_MS);
+
+    // 429: no máximo 1 retry curto no próprio Flash. 402: sem retry.
+    if (outcome.failure === 'http' && outcome.status === 429) {
+      await sleep(1_200);
+      outcome = await readOnce(FAST_MODEL, body, apiKey, FAST_TIMEOUT_MS);
+      if (outcome.failure === 'http' && outcome.status === 429) {
+        return await failPage('Limite de uso da IA atingido. Aguarde alguns instantes e leia esta página novamente.');
+      }
+    }
+    if (outcome.failure === 'http' && outcome.status === 402) {
+      return await failPage('Créditos de IA insuficientes para ler esta página.');
     }
 
-    const aiJson = await res.json();
-    const content = aiJson?.choices?.[0]?.message?.content ?? '';
-    let parsed: any;
-    try {
-      parsed = extractJson(String(content));
-    } catch (_e) {
-      const message = `Não foi possível interpretar a leitura da página ${pageNumber}.`;
-      await admin.from('grade_import_session_pages')
-        .update({ status: 'error', error: message })
-        .eq('session_id', session.id).eq('page_number', pageNumber);
-      return json({ success: false, error: message }, 200);
+    let reasons: string[] = [];
+    let escalated = false;
+
+    const transientFailure = outcome.failure === 'timeout' || outcome.failure === 'network' ||
+      outcome.failure === 'bad_json' || (outcome.failure === 'http' && outcome.status >= 500);
+
+    if (outcome.failure === 'ok') {
+      reasons = suspicionReasons(outcome.parsed, expected.length);
     }
+
+    // 2ª leitura com Pro SOMENTE em erro transitório relevante ou sinais de dúvida. Nunca em loop.
+    if (transientFailure || (outcome.failure === 'ok' && reasons.length > 0)) {
+      const second = await readOnce(ESCALATION_MODEL, body, apiKey, ESCALATION_TIMEOUT_MS);
+      if (second.failure === 'ok') {
+        const secondReasons = suspicionReasons(second.parsed, expected.length);
+        // Mantém a leitura com menos problemas detectados.
+        if (outcome.failure !== 'ok' || secondReasons.length <= reasons.length) {
+          outcome = second;
+          reasons = secondReasons;
+        }
+        escalated = true;
+      } else if (outcome.failure !== 'ok') {
+        const message = second.failure === 'timeout'
+          ? `A leitura da página ${pageNumber} demorou demais. Tente ler esta página novamente.`
+          : second.status === 402
+            ? 'Créditos de IA insuficientes para ler esta página.'
+            : `Falha ao ler a página ${pageNumber}. Tente novamente.`;
+        return await failPage(message);
+      }
+    }
+
+    if (outcome.failure !== 'ok' || !outcome.parsed) {
+      return await failPage(`Não foi possível interpretar a leitura da página ${pageNumber}.`);
+    }
+
+    const parsed = outcome.parsed;
 
     // ---------- Normalização da prévia ----------
     const header = parsed.student ?? {};
@@ -396,17 +495,31 @@ serve(async (req) => {
     (parsed.subjects ?? []).forEach((s: string) => registerSubject(s));
 
     // Casamento do aluno
+    // Casamento local, nesta ordem: código exato -> nome normalizado exato -> similaridade.
     const normName = normalize(pdfName);
     let matchedStudent: ClassStudent | null = null;
     let matchScore = 0;
-    for (const s of students) {
-      const score = similarity(normName, normalize(s.full_name));
-      if (score > matchScore) { matchScore = score; matchedStudent = s; }
-    }
-    const codeMatch = header.student_code
-      ? students.find((s) => (s.school_code ?? '').trim() === String(header.student_code).trim() && Boolean(s.school_code))
+
+    const pdfCode = String(header.student_code ?? '').trim();
+    const codeMatch = pdfCode
+      ? students.find((s) => Boolean(s.school_code) && String(s.school_code).trim() === pdfCode)
       : undefined;
-    if (codeMatch) { matchedStudent = codeMatch; matchScore = Math.max(matchScore, 0.99); }
+
+    if (codeMatch) {
+      matchedStudent = codeMatch;
+      matchScore = 1;
+    } else {
+      const exactName = normName ? students.find((s) => normalize(s.full_name) === normName) : undefined;
+      if (exactName) {
+        matchedStudent = exactName;
+        matchScore = 1;
+      } else {
+        for (const s of students) {
+          const score = similarity(normName, normalize(s.full_name));
+          if (score > matchScore) { matchScore = score; matchedStudent = s; }
+        }
+      }
+    }
 
     const status: 'matched' | 'fuzzy' | 'unmatched' =
       matchScore >= 0.95 ? 'matched' : matchScore >= 0.6 ? 'fuzzy' : 'unmatched';
@@ -428,6 +541,9 @@ serve(async (req) => {
       if (confidence != null && confidence < 0.7) flags.push('low_confidence');
       if (status === 'fuzzy') flags.push('fuzzy_student_match');
       if (status === 'unmatched') flags.push('unmatched_student');
+      if (escalated && (invalid || (confidence != null && confidence < CONFIDENCE_ESCALATION_THRESHOLD))) {
+        flags.push('second_reading');
+      }
       return [{
         student_name: pdfName,
         student_code: header.student_code ?? null,
@@ -518,6 +634,11 @@ serve(async (req) => {
         periods: periodMap.size,
       },
       notes: Array.isArray(parsed.notes) ? parsed.notes.slice(0, 10) : [],
+      reading: {
+        mode: escalated ? 'validated' : 'fast',
+        escalated,
+        reasons,
+      },
     };
 
     await admin.from('grade_import_session_pages')

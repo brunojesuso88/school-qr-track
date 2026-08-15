@@ -63,6 +63,11 @@ interface PagePreview {
     periods: number;
   };
   notes: string[];
+  reading?: {
+    mode: 'fast' | 'validated';
+    escalated: boolean;
+    reasons: string[];
+  };
 }
 
 interface SessionState {
@@ -808,6 +813,14 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
               <Badge variant="secondary" className="text-xs">
                 Página {preview.page} de {preview.total_pages}
               </Badge>
+              {preview.reading && (
+                <Badge
+                  variant={preview.reading.escalated ? 'secondary' : 'outline'}
+                  className="text-[10px]"
+                >
+                  {preview.reading.escalated ? 'Validação adicional aplicada' : 'Lida em modo rápido'}
+                </Badge>
+              )}
               <Progress value={progress} className="flex-1 min-w-[160px]" />
             </div>
             {sessionSummary}
