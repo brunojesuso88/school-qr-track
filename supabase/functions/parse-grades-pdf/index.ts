@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { requireAuth } from "../_shared/auth.ts";
+import { PDFDocument } from "npm:pdf-lib@1.17.1";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -11,6 +12,10 @@ const MAX_PDF_SIZE_BYTES = MAX_PDF_SIZE_MB * 1024 * 1024;
 
 const PRIMARY_MODEL = 'google/gemini-2.5-pro';
 const FALLBACK_MODEL = 'google/gemini-2.5-flash';
+// Boletins SIAEP têm 1 página por aluno; PDFs grandes (40+ páginas) estouram o
+// idle timeout (150s) numa única chamada. Dividimos em blocos processados em paralelo.
+const CHUNK_PAGES = 5;
+const CHUNK_CONCURRENCY = 4;
 
 interface ClassStudent {
   id: string;
