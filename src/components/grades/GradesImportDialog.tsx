@@ -9,8 +9,15 @@ import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Loader2, Upload, FileText, AlertTriangle, CheckCircle2, Info, GraduationCap } from 'lucide-react';
 import { GradesReviewTable, ReviewRow } from './GradesReviewTable';
+import { GradesConflictsPanel } from './GradesConflictsPanel';
+import { GradesRegistrationAudit } from './GradesRegistrationAudit';
+import {
+  DetectedStudent, FieldDecision, RegistrationDecision, Resolution, ResolutionAction,
+  defaultRegistrationDecision, isResolved, needsResolution,
+} from './gradesConflicts';
 
 interface ImportIssue {
   level: 'error' | 'warning' | 'info';
@@ -112,6 +119,11 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
   const [subjects, setSubjects] = useState<ParsedSubject[]>([]);
   const [periods, setPeriods] = useState<ParsedPeriod[]>([]);
   const [classStudents, setClassStudents] = useState<{ id: string; full_name: string }[]>([]);
+  const [detected, setDetected] = useState<DetectedStudent[]>([]);
+  const [missingInPdf, setMissingInPdf] = useState<{ id: string; full_name: string; student_id?: string | null }[]>([]);
+  const [resolutions, setResolutions] = useState<Record<string, Resolution>>({});
+  const [regDecisions, setRegDecisions] = useState<Record<string, RegistrationDecision>>({});
+  const [reviewTab, setReviewTab] = useState('conflicts');
   const [expectedSubjects, setExpectedSubjects] = useState<{ id: string; name: string; weekly_classes: number }[]>([]);
   const [conflictKeys, setConflictKeys] = useState<Set<string>>(new Set());
   const [conflictStrategy, setConflictStrategy] = useState<'keep' | 'overwrite'>('keep');
@@ -126,6 +138,11 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
     setRows([]);
     setSubjects([]);
     setPeriods([]);
+    setDetected([]);
+    setMissingInPdf([]);
+    setResolutions({});
+    setRegDecisions({});
+    setReviewTab('conflicts');
     setConflictKeys(new Set());
     setConflictStrategy('keep');
     setSavedCount(0);
