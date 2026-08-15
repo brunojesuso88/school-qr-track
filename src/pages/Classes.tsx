@@ -133,6 +133,8 @@ const Classes = () => {
   const { userRole } = useAuth();
   const canViewGuardianPhone = userRole === 'admin' || userRole === 'direction';
   const canManageGrades = userRole === 'admin' || userRole === 'direction';
+  // Professor não pode excluir turmas (também bloqueado por RLS no backend)
+  const canDeleteClasses = userRole === 'admin' || userRole === 'direction';
   const [classes, setClasses] = useState<ClassItem[]>([]);
   const [studentCounts, setStudentCounts] = useState<Record<string, number>>({});
   const [classesWithAttendance, setClassesWithAttendance] = useState<Set<string>>(new Set());
@@ -316,6 +318,10 @@ const Classes = () => {
   };
 
   const handleDelete = async (id: string) => {
+    if (!canDeleteClasses) {
+      toast.error('Acesso negado: apenas administração e direção podem excluir turmas.');
+      return;
+    }
     if (!confirm('Tem certeza que deseja excluir esta turma?')) return;
 
     try {
@@ -1016,9 +1022,11 @@ const Classes = () => {
                       <Edit2 className="w-3 h-3 mr-1" />
                       Editar
                     </Button>
-                    <Button variant="ghost" size="sm" onClick={() => handleDelete(classItem.id)}>
-                      <Trash2 className="w-3 h-3 text-destructive" />
-                    </Button>
+                    {canDeleteClasses && (
+                      <Button variant="ghost" size="sm" onClick={() => handleDelete(classItem.id)}>
+                        <Trash2 className="w-3 h-3 text-destructive" />
+                      </Button>
+                    )}
                   </div>
                 </CardContent>
               </Card>

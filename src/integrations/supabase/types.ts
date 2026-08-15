@@ -1037,14 +1037,17 @@ export type Database = {
           class: string
           created_at: string | null
           created_by: string | null
+          father_name: string | null
           full_name: string
           guardian_name: string | null
           guardian_phone: string | null
           has_medical_report: boolean
           id: string
           medical_report_details: string | null
+          mother_name: string | null
           photo_url: string | null
           qr_code: string | null
+          school_code: string | null
           shift: Database["public"]["Enums"]["student_shift"]
           status: string | null
           student_id: string
@@ -1063,14 +1066,17 @@ export type Database = {
           class: string
           created_at?: string | null
           created_by?: string | null
+          father_name?: string | null
           full_name: string
           guardian_name?: string | null
           guardian_phone?: string | null
           has_medical_report?: boolean
           id?: string
           medical_report_details?: string | null
+          mother_name?: string | null
           photo_url?: string | null
           qr_code?: string | null
+          school_code?: string | null
           shift?: Database["public"]["Enums"]["student_shift"]
           status?: string | null
           student_id: string
@@ -1089,14 +1095,17 @@ export type Database = {
           class?: string
           created_at?: string | null
           created_by?: string | null
+          father_name?: string | null
           full_name?: string
           guardian_name?: string | null
           guardian_phone?: string | null
           has_medical_report?: boolean
           id?: string
           medical_report_details?: string | null
+          mother_name?: string | null
           photo_url?: string | null
           qr_code?: string | null
+          school_code?: string | null
           shift?: Database["public"]["Enums"]["student_shift"]
           status?: string | null
           student_id?: string

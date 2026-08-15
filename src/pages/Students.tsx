@@ -77,6 +77,8 @@ const Students = () => {
   const classFromUrl = searchParams.get('class');
   const { userRole } = useAuth();
   const canViewGuardianPhone = userRole === 'admin' || userRole === 'direction';
+  // Professor não pode excluir alunos (também bloqueado por RLS no backend)
+  const canDeleteStudents = userRole === 'admin' || userRole === 'direction';
   
   const [students, setStudents] = useState<Student[]>([]);
   const [classes, setClasses] = useState<ClassItem[]>([]);
@@ -491,6 +493,10 @@ const Students = () => {
   };
 
   const handleDelete = async (id: string) => {
+    if (!canDeleteStudents) {
+      toast.error('Acesso negado: apenas administração e direção podem excluir alunos.');
+      return;
+    }
     if (!confirm('Tem certeza que deseja excluir este aluno?')) return;
 
     try {
@@ -1005,9 +1011,11 @@ const Students = () => {
                     <Button variant="ghost" size="sm" onClick={() => handleEdit(student)}>
                       <Edit2 className="w-3 h-3" />
                     </Button>
-                    <Button variant="ghost" size="sm" onClick={() => handleDelete(student.id)}>
-                      <Trash2 className="w-3 h-3 text-destructive" />
-                    </Button>
+                    {canDeleteStudents && (
+                      <Button variant="ghost" size="sm" onClick={() => handleDelete(student.id)}>
+                        <Trash2 className="w-3 h-3 text-destructive" />
+                      </Button>
+                    )}
                   </div>
                 </CardContent>
               </Card>

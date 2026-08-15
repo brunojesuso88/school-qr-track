@@ -9,8 +9,15 @@ import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Loader2, Upload, FileText, AlertTriangle, CheckCircle2, Info, GraduationCap } from 'lucide-react';
 import { GradesReviewTable, ReviewRow } from './GradesReviewTable';
+import { GradesConflictsPanel } from './GradesConflictsPanel';
+import { GradesRegistrationAudit } from './GradesRegistrationAudit';
+import {
+  DetectedStudent, FieldDecision, RegistrationDecision, Resolution, ResolutionAction,
+  defaultRegistrationDecision, isResolved, needsResolution,
+} from './gradesConflicts';
 
 interface ImportIssue {
   level: 'error' | 'warning' | 'info';
@@ -112,6 +119,11 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
   const [subjects, setSubjects] = useState<ParsedSubject[]>([]);
   const [periods, setPeriods] = useState<ParsedPeriod[]>([]);
   const [classStudents, setClassStudents] = useState<{ id: string; full_name: string }[]>([]);
+  const [detected, setDetected] = useState<DetectedStudent[]>([]);
+  const [missingInPdf, setMissingInPdf] = useState<{ id: string; full_name: string; student_id?: string | null }[]>([]);
+  const [resolutions, setResolutions] = useState<Record<string, Resolution>>({});
+  const [regDecisions, setRegDecisions] = useState<Record<string, RegistrationDecision>>({});
+  const [reviewTab, setReviewTab] = useState('conflicts');
   const [expectedSubjects, setExpectedSubjects] = useState<{ id: string; name: string; weekly_classes: number }[]>([]);
   const [conflictKeys, setConflictKeys] = useState<Set<string>>(new Set());
   const [conflictStrategy, setConflictStrategy] = useState<'keep' | 'overwrite'>('keep');
@@ -126,6 +138,11 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
     setRows([]);
     setSubjects([]);
     setPeriods([]);
+    setDetected([]);
+    setMissingInPdf([]);
+    setResolutions({});
+    setRegDecisions({});
+    setReviewTab('conflicts');
     setConflictKeys(new Set());
     setConflictStrategy('keep');
     setSavedCount(0);
@@ -202,11 +219,15 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
       // Alunos da turma
       const { data: studentsData, error: studentsError } = await supabase
         .from('students')
-        .select('id, full_name, student_id')
+        .select('id, full_name, student_id, school_code, birth_date, mother_name, father_name')
         .eq('class', classItem.name)
         .order('full_name');
       if (studentsError) throw studentsError;
-      const students = (studentsData || []) as { id: string; full_name: string; student_id: string }[];
+      const students = (studentsData || []) as {
+        id: string; full_name: string; student_id: string;
+        school_code: string | null; birth_date: string | null;
+        mother_name: string | null; father_name: string | null;
+      }[];
       setClassStudents(students.map((s) => ({ id: s.id, full_name: s.full_name })));
 
       // Disciplinas esperadas (mapeamento escolar, quando vinculado)
@@ -229,7 +250,15 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
           fileName: file.name,
           class_id: classItem.id,
           class_code: classItem.name,
-          students: students.map((s) => ({ id: s.id, full_name: s.full_name, student_id: s.student_id })),
+          students: students.map((s) => ({
+            id: s.id,
+            full_name: s.full_name,
+            student_id: s.student_id,
+            school_code: s.school_code,
+            birth_date: s.birth_date,
+            mother_name: s.mother_name,
+            father_name: s.father_name,
+          })),
           expected_subjects: expected.map((s) => ({ name: s.name, weekly_classes: s.weekly_classes })),
         },
       });
@@ -245,6 +274,19 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
       setPeriods(data.periods || []);
       setStats(data.stats || null);
       setIssues(data.issues || []);
+
+      const detectedList: DetectedStudent[] = (data.detected_students || []).map((d: DetectedStudent) => ({
+        ...d,
+        conflicts: d.conflicts || [],
+        pages: d.pages || [],
+      }));
+      setDetected(detectedList);
+      setMissingInPdf(data.students_missing_in_pdf || []);
+      const initialDecisions: Record<string, RegistrationDecision> = {};
+      detectedList.forEach((d) => { initialDecisions[d.key] = defaultRegistrationDecision(d); });
+      setRegDecisions(initialDecisions);
+      setResolutions({});
+      setReviewTab(detectedList.some((d) => needsResolution(d)) ? 'conflicts' : 'grades');
       await loadConflicts(classItem.id, parsedRows, data.subjects || [], data.periods || []);
       setStep('review');
     } catch (e) {
@@ -288,9 +330,50 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
   };
 
   const blockingCount = useMemo(
-    () => rows.filter((r) => r.flags.includes('invalid_value') || (!r.student_id && (r.value != null || r.raw_value))).length,
-    [rows],
+    () => rows.filter((r) => {
+      if (r.flags.includes('invalid_value')) return true;
+      if (r.student_id) return false;
+      const res = resolutions[normalize(r.student_name)];
+      if (res?.action === 'ignore' || res?.action === 'create') return false;
+      return r.value != null || Boolean(r.raw_value);
+    }).length,
+    [rows, resolutions],
   );
+
+  const handleResolve = (key: string, action: ResolutionAction, studentId?: string | null) => {
+    setResolutions((prev) => ({ ...prev, [key]: { action, student_id: action === 'link' || action === 'confirm' ? studentId ?? null : null } }));
+    if (action === 'link' || action === 'confirm') {
+      const student = classStudents.find((s) => s.id === studentId);
+      setRows((prev) => prev.map((row) => (normalize(row.student_name) === key
+        ? {
+          ...row,
+          student_id: studentId ?? null,
+          matched_name: student?.full_name ?? row.matched_name,
+          flags: [...new Set([...row.flags.filter((f) => f !== 'unmatched_student'), action === 'link' ? 'manual' : 'fuzzy_student_match'])],
+        }
+        : row)));
+    } else {
+      setRows((prev) => prev.map((row) => (normalize(row.student_name) === key
+        ? { ...row, student_id: null, matched_name: null }
+        : row)));
+    }
+    setDetected((prev) => prev.map((d) => (d.key === key
+      ? { ...d, student_id: action === 'link' || action === 'confirm' ? studentId ?? null : null }
+      : d)));
+  };
+
+  const handleRegistrationDecision = (key: string, field: keyof RegistrationDecision, decision: FieldDecision) => {
+    setRegDecisions((prev) => ({
+      ...prev,
+      [key]: { ...(prev[key] ?? { code: 'keep', birth_date: 'keep', mother: 'keep', father: 'keep' }), [field]: decision },
+    }));
+  };
+
+  const pendingConflicts = useMemo(
+    () => detected.filter((d) => needsResolution(d) && !isResolved(d, resolutions[d.key])),
+    [detected, resolutions],
+  );
+
   const importableRows = useMemo(() => rows.filter((r) => r.student_id && !r.flags.includes('invalid_value')), [rows]);
   const hasConflicts = useMemo(
     () => importableRows.some((r) => conflictKeys.has(`${r.student_id}||${r.subject}||${r.period}`)),
@@ -304,6 +387,38 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
     try {
       const { data: userData } = await supabase.auth.getUser();
       const userId = userData?.user?.id ?? null;
+
+      // 0. Alunos novos criados a partir do boletim (ação "Cadastrar novo aluno")
+      const shiftCode = classItem.shift === 'morning' ? 'M' : classItem.shift === 'afternoon' ? 'T' : 'N';
+      const createdIdByKey = new Map<string, string>();
+      const toCreate = detected.filter((d) => resolutions[d.key]?.action === 'create');
+      for (const d of toCreate) {
+        const initials = d.pdf_name.trim().split(/\s+/).filter(Boolean).map((p) => p[0].toUpperCase()).join('');
+        const { data: created, error: createError } = await supabase
+          .from('students')
+          .insert({
+            full_name: d.pdf_name,
+            student_id: `${initials}-${classItem.name}-${shiftCode}`,
+            class: classItem.name,
+            shift: classItem.shift as never,
+            qr_code: `STU-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`,
+            school_code: d.pdf_code,
+            birth_date: d.pdf_birth_date,
+            mother_name: d.pdf_mother_name,
+            father_name: d.pdf_father_name,
+            created_by: userId,
+          })
+          .select('id')
+          .single();
+        if (createError) throw createError;
+        createdIdByKey.set(d.key, created.id);
+      }
+
+      const rowsToSave = rows.map((row) => {
+        const key = normalize(row.student_name);
+        const createdId = createdIdByKey.get(key);
+        return createdId ? { ...row, student_id: createdId } : row;
+      });
 
       // 1. Períodos
       const periodPayload = periods.map((p) => ({
@@ -362,6 +477,17 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
       (subjectRows || []).forEach((s: { id: string; normalized_name: string }) => subjectIdByNorm.set(s.normalized_name, s.id));
 
       // 3. Registro da importação (histórico)
+      const auditResolutions = detected
+        .filter((d) => needsResolution(d))
+        .map((d) => ({
+          pdf_name: d.pdf_name,
+          pdf_code: d.pdf_code,
+          pages: d.pages,
+          conflicts: d.conflicts,
+          action: resolutions[d.key]?.action ?? null,
+          linked_student_id: createdIdByKey.get(d.key) ?? resolutions[d.key]?.student_id ?? null,
+        }));
+
       const { data: importRow, error: importError } = await supabase
         .from('grade_imports')
         .insert({
@@ -369,7 +495,7 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
           file_name: fileName,
           status: 'confirmed',
           conflict_strategy: conflictStrategy,
-          stats: (stats ?? {}) as never,
+          stats: { ...(stats ?? {}), student_resolutions: auditResolutions } as never,
           issues: issues as never,
           created_by: userId,
         })
@@ -378,7 +504,8 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
       if (importError) throw importError;
 
       // 4. Notas
-      const gradePayload = importableRows
+      const gradePayload = rowsToSave
+        .filter((r) => r.student_id && !r.flags.includes('invalid_value'))
         .map((row) => {
           const subjectId = subjectIdByNorm.get(normalize(row.subject));
           const periodId = periodIdByNorm.get(normalize(row.period));
@@ -410,9 +537,30 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
         if (gradesError) throw gradesError;
       }
 
+      // 5. Atualização cadastral (somente na confirmação final, conforme decisões do usuário)
+      let updatedRegistrations = 0;
+      for (const d of detected) {
+        const studentId = d.student_id;
+        if (!studentId || createdIdByKey.has(d.key)) continue;
+        const dec = regDecisions[d.key] ?? defaultRegistrationDecision(d);
+        const update: { school_code?: string; birth_date?: string; mother_name?: string; father_name?: string } = {};
+        if (d.pdf_code && dec.code === 'update') update.school_code = d.pdf_code;
+        if (d.pdf_birth_date && dec.birth_date === 'update') update.birth_date = d.pdf_birth_date;
+        if (d.pdf_mother_name && dec.mother === 'update') update.mother_name = d.pdf_mother_name;
+        if (d.pdf_father_name && dec.father === 'update') update.father_name = d.pdf_father_name;
+        if (Object.keys(update).length === 0) continue;
+        const { error: updError } = await supabase.from('students').update(update).eq('id', studentId);
+        if (updError) throw updError;
+        updatedRegistrations++;
+      }
+
       setSavedCount(finalPayload.length);
       setStep('done');
-      toast.success(`${finalPayload.length} nota(s) importada(s) para ${classItem.name}.`);
+      toast.success(
+        `${finalPayload.length} nota(s) importada(s) para ${classItem.name}.` +
+        (updatedRegistrations ? ` ${updatedRegistrations} cadastro(s) atualizado(s).` : '') +
+        (createdIdByKey.size ? ` ${createdIdByKey.size} aluno(s) cadastrado(s).` : ''),
+      );
       onImported?.();
     } catch (e) {
       console.error(e);
@@ -547,21 +695,50 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
               </div>
             )}
 
-            <div className="flex items-center justify-between gap-2 flex-wrap">
-              <p className="text-sm font-medium">Revisão ({rows.length} células)</p>
-              <div className="flex gap-2">
-                <Badge variant="outline">{importableRows.length} prontas para importar</Badge>
-                {blockingCount > 0 && <Badge variant="destructive">{blockingCount} exigem revisão</Badge>}
-              </div>
-            </div>
+            <Tabs value={reviewTab} onValueChange={setReviewTab}>
+              <TabsList className="w-full">
+                <TabsTrigger value="conflicts" className="flex-1 text-xs">
+                  Conflitos do boletim{pendingConflicts.length > 0 ? ` (${pendingConflicts.length})` : ''}
+                </TabsTrigger>
+                <TabsTrigger value="grades" className="flex-1 text-xs">Notas ({rows.length})</TabsTrigger>
+                <TabsTrigger value="registration" className="flex-1 text-xs">Atualização cadastral</TabsTrigger>
+              </TabsList>
 
-            <GradesReviewTable
-              rows={rows}
-              students={classStudents}
-              onChangeStudent={handleChangeStudent}
-              onChangeValue={handleChangeValue}
-              conflictKeys={conflictKeys}
-            />
+              <TabsContent value="conflicts" className="mt-3">
+                <GradesConflictsPanel
+                  detected={detected}
+                  missingInPdf={missingInPdf}
+                  classStudents={classStudents}
+                  resolutions={resolutions}
+                  onResolve={handleResolve}
+                />
+              </TabsContent>
+
+              <TabsContent value="grades" className="mt-3 space-y-3">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <p className="text-sm font-medium">Revisão ({rows.length} células)</p>
+                  <div className="flex gap-2">
+                    <Badge variant="outline">{importableRows.length} prontas para importar</Badge>
+                    {blockingCount > 0 && <Badge variant="destructive">{blockingCount} exigem revisão</Badge>}
+                  </div>
+                </div>
+                <GradesReviewTable
+                  rows={rows}
+                  students={classStudents}
+                  onChangeStudent={handleChangeStudent}
+                  onChangeValue={handleChangeValue}
+                  conflictKeys={conflictKeys}
+                />
+              </TabsContent>
+
+              <TabsContent value="registration" className="mt-3">
+                <GradesRegistrationAudit
+                  entries={detected}
+                  decisions={regDecisions}
+                  onDecide={handleRegistrationDecision}
+                />
+              </TabsContent>
+            </Tabs>
           </div>
         )}
 
@@ -579,7 +756,15 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
           {step === 'review' && (
             <>
               <Button variant="outline" onClick={() => handleClose(false)}>Cancelar (não grava nada)</Button>
-              <Button onClick={handleConfirm} disabled={importableRows.length === 0 || blockingCount > 0}>
+              {pendingConflicts.length > 0 && (
+                <p className="text-xs text-destructive mr-auto">
+                  Resolva os {pendingConflicts.length} conflito(s) de alunos para liberar a confirmação.
+                </p>
+              )}
+              <Button
+                onClick={handleConfirm}
+                disabled={importableRows.length === 0 || blockingCount > 0 || pendingConflicts.length > 0}
+              >
                 Confirmar importação
               </Button>
             </>

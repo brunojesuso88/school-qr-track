@@ -16,6 +16,10 @@ interface ClassStudent {
   id: string;
   full_name: string;
   student_id?: string | null;
+  school_code?: string | null;
+  birth_date?: string | null;
+  mother_name?: string | null;
+  father_name?: string | null;
 }
 
 interface ExpectedSubject {
@@ -40,7 +44,15 @@ interface ExtractionPayload {
   pages?: number | null;
   periods?: { label: string; kind?: string }[];
   subjects?: string[];
-  students?: (string | { name?: string; student_code?: string | null; class_code?: string | null; page?: number | null })[];
+  students?: (string | {
+    name?: string;
+    student_code?: string | null;
+    class_code?: string | null;
+    page?: number | null;
+    birth_date?: string | null;
+    mother_name?: string | null;
+    father_name?: string | null;
+  })[];
   rows?: ExtractedRow[];
   notes?: string[];
 }
@@ -162,13 +174,14 @@ REGRAS OBRIGATÓRIAS:
 8. Reporte também as colunas finais quando houver valor: use period exatamente "Média Final", "Rec. Final", "Cons. Class", "Pendência" ou "Final".
 9. Para cada linha informe student_name (exatamente como no PDF, com acentos), student_code (código/matrícula do cabeçalho quando existir), class_code (a Turma do cabeçalho) e page (1-based).
 10. confidence entre 0 e 1 = sua certeza da leitura daquela célula (use valor baixo quando o dígito estiver borrado/cortado ou a coluna for ambígua).
+11. Para CADA página/aluno, extraia também os DADOS CADASTRAIS do cabeçalho, quando existirem: "Código" (exatamente como aparece, sem remover zeros à esquerda), "Data de Nascimento" (formato ISO AAAA-MM-DD), "Mãe" e "Pai" (nomes completos). Se um campo não existir na página, use null. NUNCA invente nomes ou datas.
 
 Responda SOMENTE com JSON válido no formato:
 {
   "pages": number,
   "periods": [{"label": "1º Período", "kind": "period" | "final"}],
   "subjects": ["ARTE", "BIOLOGIA"],
-  "students": [{"name": "NOME DO ALUNO", "student_code": "123456", "class_code": "26RMM100", "page": 1}],
+  "students": [{"name": "NOME DO ALUNO", "student_code": "123456", "class_code": "26RMM100", "page": 1, "birth_date": "2009-03-14", "mother_name": "NOME DA MAE", "father_name": "NOME DO PAI"}],
   "rows": [{"student_name": "NOME", "student_code": "123456", "class_code": "26RMM100", "subject": "ARTE", "period": "1º Período", "note_raw": "3,17", "page": 1, "confidence": 0.98}],
   "notes": ["observações sobre cortes de linha, colunas ambíguas, páginas sem aluno"]
 }`;
@@ -549,6 +562,139 @@ serve(async (req) => {
     // dedupe flags
     reviewRows.forEach((r) => { r.flags = [...new Set(r.flags)]; });
 
+    // ---------- Conferência aluno-por-aluno (PDF × turma) + dados cadastrais ----------
+    const cleanText = (v: unknown) => {
+      const t = String(v ?? '').trim();
+      return t && !['-', '--', '—', 'null', 'n/a'].includes(t.toLowerCase()) ? t : null;
+    };
+    const isoDate = (v: unknown) => {
+      const t = cleanText(v);
+      if (!t) return null;
+      const iso = t.match(/^(\d{4})-(\d{2})-(\d{2})/);
+      if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+      const br = t.match(/^(\d{2})[\/.-](\d{2})[\/.-](\d{4})/);
+      if (br) return `${br[3]}-${br[2]}-${br[1]}`;
+      return null;
+    };
+
+    type DetectedStudent = {
+      key: string;
+      pdf_name: string;
+      pdf_code: string | null;
+      pdf_birth_date: string | null;
+      pdf_mother_name: string | null;
+      pdf_father_name: string | null;
+      pages: number[];
+      cells: number;
+      student_id: string | null;
+      matched_name: string | null;
+      match_score: number;
+      status: 'matched' | 'fuzzy' | 'unmatched';
+      conflicts: string[];
+      current: {
+        school_code: string | null;
+        birth_date: string | null;
+        mother_name: string | null;
+        father_name: string | null;
+        student_id: string | null;
+      } | null;
+    };
+
+    const headerByNorm = new Map<string, { code: string | null; birth: string | null; mother: string | null; father: string | null }>();
+    for (const s of payload.students || []) {
+      if (typeof s === 'string') continue;
+      const norm = normalize(s?.name ?? '');
+      if (!norm) continue;
+      headerByNorm.set(norm, {
+        code: cleanText(s?.student_code),
+        birth: isoDate(s?.birth_date),
+        mother: cleanText(s?.mother_name),
+        father: cleanText(s?.father_name),
+      });
+    }
+
+    const detectedMap = new Map<string, DetectedStudent>();
+    for (const row of reviewRows) {
+      const norm = normalize(row.student_name);
+      if (!norm) continue;
+      let entry = detectedMap.get(norm);
+      if (!entry) {
+        const header = headerByNorm.get(norm);
+        const matched = studentIndex.find((s) => s.id === row.student_id) ?? null;
+        let best: (typeof studentIndex)[number] | null = matched;
+        let score = matched ? similarity(norm, matched.norm) : 0;
+        if (!matched) {
+          for (const s of studentIndex) {
+            const sc = similarity(norm, s.norm);
+            if (sc > score) { score = sc; best = s; }
+          }
+        }
+        const status: DetectedStudent['status'] = score >= 0.97 ? 'matched' : score >= 0.85 ? 'fuzzy' : 'unmatched';
+        entry = {
+          key: norm,
+          pdf_name: row.student_name,
+          pdf_code: header?.code ?? row.student_code ?? null,
+          pdf_birth_date: header?.birth ?? null,
+          pdf_mother_name: header?.mother ?? null,
+          pdf_father_name: header?.father ?? null,
+          pages: [],
+          cells: 0,
+          student_id: status === 'unmatched' ? null : best?.id ?? null,
+          matched_name: status === 'unmatched' ? null : best?.full_name ?? null,
+          match_score: Number(score.toFixed(3)),
+          status,
+          conflicts: [],
+          current: status === 'unmatched' || !best ? null : {
+            school_code: best.school_code ?? null,
+            birth_date: best.birth_date ?? null,
+            mother_name: best.mother_name ?? null,
+            father_name: best.father_name ?? null,
+            student_id: best.student_id ?? null,
+          },
+        };
+        if (status === 'unmatched') entry.conflicts.push('not_in_class');
+        if (status === 'fuzzy') entry.conflicts.push('name_similar');
+        detectedMap.set(norm, entry);
+      }
+      entry.cells++;
+      if (row.source_page != null && !entry.pages.includes(row.source_page)) entry.pages.push(row.source_page);
+    }
+
+    const detectedStudents = [...detectedMap.values()];
+    // divergências cadastrais e código escolar
+    for (const d of detectedStudents) {
+      d.pages.sort((a, b) => a - b);
+      if (d.pages.length > 1) d.conflicts.push('multiple_pages');
+      if (!d.current) continue;
+      if (d.pdf_code && d.current.school_code && normalize(d.pdf_code) !== normalize(d.current.school_code)) {
+        d.conflicts.push('code_mismatch');
+      }
+      if (d.pdf_birth_date && d.current.birth_date && d.pdf_birth_date !== d.current.birth_date) {
+        d.conflicts.push('birth_date_mismatch');
+      }
+      if (d.pdf_mother_name && d.current.mother_name && similarity(normalize(d.pdf_mother_name), normalize(d.current.mother_name)) < 0.9) {
+        d.conflicts.push('mother_mismatch');
+      }
+      if (d.pdf_father_name && d.current.father_name && similarity(normalize(d.pdf_father_name), normalize(d.current.father_name)) < 0.9) {
+        d.conflicts.push('father_mismatch');
+      }
+    }
+    // possíveis duplicidades: dois nomes do PDF apontando para o mesmo aluno cadastrado
+    const byStudentId = new Map<string, DetectedStudent[]>();
+    detectedStudents.forEach((d) => {
+      if (!d.student_id) return;
+      if (!byStudentId.has(d.student_id)) byStudentId.set(d.student_id, []);
+      byStudentId.get(d.student_id)!.push(d);
+    });
+    byStudentId.forEach((list, id) => {
+      if (list.length > 1) {
+        list.forEach((d) => d.conflicts.push('duplicate_link'));
+        addIssue('error', 'duplicate_link', `Mais de um aluno do PDF (${list.map((d) => d.pdf_name).join(' / ')}) foi vinculado ao mesmo aluno cadastrado.`);
+      }
+      void id;
+    });
+    detectedStudents.forEach((d) => { d.conflicts = [...new Set(d.conflicts)]; });
+
     const stats = {
       pages: declaredPages,
       students_detected: pdfStudentNames.size,
@@ -579,7 +725,12 @@ serve(async (req) => {
       periods: [...periodMap.entries()].map(([norm, p], idx) => ({ normalized_label: norm, label: p.label, kind: p.kind, sort_order: idx })),
       subjects: [...subjectMap.entries()].map(([norm, s], idx) => ({ normalized_name: norm, name: s.name, weekly_classes: s.weekly_classes, matched_expected: s.matched_expected, sort_order: idx })),
       rows: reviewRows,
-      students_missing_in_pdf: missingStudents.map((s) => ({ id: s.id, full_name: s.full_name })),
+      detected_students: detectedStudents,
+      students_missing_in_pdf: missingStudents.map((s) => ({
+        id: s.id,
+        full_name: s.full_name,
+        student_id: s.student_id ?? null,
+      })),
     });
   } catch (error) {
     console.error('parse-grades-pdf erro:', error);
