@@ -71,7 +71,20 @@ interface GradesImportDialogProps {
   onImported?: () => void;
 }
 
-type Step = 'select' | 'processing' | 'class-conflict' | 'review' | 'saving' | 'done';
+type Step = 'select' | 'processing' | 'class-conflict' | 'review' | 'saving' | 'done' | 'failed';
+
+interface JobProgress {
+  job_id: string;
+  status: 'queued' | 'processing' | 'completed' | 'failed' | 'cancelled';
+  progress: number;
+  total_pages: number;
+  total_chunks: number;
+  completed_chunks: number;
+  failed_chunks: number;
+  current_chunk: number | null;
+  failed_pages: number[];
+  error_message: string | null;
+}
 
 const normalize = (s: unknown) =>
   String(s ?? '')
