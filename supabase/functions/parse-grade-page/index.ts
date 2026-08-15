@@ -17,10 +17,13 @@ const corsHeaders = {
  */
 
 const MAX_PDF_SIZE_BYTES = 15 * 1024 * 1024;
-const PRIMARY_MODEL = 'google/gemini-2.5-pro';
-const FALLBACK_MODEL = 'google/gemini-2.5-flash';
-const GATEWAY_TIMEOUT_MS = 60_000;
-const ATTEMPTS = 3;
+/** Leitura normal: Flash (rápido). Pro só entra como 2ª leitura em caso de dúvida. */
+const FAST_MODEL = 'google/gemini-2.5-flash';
+const ESCALATION_MODEL = 'google/gemini-2.5-pro';
+const FAST_TIMEOUT_MS = 45_000;
+const ESCALATION_TIMEOUT_MS = 70_000;
+/** Limiar de confiança abaixo do qual a página é reencaminhada ao modelo Pro. */
+const CONFIDENCE_ESCALATION_THRESHOLD = 0.85;
 
 interface ClassStudent {
   id: string;
