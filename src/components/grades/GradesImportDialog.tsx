@@ -278,7 +278,7 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
     (async () => {
       const { data } = await supabase
         .from('grade_import_sessions')
-        .select('id, file_name, total_pages, current_page, confirmed_pages, ignored_pages, notes_imported, status')
+        .select('id, file_name, total_pages, current_page, confirmed_pages, ignored_pages, notes_imported, status, auto_accept')
         .eq('class_id', classItem.id)
         .in('status', ['processing_page', 'awaiting_confirmation'])
         .order('created_at', { ascending: false })
@@ -293,7 +293,9 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
         confirmed_pages: data.confirmed_pages,
         ignored_pages: data.ignored_pages,
         notes_imported: data.notes_imported,
+        auto_accept: Boolean(data.auto_accept),
       });
+      setAutoAccept(Boolean(data.auto_accept));
       setStep('resume');
     })();
     return () => { cancelled = true; };
