@@ -1,55 +1,73 @@
-# Auditoria: “Inserir boletim da turma” não abre a tela de revisão
+# IRA multi-período: plano técnico
 
-## A) Causa raiz provável (com evidências)
+## Estado atual verificado (consultas ao banco, agosto/2026)
 
-A Edge Function `parse-grades-pdf` é **morta pelo runtime antes de responder** no PDF real de 45 páginas. Logo, `supabase.functions.invoke` nunca retorna sucesso e a tela de revisão nunca é montada.
+- 22 turmas cadastradas, **1** com boletim importado (`grade_subjects`), **1** linha em `ira_settings`.
+- **6.480** notas em `student_grades` — acima do limite padrão de 1.000 linhas por requisição do backend, o que trunca silenciosamente a busca de notas em lote (causa confirmada do IRA "—" nos cards).
+- Nenhum aluno com `students.class` sem turma correspondente em `classes` (o vínculo por nome está íntegro hoje, mas é frágil).
+- A coluna `ira_period_ids uuid[]` já existe em `ira_settings` e a configuração antiga (`ira_period_id`) já foi convertida para o formato de lista.
 
-Evidências:
-- Logs da função (execuções de 02:17 e 02:19 UTC de hoje): `PDF dividido em 9 bloco(s) de até 5 páginas` seguido apenas de `shutdown` — **nenhum log de conclusão, nenhum erro de bloco, nenhuma resposta**. As duas tentativas morreram no meio da extração.
-- `supabase/functions/parse-grades-pdf/index.ts:17-18`: `CHUNK_PAGES = 5`, `CHUNK_CONCURRENCY = 4` → 45 páginas = 9 blocos em 3 ondas de chamadas de IA multimodais (cada uma dezenas de segundos), somando facilmente mais que o limite de execução/idle.
-- `index.ts:330-397`: a resposta só é montada **depois** que todos os blocos terminam; não há resposta parcial nem streaming/keep-alive, então o cliente fica sem nenhum byte até o fim (idle timeout).
-- `src/components/grades/GradesImportDialog.tsx:304-308`: qualquer erro/timeout cai no `catch`, seta `error` e **volta o step para `select`** — o usuário vê o seletor de arquivo de novo e interpreta como “a conferência não abriu”.
-- `GradesImportDialog.tsx:722-726`: durante `processing` só existe um spinner sem progresso nem tempo estimado, reforçando a sensação de travamento.
+## Escopo
 
-Ou seja: o fluxo de revisão em si (`class-conflict` / `review`, `GradesClassMismatchPanel`, `GradesConflictsPanel`, `GradesReviewTable`) está correto — ele simplesmente nunca é alcançado.
+### 1. Configurações → IRA por turma, com visão de todas as turmas
+- Seletor lista **todas** as 22 turmas, cada uma com status: "sem boletim", "IRA não configurado" ou configurada.
+- Resumo textual: total de turmas, quantas têm boletim, quantas têm IRA configurado.
+- Configuração continua **efetiva por turma** (uma linha por turma em `ira_settings`).
+- Ação "Aplicar a todas as turmas": replica a seleção atual para todas as turmas com boletim, casando os períodos pelo rótulo normalizado (ex.: "1º Período"); turmas sem período equivalente são ignoradas e reportadas.
 
-## B) Outras falhas relevantes
+### 2. Múltiplos períodos
+- Seleção por caixas de marcação (vários bimestres) e "Nota Final" como alternativa **exclusiva** (ao marcar Nota Final, a seleção de bimestres é limpa e desabilitada).
+- Regra de cálculo: para cada disciplina selecionada, média aritmética das notas dos períodos escolhidos, com nota ausente valendo 0,00 **apenas no cálculo**; depois média ponderada entre disciplinas com pesos 1/2/4 ou peso personalizado.
+- Persistência: `ira_period_ids` (lista) + `ira_period_id` preenchido com o primeiro item, mantendo compatibilidade com leituras antigas.
+- Leitura com precedência: Nota Final → `ira_period_ids` → `ira_period_id` (legado).
 
-1. **Perda total do trabalho parcial**: se 8 de 9 blocos forem lidos, o timeout descarta tudo; não há persistência intermediária.
-2. **Chunk sem retry**: `index.ts:354-383` marca o bloco como falho no primeiro erro HTTP (429/5xx) sem nova tentativa; 4 chamadas simultâneas aumentam a chance de 429.
-3. **Reconciliação já desativada em PDF longo** (`index.ts:644-646`) — sintoma de que o orçamento de tempo já estava no limite antes desta alteração.
-4. **UX de erro**: voltar para `select` apaga o contexto; a mensagem não distingue timeout de PDF inválido, de créditos de IA (402) ou de permissão.
-5. **Permissões**: a função exige role `admin`/`direction` (`index.ts:308`). Professor que clicar em “Inserir boletim” recebe 403 e o mesmo retorno silencioso para `select`. `supabase/config.toml` já tem `verify_jwt = false` com validação em código — correto.
-6. **Payload grande em memória**: base64 do PDF completo + 9 cópias recortadas + 9 base64 de bloco em memória simultaneamente; risco adicional de pressão de memória em PDFs próximos de 10MB.
-7. **`class_codes` vindo de blocos distintos** pode conter variações de leitura do mesmo código, disparando o painel de divergência de turma sem necessidade.
+### 3. Correção do IRA no card (Students)
+- Card e detalhe do aluno passam a chamar exatamente a mesma função de cálculo.
+- Busca de notas paginada (blocos de 1.000) para eliminar o truncamento; filtro por aluno aplicado na consulta apenas quando a lista é curta, e em memória quando é longa (evita URL gigante).
+- Vínculo aluno→turma por nome exato com alternativa por nome normalizado; nomes duplicados e turmas inexistentes são registrados no console e devolvidos pelo hook em vez de resultar em IRA vazio.
+- Erros de consulta deixam de ser engolidos: o hook expõe estado de erro.
+- Custo mantido em poucas consultas por lista (turmas, disciplinas, períodos, configuração, notas paginadas), independente da quantidade de alunos.
 
-## C) Solução recomendada (robusta para 45+ páginas)
+### 4. Motor único
+- Todo o cálculo multi-período fica em `src/lib/ira.ts`; hooks e telas apenas montam entradas e exibem resultados.
 
-Trocar a chamada síncrona por um **job assíncrono com progresso**, mantendo intacta a lógica de conferência já aprovada:
+### 5. "—" com motivo
+- O card mostra "—" apenas quando não há configuração de períodos, nenhuma disciplina marcada ou nenhuma disciplina com peso válido; o tooltip traz o motivo exato.
 
-- Nova tabela `grade_import_jobs` (status, total de blocos, blocos concluídos, payload parcial, resultado final, erro), com RLS para `admin`/`direction` e GRANTs.
-- `parse-grades-pdf` passa a **criar o job e responder imediatamente** (`202` + `job_id`), continuando o trabalho em background (`EdgeRuntime.waitUntil`), gravando cada bloco concluído no job. Assim nenhum timeout de request derruba a extração.
-- O diálogo consulta o job (polling/realtime) e mostra **progresso real** (“bloco 4 de 9 · páginas 16-20”), depois carrega o resultado e segue para `class-conflict`/`review` como hoje.
-- **Resiliência por bloco**: retry com backoff em 429/5xx, blocos de 3 páginas e concorrência 3 (mais chamadas curtas em vez de poucas longas), e resultado aproveitável mesmo com bloco faltando — as páginas não lidas são listadas como erro na auditoria.
-- **Erro nunca volta para `select`**: novo step `failed`, com a causa (timeout, créditos, permissão, PDF inválido) e botão “Tentar novamente” reaproveitando o mesmo arquivo.
-- Regras de negócio preservadas: Faltas ignoradas, célula vazia ≠ 0 no armazenamento, zero virtual só no IRA quando a disciplina estiver selecionada.
+### 6. Banco
+- `ira_settings.ira_period_ids uuid[]` (já aplicada) e tipos regenerados.
 
-## D) Plano de implementação por etapas
+## Arquivos e tabelas
 
-1. **Migração**: `grade_import_jobs` + RLS + GRANTs (`authenticated` para admin/direção via policies, `service_role` completo).
-2. **Edge Function**: divisão em job assíncrono; resposta imediata com `job_id`; extração em background por bloco com retry; gravação incremental; montagem do resultado final no job. Blocos de 3 páginas, concorrência 3.
-3. **Cliente**: `handleFile` cria o job e entra em `processing` com barra de progresso; polling do job; ao concluir, aplica exatamente a lógica atual de `detected_students`, auditoria cadastral e divergência de turma.
-4. **Tratamento de erro**: step `failed` com mensagem por causa e retry; deduplicar `class_codes` por normalização antes de disparar o painel de divergência.
-5. **Permissões na UI**: esconder/desabilitar “Inserir boletim da turma” para professor, evitando o 403 silencioso.
-6. **Verificação**: typecheck, deploy da função e leitura dos logs de uma execução completa.
+| Arquivo / tabela | Mudança |
+| --- | --- |
+| `src/lib/ira.ts` | Motor único multi-período: média por disciplina, ponderação, motivos, períodos selecionados |
+| `src/hooks/useStudentGrades.ts` | Resolução de períodos, montagem de entradas por período, busca paginada de notas |
+| `src/hooks/useStudentsIra.ts` | Cálculo em lote reutilizando o motor único; paginação; vínculo de turma resiliente; estado de erro |
+| `src/components/grades/StudentGradesTab.tsx` | Marca as colunas usadas no IRA e exibe a base do cálculo |
+| `src/components/grades/IRABreakdown.tsx` | Composição com nota de cada período, nota usada, peso e contribuição |
+| `src/components/settings/IRASettings.tsx` | Todas as turmas com status, seleção múltipla, Nota Final exclusiva, aplicar a todas |
+| `public.ira_settings` | `ira_period_ids uuid[]`, com dados antigos migrados |
 
-## E) Critérios objetivos de teste
+## Riscos
 
-1. PDF real de 45 páginas / 45 alunos (turma 26RMM100): o diálogo mostra progresso e **chega à tela de revisão**, sem 504.
-2. `stats.pages = 45` e alunos detectados = 45; nenhuma página listada como não lida.
-3. Nenhuma linha de nota com período contendo “Faltas”.
-4. Células vazias permanecem `null` na revisão (não 0,00) e “0,00” do PDF aparece como zero real.
-5. Divergência de turma: com PDF de outra turma, o painel de divergência abre e nada é gravado até a decisão.
-6. Conflitos de aluno pendentes bloqueiam o botão de confirmar importação.
-7. Erro forçado (créditos/permissão): aparece o step de falha com a causa e o botão de repetir — nunca volta silenciosamente ao seletor.
-8. Logs da função: um ciclo completo com todos os blocos concluídos e sem `shutdown` antes do fim.
+- **Vínculo por nome de turma**: `students.class` é texto; renomear turma ou nomes duplicados quebram o cálculo. Mitigação: correspondência normalizada e alerta explícito (vínculo por id fica como evolução futura).
+- **"Aplicar a todas as turmas"**: sobrescreve configuração existente das turmas com boletim. Mitigação: casamento por rótulo, relatório de turmas ignoradas e mensagem de confirmação.
+- **Nota ausente = 0,00**: pode derrubar o IRA de turmas com lançamento incompleto. Mitigação: aviso no card, no detalhe e na composição, com contagem de disciplinas afetadas.
+- **Volume de notas**: turmas grandes com muitos períodos aumentam o número de páginas buscadas. Mitigação: uma consulta paginada por lista, não por aluno.
+- **Compatibilidade**: telas antigas que leiam `ira_period_id` continuam funcionando porque o primeiro período é gravado nele.
+
+## Estratégia de teste
+
+1. **Consistência card × detalhe**: para a turma com boletim, comparar o IRA do card com o da aba Notas de vários alunos — devem ser idênticos.
+2. **Truncamento**: com 6.480 notas, confirmar que todos os alunos da turma recebem IRA (nenhum "—" indevido).
+3. **Multi-período**: selecionar 1º e 2º períodos e conferir manualmente uma disciplina (média dos dois períodos × peso) contra a composição exibida.
+4. **Nota ausente**: aluno com nota faltando em um período selecionado deve entrar com 0,00 no cálculo e continuar com "—" na aba Notas.
+5. **Exclusividade**: marcar Nota Final limpa e desabilita os bimestres; desmarcar volta a permitir a seleção múltipla.
+6. **Motivos do "—"**: turma sem configuração, turma sem disciplina marcada e disciplina com carga fora de 1/2/4 sem peso personalizado devem produzir tooltips distintos e corretos.
+7. **Aplicar a todas as turmas**: confirmar quantas turmas foram configuradas e que turmas sem períodos equivalentes foram apenas reportadas.
+8. **Regressão de pesos**: cargas 1/2/4 continuam automáticas; carga 3 exige peso personalizado para participar.
+
+## Observação
+
+As alterações descritas acima já foram implementadas na etapa anterior desta conversa, incluindo a migração de `ira_period_ids`. Ao aprovar este plano, a próxima etapa é a execução da bateria de testes acima e o ajuste dos pontos que ela revelar.
