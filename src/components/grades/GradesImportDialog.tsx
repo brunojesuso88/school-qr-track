@@ -429,6 +429,29 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
     invalidCount === 0 &&
     (pageAction === 'create' || (pageAction === 'link' && Boolean(linkStudentId)));
 
+  /** Avaliação estrita da autoaceitação da página atual (não grava nada). */
+  const autoEval = useMemo(() => {
+    if (!preview) return { eligible: false, reasons: [] as string[] };
+    return evaluateAutoAccept({
+      detected: preview.detected,
+      rows,
+      classDecisionPending: classDecision === 'pending',
+      pageHasExistingGrades: pageHasConflicts,
+      linkedStudentId: pageAction === 'link' ? linkStudentId : null,
+      suggestedStudentId: preview.detected.student_id,
+      regDecision,
+    });
+  }, [preview, rows, classDecision, pageHasConflicts, pageAction, linkStudentId, regDecision]);
+
+  /** Persiste a preferência na sessão para valer também ao retomar. */
+  const handleToggleAutoAccept = async (value: boolean) => {
+    setAutoAccept(value);
+    if (session) {
+      await supabase.from('grade_import_sessions').update({ auto_accept: value }).eq('id', session.id);
+      setSession((prev) => (prev ? { ...prev, auto_accept: value } : prev));
+    }
+  };
+
   /** Renomeia a turma para o nome do PDF (com auditoria) — nunca automático. */
   const handleRenameClass = async () => {
     if (!classItem || !preview?.pdf_class_code) return;
