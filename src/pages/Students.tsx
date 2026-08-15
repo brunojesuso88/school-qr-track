@@ -582,10 +582,10 @@ const Students = () => {
     const matchesOccurrence = !filterOccurrences || occurrenceMap.has(student.id);
     return matchesSearch && matchesClass && matchesShift && matchesOccurrence;
   }).sort((a, b) => {
-    if (sortByAbsences !== 'none') {
+    if (sortBy === 'absences-desc' || sortBy === 'absences-asc') {
       const ca = absenceCountMap.get(a.id) || 0;
       const cb = absenceCountMap.get(b.id) || 0;
-      return sortByAbsences === 'desc' ? cb - ca : ca - cb;
+      return sortBy === 'absences-desc' ? cb - ca : ca - cb;
     }
     if (!filterOccurrences) return 0;
     const dateA = occurrenceMap.get(a.id) || '';
@@ -598,7 +598,23 @@ const Students = () => {
     filteredStudents.map((s) => ({ id: s.id, class: s.class })),
   );
 
-  const uniqueClasses = [...new Set(students.map((s) => s.class))];
+  // Aplica ordenação por IRA após o carregamento dos valores (assíncrono)
+  const displayStudents = sortBy === 'ira-desc' || sortBy === 'ira-asc'
+    ? [...filteredStudents].sort((a, b) => {
+        const va = iraByStudent[a.id]?.value ?? null;
+        const vb = iraByStudent[b.id]?.value ?? null;
+        // Alunos sem IRA ficam por último em ambos os modos
+        if (va === null && vb === null) return 0;
+        if (va === null) return 1;
+        if (vb === null) return -1;
+        return sortBy === 'ira-desc' ? vb - va : va - vb;
+      })
+    : filteredStudents;
+
+  // Turmas em ordem alfabética
+  const uniqueClasses = [...new Set(students.map((s) => s.class))]
+    .filter((c) => c && c.trim() !== '')
+    .sort((a, b) => a.localeCompare(b, 'pt-BR', { sensitivity: 'base' }));
 
   const getOccurrenceTypeLabel = (type: string) => {
     return OCCURRENCE_TYPES.find(t => t.value === type)?.label || type;
