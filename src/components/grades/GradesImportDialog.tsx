@@ -636,9 +636,11 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
         })
         .filter(Boolean) as (Record<string, unknown> & { conflictKey: string })[];
 
+      // Idênticos já existentes: não regravar (idempotente). Divergentes seguem a estratégia escolhida.
+      const withoutIdentical = payload.filter((g) => !identicalKeys.has(g.conflictKey));
       const filtered = conflictStrategy === 'keep'
-        ? payload.filter((g) => !conflictKeys.has(g.conflictKey))
-        : payload;
+        ? withoutIdentical.filter((g) => !conflictKeys.has(g.conflictKey))
+        : withoutIdentical;
       const finalPayload = filtered.map(({ conflictKey, ...rest }) => rest);
 
       if (finalPayload.length > 0) {
