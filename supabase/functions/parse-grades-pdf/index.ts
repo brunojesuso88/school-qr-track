@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { requireAuth } from "../_shared/auth.ts";
 import { PDFDocument } from "npm:pdf-lib@1.17.1";
 
@@ -12,10 +13,22 @@ const MAX_PDF_SIZE_BYTES = MAX_PDF_SIZE_MB * 1024 * 1024;
 
 const PRIMARY_MODEL = 'google/gemini-2.5-pro';
 const FALLBACK_MODEL = 'google/gemini-2.5-flash';
-// Boletins SIAEP têm 1 página por aluno; PDFs grandes (40+ páginas) estouram o
-// idle timeout (150s) numa única chamada. Dividimos em blocos processados em paralelo.
-const CHUNK_PAGES = 5;
-const CHUNK_CONCURRENCY = 4;
+
+/**
+ * Boletins SIAEP têm 1 página por aluno. Um PDF de 45 páginas não pode ser lido
+ * numa única requisição HTTP (o runtime encerra a função antes da resposta).
+ * O processamento é feito por JOB incremental e idempotente:
+ *   action=create  -> cria o job e devolve 202 imediatamente
+ *   action=process -> processa até CHUNKS_PER_CALL blocos, persiste e retorna
+ *   action=status  -> devolve o progresso/resultado do job
+ * O frontend chama `process` repetidamente até status = completed | failed.
+ */
+const CHUNK_PAGES = 3;
+const CHUNK_CONCURRENCY = 3;
+const CHUNKS_PER_CALL = 3;
+const CHUNK_ATTEMPTS = 3;
+const MAX_RECONCILE_CELLS = 80;
+const MAX_RECONCILE_PAGES = 8;
 
 interface ClassStudent {
   id: string;
@@ -115,7 +128,6 @@ function similarity(a: string, b: string): number {
   const bt = b.split(' ').filter(Boolean);
   const inter = at.filter((t) => bt.includes(t)).length;
   const tokenScore = (2 * inter) / (at.length + bt.length);
-  // bônus para prefixo comum (nomes abreviados no boletim)
   const shorter = a.length <= b.length ? a : b;
   const longer = a.length > b.length ? a : b;
   const contains = longer.includes(shorter) ? 0.15 : 0;
@@ -135,6 +147,8 @@ function parseGradeValue(raw: string | null | undefined): { value: number | null
   return { value: num, invalid: false };
 }
 
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
 async function callGateway(model: string, body: unknown, apiKey: string) {
   return await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
     method: 'POST',
@@ -143,17 +157,22 @@ async function callGateway(model: string, body: unknown, apiKey: string) {
   });
 }
 
-async function callWithFallback(body: unknown, apiKey: string) {
-  return await callWithFallbackFrom(PRIMARY_MODEL, body, apiKey);
-}
-
-async function callWithFallbackFrom(primary: string, body: unknown, apiKey: string) {
-  let res = await callGateway(primary, body, apiKey);
-  if (!res.ok && (res.status === 429 || res.status === 402 || res.status >= 500)) {
-    console.warn(`Modelo ${primary} falhou (${res.status}); usando ${FALLBACK_MODEL}`);
-    res = await callGateway(primary === FALLBACK_MODEL ? PRIMARY_MODEL : FALLBACK_MODEL, body, apiKey);
+/** Retry com backoff exponencial para 429/5xx (até CHUNK_ATTEMPTS tentativas). */
+async function callWithRetry(model: string, body: unknown, apiKey: string): Promise<Response | null> {
+  let last: Response | null = null;
+  for (let attempt = 1; attempt <= CHUNK_ATTEMPTS; attempt++) {
+    try {
+      const res = await callGateway(attempt === CHUNK_ATTEMPTS ? PRIMARY_MODEL : model, body, apiKey);
+      if (res.ok) return res;
+      last = res;
+      if (res.status !== 429 && res.status < 500) return res;
+      await res.text().catch(() => '');
+    } catch (e) {
+      console.error(`Tentativa ${attempt} falhou:`, e);
+    }
+    if (attempt < CHUNK_ATTEMPTS) await sleep(800 * Math.pow(2, attempt - 1));
   }
-  return res;
+  return last;
 }
 
 function base64ToBytes(b64: string): Uint8Array {
@@ -172,30 +191,26 @@ function bytesToBase64(bytes: Uint8Array): string {
   return btoa(bin);
 }
 
-/** Divide o PDF em blocos de CHUNK_PAGES páginas. Retorna [] se não for possível dividir. */
-async function splitPdf(pdfBase64: string): Promise<{ base64: string; startPage: number; pages: number }[]> {
+/** Extrai APENAS as páginas pedidas (0-based) como PDF base64 — nunca todos os blocos de uma vez. */
+async function extractPages(pdfBytes: Uint8Array, indices: number[]): Promise<string | null> {
   try {
-    const src = await PDFDocument.load(base64ToBytes(pdfBase64), { ignoreEncryption: true });
+    const src = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
     const total = src.getPageCount();
-    if (total <= CHUNK_PAGES) return [];
-    const chunks: { base64: string; startPage: number; pages: number }[] = [];
-    for (let start = 0; start < total; start += CHUNK_PAGES) {
-      const indices: number[] = [];
-      for (let i = start; i < Math.min(start + CHUNK_PAGES, total); i++) indices.push(i);
-      const out = await PDFDocument.create();
-      const copied = await out.copyPages(src, indices);
-      copied.forEach((p) => out.addPage(p));
-      chunks.push({
-        base64: bytesToBase64(await out.save()),
-        startPage: start + 1,
-        pages: indices.length,
-      });
-    }
-    return chunks;
+    const valid = indices.filter((i) => i >= 0 && i < total);
+    if (valid.length === 0) return null;
+    const out = await PDFDocument.create();
+    const copied = await out.copyPages(src, valid);
+    copied.forEach((p) => out.addPage(p));
+    return bytesToBase64(await out.save());
   } catch (e) {
-    console.error('Não foi possível dividir o PDF; processando inteiro:', e);
-    return [];
+    console.error('Falha ao isolar páginas:', e);
+    return null;
   }
+}
+
+async function countPages(pdfBytes: Uint8Array): Promise<number> {
+  const src = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
+  return src.getPageCount();
 }
 
 async function mapWithConcurrency<T, R>(items: T[], limit: number, fn: (item: T, index: number) => Promise<R>): Promise<R[]> {
@@ -296,115 +311,35 @@ Responda SOMENTE com JSON: {"rows":[{"student_name":"...","subject":"...","perio
   };
 }
 
-serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
-  }
+interface FinalizeArgs {
+  payload: ExtractionPayload;
+  students: ClassStudent[];
+  expected: ExpectedSubject[];
+  scaleMax: number;
+  expectedClassCode: string;
+  totalChunks: number;
+  failedPages: number[];
+  pdfBytes: Uint8Array;
+  fileName: string;
+  apiKey: string;
+}
 
-  const json = (body: unknown, status = 200) =>
-    new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-
-  try {
-    const auth = await requireAuth(req, corsHeaders, ['admin', 'direction']);
-    if (auth instanceof Response) return auth;
-
-    const apiKey = Deno.env.get('LOVABLE_API_KEY');
-    if (!apiKey) return json({ success: false, error: 'IA não configurada no servidor' }, 500);
-
-    const body = await req.json().catch(() => null);
-    if (!body?.pdfBase64) return json({ success: false, error: 'PDF não enviado' }, 400);
-
-    const pdfBase64: string = body.pdfBase64;
-    const fileName: string = body.fileName || 'boletim.pdf';
-    const students: ClassStudent[] = Array.isArray(body.students) ? body.students : [];
-    const expected: ExpectedSubject[] = Array.isArray(body.expected_subjects) ? body.expected_subjects : [];
-    const scaleMax: number = Number(body.scale_max) > 0 ? Number(body.scale_max) : 10;
-    const expectedClassCode: string = String(body.class_code ?? body.class_name ?? '').trim();
-
-    const approxBytes = Math.floor((pdfBase64.length * 3) / 4);
-    if (approxBytes > MAX_PDF_SIZE_BYTES) {
-      return json({ success: false, error: `PDF acima de ${MAX_PDF_SIZE_MB}MB` }, 413);
-    }
-
-    // ---------- Etapa 1: extração (em blocos paralelos para PDFs longos) ----------
-    const chunks = await splitPdf(pdfBase64);
-    const chunked = chunks.length > 1;
-    let payload: ExtractionPayload;
-    const chunkFailures: string[] = [];
-
-    if (!chunked) {
-      const res = await callWithFallback(buildExtractionBody(pdfBase64, fileName, expected, students), apiKey);
-      if (!res.ok) {
-        const text = await res.text();
-        console.error('Falha na extração:', res.status, text);
-        if (res.status === 402) return json({ success: false, error: 'Créditos de IA insuficientes para processar o PDF.' }, 402);
-        if (res.status === 429) return json({ success: false, error: 'Limite de uso da IA atingido. Tente novamente em instantes.' }, 429);
-        return json({ success: false, error: 'Não foi possível ler o PDF.' }, 502);
-      }
-      const aiJson = await res.json();
-      const content: string = aiJson?.choices?.[0]?.message?.content ?? '';
-      try {
-        payload = extractJson(content);
-      } catch (e) {
-        console.error('JSON inválido da IA:', e, content.slice(0, 500));
-        return json({ success: false, error: 'A IA retornou um formato inesperado. Tente novamente.' }, 502);
-      }
-    } else {
-      console.log(`PDF dividido em ${chunks.length} bloco(s) de até ${CHUNK_PAGES} páginas`);
-      const partials = await mapWithConcurrency(chunks, CHUNK_CONCURRENCY, async (chunk) => {
-        try {
-          // Blocos pequenos: o modelo rápido evita o idle timeout de 150s.
-          const r = await callWithFallbackFrom(
-            FALLBACK_MODEL,
-            buildExtractionBody(chunk.base64, fileName, expected, students),
-            apiKey,
-          );
-          if (!r.ok) {
-            const t = await r.text();
-            console.error(`Bloco p.${chunk.startPage} falhou:`, r.status, t.slice(0, 300));
-            chunkFailures.push(`páginas ${chunk.startPage}-${chunk.startPage + chunk.pages - 1} (HTTP ${r.status})`);
-            return null;
-          }
-          const j = await r.json();
-          const parsed = extractJson(j?.choices?.[0]?.message?.content ?? '') as ExtractionPayload;
-          const offset = chunk.startPage - 1;
-          const fixPage = (p: unknown) => {
-            const n = typeof p === 'number' ? p : Number(p);
-            return Number.isFinite(n) && n > 0 ? n + offset : chunk.startPage;
-          };
-          (parsed.rows || []).forEach((r2: any) => { r2.page = fixPage(r2?.page); });
-          (parsed.students || []).forEach((s: any) => { s.page = fixPage(s?.page); });
-          return parsed;
-        } catch (e) {
-          console.error(`Erro no bloco p.${chunk.startPage}:`, e);
-          chunkFailures.push(`páginas ${chunk.startPage}-${chunk.startPage + chunk.pages - 1}`);
-          return null;
-        }
-      });
-
-      const ok = partials.filter((p): p is ExtractionPayload => !!p);
-      if (ok.length === 0) {
-        return json({ success: false, error: 'Não foi possível ler o PDF. Tente novamente ou envie um arquivo menor.' }, 502);
-      }
-      payload = {
-        pages: chunks.reduce((sum, c) => sum + c.pages, 0),
-        periods: ok.flatMap((p) => p.periods || []),
-        subjects: [...new Set(ok.flatMap((p) => p.subjects || []))],
-        students: ok.flatMap((p) => p.students || []),
-        rows: ok.flatMap((p) => p.rows || []),
-        notes: ok.flatMap((p) => p.notes || []),
-      } as ExtractionPayload;
-    }
-
+/**
+ * Etapa determinística + reconciliação pontual. Regras preservadas:
+ * FALTAS descartadas, célula vazia permanece NULL, "0,00" é zero real,
+ * disciplinas dinâmicas, conferência PDF × turma e dados cadastrais.
+ */
+async function finalize({
+  payload, students, expected, scaleMax, expectedClassCode,
+  totalChunks, failedPages, pdfBytes, fileName, apiKey,
+}: FinalizeArgs) {
     const issues: { level: 'error' | 'warning' | 'info'; code: string; message: string }[] = [];
     const addIssue = (level: 'error' | 'warning' | 'info', code: string, message: string) =>
       issues.push({ level, code, message });
 
-    if (chunked) {
-      addIssue('info', 'chunked_extraction', `PDF longo processado em ${chunks.length} bloco(s) de até ${CHUNK_PAGES} páginas.`);
-      if (chunkFailures.length) {
-        addIssue('error', 'chunk_failed', `Alguns trechos não puderam ser lidos: ${chunkFailures.join('; ')}. Reenvie o PDF ou revise manualmente essas páginas.`);
-      }
+    addIssue('info', 'chunked_extraction', `PDF processado em ${totalChunks} bloco(s) de até ${CHUNK_PAGES} páginas.`);
+    if (failedPages.length) {
+      addIssue('error', 'chunk_failed', `Páginas não lidas: ${failedPages.join(', ')}. Revise essas páginas manualmente ou tente novamente.`);
     }
 
     (payload.notes || []).forEach((n) => addIssue('info', 'ai_note', String(n)));
@@ -418,7 +353,7 @@ serve(async (req) => {
       addIssue('info', 'absences_ignored', `${droppedAbsenceCells} célula(s) de faltas foram descartadas — o módulo de notas ignora faltas.`);
     }
     if (rawRows.length === 0) {
-      return json({ success: false, error: 'Nenhuma nota foi encontrada no PDF. Verifique se o arquivo é um boletim tabular.' }, 422);
+      throw new Error('Nenhuma nota foi encontrada no PDF. Verifique se o arquivo é um boletim tabular.');
     }
 
     const studentIndex = students.map((s) => ({ ...s, norm: normalize(s.full_name) }));
@@ -641,47 +576,55 @@ serve(async (req) => {
       r.flags.includes('out_of_scale') || r.flags.includes('conflicting_duplicate'));
 
     let reconciled = 0;
-    if (chunked && suspects.length > 0) {
-      // Em PDFs longos a segunda passada estouraria o tempo limite da função.
-      addIssue('warning', 'reconciliation_skipped', 'PDF longo: a segunda validação por IA foi ignorada para não exceder o tempo limite; revise manualmente as células sinalizadas.');
-    } else if (suspects.length > 0 && suspects.length <= 150) {
+    // Reconciliação SOMENTE das células suspeitas, usando um PDF reduzido com as
+    // páginas suspeitas (nunca uma segunda leitura integral do boletim).
+    if (suspects.length === 0) {
+      // nada a reconciliar
+    } else if (suspects.length > MAX_RECONCILE_CELLS) {
+      addIssue('warning', 'reconciliation_skipped', `${suspects.length} célula(s) suspeitas — acima do orçamento de reconciliação automática (${MAX_RECONCILE_CELLS}). Revise manualmente as células sinalizadas.`);
+    } else {
+      const suspectPages = [...new Set(suspects.map((r) => r.source_page).filter((p): p is number => typeof p === 'number' && p > 0))]
+        .sort((a, b) => a - b)
+        .slice(0, MAX_RECONCILE_PAGES);
       try {
-        const res2 = await callWithFallback(buildReconciliationBody(pdfBase64, fileName, suspects), apiKey);
-        if (res2.ok) {
-          const j2 = await res2.json();
-          const payload2 = extractJson(j2?.choices?.[0]?.message?.content ?? '');
-          const map2 = new Map<string, { raw_value: string | null; confidence: number | null }>();
-          for (const r of payload2?.rows ?? []) {
-            const key = `${normalize(r?.student_name)}||${normalize(r?.subject)}||${normalize(r?.period)}`;
-            const note = r?.note_raw != null ? String(r.note_raw) : (r?.raw_value != null ? String(r.raw_value) : null);
-            map2.set(key, {
-              raw_value: note,
-              confidence: typeof r?.confidence === 'number' ? r.confidence : null,
-            });
-          }
-          for (const row of suspects) {
-            const key = `${normalize(row.student_name)}||${normalize(row.subject)}||${normalize(row.period)}`;
-            const second = map2.get(key);
-            if (!second) continue;
-            reconciled++;
-            if ((second.raw_value ?? null) === (row.note_raw ?? null)) {
-              row.flags = row.flags.filter((f) => f !== 'low_confidence');
-              row.flags.push('reconciled_match');
-            } else {
-              row.flags.push('low_confidence', 'reconciliation_divergence');
-              row.second_pass_value = second.raw_value;
-              addIssue('error', 'reconciliation_divergence', `Divergência entre leituras (${row.student_name} / ${row.subject} / ${row.period}): "${row.raw_value ?? 'VAZIO'}" vs "${second.raw_value ?? 'VAZIO'}". Revise manualmente.`);
-            }
-          }
+        const slice = suspectPages.length > 0
+          ? await extractPages(pdfBytes, suspectPages.map((p) => p - 1))
+          : null;
+        if (!slice) {
+          addIssue('warning', 'reconciliation_skipped', 'Não foi possível isolar as páginas suspeitas; revise manualmente as células sinalizadas.');
         } else {
-          addIssue('warning', 'reconciliation_skipped', 'A segunda validação por IA não pôde ser executada; revise manualmente as células sinalizadas.');
+          const res2 = await callWithRetry(FALLBACK_MODEL, buildReconciliationBody(slice, fileName, suspects), apiKey);
+          if (res2 && res2.ok) {
+            const j2 = await res2.json();
+            const payload2 = extractJson(j2?.choices?.[0]?.message?.content ?? '');
+            const map2 = new Map<string, { raw_value: string | null; confidence: number | null }>();
+            for (const r of payload2?.rows ?? []) {
+              const key = `${normalize(r?.student_name)}||${normalize(r?.subject)}||${normalize(r?.period)}`;
+              const note = r?.note_raw != null ? String(r.note_raw) : (r?.raw_value != null ? String(r.raw_value) : null);
+              map2.set(key, { raw_value: note, confidence: typeof r?.confidence === 'number' ? r.confidence : null });
+            }
+            for (const row of suspects) {
+              const key = `${normalize(row.student_name)}||${normalize(row.subject)}||${normalize(row.period)}`;
+              const second = map2.get(key);
+              if (!second) continue;
+              reconciled++;
+              if ((second.raw_value ?? null) === (row.note_raw ?? null)) {
+                row.flags = row.flags.filter((f) => f !== 'low_confidence');
+                row.flags.push('reconciled_match');
+              } else {
+                row.flags.push('low_confidence', 'reconciliation_divergence');
+                row.second_pass_value = second.raw_value;
+                addIssue('error', 'reconciliation_divergence', `Divergência entre leituras (${row.student_name} / ${row.subject} / ${row.period}): "${row.raw_value ?? 'VAZIO'}" vs "${second.raw_value ?? 'VAZIO'}". Revise manualmente.`);
+              }
+            }
+          } else {
+            addIssue('warning', 'reconciliation_skipped', 'A segunda validação por IA não pôde ser executada; revise manualmente as células sinalizadas.');
+          }
         }
       } catch (e) {
         console.error('Reconciliação falhou:', e);
         addIssue('warning', 'reconciliation_skipped', 'A segunda validação por IA falhou; revise manualmente as células sinalizadas.');
       }
-    } else if (suspects.length > 150) {
-      addIssue('warning', 'reconciliation_skipped', 'Muitas células suspeitas para reconciliação automática; revise manualmente.');
     }
 
     // dedupe flags
@@ -843,8 +786,7 @@ serve(async (req) => {
       warnings: issues.filter((i) => i.level === 'warning').length,
     };
 
-    return json({
-      success: true,
+    return {
       stats,
       issues,
       periods: [...periodMap.entries()].map(([norm, p], idx) => ({ normalized_label: norm, label: p.label, kind: p.kind, sort_order: idx })),
@@ -856,9 +798,297 @@ serve(async (req) => {
         full_name: s.full_name,
         student_id: s.student_id ?? null,
       })),
+    };
+}
+
+/** Consolida os blocos concluídos, deduplicando células aluno+disciplina+período. */
+function consolidate(partials: Record<string, ExtractionPayload>, totalPages: number): ExtractionPayload {
+  const ordered = Object.keys(partials)
+    .map((k) => Number(k))
+    .sort((a, b) => a - b)
+    .map((k) => partials[String(k)])
+    .filter(Boolean);
+
+  const seen = new Set<string>();
+  const rows: ExtractedRow[] = [];
+  for (const p of ordered) {
+    for (const r of p.rows || []) {
+      const key = `${normalize(r?.student_name)}||${normalize(r?.subject)}||${normalize(r?.period)}||${r?.page ?? '?'}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      rows.push(r);
+    }
+  }
+
+  const studentSeen = new Set<string>();
+  const studentsOut: ExtractionPayload['students'] = [];
+  for (const p of ordered) {
+    for (const s of p.students || []) {
+      const name = typeof s === 'string' ? s : s?.name ?? '';
+      const key = normalize(name);
+      if (!key || studentSeen.has(key)) continue;
+      studentSeen.add(key);
+      studentsOut.push(s);
+    }
+  }
+
+  const periodSeen = new Set<string>();
+  const periods: { label: string; kind?: string }[] = [];
+  for (const p of ordered) {
+    for (const per of p.periods || []) {
+      const key = normalize(per?.label);
+      if (!key || periodSeen.has(key)) continue;
+      periodSeen.add(key);
+      periods.push(per);
+    }
+  }
+
+  return {
+    pages: totalPages,
+    periods,
+    subjects: [...new Set(ordered.flatMap((p) => p.subjects || []))],
+    students: studentsOut,
+    rows,
+    notes: ordered.flatMap((p) => p.notes || []),
+  };
+}
+
+const serviceClient = () => createClient(
+  Deno.env.get('SUPABASE_URL') ?? '',
+  Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+  { auth: { persistSession: false } },
+);
+
+serve(async (req) => {
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders });
+  }
+
+  const json = (body: unknown, status = 200) =>
+    new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+
+  try {
+    // Segurança: somente admin e direção importam boletim.
+    const auth = await requireAuth(req, corsHeaders, ['admin', 'direction']);
+    if (auth instanceof Response) return auth;
+
+    const apiKey = Deno.env.get('LOVABLE_API_KEY');
+    if (!apiKey) return json({ success: false, error: 'IA não configurada no servidor' }, 500);
+
+    const body = await req.json().catch(() => null);
+    const action: string = String(body?.action ?? (body?.pdfBase64 ? 'create' : '')) || '';
+    const db = serviceClient();
+
+    const jobPublic = (job: Record<string, any>, extra: Record<string, unknown> = {}) => ({
+      success: true,
+      job_id: job.id,
+      status: job.status,
+      progress: job.progress,
+      total_pages: job.total_pages,
+      total_chunks: job.total_chunks,
+      completed_chunks: job.completed_chunks,
+      failed_chunks: job.failed_chunks,
+      current_chunk: job.current_chunk,
+      failed_pages: job.failed_pages ?? [],
+      error_message: job.error_message ?? null,
+      ...extra,
     });
+
+    // ---------------- action: create ----------------
+    if (action === 'create') {
+      if (!body?.pdfBase64) return json({ success: false, error: 'PDF não enviado' }, 400);
+      if (!body?.class_id) return json({ success: false, error: 'Turma não informada' }, 400);
+
+      const pdfBase64: string = body.pdfBase64;
+      const approxBytes = Math.floor((pdfBase64.length * 3) / 4);
+      if (approxBytes > MAX_PDF_SIZE_BYTES) {
+        return json({ success: false, error: `PDF acima de ${MAX_PDF_SIZE_MB}MB` }, 413);
+      }
+
+      let totalPages = 0;
+      try {
+        totalPages = await countPages(base64ToBytes(pdfBase64));
+      } catch (e) {
+        console.error('PDF inválido:', e);
+        return json({ success: false, error: 'Não foi possível abrir o PDF. Verifique se o arquivo não está corrompido ou protegido.' }, 422);
+      }
+      if (totalPages === 0) return json({ success: false, error: 'O PDF não contém páginas.' }, 422);
+
+      const totalChunks = Math.ceil(totalPages / CHUNK_PAGES);
+      const { data: job, error } = await db
+        .from('grade_import_jobs')
+        .insert({
+          class_id: body.class_id,
+          file_name: String(body.fileName ?? 'boletim.pdf'),
+          status: 'queued',
+          total_pages: totalPages,
+          total_chunks: totalChunks,
+          created_by: auth.userId,
+          pdf_base64: pdfBase64,
+          context: {
+            class_code: String(body.class_code ?? body.class_name ?? '').trim(),
+            scale_max: Number(body.scale_max) > 0 ? Number(body.scale_max) : 10,
+            students: Array.isArray(body.students) ? body.students : [],
+            expected_subjects: Array.isArray(body.expected_subjects) ? body.expected_subjects : [],
+          },
+        })
+        .select('*')
+        .single();
+      if (error) throw error;
+
+      return json(jobPublic(job, { chunk_pages: CHUNK_PAGES }), 202);
+    }
+
+    // ---------------- action: status ----------------
+    if (action === 'status' || action === 'process') {
+      const jobId: string = String(body?.job_id ?? '');
+      if (!jobId) return json({ success: false, error: 'job_id não informado' }, 400);
+
+      const { data: job, error } = await db.from('grade_import_jobs').select('*').eq('id', jobId).single();
+      if (error || !job) return json({ success: false, error: 'Processamento não encontrado' }, 404);
+
+      if (action === 'status' || ['completed', 'failed', 'cancelled'].includes(job.status)) {
+        return json(jobPublic(job, job.status === 'completed' ? { result: job.result_json } : {}));
+      }
+
+      const partials: Record<string, ExtractionPayload> = (job.partials ?? {}) as Record<string, ExtractionPayload>;
+      const failed: { index: number; pages: number[]; error?: string }[] = Array.isArray(job.context?.failed_chunks_detail)
+        ? job.context.failed_chunks_detail
+        : [];
+      const attempted = new Set<number>([
+        ...Object.keys(partials).map((k) => Number(k)),
+        ...failed.map((f) => f.index),
+      ]);
+
+      const pending: number[] = [];
+      for (let i = 0; i < job.total_chunks; i++) if (!attempted.has(i)) pending.push(i);
+      const batch = pending.slice(0, CHUNKS_PER_CALL);
+
+      {
+        if (!job.pdf_base64) {
+          await db.from('grade_import_jobs').update({
+            status: 'failed',
+            error_message: 'O arquivo temporário do boletim não está mais disponível. Envie o PDF novamente.',
+          }).eq('id', jobId);
+          return json({ success: false, error: 'O arquivo temporário do boletim expirou. Envie o PDF novamente.' }, 410);
+        }
+
+        if (batch.length > 0) {
+          await db.from('grade_import_jobs')
+            .update({ status: 'processing', current_chunk: batch[0] + 1 })
+            .eq('id', jobId);
+        }
+
+        const pdfBytes = base64ToBytes(job.pdf_base64);
+        const ctx = job.context ?? {};
+        const students: ClassStudent[] = Array.isArray(ctx.students) ? ctx.students : [];
+        const expected: ExpectedSubject[] = Array.isArray(ctx.expected_subjects) ? ctx.expected_subjects : [];
+
+        const results = await mapWithConcurrency(batch, CHUNK_CONCURRENCY, async (chunkIndex) => {
+          const startPage = chunkIndex * CHUNK_PAGES + 1;
+          const pageNumbers: number[] = [];
+          for (let p = startPage; p < Math.min(startPage + CHUNK_PAGES, job.total_pages + 1); p++) pageNumbers.push(p);
+          try {
+            const slice = await extractPages(pdfBytes, pageNumbers.map((p) => p - 1));
+            if (!slice) throw new Error('Não foi possível isolar o bloco');
+            const res = await callWithRetry(FALLBACK_MODEL, buildExtractionBody(slice, job.file_name ?? 'boletim.pdf', expected, students), apiKey);
+            if (!res || !res.ok) {
+              const status = res?.status ?? 0;
+              const detail = res ? await res.text().catch(() => '') : '';
+              console.error(`Bloco ${chunkIndex} (p.${pageNumbers.join(',')}) falhou:`, status, detail.slice(0, 200));
+              return { chunkIndex, pageNumbers, payload: null, status };
+            }
+            const j = await res.json();
+            const parsed = extractJson(j?.choices?.[0]?.message?.content ?? '') as ExtractionPayload;
+            const fixPage = (p: unknown) => {
+              const n = typeof p === 'number' ? p : Number(p);
+              return Number.isFinite(n) && n > 0 && n <= CHUNK_PAGES ? startPage + n - 1 : startPage;
+            };
+            (parsed.rows || []).forEach((r: any) => { r.page = fixPage(r?.page); });
+            (parsed.students || []).forEach((s: any) => { if (typeof s === 'object' && s) s.page = fixPage(s?.page); });
+            return { chunkIndex, pageNumbers, payload: parsed, status: 200 };
+          } catch (e) {
+            console.error(`Erro no bloco ${chunkIndex}:`, e);
+            return { chunkIndex, pageNumbers, payload: null, status: 0 };
+          }
+        });
+
+        for (const r of results) {
+          if (r.payload) partials[String(r.chunkIndex)] = r.payload;
+          else failed.push({ index: r.chunkIndex, pages: r.pageNumbers, error: `HTTP ${r.status}` });
+        }
+
+        const completedChunks = Object.keys(partials).length;
+        const failedChunks = failed.length;
+        const failedPages = [...new Set(failed.flatMap((f) => f.pages))].sort((a, b) => a - b);
+        const done = completedChunks + failedChunks >= job.total_chunks;
+
+        const update: Record<string, unknown> = {
+          partials: partials as never,
+          completed_chunks: completedChunks,
+          failed_chunks: failedChunks,
+          failed_pages: failedPages as never,
+          progress: Math.round(((completedChunks + failedChunks) / Math.max(1, job.total_chunks)) * 100),
+          context: { ...ctx, failed_chunks_detail: failed } as never,
+          status: 'processing',
+        };
+
+        if (done) {
+          if (completedChunks === 0) {
+            update.status = 'failed';
+            update.error_message = 'Nenhum bloco do PDF pôde ser lido pela IA. Tente novamente em instantes.';
+            update.pdf_base64 = null;
+          } else {
+            try {
+              const consolidated = consolidate(partials, job.total_pages);
+              const result = await finalize({
+                payload: consolidated,
+                students,
+                expected,
+                scaleMax: Number(ctx.scale_max) > 0 ? Number(ctx.scale_max) : 10,
+                expectedClassCode: String(ctx.class_code ?? ''),
+                totalChunks: job.total_chunks,
+                failedPages,
+                pdfBytes,
+                fileName: job.file_name ?? 'boletim.pdf',
+                apiKey,
+              });
+              update.status = 'completed';
+              update.progress = 100;
+              update.result_json = result as never;
+              update.issues_json = result.issues as never;
+              update.pdf_base64 = null;
+              update.current_chunk = job.total_chunks;
+            } catch (e) {
+              console.error('Falha ao consolidar o boletim:', e);
+              update.status = 'failed';
+              update.error_message = e instanceof Error ? e.message : 'Falha ao consolidar o boletim.';
+              update.pdf_base64 = null;
+            }
+          }
+        }
+
+        const { data: updated, error: updError } = await db
+          .from('grade_import_jobs')
+          .update(update as never)
+          .eq('id', jobId)
+          .select('*')
+          .single();
+        if (updError) throw updError;
+
+        return json(jobPublic(updated, {
+          remaining_chunks: Math.max(0, job.total_chunks - (updated.completed_chunks + updated.failed_chunks)),
+          ...(updated.status === 'completed' ? { result: updated.result_json } : {}),
+        }));
+      }
+
+      // Nada pendente: consolida se ainda não consolidou.
+      return json(jobPublic(job, { remaining_chunks: 0, ...(job.result_json ? { result: job.result_json } : {}) }));
+    }
+
+    return json({ success: false, error: 'Ação inválida' }, 400);
   } catch (error) {
     console.error('parse-grades-pdf erro:', error);
-    return json({ success: false, error: 'Erro interno ao processar o boletim.' }, 500);
+    return json({ success: false, error: error instanceof Error ? error.message : 'Erro interno ao processar o boletim.' }, 500);
   }
 });
