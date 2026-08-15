@@ -641,7 +641,10 @@ serve(async (req) => {
       r.flags.includes('out_of_scale') || r.flags.includes('conflicting_duplicate'));
 
     let reconciled = 0;
-    if (suspects.length > 0 && suspects.length <= 150) {
+    if (chunked && suspects.length > 0) {
+      // Em PDFs longos a segunda passada estouraria o tempo limite da função.
+      addIssue('warning', 'reconciliation_skipped', 'PDF longo: a segunda validação por IA foi ignorada para não exceder o tempo limite; revise manualmente as células sinalizadas.');
+    } else if (suspects.length > 0 && suspects.length <= 150) {
       try {
         const res2 = await callWithFallback(buildReconciliationBody(pdfBase64, fileName, suspects), apiKey);
         if (res2.ok) {
