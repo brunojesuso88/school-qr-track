@@ -684,6 +684,7 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
   };
 
   const handleCancelSession = async () => {
+    autoRunRef.current = 'stopped';
     if (session) {
       await supabase.functions.invoke('parse-grade-page', { body: { action: 'cancel', session_id: session.id } });
       toast.info('Importação encerrada. As páginas já confirmadas foram mantidas.');
@@ -696,6 +697,18 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
     if (!session) { setStep('select'); return; }
     await processPage(session.id, session.current_page || 1);
   };
+
+  /** Autoaceitação: grava e avança sozinho apenas quando a página é 100% elegível. */
+  useEffect(() => {
+    if (!autoAccept || step !== 'page' || !preview || !session) return;
+    const key = `${session.id}:${preview.page}`;
+    if (autoRunRef.current === key) return;
+    if (!autoEval.eligible || !canConfirmPage) return;
+    autoRunRef.current = key;
+    setAutoApprovedPage(preview.page);
+    void handleConfirmPage('auto');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoAccept, step, preview, session, autoEval.eligible, canConfirmPage]);
 
   const progress = session && session.total_pages > 0
     ? Math.round(((preview?.page ?? session.current_page) / session.total_pages) * 100)
