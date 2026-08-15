@@ -219,11 +219,15 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
       // Alunos da turma
       const { data: studentsData, error: studentsError } = await supabase
         .from('students')
-        .select('id, full_name, student_id')
+        .select('id, full_name, student_id, school_code, birth_date, mother_name, father_name')
         .eq('class', classItem.name)
         .order('full_name');
       if (studentsError) throw studentsError;
-      const students = (studentsData || []) as { id: string; full_name: string; student_id: string }[];
+      const students = (studentsData || []) as {
+        id: string; full_name: string; student_id: string;
+        school_code: string | null; birth_date: string | null;
+        mother_name: string | null; father_name: string | null;
+      }[];
       setClassStudents(students.map((s) => ({ id: s.id, full_name: s.full_name })));
 
       // Disciplinas esperadas (mapeamento escolar, quando vinculado)
@@ -246,7 +250,15 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
           fileName: file.name,
           class_id: classItem.id,
           class_code: classItem.name,
-          students: students.map((s) => ({ id: s.id, full_name: s.full_name, student_id: s.student_id })),
+          students: students.map((s) => ({
+            id: s.id,
+            full_name: s.full_name,
+            student_id: s.student_id,
+            school_code: s.school_code,
+            birth_date: s.birth_date,
+            mother_name: s.mother_name,
+            father_name: s.father_name,
+          })),
           expected_subjects: expected.map((s) => ({ name: s.name, weekly_classes: s.weekly_classes })),
         },
       });
@@ -262,6 +274,19 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
       setPeriods(data.periods || []);
       setStats(data.stats || null);
       setIssues(data.issues || []);
+
+      const detectedList: DetectedStudent[] = (data.detected_students || []).map((d: DetectedStudent) => ({
+        ...d,
+        conflicts: d.conflicts || [],
+        pages: d.pages || [],
+      }));
+      setDetected(detectedList);
+      setMissingInPdf(data.students_missing_in_pdf || []);
+      const initialDecisions: Record<string, RegistrationDecision> = {};
+      detectedList.forEach((d) => { initialDecisions[d.key] = defaultRegistrationDecision(d); });
+      setRegDecisions(initialDecisions);
+      setResolutions({});
+      setReviewTab(detectedList.some((d) => needsResolution(d)) ? 'conflicts' : 'grades');
       await loadConflicts(classItem.id, parsedRows, data.subjects || [], data.periods || []);
       setStep('review');
     } catch (e) {
