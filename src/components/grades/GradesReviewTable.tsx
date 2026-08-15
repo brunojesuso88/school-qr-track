@@ -40,6 +40,7 @@ const FLAG_LABELS: Record<string, { label: string; variant: 'destructive' | 'sec
   explicit_zero: { label: 'Nota zero registrada', variant: 'outline' },
   missing_subject: { label: 'Disciplina ausente', variant: 'destructive' },
   manual: { label: 'Corrigido manualmente', variant: 'outline' },
+  second_reading: { label: 'Validação adicional', variant: 'secondary' },
 };
 
 interface GradesReviewTableProps {
