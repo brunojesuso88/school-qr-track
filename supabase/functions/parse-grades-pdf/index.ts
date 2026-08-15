@@ -952,6 +952,7 @@ serve(async (req) => {
     if (action === 'status' || action === 'process') {
       const jobId: string = String(body?.job_id ?? '');
       if (!jobId) return json({ success: false, error: 'job_id não informado' }, 400);
+      const callDeadline = Date.now() + CALL_BUDGET_MS;
 
       const { data: job, error } = await db.from('grade_import_jobs').select('*').eq('id', jobId).single();
       if (error || !job) return json({ success: false, error: 'Processamento não encontrado' }, 404);
