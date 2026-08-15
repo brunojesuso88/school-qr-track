@@ -205,9 +205,13 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
     return { students, expected };
   }, [classItem]);
 
-  /** Notas já existentes para o aluno desta página (aluno + disciplina + período). */
+  /**
+   * Notas já existentes para o aluno desta página (aluno + disciplina + período).
+   * Só é conflito quando o valor existente DIVERGE do valor lido do PDF.
+   * Valores iguais (7,5 == 7,50; 0 == 0,00; null == vazio) são "match existente".
+   */
   const loadPageConflicts = useCallback(async (studentId: string | null, p: PagePreview) => {
-    if (!classItem || !studentId) { setConflictKeys(new Set()); return; }
+    if (!classItem || !studentId) { setConflictKeys(new Set()); setIdenticalKeys(new Set()); return; }
     const [subjRes, perRes] = await Promise.all([
       supabase.from('grade_subjects').select('id, normalized_name').eq('class_id', classItem.id),
       supabase.from('grade_periods').select('id, normalized_label').eq('class_id', classItem.id),
@@ -216,22 +220,35 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
     (subjRes.data || []).forEach((s: { id: string; normalized_name: string }) => subjById.set(s.id, s.normalized_name));
     const perById = new Map<string, string>();
     (perRes.data || []).forEach((x: { id: string; normalized_label: string }) => perById.set(x.id, x.normalized_label));
-    if (subjById.size === 0 || perById.size === 0) { setConflictKeys(new Set()); return; }
+    if (subjById.size === 0 || perById.size === 0) { setConflictKeys(new Set()); setIdenticalKeys(new Set()); return; }
     const { data } = await supabase
       .from('student_grades')
-      .select('student_id, grade_subject_id, grade_period_id')
+      .select('student_id, grade_subject_id, grade_period_id, value')
       .eq('student_id', studentId);
-    const keys = new Set<string>();
-    (data || []).forEach((g: { student_id: string; grade_subject_id: string; grade_period_id: string }) => {
+
+    // Valores lidos do PDF por chave (aluno + disciplina + período)
+    const pdfByKey = new Map<string, number | null>();
+    (p.rows || []).forEach((r) => {
+      if ((r.flags || []).includes('invalid_value')) return;
+      pdfByKey.set(`${studentId}||${r.subject}||${r.period}`, r.value ?? null);
+    });
+
+    const divergent = new Set<string>();
+    const identical = new Set<string>();
+    (data || []).forEach((g: { student_id: string; grade_subject_id: string; grade_period_id: string; value: number | null }) => {
       const subjNorm = subjById.get(g.grade_subject_id);
       const perNorm = perById.get(g.grade_period_id);
       if (!subjNorm || !perNorm) return;
       const subject = p.subjects.find((s) => s.normalized_name === subjNorm);
       const period = p.periods.find((x) => x.normalized_label === perNorm);
       if (!subject || !period) return;
-      keys.add(`${g.student_id}||${subject.name}||${period.label}`);
+      const key = `${g.student_id}||${subject.name}||${period.label}`;
+      if (!pdfByKey.has(key)) return; // a página não trouxe essa combinação
+      if (sameGradeValue(g.value ?? null, pdfByKey.get(key) ?? null)) identical.add(key);
+      else divergent.add(key);
     });
-    setConflictKeys(keys);
+    setConflictKeys(divergent);
+    setIdenticalKeys(identical);
   }, [classItem]);
 
   const applyPreview = useCallback(async (p: PagePreview) => {
