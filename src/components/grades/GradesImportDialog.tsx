@@ -828,7 +828,7 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
                 className="hidden"
                 onChange={(e) => {
                   const file = e.target.files?.[0];
-                  if (file) handleFile(file);
+                  if (file) startImport(file);
                 }}
               />
               <Button onClick={() => fileInputRef.current?.click()}>
@@ -868,14 +868,67 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
           />
         )}
 
-        {(step === 'processing' || step === 'saving') && (
+        {step === 'processing' && (
+          <div className="py-8 space-y-4">
+            <div className="text-center space-y-2">
+              <Loader2 className="w-10 h-10 mx-auto animate-spin text-primary" />
+              <p className="font-medium">Processando boletim...</p>
+              <p className="text-xs text-muted-foreground">{fileName}</p>
+            </div>
+            <Progress value={job?.progress ?? 0} />
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              {counter('Páginas do PDF', job?.total_pages ?? null)}
+              {counter('Blocos concluídos', job ? `${job.completed_chunks}/${job.total_chunks}` : null)}
+              {counter('Bloco atual', job?.current_chunk ?? null)}
+              {counter('Blocos com falha', job?.failed_chunks ?? 0, job?.failed_chunks ? 'warning' : undefined)}
+            </div>
+            <p className="text-[11px] text-muted-foreground text-center">
+              Etapa: {job?.status === 'queued' ? 'preparando blocos' : 'lendo páginas e montando a matriz de notas'} ·
+              o PDF é lido em blocos de 3 páginas; nada é gravado nesta etapa.
+            </p>
+            {failedPages.length > 0 && (
+              <Alert>
+                <AlertTriangle className="w-4 h-4" />
+                <AlertDescription className="text-xs">
+                  Páginas ainda não lidas: {failedPages.join(', ')}.
+                </AlertDescription>
+              </Alert>
+            )}
+            <div className="text-center">
+              <Button variant="ghost" size="sm" onClick={() => handleClose(false)}>Cancelar</Button>
+            </div>
+          </div>
+        )}
+
+        {step === 'saving' && (
           <div className="py-12 text-center space-y-3">
             <Loader2 className="w-10 h-10 mx-auto animate-spin text-primary" />
-            <p className="text-sm text-muted-foreground">
-              {step === 'processing'
-                ? 'Lendo todas as páginas, validando a matriz de notas e reconciliando células suspeitas...'
-                : 'Gravando disciplinas, períodos e notas...'}
-            </p>
+            <p className="text-sm text-muted-foreground">Gravando disciplinas, períodos e notas...</p>
+          </div>
+        )}
+
+        {step === 'failed' && (
+          <div className="space-y-4">
+            <Alert variant="destructive">
+              <AlertTriangle className="w-4 h-4" />
+              <AlertTitle className="text-sm">O processamento do boletim não foi concluído</AlertTitle>
+              <AlertDescription className="text-xs space-y-1">
+                <p>Causa: {error ?? 'erro desconhecido'}</p>
+                <p>Arquivo: {fileName || '—'}</p>
+                {job && (
+                  <p>
+                    Blocos concluídos: {job.completed_chunks} de {job.total_chunks} ·
+                    {' '}páginas do PDF: {job.total_pages} · blocos com falha: {job.failed_chunks}
+                  </p>
+                )}
+                {failedPages.length > 0 && <p>Páginas afetadas: {failedPages.join(', ')}</p>}
+                <p>Nenhuma nota foi gravada.</p>
+              </AlertDescription>
+            </Alert>
+            <div className="flex gap-2">
+              <Button onClick={handleRetry}>Tentar novamente</Button>
+              <Button variant="outline" onClick={() => handleClose(false)}>Cancelar</Button>
+            </div>
           </div>
         )}
 
@@ -894,6 +947,17 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
               {counter('Notas 0,00', stats.explicit_zero_cells ?? 0)}
               {counter('Inconsistências', stats.issues, stats.errors ? 'danger' : stats.warnings ? 'warning' : undefined)}
             </div>
+
+            {failedPages.length > 0 && (
+              <Alert variant="destructive">
+                <AlertTriangle className="w-4 h-4" />
+                <AlertTitle className="text-sm">Páginas não processadas</AlertTitle>
+                <AlertDescription className="text-xs">
+                  As páginas {failedPages.join(', ')} não puderam ser lidas pela IA. A revisão abaixo contém apenas as
+                  páginas processadas — confira essas páginas manualmente ou reenvie o PDF depois.
+                </AlertDescription>
+              </Alert>
+            )}
 
             <p className="text-[11px] text-muted-foreground">
               Turma do cabeçalho: {stats.class_codes?.length ? stats.class_codes.join(', ') : '—'} · células de faltas ignoradas: {stats.absence_cells_ignored ?? 0}
