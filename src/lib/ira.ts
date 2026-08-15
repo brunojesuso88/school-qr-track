@@ -1,10 +1,11 @@
 /**
- * Cálculo do IRA (Índice de Rendimento Acadêmico).
+ * Cálculo do IRA (Índice de Rendimento Acadêmico) — motor único e multi-período.
  *
- * Fórmula: IRA = Σ(nota × peso) / Σ(peso)
+ * 1) Nota representativa da disciplina = média aritmética das notas dos
+ *    períodos selecionados (1 ou mais). Nota ausente em um período selecionado
+ *    entra como 0,00 APENAS no cálculo (o boletim continua com "—").
+ * 2) IRA = Σ(nota_representativa × peso) / Σ(peso).
  * Peso automático = carga semanal quando ela é 1, 2 ou 4 aulas.
- * Disciplina selecionada sem nota lançada no período escolhido entra com 0,00
- * (sinalizada como "nota não lançada"), sem alterar a nota original do boletim.
  * Cargas diferentes (3, 5, 6...) são inelegíveis até o administrador
  * definir explicitamente um "peso personalizado".
  *
@@ -18,6 +19,12 @@ export type IraStatus = 'ok' | 'no_subjects' | 'no_grades' | 'not_configured';
 /** Origem do valor usado no cálculo. */
 export type IraValueSource = 'reported' | 'missing_as_zero';
 
+/** Período selecionado para o cálculo. */
+export interface IraPeriodRef {
+  id: string;
+  label: string;
+}
+
 export interface IraSubjectInput {
   subjectId: string;
   name: string;
@@ -26,10 +33,19 @@ export interface IraSubjectInput {
   includeInIra: boolean;
   /** Peso definido manualmente pelo administrador (carga fora de 1/2/4). */
   customWeight: number | null;
-  /** Nota do período configurado para o IRA (null = não informada). */
+  /** Nota por período (periodId -> nota; null/ausente = não informada). */
+  valuesByPeriod: Record<string, number | null>;
+}
+
+/** Nota de um período selecionado, com o valor efetivamente usado. */
+export interface IraPeriodValue {
+  periodId: string;
+  label: string;
+  /** Nota real do boletim (null = não informada). */
   value: number | null;
-  /** Texto original da célula (só para exibição/diagnóstico). */
-  rawText?: string | null;
+  /** Valor usado no cálculo (0 quando não informada). */
+  usedValue: number;
+  missing: boolean;
 }
 
 export interface IraLine {
@@ -38,10 +54,17 @@ export interface IraLine {
   weeklyClasses: number | null;
   weight: number | null;
   weightSource: 'auto' | 'custom' | 'none';
+  /** Notas dos períodos selecionados. */
+  periodValues: IraPeriodValue[];
+  /** Média aritmética dos períodos selecionados (nota representativa). */
+  average: number | null;
+  /** Alias de `average`, mantido para compatibilidade de exibição. */
   value: number | null;
-  /** Valor efetivamente usado no cálculo (0 quando a nota não foi lançada). */
+  /** Valor efetivamente usado no cálculo (0 quando nenhuma nota foi lançada). */
   usedValue: number | null;
   valueSource: IraValueSource;
+  /** Quantos períodos selecionados estavam sem nota (viraram 0,00). */
+  missingPeriodCount: number;
   product: number | null;
   eligible: boolean;
   reason?: string;
@@ -56,8 +79,12 @@ export interface IraResult {
   totalWeight: number;
   totalProduct: number;
   lines: IraLine[];
-  /** Quantidade de disciplinas selecionadas sem nota lançada (contadas como 0,00). */
+  /** Períodos usados no cálculo, na ordem configurada. */
+  selectedPeriods: IraPeriodRef[];
+  /** Disciplinas selecionadas com pelo menos uma nota ausente (contadas como 0,00). */
   missingGradeCount: number;
+  /** Nota representativa por disciplina (subjectId -> média). */
+  periodAverages: Record<string, number | null>;
 }
 
 /** Peso automático a partir da carga semanal. `null` quando a carga não é 1, 2 ou 4. */
@@ -83,24 +110,25 @@ export function resolveWeight(subject: Pick<IraSubjectInput, 'weeklyClasses' | '
 }
 
 export interface CalculateIraOptions {
-  /** Rótulo do período usado (só para mensagens). */
-  periodLabel?: string | null;
-  /** Se não houver período configurado, o IRA não é calculado. */
-  hasPeriodConfigured?: boolean;
+  /** Motivo específico quando não há configuração (mensagem exibida no card). */
+  notConfiguredReason?: string;
 }
 
-export function calculateIra(
+/**
+ * Motor ÚNICO do IRA (multi-período). Usado tanto no card do aluno quanto no
+ * detalhe, garantindo valores idênticos.
+ */
+export function calculateIraMultiPeriod(
   subjects: IraSubjectInput[],
+  selectedPeriods: IraPeriodRef[],
   options: CalculateIraOptions = {},
 ): IraResult {
-  const { periodLabel, hasPeriodConfigured = true } = options;
+  const periods = selectedPeriods ?? [];
 
   const lines: IraLine[] = subjects.map((subject) => {
     const { weight, source } = resolveWeight(subject);
     let eligible = true;
     let reason: string | undefined;
-    const reported = subject.value != null && !Number.isNaN(subject.value);
-    const valueSource: IraValueSource = reported ? 'reported' : 'missing_as_zero';
 
     if (!subject.includeInIra) {
       eligible = false;
@@ -113,14 +141,36 @@ export function calculateIra(
           : `Carga semanal ${subject.weeklyClasses} não segue a regra 1/2/4 — defina um peso personalizado`;
     }
 
-    const usedValue = eligible ? (reported ? (subject.value as number) : 0) : null;
+    const periodValues: IraPeriodValue[] = periods.map((p) => {
+      const raw = subject.valuesByPeriod?.[p.id];
+      const reported = raw != null && !Number.isNaN(raw);
+      return {
+        periodId: p.id,
+        label: p.label,
+        value: reported ? (raw as number) : null,
+        usedValue: reported ? (raw as number) : 0,
+        missing: !reported,
+      };
+    });
+
+    const missingPeriodCount = periodValues.filter((v) => v.missing).length;
+    const average =
+      periodValues.length > 0
+        ? periodValues.reduce((sum, v) => sum + v.usedValue, 0) / periodValues.length
+        : null;
+    const anyReported = periodValues.some((v) => !v.missing);
+    const valueSource: IraValueSource = anyReported ? 'reported' : 'missing_as_zero';
+    const usedValue = eligible ? (average ?? null) : null;
+
     const statusLabel = !subject.includeInIra
       ? 'Fora do IRA'
       : !eligible
         ? reason
-        : reported
-          ? `Nota registrada: ${formatGrade(subject.value)}`
-          : 'Nota não lançada — considerada 0,00 no IRA';
+        : missingPeriodCount === 0
+          ? `Média dos períodos: ${formatGrade(average)}`
+          : missingPeriodCount === periodValues.length
+            ? 'Nenhuma nota lançada — considerada 0,00 no IRA'
+            : `${missingPeriodCount} período(s) sem nota — contados como 0,00`;
 
     return {
       subjectId: subject.subjectId,
@@ -128,9 +178,12 @@ export function calculateIra(
       weeklyClasses: subject.weeklyClasses,
       weight,
       weightSource: source,
-      value: subject.value,
+      periodValues,
+      average,
+      value: average,
       usedValue,
       valueSource,
+      missingPeriodCount,
       product: eligible && weight !== null && usedValue != null ? usedValue * weight : null,
       eligible,
       reason,
@@ -138,24 +191,28 @@ export function calculateIra(
     };
   });
 
-  const missingGradeCount = lines.filter(
-    (l) => l.eligible && l.valueSource === 'missing_as_zero',
-  ).length;
+  const periodAverages: Record<string, number | null> = {};
+  lines.forEach((l) => { periodAverages[l.subjectId] = l.average; });
 
-  if (!hasPeriodConfigured) {
+  const missingGradeCount = lines.filter((l) => l.eligible && l.missingPeriodCount > 0).length;
+
+  if (periods.length === 0) {
     return {
       value: null,
       status: 'not_configured',
-      reason: 'Período/nota usada no IRA ainda não foi definido na Configuração do IRA',
+      reason:
+        options.notConfiguredReason ??
+        'Períodos/nota usada no IRA ainda não foram definidos em Configurações → IRA',
       totalWeight: 0,
       totalProduct: 0,
       lines,
+      selectedPeriods: periods,
       missingGradeCount: 0,
+      periodAverages,
     };
   }
 
-  const selected = subjects.filter((s) => s.includeInIra);
-  if (selected.length === 0) {
+  if (subjects.filter((s) => s.includeInIra).length === 0) {
     return {
       value: null,
       status: 'no_subjects',
@@ -163,7 +220,9 @@ export function calculateIra(
       totalWeight: 0,
       totalProduct: 0,
       lines,
+      selectedPeriods: periods,
       missingGradeCount,
+      periodAverages,
     };
   }
 
@@ -175,13 +234,13 @@ export function calculateIra(
     return {
       value: null,
       status: 'no_grades',
-      reason: periodLabel
-        ? `Nenhuma disciplina selecionada possui peso válido para o período (${periodLabel})`
-        : 'Nenhuma disciplina selecionada possui peso válido',
+      reason: `Nenhuma disciplina selecionada possui peso válido para ${describePeriods(periods)}`,
       totalWeight,
       totalProduct,
       lines,
+      selectedPeriods: periods,
       missingGradeCount,
+      periodAverages,
     };
   }
 
@@ -191,8 +250,16 @@ export function calculateIra(
     totalWeight,
     totalProduct,
     lines,
+    selectedPeriods: periods,
     missingGradeCount,
+    periodAverages,
   };
+}
+
+/** "1º Período + 2º Período" ou "período não definido". */
+export function describePeriods(periods: IraPeriodRef[] | null | undefined): string {
+  if (!periods || periods.length === 0) return 'período não definido';
+  return periods.map((p) => p.label).join(' + ');
 }
 
 /** Formata o IRA com 2 casas decimais (pt-BR) ou "—" quando indisponível. */

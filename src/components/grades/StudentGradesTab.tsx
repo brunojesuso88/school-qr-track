@@ -7,7 +7,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { GraduationCap, ChevronDown, Info, AlertTriangle } from 'lucide-react';
 import { useStudentGrades } from '@/hooks/useStudentGrades';
 import { useClassIdByName } from '@/hooks/useClassId';
-import { formatGrade, formatIra } from '@/lib/ira';
+import { describePeriods, formatGrade, formatIra } from '@/lib/ira';
 import { IRABreakdown } from './IRABreakdown';
 import { cn } from '@/lib/utils';
 
@@ -18,8 +18,9 @@ interface StudentGradesTabProps {
 
 export const StudentGradesTab = ({ studentId, className }: StudentGradesTabProps) => {
   const { classId, loading: loadingClass } = useClassIdByName(className);
-  const { data, gradeMap, ira, iraPeriod, loading, error } = useStudentGrades(studentId, classId);
+  const { data, gradeMap, ira, iraPeriods, loading, error } = useStudentGrades(studentId, classId);
   const [showBreakdown, setShowBreakdown] = useState(false);
+  const selectedPeriodIds = new Set(iraPeriods.map((p) => p.id));
 
   if (loadingClass || loading) {
     return (
@@ -62,9 +63,10 @@ export const StudentGradesTab = ({ studentId, className }: StudentGradesTabProps
               <p className={cn('text-3xl font-bold', ira?.status === 'ok' ? 'text-primary' : 'text-muted-foreground')}>
                 IRA: {formatIra(ira?.value ?? null)}
               </p>
-              {iraPeriod && (
-                <p className="text-xs text-muted-foreground mt-1">Baseado em: {iraPeriod.label}</p>
-              )}
+              <p className="text-xs text-muted-foreground mt-1">
+                Baseado em: {describePeriods(iraPeriods.map((p) => ({ id: p.id, label: p.label })))}
+                {iraPeriods.length > 1 && ' (média dos períodos por disciplina)'}
+              </p>
               {ira && ira.missingGradeCount > 0 && (
                 <p className="text-xs text-amber-600 mt-1">
                   {ira.missingGradeCount} disciplina(s) selecionada(s) sem nota — consideradas 0,00 no IRA
@@ -90,7 +92,7 @@ export const StudentGradesTab = ({ studentId, className }: StudentGradesTabProps
 
           {showBreakdown && ira && (
             <div className="mt-4 pt-4 border-t">
-              <IRABreakdown ira={ira} periodLabel={iraPeriod?.label ?? null} />
+              <IRABreakdown ira={ira} />
             </div>
           )}
         </CardContent>
@@ -111,7 +113,16 @@ export const StudentGradesTab = ({ studentId, className }: StudentGradesTabProps
                 <tr className="text-left text-xs text-muted-foreground border-b">
                   <th className="py-2 pr-3">Disciplina</th>
                   {data.periods.map((p) => (
-                    <th key={p.id} className="py-2 px-2 text-center whitespace-nowrap">{p.label}</th>
+                    <th
+                      key={p.id}
+                      className={cn(
+                        'py-2 px-2 text-center whitespace-nowrap',
+                        selectedPeriodIds.has(p.id) && 'text-primary font-semibold',
+                      )}
+                    >
+                      {p.label}
+                      {selectedPeriodIds.has(p.id) && <span className="ml-1 text-[10px]">(IRA)</span>}
+                    </th>
                   ))}
                   <th className="py-2 pl-2 text-center">Peso IRA</th>
                 </tr>
@@ -156,6 +167,8 @@ export const StudentGradesTab = ({ studentId, className }: StudentGradesTabProps
           </div>
           <p className="text-xs text-muted-foreground mt-3">
             “—” = Não informado no boletim. “(m)” = nota corrigida manualmente na revisão da importação.
+            Colunas marcadas com “(IRA)” são os períodos usados no cálculo; disciplinas selecionadas sem nota
+            nesses períodos entram como 0,00 apenas no IRA.
           </p>
         </CardContent>
       </Card>

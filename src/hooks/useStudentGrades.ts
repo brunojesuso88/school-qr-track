@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { calculateIra, IraResult, IraSubjectInput } from '@/lib/ira';
+import { calculateIraMultiPeriod, IraPeriodRef, IraResult, IraSubjectInput } from '@/lib/ira';
 
 export interface GradeSubjectRow {
   id: string;
@@ -39,6 +39,7 @@ export interface IraSettingsRow {
   id: string;
   class_id: string;
   ira_period_id: string | null;
+  ira_period_ids: string[] | null;
   use_final_grade: boolean;
   scale_max: number;
 }
@@ -59,51 +60,107 @@ const emptyData: ClassGradesData = {
   currentWeeklyClasses: {},
 };
 
-/** Resolve o período usado no IRA conforme a configuração da turma. */
-export function resolveIraPeriod(data: ClassGradesData): GradePeriodRow | null {
-  if (data.settings?.use_final_grade) {
-    return data.periods.find((p) => p.kind === 'final') ?? null;
+/**
+ * Resolve os períodos usados no IRA conforme a configuração da turma.
+ * Prioridade: Nota Final -> `ira_period_ids` -> `ira_period_id` (compatibilidade).
+ */
+export function resolveIraPeriods(data: ClassGradesData): GradePeriodRow[] {
+  const settings = data.settings;
+  if (!settings) return [];
+  if (settings.use_final_grade) {
+    const final = data.periods.find((p) => p.kind === 'final');
+    return final ? [final] : [];
   }
-  if (data.settings?.ira_period_id) {
-    return data.periods.find((p) => p.id === data.settings?.ira_period_id) ?? null;
-  }
-  return null;
+  const ids = settings.ira_period_ids && settings.ira_period_ids.length > 0
+    ? settings.ira_period_ids
+    : settings.ira_period_id
+      ? [settings.ira_period_id]
+      : [];
+  // Mantém a ordem de exibição dos períodos da turma
+  return data.periods.filter((p) => ids.includes(p.id));
 }
 
-/** Monta as entradas do cálculo do IRA para um aluno. */
+export function toPeriodRefs(periods: GradePeriodRow[]): IraPeriodRef[] {
+  return periods.map((p) => ({ id: p.id, label: p.label }));
+}
+
+/** Monta as entradas do cálculo do IRA (multi-período) para um aluno. */
 export function buildIraInputs(
   data: ClassGradesData,
   studentId: string,
-  periodId: string | null,
+  periodIds: string[],
 ): IraSubjectInput[] {
+  const gradesForStudent = data.grades.filter((g) => g.student_id === studentId);
   return data.subjects.map((subject) => {
     const current = subject.mapping_class_subject_id
       ? data.currentWeeklyClasses[subject.mapping_class_subject_id]
       : undefined;
     const weekly = current ?? subject.weekly_classes ?? null;
-    const grade = periodId
-      ? data.grades.find(
-          (g) => g.student_id === studentId && g.grade_subject_id === subject.id && g.grade_period_id === periodId,
-        )
-      : undefined;
+    const valuesByPeriod: Record<string, number | null> = {};
+    periodIds.forEach((periodId) => {
+      const grade = gradesForStudent.find(
+        (g) => g.grade_subject_id === subject.id && g.grade_period_id === periodId,
+      );
+      valuesByPeriod[periodId] = grade?.value ?? null;
+    });
     return {
       subjectId: subject.id,
       name: subject.name,
       weeklyClasses: weekly,
       includeInIra: subject.include_in_ira,
       customWeight: subject.custom_ira_weight,
-      value: grade?.value ?? null,
-      rawText: grade?.raw_text ?? null,
+      valuesByPeriod,
     };
   });
 }
 
+/** Cálculo canônico do IRA de um aluno — usado pelo card e pelo detalhe. */
 export function computeIraForStudent(data: ClassGradesData, studentId: string): IraResult {
-  const period = resolveIraPeriod(data);
-  return calculateIra(buildIraInputs(data, studentId, period?.id ?? null), {
-    periodLabel: period?.label ?? null,
-    hasPeriodConfigured: !!period,
-  });
+  const periods = resolveIraPeriods(data);
+  return calculateIraMultiPeriod(
+    buildIraInputs(data, studentId, periods.map((p) => p.id)),
+    toPeriodRefs(periods),
+    {
+      notConfiguredReason: data.settings
+        ? 'Nenhum período válido selecionado em Configurações → IRA para esta turma'
+        : 'Esta turma ainda não tem configuração de IRA (Configurações → IRA)',
+    },
+  );
+}
+
+/**
+ * Busca todas as notas em páginas de 1000 linhas (limite padrão do PostgREST),
+ * evitando resultados truncados silenciosamente.
+ */
+export async function fetchGradesPaged(
+  subjectIds: string[],
+  studentIds?: string[],
+): Promise<StudentGradeRow[]> {
+  if (subjectIds.length === 0) return [];
+  const PAGE = 1000;
+  const rows: StudentGradeRow[] = [];
+  for (let from = 0; ; from += PAGE) {
+    let query = supabase
+      .from('student_grades')
+      .select('*')
+      .in('grade_subject_id', subjectIds)
+      .order('id')
+      .range(from, from + PAGE - 1);
+    // Só filtra por aluno quando a lista é curta (URL longa quebra a requisição)
+    if (studentIds && studentIds.length > 0 && studentIds.length <= 100) {
+      query = query.in('student_id', studentIds);
+    }
+    const { data, error } = await query;
+    if (error) throw error;
+    const page = ((data || []) as unknown as StudentGradeRow[]).map((g) => ({ ...g, flags: g.flags || [] }));
+    rows.push(...page);
+    if (page.length < PAGE) break;
+  }
+  if (studentIds && studentIds.length > 100) {
+    const set = new Set(studentIds);
+    return rows.filter((g) => set.has(g.student_id));
+  }
+  return rows;
 }
 
 async function fetchClassGrades(classId: string, studentIds?: string[]): Promise<ClassGradesData> {
@@ -117,13 +174,7 @@ async function fetchClassGrades(classId: string, studentIds?: string[]): Promise
   const periods = (periodsRes.data || []) as unknown as GradePeriodRow[];
   const subjectIds = subjects.map((s) => s.id);
 
-  let grades: StudentGradeRow[] = [];
-  if (subjectIds.length > 0) {
-    let query = supabase.from('student_grades').select('*').in('grade_subject_id', subjectIds);
-    if (studentIds && studentIds.length > 0) query = query.in('student_id', studentIds);
-    const { data } = await query;
-    grades = ((data || []) as unknown as StudentGradeRow[]).map((g) => ({ ...g, flags: g.flags || [] }));
-  }
+  const grades = await fetchGradesPaged(subjectIds, studentIds);
 
   // Carga semanal atual do mapeamento escolar (quando há vínculo)
   const mappingIds = subjects.map((s) => s.mapping_class_subject_id).filter(Boolean) as string[];
@@ -189,7 +240,7 @@ export function useStudentGrades(studentId: string | null, classId: string | nul
     () => (studentId ? computeIraForStudent(data, studentId) : null),
     [data, studentId],
   );
-  const iraPeriod = useMemo(() => resolveIraPeriod(data), [data]);
+  const iraPeriods = useMemo(() => resolveIraPeriods(data), [data]);
 
   const gradeMap = useMemo(() => {
     const map = new Map<string, StudentGradeRow>();
@@ -199,5 +250,5 @@ export function useStudentGrades(studentId: string | null, classId: string | nul
     return map;
   }, [data.grades, studentId]);
 
-  return { data, gradeMap, ira, iraPeriod, loading, error, reload };
+  return { data, gradeMap, ira, iraPeriods, loading, error, reload };
 }

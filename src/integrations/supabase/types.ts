@@ -478,6 +478,7 @@ export type Database = {
           created_at: string
           id: string
           ira_period_id: string | null
+          ira_period_ids: string[]
           scale_max: number
           updated_at: string
           updated_by: string | null
@@ -488,6 +489,7 @@ export type Database = {
           created_at?: string
           id?: string
           ira_period_id?: string | null
+          ira_period_ids?: string[]
           scale_max?: number
           updated_at?: string
           updated_by?: string | null
@@ -498,6 +500,7 @@ export type Database = {
           created_at?: string
           id?: string
           ira_period_id?: string | null
+          ira_period_ids?: string[]
           scale_max?: number
           updated_at?: string
           updated_by?: string | null
