@@ -24,17 +24,8 @@ import AEE from "./pages/AEE";
 import Events from "./pages/Events";
 import SchoolEvents from "./pages/SchoolEvents";
 import Declarations from "./pages/Declarations";
-import SchoolMapping from "./pages/SchoolMapping";
-import MappingTeachers from "./pages/mapping/MappingTeachers";
-import MappingSubjects from "./pages/mapping/MappingSubjects";
-import MappingClasses from "./pages/mapping/MappingClasses";
-import MappingDistribution from "./pages/mapping/MappingDistribution";
-import MappingSummary from "./pages/mapping/MappingSummary";
-import Timetable from "./pages/Timetable";
-import TimetableSettings from "./pages/timetable/TimetableSettings";
-import TimetableRules from "./pages/timetable/TimetableRules";
-import TimetableGenerate from "./pages/timetable/TimetableGenerate";
-import TimetableExport from "./pages/timetable/TimetableExport";
+import Teachers from "./pages/Teachers";
+import Subjects from "./pages/Subjects";
 import TeacherNotifications from "./pages/TeacherNotifications";
 
 const queryClient = new QueryClient({
@@ -69,6 +60,8 @@ const App = () => (
               <Route path="/students" element={<AdminRoute><Students /></AdminRoute>} />
               <Route path="/aee" element={<AdminRoute><AEE /></AdminRoute>} />
               <Route path="/classes" element={<AdminRoute><Classes /></AdminRoute>} />
+              <Route path="/teachers" element={<AdminRoute><Teachers /></AdminRoute>} />
+              <Route path="/subjects" element={<AdminRoute><Subjects /></AdminRoute>} />
               <Route path="/scan" element={<AdminRoute><QRCodes /></AdminRoute>} />
               <Route path="/attendance" element={<AdminRoute><Attendance /></AdminRoute>} />
               <Route path="/events" element={<AdminRoute><Events /></AdminRoute>} />
@@ -78,20 +71,15 @@ const App = () => (
               <Route path="/notifications" element={<AdminRoute><Notifications /></AdminRoute>} />
               <Route path="/settings" element={<AdminRoute><Settings /></AdminRoute>} />
               
-              {/* School Mapping Routes */}
-              <Route path="/school-mapping" element={<AdminRoute><SchoolMapping /></AdminRoute>} />
-              <Route path="/school-mapping/teachers" element={<AdminRoute><MappingTeachers /></AdminRoute>} />
-              <Route path="/school-mapping/subjects" element={<AdminRoute><MappingSubjects /></AdminRoute>} />
-              <Route path="/school-mapping/classes" element={<AdminRoute><MappingClasses /></AdminRoute>} />
-              <Route path="/school-mapping/distribution" element={<AdminRoute><MappingDistribution /></AdminRoute>} />
-              <Route path="/school-mapping/summary" element={<AdminRoute><MappingSummary /></AdminRoute>} />
-              
-              {/* Timetable Routes */}
-              <Route path="/timetable" element={<AdminRoute><Timetable /></AdminRoute>} />
-              <Route path="/timetable/settings" element={<AdminRoute><TimetableSettings /></AdminRoute>} />
-              <Route path="/timetable/rules" element={<AdminRoute><TimetableRules /></AdminRoute>} />
-              <Route path="/timetable/generate" element={<AdminRoute><TimetableGenerate /></AdminRoute>} />
-              <Route path="/timetable/export" element={<AdminRoute><TimetableExport /></AdminRoute>} />
+              {/* Compatibilidade: módulos removidos (Mapeamento Escolar / Criação do Horário) */}
+              <Route path="/school-mapping/teachers" element={<Navigate to="/teachers" replace />} />
+              <Route path="/school-mapping/subjects" element={<Navigate to="/subjects" replace />} />
+              <Route path="/school-mapping/classes" element={<Navigate to="/classes" replace />} />
+              <Route path="/school-mapping/distribution" element={<Navigate to="/dashboard" replace />} />
+              <Route path="/school-mapping/summary" element={<Navigate to="/dashboard" replace />} />
+              <Route path="/school-mapping" element={<Navigate to="/dashboard" replace />} />
+              <Route path="/timetable/*" element={<Navigate to="/dashboard" replace />} />
+              <Route path="/timetable" element={<Navigate to="/dashboard" replace />} />
 
               {/* Staff Route - Funcionário (página simplificada) */}
               <Route path="/staff/scan" element={<StaffRoute><StaffScanQR /></StaffRoute>} />
