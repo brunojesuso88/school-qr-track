@@ -808,6 +808,8 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
   }, [pageAction, linkStudentId]);
 
   const invalidCount = useMemo(() => rows.filter((r) => r.flags.includes('invalid_value')).length, [rows]);
+  /** Erros reais que continuam bloqueando até a confirmação manual. */
+  const manualBlockers = useMemo(() => manualConfirmationBlockers(rows), [rows]);
   /** Contagem ATUAL de divergências (reflete correções manuais), não o valor gravado na prévia. */
   const currentDivergenceCount = useMemo(() => analyzeDivergences(rows).divergences.length, [rows]);
   const pageHasConflicts = useMemo(
