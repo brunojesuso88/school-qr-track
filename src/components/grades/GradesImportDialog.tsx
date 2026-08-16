@@ -445,7 +445,11 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
     const detected = p.detected;
     setPageAction(detected.student_id ? 'link' : null);
     setLinkStudentId(detected.student_id ?? null);
-    setRegDecision(defaultRegistrationDecision(detected));
+    // Professor/funcionário não altera Código, nascimento e filiação: mantém sempre o cadastro.
+    const baseDecision = defaultRegistrationDecision(detected);
+    setRegDecision(canEditRegistration
+      ? baseDecision
+      : { code: 'keep', birth_date: 'keep', mother: 'keep', father: 'keep' });
     await loadPageConflicts(detected.student_id, p);
     const pdfClass = (p.pdf_class_code ?? '').trim();
     const divergent = Boolean(pdfClass) && normalize(pdfClass) !== normalize(effectiveName || classItem?.name || '');
@@ -463,7 +467,7 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
       }
     }
     setStep('page');
-  }, [loadPageConflicts, lookupOtherClass, effectiveName, classItem]);
+  }, [loadPageConflicts, lookupOtherClass, effectiveName, classItem, canEditRegistration]);
 
   /** Grava a prévia da leitura local na sessão (mesmo contrato da Edge Function). */
   const persistPreview = useCallback(async (sessionId: string, pageNumber: number, p: PagePreview) => {
@@ -728,6 +732,7 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
   const canConfirmPage =
     classDecision === 'resolved' &&
     invalidCount === 0 &&
+    !otherClassMatch &&
     (pageAction === 'create' || (pageAction === 'link' && Boolean(linkStudentId)));
 
   /** Avaliação estrita da autoaceitação da página atual (não grava nada). */
@@ -1430,7 +1435,7 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
                   </SelectContent>
                 </Select>
                 <Button size="sm" variant={pageAction === 'create' ? 'default' : 'outline'}
-                  disabled={Boolean(otherClassMatch) || classStudents.length === 0}
+                  disabled={Boolean(otherClassMatch)}
                   onClick={() => { setPageAction('create'); setLinkStudentId(null); }}>
                   Cadastrar novo aluno
                 </Button>
