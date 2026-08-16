@@ -442,15 +442,15 @@ export async function buildIraRankingPdf(entries: RankingEntry[], options: Ranki
   doc.setFontSize(7);
   doc.text(
     `Turmas/Séries: ${options.classNames.join(', ')}`,
-    margin + 1, margin + 51, { maxWidth: 118 },
+    margin + 50, margin + 43, { maxWidth: 44 },
   );
   doc.text(
     `Emitido em ${format(new Date(), 'dd/MM/yyyy')}${options.periodsLabel ? ` · Base: ${options.periodsLabel}` : ''} · ${rows.length} de ${options.totalEligible} elegível(is)`,
-    margin + 1, margin + 55.5, { maxWidth: 118 },
+    margin + 50, margin + 47, { maxWidth: 44 },
   );
 
   // Faixa azul "TOP 15 — MELHORES IRA"
-  const bandY = margin + 59;
+  const bandY = margin + 51;
   const bandH = 9.6;
   doc.setFillColor(...NAVY);
   doc.roundedRect(margin, bandY, pageWidth - margin * 2, bandH, 1.5, 1.5, 'F');
@@ -479,12 +479,12 @@ export async function buildIraRankingPdf(entries: RankingEntry[], options: Ranki
     theme: 'grid',
     tableWidth: pageWidth - margin * 2,
     styles: {
-      fontSize: 9, cellPadding: 1.35, textColor: [32, 44, 58],
+      fontSize: 8.6, cellPadding: 1.15, textColor: [32, 44, 58],
       lineColor: [206, 224, 245], lineWidth: 0.2, valign: 'middle',
     },
     headStyles: {
       fillColor: ROYAL, textColor: 255, fontStyle: 'bold', halign: 'center',
-      fontSize: 9, cellPadding: 1.8,
+      fontSize: 8.6, cellPadding: 1.5,
     },
     alternateRowStyles: { fillColor: LIGHT },
     columnStyles: {
