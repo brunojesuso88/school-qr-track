@@ -566,11 +566,21 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
       let finalPreview = aiPreview;
       if (local?.preview && local.ok) {
         // A IA valida: a leitura local permanece visível e as divergências são sinalizadas.
-        const { preview: merged } = reconcileLocalWithAi(
+        const { preview: merged, aiEmptyIgnored } = reconcileLocalWithAi(
           local.preview as unknown as PagePreview,
           aiPreview as unknown as { rows: ReviewRow[]; notes?: string[] },
         );
-        finalPreview = merged;
+        finalPreview = {
+          ...merged,
+          reading: merged.reading
+            ? {
+                ...merged.reading,
+                ai_empty_ignored: aiEmptyIgnored,
+                anchored_subjects: (local.preview as unknown as PagePreview).reading?.anchored_subjects ?? [],
+                merged_subject_lines: (local.preview as unknown as PagePreview).reading?.merged_subject_lines ?? 0,
+              }
+            : merged.reading,
+        };
         await persistPreview(sessionId, pageNumber, finalPreview);
       } else if (finalPreview.reading) {
         finalPreview = {
@@ -1531,6 +1541,20 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
                 hasOtherBlockers={otherBlockers.length > 0}
                 applying={applyingLocalReading}
                 onUseLocalReading={handleUseLocalReading}
+                aiEmptyIgnored={preview.reading?.ai_empty_ignored ?? 0}
+                anchoredSubjects={preview.reading?.anchored_subjects ?? []}
+              />
+            )}
+            {!divergenceDiag.hasDivergence
+              && ((preview.reading?.ai_empty_ignored ?? 0) > 0
+                || (preview.reading?.anchored_subjects?.length ?? 0) > 0) && (
+              <GradesDivergencePanel
+                divergences={[]}
+                ruleActive={autoRules.use_local_on_reconciliation}
+                allLocallyEligible
+                hasOtherBlockers={false}
+                aiEmptyIgnored={preview.reading?.ai_empty_ignored ?? 0}
+                anchoredSubjects={preview.reading?.anchored_subjects ?? []}
               />
             )}
             {sessionSummary}
