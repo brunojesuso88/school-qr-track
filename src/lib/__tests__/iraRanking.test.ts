@@ -1,6 +1,18 @@
-// @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
-import { buildIraRankingPdf, formatStudentCode, RANKING_LIMIT, RankingEntry } from '@/lib/iraRanking';
+
+// Stub mínimo de localStorage (o client do backend é importado indiretamente).
+const store = new Map<string, string>();
+(globalThis as unknown as { localStorage: unknown }).localStorage = {
+  getItem: (k: string) => store.get(k) ?? null,
+  setItem: (k: string, v: string) => void store.set(k, v),
+  removeItem: (k: string) => void store.delete(k),
+  clear: () => store.clear(),
+  key: () => null,
+  length: 0,
+};
+
+const { buildIraRankingPdf, formatStudentCode, RANKING_LIMIT } = await import('@/lib/iraRanking');
+type RankingEntry = import('@/lib/iraRanking').RankingEntry;
 
 const entries: RankingEntry[] = Array.from({ length: 25 }, (_, i) => ({
   studentId: `s${i}`,
