@@ -557,9 +557,17 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
       }
       if (cancelledRef.current) return;
 
-      // Caminho 100% local: página conclusiva e sem nenhum motivo de dúvida.
-      if (readingMode === 'local_ai' && local?.preview && local.ok && local.confident) {
+      // Caminho 100% local: leitura AUTORITATIVA (sem risco real) dispensa a IA.
+      const localOk = Boolean(local?.preview && local.ok);
+      const localAuthoritative = Boolean(local?.authoritative);
+      const useAi = shouldValidateWithAi({ mode: readingMode, localOk, localAuthoritative });
+      if (!useAi && local?.preview) {
         const localPreview = local.preview as unknown as PagePreview;
+        if (localPreview.reading) {
+          localPreview.reading = {
+            ...localPreview.reading, mode: 'local', authority: 'authoritative', ai_used: false,
+          };
+        }
         await persistPreview(sessionId, pageNumber, localPreview);
         setLocalSolvedPages((prev) => prev + 1);
         setSession((prev) => (prev ? { ...prev, current_page: pageNumber } : prev));
@@ -578,9 +586,10 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
       let finalPreview = aiPreview;
       if (local?.preview && local.ok) {
         // A IA valida: a leitura local permanece visível e as divergências são sinalizadas.
-        const { preview: merged, aiEmptyIgnored } = reconcileLocalWithAi(
+        const { preview: merged, aiEmptyIgnored, aiOnlyNumericIgnored } = reconcileLocalWithAi(
           local.preview as unknown as PagePreview,
           aiPreview as unknown as { rows: ReviewRow[]; notes?: string[] },
+          { localAuthoritative },
         );
         finalPreview = {
           ...merged,
@@ -588,6 +597,7 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
             ? {
                 ...merged.reading,
                 ai_empty_ignored: aiEmptyIgnored,
+                ai_only_numeric_ignored: aiOnlyNumericIgnored,
                 anchored_subjects: (local.preview as unknown as PagePreview).reading?.anchored_subjects ?? [],
                 merged_subject_lines: (local.preview as unknown as PagePreview).reading?.merged_subject_lines ?? 0,
               }
