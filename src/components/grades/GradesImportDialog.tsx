@@ -40,6 +40,7 @@ import { CatalogSubject, buildEffectiveSubjectMatrix } from '@/lib/gradePageLoca
 import { fetchCurriculumMatrix, matrixToExpectedSubjects } from '@/lib/curriculumMatrix';
 import { parseSeriesValue } from '@/lib/series';
 import { classifyPeriodLabel, isPeriodKind, periodRank } from '@/lib/gradePageLocal/normalize';
+import { resolveClassNameFromPdf, samePdfClassBaseName } from '@/lib/classNames/salaFora';
 import {
   matchesSecondPass,
   sameGradeValue,
@@ -509,7 +510,8 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
       : { code: 'keep', birth_date: 'keep', mother: 'keep', father: 'keep' });
     await loadPageConflicts(detected.student_id, p);
     const pdfClass = (p.pdf_class_code ?? '').trim();
-    const divergent = Boolean(pdfClass) && normalize(pdfClass) !== normalize(effectiveName || classItem?.name || '');
+    // O sufixo "Sala Fora" é diferenciação interna do registro: não gera conflito de turma.
+    const divergent = Boolean(pdfClass) && !samePdfClassBaseName(pdfClass, effectiveName || classItem?.name || '');
     setClassDecision(divergent ? 'pending' : 'resolved');
     setOtherClassMatch(null);
     if (!detected.student_id) {
@@ -917,13 +919,13 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
   };
 
   /** Renomeia a turma para o nome do PDF (com auditoria) — nunca automático. */
-  const handleRenameClass = async () => {
+  const handleRenameClass = async (salaFora = false) => {
     if (!classItem || !preview?.pdf_class_code) return;
     setRenamingClass(true);
     try {
       const { data: userData } = await supabase.auth.getUser();
       const oldName = effectiveName || classItem.name;
-      const newName = preview.pdf_class_code.trim();
+      const newName = resolveClassNameFromPdf(preview.pdf_class_code, salaFora);
       const { error: classError } = await supabase.from('classes').update({ name: newName }).eq('id', classItem.id);
       if (classError) throw classError;
       const { error: studentsError } = await supabase.from('students').update({ class: newName }).eq('class', oldName);
