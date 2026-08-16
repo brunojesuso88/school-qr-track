@@ -225,6 +225,8 @@ export interface RankingPdfOptions {
   totalEligible: number;
   /** URL do brasão da escola (opcional). */
   logoUrl?: string;
+  /** Série do Ensino Médio da classificação (obrigatória no fluxo da UI). */
+  series?: HighSchoolSeries;
 }
 
 const SCHOOL_LINE_1 = 'CENTRO DE ENSINO';
@@ -365,11 +367,11 @@ export async function buildIraRankingPdf(entries: RankingEntry[], options: Ranki
   doc.setLineWidth(0.3);
   doc.rect(margin - 1.6, margin - 1.6, pageWidth - (margin - 1.6) * 2, pageHeight - (margin - 1.6) * 2, 'S');
 
-  // Brasão (canto superior esquerdo), cores originais preservadas
+  // Brasão (canto superior esquerdo) em destaque, cores originais preservadas
   const logo = await loadLogo(options.logoUrl ?? '');
   if (logo) {
     try {
-      doc.addImage(logo, 'PNG', margin + 1, margin + 1, 30, 30);
+      doc.addImage(logo, 'PNG', margin + 1, margin + 1, 46, 46);
     } catch {
       /* ignora logo inválido */
     }
@@ -391,8 +393,15 @@ export async function buildIraRankingPdf(entries: RankingEntry[], options: Ranki
   doc.setFontSize(11);
   doc.text(TITLE_TOP, cx, margin + 24, { align: 'center', charSpace: 0.5 });
   doc.setTextColor(...ROYAL);
-  doc.setFontSize(26);
-  doc.text(TITLE_MAIN, cx, margin + 36, { align: 'center' });
+  doc.setFontSize(24);
+  const mainTitle = options.series
+    ? `${TITLE_MAIN} — ${options.series}ª SÉRIE DO ENSINO MÉDIO`
+    : TITLE_MAIN;
+  doc.text(mainTitle, cx, margin + 35, { align: 'center' });
+  doc.setDrawColor(...ROYAL);
+  doc.setLineWidth(0.8);
+  const underline = Math.min(doc.getTextWidth(mainTitle) / 2 + 4, pageWidth / 2 - margin - 56);
+  doc.line(cx - underline, margin + 37.6, cx + underline, margin + 37.6);
 
   // Faixa motivacional central discreta
   const phrase = 'Seu esforço hoje, sua conquista amanhã!';
@@ -401,10 +410,10 @@ export async function buildIraRankingPdf(entries: RankingEntry[], options: Ranki
   const phraseWidth = doc.getTextWidth(phrase);
   const chipW = phraseWidth + 16;
   doc.setFillColor(...LIGHT);
-  doc.roundedRect(cx - chipW / 2, margin + 39.6, chipW, 7.6, 3.8, 3.8, 'F');
-  drawGrowthIcon(doc, cx - chipW / 2 + 4.5, margin + 41.4, 1);
+  doc.roundedRect(cx - chipW / 2, margin + 40.4, chipW, 7.6, 3.8, 3.8, 'F');
+  drawGrowthIcon(doc, cx - chipW / 2 + 4.5, margin + 42.2, 1);
   doc.setTextColor(...NAVY);
-  doc.text(phrase, cx - chipW / 2 + 13.5, margin + 44.6);
+  doc.text(phrase, cx - chipW / 2 + 13.5, margin + 45.4);
   doc.setFont('helvetica', 'normal');
 
   // Troféu dourado (canto superior direito)
@@ -433,15 +442,15 @@ export async function buildIraRankingPdf(entries: RankingEntry[], options: Ranki
   doc.setFontSize(7);
   doc.text(
     `Turmas/Séries: ${options.classNames.join(', ')}`,
-    margin + 1, margin + 35, { maxWidth: 110 },
+    margin + 1, margin + 51, { maxWidth: 118 },
   );
   doc.text(
     `Emitido em ${format(new Date(), 'dd/MM/yyyy')}${options.periodsLabel ? ` · Base: ${options.periodsLabel}` : ''} · ${rows.length} de ${options.totalEligible} elegível(is)`,
-    margin + 1, margin + 39.5, { maxWidth: 110 },
+    margin + 1, margin + 55.5, { maxWidth: 118 },
   );
 
   // Faixa azul "TOP 15 — MELHORES IRA"
-  const bandY = margin + 50;
+  const bandY = margin + 59;
   const bandH = 9.6;
   doc.setFillColor(...NAVY);
   doc.roundedRect(margin, bandY, pageWidth - margin * 2, bandH, 1.5, 1.5, 'F');
@@ -453,7 +462,7 @@ export async function buildIraRankingPdf(entries: RankingEntry[], options: Ranki
   doc.text(`TOP ${RANKING_LIMIT} — MELHORES IRA`, cx, bandY + 6.4, { align: 'center', charSpace: 0.6 });
   [-70, -62, 62, 70].forEach((dx) => drawStar(doc, cx + dx, bandY + 4.6, 1.7, [255, 255, 255]));
 
-  const footerH = 15;
+  const footerH = 13;
   const footerY = pageHeight - margin - footerH;
 
   autoTable(doc, {
