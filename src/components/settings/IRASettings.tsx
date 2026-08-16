@@ -13,6 +13,7 @@ import { Loader2, Calculator, AlertTriangle, Link2, Info } from 'lucide-react';
 import { isAutoWeightEligible, resolveWeight, weightForWeeklyClasses } from '@/lib/ira';
 import { cn } from '@/lib/utils';
 import IraRankingExport from '@/components/settings/IraRankingExport';
+import { useAuth } from '@/contexts/AuthContext';
 import {
   CLASS_SERIES_OPTIONS, HighSchoolSeries, classSeriesLabel, detectClassSeries, parseClassSeries,
 } from '@/lib/iraRanking';
@@ -53,6 +54,9 @@ const normalize = (s: string) =>
 
 const IRASettings = () => {
   const [classes, setClasses] = useState<ClassRow[]>([]);
+  const { userRole } = useAuth();
+  const canEditSeries = userRole === 'admin' || userRole === 'direction';
+  const [savingSeries, setSavingSeries] = useState(false);
   const [mappingClasses, setMappingClasses] = useState<MappingClassRow[]>([]);
   const [selectedClassId, setSelectedClassId] = useState<string>('');
   const [subjects, setSubjects] = useState<SubjectRow[]>([]);
