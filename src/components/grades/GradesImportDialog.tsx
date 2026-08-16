@@ -745,9 +745,12 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
     !otherClassMatch &&
     (pageAction === 'create' || (pageAction === 'link' && Boolean(linkStudentId)));
 
+  /** Exceção cadastral vale apenas para quem pode alterar cadastro (RLS/trigger inalterados). */
+  const registryExceptionActive = autoAccept && autoRules.use_pdf_registry && canEditRegistration;
+
   /** Avaliação estrita da autoaceitação da página atual (não grava nada). */
   const autoEval = useMemo(() => {
-    if (!preview) return { eligible: false, reasons: [] as string[] };
+    if (!preview) return { eligible: false, reasons: [] as string[], appliedExceptions: [] as string[] };
     return evaluateAutoAccept({
       detected: preview.detected,
       rows,
@@ -756,8 +759,30 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
       linkedStudentId: pageAction === 'link' ? linkStudentId : null,
       suggestedStudentId: preview.detected.student_id,
       regDecision,
+      rules: autoRules,
+      canUsePdfRegistry: canEditRegistration,
+      otherClassMatch: Boolean(otherClassMatch),
+      contextBlocked: Boolean(contextBlock),
     });
-  }, [preview, rows, classDecision, pageHasConflicts, pageAction, linkStudentId, regDecision]);
+  }, [
+    preview, rows, classDecision, pageHasConflicts, pageAction, linkStudentId, regDecision,
+    autoRules, canEditRegistration, otherClassMatch, contextBlock,
+  ]);
+
+  /**
+   * Exceção A ativa: a decisão cadastral da página passa a ser "Atualizar pelo boletim"
+   * em todo campo presente no PDF (inclusive quando o cadastro está vazio).
+   */
+  useEffect(() => {
+    if (!registryExceptionActive || !preview) return;
+    const d = preview.detected;
+    setRegDecision({
+      code: d.pdf_code ? 'update' : 'keep',
+      birth_date: d.pdf_birth_date ? 'update' : 'keep',
+      mother: d.pdf_mother_name ? 'update' : 'keep',
+      father: d.pdf_father_name ? 'update' : 'keep',
+    });
+  }, [registryExceptionActive, preview]);
 
   /** Persiste a preferência na sessão para valer também ao retomar. */
   const handleToggleAutoAccept = async (value: boolean) => {
@@ -765,6 +790,18 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
     if (session) {
       await supabase.from('grade_import_sessions').update({ auto_accept: value }).eq('id', session.id);
       setSession((prev) => (prev ? { ...prev, auto_accept: value } : prev));
+    }
+  };
+
+  /** Persiste as exceções por sessão (retomada mantém a mesma configuração). */
+  const handleToggleRule = async (rule: keyof AutoAcceptRules, value: boolean) => {
+    const next = { ...autoRules, [rule]: value };
+    setAutoRules(next);
+    if (session) {
+      await supabase.from('grade_import_sessions')
+        .update({ auto_accept_rules: next as never })
+        .eq('id', session.id);
+      setSession((prev) => (prev ? { ...prev, auto_accept_rules: next } : prev));
     }
   };
 
