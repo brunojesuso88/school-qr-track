@@ -90,7 +90,7 @@ const SchoolMappingLayout: React.FC<SchoolMappingLayoutProps> = ({ children }) =
           {/* Header */}
           <div className="flex items-center gap-3 px-6 py-5 border-b border-sidebar-border">
             <button
-              onClick={() => navigate('/home')}
+              onClick={() => navigate('/dashboard')}
               className="p-2 -ml-2 rounded-lg hover:bg-sidebar-accent transition-colors"
             >
               <ArrowLeft className="w-5 h-5 text-sidebar-foreground" />

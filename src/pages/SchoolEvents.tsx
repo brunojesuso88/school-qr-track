@@ -23,11 +23,22 @@ export default function SchoolEvents() {
   const load = async () => {
     setLoading(true);
     const { data, error } = await supabase
-      .from('school_event_simple')
-      .select('*')
+      .from('school_events')
+      .select('id, title, description, event_date, cover_image, images, created_by, created_at, updated_at')
+      .contains('tags', ['evento'])
       .order('event_date', { ascending: false, nullsFirst: false });
     if (error) toast.error('Erro ao carregar eventos');
-    else setEvents((data || []) as any);
+    else setEvents(((data || []) as any[]).map(e => ({
+      id: e.id,
+      name: e.title,
+      description: e.description || '',
+      event_date: e.event_date,
+      cover_image: e.cover_image,
+      images: (e.images || []) as string[],
+      created_by: e.created_by,
+      created_at: e.created_at,
+      updated_at: e.updated_at,
+    })));
     setLoading(false);
   };
 
@@ -55,7 +66,7 @@ export default function SchoolEvents() {
     if (!window.confirm(`Excluir o evento "${e.name}"?`)) return;
     const paths = [...(e.images || []), ...(e.cover_image ? [e.cover_image] : [])];
     if (paths.length) await supabase.storage.from('school-events').remove(paths);
-    const { error } = await supabase.from('school_event_simple').delete().eq('id', e.id);
+    const { error } = await supabase.from('school_events').delete().eq('id', e.id);
     if (error) toast.error('Erro ao excluir');
     else { toast.success('Evento excluído'); load(); }
   };

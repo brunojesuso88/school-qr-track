@@ -53,7 +53,7 @@ const Auth = () => {
         return;
       }
       if (userRole === 'admin' || userRole === 'direction') {
-        navigate('/home', { replace: true });
+        navigate('/dashboard', { replace: true });
       } else {
         navigate('/dashboard', { replace: true });
       }
