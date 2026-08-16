@@ -25,6 +25,7 @@ import {
 import { parseGradePageLocal } from '@/lib/gradePageLocal/parseGradePageLocal';
 import { reconcileLocalWithAi } from '@/lib/gradePageLocal/reconcile';
 import { LocalContextStudent } from '@/lib/gradePageLocal/types';
+import { classifyPeriodLabel, isPeriodKind, periodRank } from '@/lib/gradePageLocal/normalize';
 import {
   CONFLICT_LABELS, DetectedStudent, FieldDecision, RegistrationDecision,
   defaultRegistrationDecision, formatDate,
