@@ -63,6 +63,17 @@ export const PERIOD_ORDER = [
   'media final', 'rec final', 'cons class', 'pendencia', 'final',
 ];
 
+/**
+ * Colunas finais do boletim: NUNCA são notas de período.
+ * Não importar, não mapear, não exibir e não usar no IRA.
+ */
+export const IGNORED_PERIOD_KINDS = ['media_final', 'rec_final', 'cons_class', 'pendencia', 'final'];
+
+export const isIgnoredPeriodKind = (kind: string | null | undefined) =>
+  IGNORED_PERIOD_KINDS.includes(String(kind ?? ''));
+
+export const isPeriodKind = (kind: string | null | undefined) => String(kind ?? '') === 'period';
+
 export const periodRank = (label: string) => {
   const idx = PERIOD_ORDER.indexOf(normalizeText(label));
   return idx === -1 ? PERIOD_ORDER.length : idx;

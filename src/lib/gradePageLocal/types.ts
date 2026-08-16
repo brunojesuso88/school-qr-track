@@ -35,6 +35,8 @@ export interface AbsenceColumn {
 export interface GridLayout {
   columns: GridColumn[];
   absenceColumns: AbsenceColumn[];
+  /** Colunas finais do boletim (Média Final, Rec. Final, Cons. Class, Pendência, Final) — descartadas. */
+  ignoredColumns: AbsenceColumn[];
   /** x onde termina a coluna de disciplinas */
   subjectColumnEnd: number;
   /** índice da linha do cabeçalho de períodos */
