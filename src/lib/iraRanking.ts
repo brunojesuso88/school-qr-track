@@ -470,10 +470,12 @@ export async function buildIraRankingPdf(entries: RankingEntry[], options: Ranki
     position: 26, code: 56, birthDate: 46, ira: 30,
   };
   const dense = columns.includes('fullName') && columns.length >= 5;
+  // Sem coluna elástica, as larguras fixas não preenchem a página: deixa tudo em auto.
+  const hasFlexible = columns.includes('fullName') || columns.includes('className');
   const columnStyles: Record<number, Record<string, unknown>> = {};
   columns.forEach((c, idx) => {
     const base: Record<string, unknown> = { halign: 'center' };
-    if (FIXED[c]) base.cellWidth = FIXED[c];
+    if (hasFlexible && FIXED[c]) base.cellWidth = FIXED[c];
     if (c === 'position') base.fontStyle = 'bold';
     if (c === 'fullName' || c === 'className') {
       base.cellWidth = 'auto';
