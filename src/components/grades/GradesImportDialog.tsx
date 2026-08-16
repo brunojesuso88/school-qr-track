@@ -217,6 +217,7 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
   const cancelledRef = useRef(false);
   const [autoAccept, setAutoAccept] = useState(false);
   const [autoRules, setAutoRules] = useState<AutoAcceptRules>(DEFAULT_AUTO_ACCEPT_RULES);
+  const [applyingLocalReading, setApplyingLocalReading] = useState(false);
   const [autoApprovedPage, setAutoApprovedPage] = useState<number | null>(null);
   const autoRunRef = useRef<string | null>(null);
   const [readingMode, setReadingMode] = useState<ReadingMode>('local_ai');
