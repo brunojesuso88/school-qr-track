@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -7,13 +7,16 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Loader2, Trophy, AlertTriangle, Medal, FileDown } from 'lucide-react';
+import { Loader2, Trophy, AlertTriangle, Medal, FileDown, Eye } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatIra } from '@/lib/ira';
 import {
   HIGH_SCHOOL_SERIES, HighSchoolSeries, RANKING_LIMIT, RankingResult, buildIraRanking, detectClassSeries,
   formatBirthDate, formatStudentCode, generateIraRankingPdf, parseClassSeries, seriesLabel,
+  DEFAULT_RANKING_PDF_COLUMNS, RANKING_PDF_COLUMN_OPTIONS, RankingPdfColumn, buildIraRankingPdf,
+  orderRankingColumns,
 } from '@/lib/iraRanking';
 import logoAsset from '@/assets/logo-cepans.png.asset.json';
 
@@ -39,6 +42,29 @@ const IraRankingExport = ({ classes, classesWithGrades }: Props) => {
   const [loading, setLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [result, setResult] = useState<RankingResult | null>(null);
+  const [columns, setColumns] = useState<RankingPdfColumn[]>(DEFAULT_RANKING_PDF_COLUMNS);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewing, setPreviewing] = useState(false);
+  const previewUrlRef = useRef<string | null>(null);
+
+  const revokePreview = useCallback(() => {
+    if (previewUrlRef.current) {
+      URL.revokeObjectURL(previewUrlRef.current);
+      previewUrlRef.current = null;
+    }
+    setPreviewUrl(null);
+  }, []);
+
+  useEffect(() => revokePreview, [revokePreview]);
+
+  const activeColumns = useMemo(() => orderRankingColumns(columns), [columns]);
+  const hasColumn = (c: RankingPdfColumn) => activeColumns.includes(c);
+
+  const toggleColumn = (c: RankingPdfColumn, checked: boolean) => {
+    revokePreview();
+    setColumns((prev) => (checked ? [...new Set([...prev, c])] : prev.filter((p) => p !== c)));
+  };
 
   /** Turmas com boletim importado. */
   const withGrades = useMemo(
@@ -72,6 +98,7 @@ const IraRankingExport = ({ classes, classesWithGrades }: Props) => {
   const changeSeries = (value: HighSchoolSeries) => {
     setSeries(value);
     setResult(null);
+    revokePreview();
     // Limpa automaticamente turmas de outra série.
     setSelected((prev) => prev.filter((id) => {
       const c = withGrades.find((w) => w.id === id);
@@ -81,6 +108,7 @@ const IraRankingExport = ({ classes, classesWithGrades }: Props) => {
 
   const toggle = (id: string, checked: boolean) => {
     setResult(null);
+    revokePreview();
     setSelected((prev) => (checked ? [...new Set([...prev, id])] : prev.filter((p) => p !== id)));
   };
 
@@ -91,6 +119,10 @@ const IraRankingExport = ({ classes, classesWithGrades }: Props) => {
     }
     if (selected.length === 0) {
       toast.error('Selecione ao menos uma turma para compor a classificação.');
+      return;
+    }
+    if (activeColumns.length === 0) {
+      toast.error('Selecione ao menos uma coluna do PDF.');
       return;
     }
     setLoading(true);
@@ -111,6 +143,10 @@ const IraRankingExport = ({ classes, classesWithGrades }: Props) => {
 
   const exportPdf = async () => {
     if (!result || result.top.length === 0) return;
+    if (activeColumns.length === 0) {
+      toast.error('Selecione ao menos uma coluna do PDF.');
+      return;
+    }
     setExporting(true);
     try {
       await generateIraRankingPdf(result.top, {
@@ -119,6 +155,7 @@ const IraRankingExport = ({ classes, classesWithGrades }: Props) => {
         totalEligible: result.eligibleCount,
         logoUrl: logoAsset.url,
         series: series || undefined,
+        columns: activeColumns,
       });
       toast.success(`PDF gerado com ${result.top.length} colocação(ões).`);
     } catch (e) {
@@ -126,6 +163,35 @@ const IraRankingExport = ({ classes, classesWithGrades }: Props) => {
       toast.error('Não foi possível gerar o PDF da classificação.');
     } finally {
       setExporting(false);
+    }
+  };
+
+  const openPreview = async () => {
+    if (!result || result.top.length === 0) return;
+    if (activeColumns.length === 0) {
+      toast.error('Selecione ao menos uma coluna do PDF.');
+      return;
+    }
+    setPreviewing(true);
+    try {
+      const doc = await buildIraRankingPdf(result.top, {
+        classNames: selectedNames,
+        periodsLabel: result.periodsLabel,
+        totalEligible: result.eligibleCount,
+        logoUrl: logoAsset.url,
+        series: series || undefined,
+        columns: activeColumns,
+      });
+      revokePreview();
+      const url = URL.createObjectURL(doc.output('blob'));
+      previewUrlRef.current = url;
+      setPreviewUrl(url);
+      setPreviewOpen(true);
+    } catch (e) {
+      console.error(e);
+      toast.error('Não foi possível gerar a pré-visualização do PDF.');
+    } finally {
+      setPreviewing(false);
     }
   };
 
@@ -140,7 +206,7 @@ const IraRankingExport = ({ classes, classesWithGrades }: Props) => {
         </CardTitle>
         <CardDescription>
           Escolha a série do Ensino Médio, selecione as turmas, confira a prévia e exporte em PDF os {RANKING_LIMIT} melhores resultados.
-          O cálculo usa a configuração de IRA de cada turma. O PDF não exibe nomes de alunos.
+          O cálculo usa a configuração de IRA de cada turma. Escolha quais informações serão exibidas — o nome completo só será incluído quando selecionado.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
