@@ -4,6 +4,7 @@
  * catálogo global da série. Aliases e abreviações do catálogo enriquecem as âncoras.
  */
 import { normalizeText } from './normalize';
+import { seriesListMatches } from '../series';
 import { LocalExpectedSubject } from './types';
 
 export interface CatalogSubject {
@@ -18,15 +19,13 @@ interface BuildEffectiveMatrixInput {
   mapping: { name: string; weekly_classes?: number | null }[];
   imported?: { name: string; weekly_classes?: number | null }[];
   catalog?: CatalogSubject[];
-  /** Série da turma (1º, 2º, 3º ano). Quando nula, o catálogo entra apenas como enriquecimento. */
+  /** Série da turma como valor persistido ('1' | '2' | '3'). Nula => catálogo só enriquece. */
   series?: string | null;
 }
 
-const seriesMatches = (series: string | null | undefined, list: string[] | null | undefined) => {
-  if (!series || !list || list.length === 0) return false;
-  const target = normalizeText(series);
-  return list.some((s) => normalizeText(s) === target);
-};
+/** Comparação canônica de série: '1'|'2'|'3', tolerando rótulos legados apenas na leitura. */
+export const seriesMatches = (series: string | null | undefined, list: string[] | null | undefined) =>
+  seriesListMatches(series, list);
 
 export function buildEffectiveSubjectMatrix({
   mapping, imported = [], catalog = [], series = null,
