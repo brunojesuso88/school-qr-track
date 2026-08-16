@@ -20,6 +20,12 @@ import { GradesRegistrationAudit } from './GradesRegistrationAudit';
 import { GradesClassMismatchPanel } from './GradesClassMismatchPanel';
 import { evaluateAutoAccept } from './gradesAutoAccept';
 import {
+  closePdfDocument, extractPageTokens, LocalPdfDocument, openPdfDocument,
+} from '@/lib/gradePageLocal/pdfText';
+import { parseGradePageLocal } from '@/lib/gradePageLocal/parseGradePageLocal';
+import { reconcileLocalWithAi } from '@/lib/gradePageLocal/reconcile';
+import { LocalContextStudent } from '@/lib/gradePageLocal/types';
+import {
   CONFLICT_LABELS, DetectedStudent, FieldDecision, RegistrationDecision,
   defaultRegistrationDecision, formatDate,
 } from './gradesConflicts';
@@ -66,9 +72,13 @@ interface PagePreview {
   };
   notes: string[];
   reading?: {
-    mode: 'fast' | 'validated';
+    mode: 'fast' | 'validated' | 'local' | 'local_validated' | 'ai_fallback';
     escalated: boolean;
     reasons: string[];
+    local_score?: number;
+    divergences?: number;
+    absence_tokens_dropped?: number;
+    duration_ms?: number;
   };
 }
 
@@ -92,6 +102,14 @@ interface GradesImportDialogProps {
 
 type Step = 'select' | 'resume' | 'processing' | 'page' | 'saving' | 'summary' | 'failed';
 type PageAction = 'link' | 'create' | 'ignore' | null;
+/** Modo de leitura (feature flag). Padrão: local com validação da IA quando necessário. */
+type ReadingMode = 'local_ai' | 'always_ai' | 'ai_only';
+
+const READING_MODE_LABELS: Record<ReadingMode, string> = {
+  local_ai: 'Leitura local + validação por IA',
+  always_ai: 'Sempre validar com IA',
+  ai_only: 'Somente IA (modo anterior)',
+};
 
 const normalize = (s: unknown) =>
   String(s ?? '')
@@ -143,6 +161,12 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
   const [autoAccept, setAutoAccept] = useState(false);
   const [autoApprovedPage, setAutoApprovedPage] = useState<number | null>(null);
   const autoRunRef = useRef<string | null>(null);
+  const [readingMode, setReadingMode] = useState<ReadingMode>('local_ai');
+  const pdfDocRef = useRef<LocalPdfDocument | null>(null);
+  const localStudentsRef = useRef<LocalContextStudent[]>([]);
+  const localExpectedRef = useRef<{ name: string; weekly_classes?: number | null }[]>([]);
+  const [localTimings, setLocalTimings] = useState<number[]>([]);
+  const [localSolvedPages, setLocalSolvedPages] = useState(0);
 
   const reset = useCallback(() => {
     setStep('select');
@@ -165,6 +189,12 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
     setAutoApprovedPage(null);
     autoRunRef.current = null;
     cancelledRef.current = false;
+    closePdfDocument(pdfDocRef.current);
+    pdfDocRef.current = null;
+    localStudentsRef.current = [];
+    localExpectedRef.current = [];
+    setLocalTimings([]);
+    setLocalSolvedPages(0);
     if (fileInputRef.current) fileInputRef.current.value = '';
   }, []);
 
@@ -211,6 +241,12 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
       }));
     }
     setExpectedSubjects(expected);
+    localStudentsRef.current = students.map((s) => ({
+      id: s.id, full_name: s.full_name, student_id: s.student_id,
+      school_code: s.school_code, birth_date: s.birth_date,
+      mother_name: s.mother_name, father_name: s.father_name,
+    }));
+    localExpectedRef.current = expected.map((s) => ({ name: s.name, weekly_classes: s.weekly_classes }));
     return { students, expected };
   }, [classItem]);
 
@@ -262,7 +298,7 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
 
   const applyPreview = useCallback(async (p: PagePreview) => {
     setPreview(p);
-    setRows((p.rows || []).map((r) => ({ ...r, flags: r.flags || [], source: 'import' as const })));
+    setRows((p.rows || []).map((r) => ({ ...r, flags: r.flags || [], source: r.source ?? 'import' })));
     setEditing(false);
     setConflictStrategy('keep');
     const detected = p.detected;
@@ -276,26 +312,94 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
     setStep('page');
   }, [loadPageConflicts, effectiveName, classItem]);
 
-  /** Processa UMA página e abre a confirmação. */
+  /** Grava a prévia da leitura local na sessão (mesmo contrato da Edge Function). */
+  const persistPreview = useCallback(async (sessionId: string, pageNumber: number, p: PagePreview) => {
+    await supabase.from('grade_import_session_pages')
+      .update({ status: 'awaiting_confirmation', preview_json: p as never, error: null })
+      .eq('session_id', sessionId).eq('page_number', pageNumber);
+    await supabase.from('grade_import_sessions')
+      .update({ status: 'awaiting_confirmation', current_preview: p as never, current_page: pageNumber })
+      .eq('id', sessionId);
+  }, []);
+
+  /** Leitura LOCAL determinística (texto + coordenadas), sem rede e sem IA. */
+  const readPageLocally = useCallback(async (pageNumber: number) => {
+    const doc = pdfDocRef.current;
+    if (!doc) return null;
+    const started = performance.now();
+    const tokens = await extractPageTokens(doc, pageNumber);
+    const result = parseGradePageLocal(tokens, {
+      page: pageNumber,
+      totalPages: doc.numPages,
+      students: localStudentsRef.current,
+      expectedSubjects: localExpectedRef.current,
+    });
+    const elapsed = Math.round(performance.now() - started);
+    if (result.preview) result.preview.reading.duration_ms = elapsed;
+    setLocalTimings((prev) => [...prev, elapsed]);
+    return result;
+  }, []);
+
+  /** Processa UMA página: local primeiro, IA como validadora/fallback. */
   const processPage = useCallback(async (sessionId: string, pageNumber: number) => {
     setError(null);
     setStep('processing');
     setPreview(null);
     try {
+      let local: Awaited<ReturnType<typeof readPageLocally>> = null;
+      if (readingMode !== 'ai_only') {
+        try {
+          local = await readPageLocally(pageNumber);
+        } catch (e) {
+          console.error('Leitura local falhou, seguindo com IA:', e);
+          local = null;
+        }
+      }
+      if (cancelledRef.current) return;
+
+      // Caminho 100% local: página conclusiva e sem nenhum motivo de dúvida.
+      if (readingMode === 'local_ai' && local?.preview && local.ok && local.confident) {
+        const localPreview = local.preview as unknown as PagePreview;
+        await persistPreview(sessionId, pageNumber, localPreview);
+        setLocalSolvedPages((prev) => prev + 1);
+        setSession((prev) => (prev ? { ...prev, current_page: pageNumber } : prev));
+        await applyPreview(localPreview);
+        return;
+      }
+
       const { data, error: fnError } = await supabase.functions.invoke('parse-grade-page', {
         body: { action: 'page', session_id: sessionId, page_number: pageNumber },
       });
       if (fnError) throw new Error(fnError.message);
       if (!data?.success) throw new Error(data?.error || 'Falha ao ler a página.');
       if (cancelledRef.current) return;
+      const aiPreview = data.preview as PagePreview;
+
+      let finalPreview = aiPreview;
+      if (local?.preview && local.ok) {
+        // A IA valida: a leitura local permanece visível e as divergências são sinalizadas.
+        const { preview: merged } = reconcileLocalWithAi(
+          local.preview as unknown as PagePreview,
+          aiPreview as unknown as { rows: ReviewRow[]; notes?: string[] },
+        );
+        finalPreview = merged;
+        await persistPreview(sessionId, pageNumber, finalPreview);
+      } else if (finalPreview.reading) {
+        finalPreview = {
+          ...finalPreview,
+          reading: { ...finalPreview.reading, mode: 'ai_fallback', local_score: local?.validation.score ?? 0,
+            reasons: [...new Set([...(local?.validation.reasons ?? []), ...finalPreview.reading.reasons])] },
+        };
+      }
+
       setSession((prev) => (prev ? { ...prev, current_page: pageNumber } : prev));
-      await applyPreview(data.preview as PagePreview);
+      await applyPreview(finalPreview);
     } catch (e) {
       console.error(e);
       setError(e instanceof Error ? e.message : 'Erro ao ler a página.');
       setStep('failed');
     }
-  }, [applyPreview]);
+  }, [applyPreview, persistPreview, readPageLocally, readingMode]);
 
   /** Sessão em aberto para esta turma (retomada). */
   useEffect(() => {
@@ -342,6 +446,16 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
     try {
       const { students, expected } = await loadContext();
       const pdfBase64 = await fileToBase64(file);
+      // Documento aberto UMA vez por sessão e reutilizado em todas as páginas.
+      if (readingMode !== 'ai_only') {
+        try {
+          closePdfDocument(pdfDocRef.current);
+          pdfDocRef.current = await openPdfDocument(await file.arrayBuffer());
+        } catch (e) {
+          console.error('Não foi possível abrir o PDF localmente:', e);
+          pdfDocRef.current = null;
+        }
+      }
       const { data, error: fnError } = await supabase.functions.invoke('parse-grade-page', {
         body: {
           action: 'create',
@@ -808,6 +922,23 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
                 Selecionar PDF
               </Button>
             </div>
+            <div className="rounded-lg border p-3 space-y-2">
+              <Label className="text-sm font-medium">Modo de leitura</Label>
+              <Select value={readingMode} onValueChange={(v) => setReadingMode(v as ReadingMode)}>
+                <SelectTrigger className="h-8 text-xs w-full sm:w-[320px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="local_ai">{READING_MODE_LABELS.local_ai}</SelectItem>
+                  <SelectItem value="always_ai">{READING_MODE_LABELS.always_ai}</SelectItem>
+                  <SelectItem value="ai_only">{READING_MODE_LABELS.ai_only}</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-[11px] text-muted-foreground">
+                No modo padrão a página é lida no próprio dispositivo por texto e coordenadas; a IA só entra quando a
+                leitura local não é conclusiva e atua como validadora — nunca substitui a leitura local sem aviso.
+              </p>
+            </div>
             {classItem && !classItem.mapping_class_id && (
               <Alert>
                 <Info className="w-4 h-4" />
@@ -907,12 +1038,28 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
                 Página {preview.page} de {preview.total_pages}
               </Badge>
               {preview.reading && (
-                <Badge
-                  variant={preview.reading.escalated ? 'secondary' : 'outline'}
-                  className="text-[10px]"
-                >
-                  {preview.reading.escalated ? 'Validação adicional aplicada' : 'Lida em modo rápido'}
-                </Badge>
+                <div className="flex items-center gap-1 flex-wrap">
+                  <Badge
+                    variant={preview.reading.mode === 'local' ? 'outline' : 'secondary'}
+                    className="text-[10px]"
+                  >
+                    {preview.reading.mode === 'local'
+                      ? 'Leitura local'
+                      : preview.reading.mode === 'local_validated'
+                        ? 'Leitura local + validação IA'
+                        : preview.reading.mode === 'ai_fallback'
+                          ? 'Leitura por IA (fallback)'
+                          : preview.reading.escalated ? 'Validação adicional aplicada' : 'Lida em modo rápido'}
+                  </Badge>
+                  {preview.reading.duration_ms != null && (
+                    <span className="text-[10px] text-muted-foreground">{preview.reading.duration_ms}ms</span>
+                  )}
+                  {Boolean(preview.reading.divergences) && (
+                    <Badge variant="destructive" className="text-[10px]">
+                      {preview.reading.divergences} divergência(s) local × IA
+                    </Badge>
+                  )}
+                </div>
               )}
               <Progress value={progress} className="flex-1 min-w-[160px]" />
             </div>
@@ -1148,6 +1295,12 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
             <p className="text-xs text-muted-foreground">
               Nenhuma gravação adicional foi feita. As notas já aparecem na aba “Notas” de cada aluno.
             </p>
+            {localTimings.length > 0 && (
+              <p className="text-xs text-muted-foreground">
+                Leitura local: {localSolvedPages} página(s) resolvida(s) sem IA ·
+                {' '}tempo médio {Math.round(localTimings.reduce((a, b) => a + b, 0) / localTimings.length)}ms por página.
+              </p>
+            )}
           </div>
         )}
 
