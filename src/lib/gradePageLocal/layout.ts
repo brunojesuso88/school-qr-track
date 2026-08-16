@@ -153,10 +153,13 @@ const SUBJECT_STOPWORDS = [
   'frequencia', 'legenda', 'responsavel', 'matricula', 'estado', 'municipio', 'unidade',
 ];
 
+const HARD_STOPWORDS = /\b(legenda|assinatura|observac|resultado final|total geral|pagina)\b/;
+
 const isSubjectLabel = (text: string) => {
   const norm = normalizeText(text);
   if (norm.length < 3) return false;
   if (!/[a-z]/.test(norm)) return false;
+  if (HARD_STOPWORDS.test(norm)) return false;
   const words = norm.split(' ').filter(Boolean);
   if (words.every((w) => SUBJECT_STOPWORDS.includes(w))) return false;
   return true;
@@ -187,6 +190,13 @@ export function buildCells(lines: TokenLine[], grid: GridLayout): BuildCellsResu
     if (!subjectName || !isSubjectLabel(subjectName)) continue;
 
     const valueTokens = line.tokens.filter((t) => t.x + t.w / 2 >= grid.subjectColumnEnd);
+    // Linha de dados só é considerada se houver token DENTRO da grade (nota ou falta).
+    const insideGrid = valueTokens.some((t) => {
+      const center = t.x + t.w / 2;
+      return grid.columns.some((c) => center >= c.start && center < c.end)
+        || grid.absenceColumns.some((a) => center >= a.start && center < a.end);
+    });
+    if (!insideGrid) continue;
     const byColumn = new Map<string, { texts: string[]; ambiguous: boolean }>();
 
     for (const token of valueTokens) {
