@@ -1295,6 +1295,12 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
             <p className="text-xs text-muted-foreground">
               Nenhuma gravação adicional foi feita. As notas já aparecem na aba “Notas” de cada aluno.
             </p>
+            {localTimings.length > 0 && (
+              <p className="text-xs text-muted-foreground">
+                Leitura local: {localSolvedPages} página(s) resolvida(s) sem IA ·
+                {' '}tempo médio {Math.round(localTimings.reduce((a, b) => a + b, 0) / localTimings.length)}ms por página.
+              </p>
+            )}
           </div>
         )}
 
