@@ -450,8 +450,20 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
     const pdfClass = (p.pdf_class_code ?? '').trim();
     const divergent = Boolean(pdfClass) && normalize(pdfClass) !== normalize(effectiveName || classItem?.name || '');
     setClassDecision(divergent ? 'pending' : 'resolved');
+    setOtherClassMatch(null);
+    if (!detected.student_id) {
+      try {
+        const found = await lookupOtherClass(detected, effectiveNameRef.current || classItem?.name || '');
+        if (found) {
+          setOtherClassMatch(found);
+          setPageAction(null);
+        }
+      } catch (e) {
+        console.error('Busca global do aluno falhou:', e);
+      }
+    }
     setStep('page');
-  }, [loadPageConflicts, effectiveName, classItem]);
+  }, [loadPageConflicts, lookupOtherClass, effectiveName, classItem]);
 
   /** Grava a prévia da leitura local na sessão (mesmo contrato da Edge Function). */
   const persistPreview = useCallback(async (sessionId: string, pageNumber: number, p: PagePreview) => {
@@ -574,7 +586,10 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
   }, [open, classItem]);
 
   useEffect(() => {
-    if (open && classItem) setEffectiveName(classItem.name);
+    if (open && classItem) {
+      effectiveNameRef.current = classItem.name;
+      setEffectiveName(classItem.name);
+    }
   }, [open, classItem]);
 
   const startImport = async (file: File) => {
