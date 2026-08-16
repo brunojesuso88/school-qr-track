@@ -18,8 +18,9 @@ import {
 import { GradesReviewTable, ReviewRow } from './GradesReviewTable';
 import { GradesRegistrationAudit } from './GradesRegistrationAudit';
 import { GradesClassMismatchPanel } from './GradesClassMismatchPanel';
+import { GradesDivergencePanel } from './GradesDivergencePanel';
 import {
-  AutoAcceptRules, DEFAULT_AUTO_ACCEPT_RULES, evaluateAutoAccept, parseAutoAcceptRules,
+  analyzeDivergences, AutoAcceptRules, DEFAULT_AUTO_ACCEPT_RULES, evaluateAutoAccept, parseAutoAcceptRules,
 } from './gradesAutoAccept';
 import { useAuth } from '@/contexts/AuthContext';
 import {
@@ -216,6 +217,7 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
   const cancelledRef = useRef(false);
   const [autoAccept, setAutoAccept] = useState(false);
   const [autoRules, setAutoRules] = useState<AutoAcceptRules>(DEFAULT_AUTO_ACCEPT_RULES);
+  const [applyingLocalReading, setApplyingLocalReading] = useState(false);
   const [autoApprovedPage, setAutoApprovedPage] = useState<number | null>(null);
   const autoRunRef = useRef<string | null>(null);
   const [readingMode, setReadingMode] = useState<ReadingMode>('local_ai');
@@ -750,7 +752,12 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
 
   /** Avaliação estrita da autoaceitação da página atual (não grava nada). */
   const autoEval = useMemo(() => {
-    if (!preview) return { eligible: false, reasons: [] as string[], appliedExceptions: [] as string[] };
+    if (!preview) {
+      return {
+        eligible: false, reasons: [] as string[], appliedExceptions: [] as string[],
+        appliedExceptionCodes: [] as string[], divergences: [], divergenceOnlyBlocker: false,
+      } as ReturnType<typeof evaluateAutoAccept>;
+    }
     return evaluateAutoAccept({
       detected: preview.detected,
       rows,
@@ -768,6 +775,29 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
     preview, rows, classDecision, pageHasConflicts, pageAction, linkStudentId, regDecision,
     autoRules, canEditRegistration, otherClassMatch, contextBlock,
   ]);
+
+  /** Diagnóstico das divergências LOCAL × IA — sempre visível, independente do modo automático. */
+  const divergenceDiag = useMemo(() => analyzeDivergences(rows), [rows]);
+  const otherBlockers = useMemo(
+    () => autoEval.reasons.filter((r) => r !== 'Divergência entre leituras'),
+    [autoEval.reasons],
+  );
+
+  /** Ação contextual: adota a leitura local do boletim e retoma o fluxo automático. */
+  const handleUseLocalReading = async () => {
+    setApplyingLocalReading(true);
+    try {
+      if (!autoAccept) await handleToggleAutoAccept(true);
+      await handleToggleRule('use_local_on_reconciliation', true);
+      if (otherBlockers.length > 0) {
+        toast.warning('Leitura local adotada, mas ainda existem outras pendências nesta página.');
+      } else {
+        toast.info('Leitura local do boletim adotada — continuando automaticamente.');
+      }
+    } finally {
+      setApplyingLocalReading(false);
+    }
+  };
 
   /**
    * Exceção A ativa: a decisão cadastral da página passa a ser "Atualizar pelo boletim"
@@ -1064,8 +1094,8 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
           confirmed_by: userId,
           confirmed_at: new Date().toISOString(),
           confirmation_mode: mode === 'auto'
-            ? (autoEval.appliedExceptions.length > 0
-              ? `auto:${autoEval.appliedExceptions.map((e) => (e.startsWith('Nome') ? 'fuzzy_unique' : 'pdf_registry')).join(',')}`
+            ? (autoEval.appliedExceptionCodes.length > 0
+              ? `auto:${autoEval.appliedExceptionCodes.join(',')}`
               : 'auto')
             : 'manual',
         })
@@ -1425,6 +1455,25 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
                       </p>
                     </div>
                   </div>
+                  <div className="flex items-start gap-2">
+                    <Switch
+                      id="rule-local-reconciliation"
+                      className="mt-0.5"
+                      checked={autoRules.use_local_on_reconciliation}
+                      onCheckedChange={(v) => handleToggleRule('use_local_on_reconciliation', v)}
+                    />
+                    <div>
+                      <Label htmlFor="rule-local-reconciliation" className="text-xs font-medium">
+                        Divergência entre leituras — usar a leitura local do boletim
+                      </Label>
+                      <p className="text-[11px] text-muted-foreground">
+                        Grava exatamente o valor extraído do PDF (leitura local), usando a IA apenas como validação.
+                        Só vale quando a célula é estruturalmente válida: valor entre 0 e 10 ou vazio legítimo, sem
+                        baixa confiança, valor inválido, duplicidade conflitante ou disciplina ausente. Células vistas
+                        somente pela IA nunca são aceitas automaticamente.
+                      </p>
+                    </div>
+                  </div>
                 </div>
               )}
               {autoAccept && autoEval.appliedExceptions.length > 0 && (
@@ -1452,6 +1501,17 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
                 )
               )}
             </div>
+
+            {divergenceDiag.hasDivergence && (
+              <GradesDivergencePanel
+                divergences={divergenceDiag.divergences}
+                ruleActive={autoRules.use_local_on_reconciliation}
+                allLocallyEligible={divergenceDiag.allLocallyEligible}
+                hasOtherBlockers={otherBlockers.length > 0}
+                applying={applyingLocalReading}
+                onUseLocalReading={handleUseLocalReading}
+              />
+            )}
             {sessionSummary}
 
             {classDecision === 'pending' && preview.pdf_class_code && (

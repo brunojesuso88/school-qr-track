@@ -8,11 +8,14 @@ export interface AutoAcceptRules {
   use_pdf_registry: boolean;
   /** Nome semelhante (>= 0,85) com candidato ÚNICO é vinculado automaticamente. */
   accept_unique_fuzzy: boolean;
+  /** Divergência LOCAL × IA deixa de bloquear e adota-se a leitura local do boletim. */
+  use_local_on_reconciliation: boolean;
 }
 
 export const DEFAULT_AUTO_ACCEPT_RULES: AutoAcceptRules = {
   use_pdf_registry: false,
   accept_unique_fuzzy: false,
+  use_local_on_reconciliation: false,
 };
 
 /** Lê as regras persistidas na sessão de forma tolerante a sessões antigas. */
@@ -21,19 +24,107 @@ export const parseAutoAcceptRules = (value: unknown): AutoAcceptRules => {
   return {
     use_pdf_registry: raw.use_pdf_registry === true,
     accept_unique_fuzzy: raw.accept_unique_fuzzy === true,
+    use_local_on_reconciliation: raw.use_local_on_reconciliation === true,
   };
 };
 
-/** Flags de célula que impedem a autoaceitação. Célula vazia NUNCA é erro. */
+/**
+ * Flags de célula que impedem a autoaceitação. Célula vazia NUNCA é erro.
+ * `reconciliation_divergence` NÃO entra aqui: é tratada linha a linha (ver analyzeDivergences).
+ */
 const BLOCKING_CELL_FLAGS = [
   'invalid_value',
   'out_of_scale',
   'low_confidence',
-  'reconciliation_divergence',
   'conflicting_duplicate',
   'unmatched_student',
   'missing_subject',
 ];
+
+/** Flags que, presentes na própria linha divergente, tornam a divergência inelegível. */
+const DIVERGENCE_BLOCKING_FLAGS = [
+  'invalid_value',
+  'out_of_scale',
+  'low_confidence',
+  'conflicting_duplicate',
+  'missing_subject',
+];
+
+/** Detalhe por célula de uma divergência LOCAL × IA (usado na UI e na decisão). */
+export interface DivergenceDetail {
+  index: number;
+  subject: string;
+  period: string;
+  page: number | null;
+  /** Valor lido diretamente do PDF (Fase 2). `null` = célula vazia legítima. */
+  local_raw: string | null;
+  local_value: number | null;
+  /** Valor da validação por IA (segunda leitura). */
+  ai_raw: string | null;
+  confidence: number | null;
+  source: 'local' | 'ai' | 'import' | 'manual' | undefined;
+  /** Célula vista apenas pela IA — não existe leitura local para adotar. */
+  ai_only: boolean;
+  /** Elegível para adoção automática da leitura local. */
+  local_eligible: boolean;
+  /** Motivos de inelegibilidade desta célula. */
+  reasons: string[];
+}
+
+interface DivergenceRow {
+  subject?: string;
+  period?: string;
+  page?: number | null;
+  source_page?: number | null;
+  raw_value?: string | null;
+  value?: number | null;
+  second_pass_value?: string | null;
+  confidence?: number | null;
+  flags?: string[];
+  source?: string;
+}
+
+/** Analisa todas as divergências LOCAL × IA da página, por célula. Não grava nada. */
+export const analyzeDivergences = (rows: DivergenceRow[]): {
+  divergences: DivergenceDetail[];
+  hasDivergence: boolean;
+  allLocallyEligible: boolean;
+  hasAiOnly: boolean;
+} => {
+  const divergences: DivergenceDetail[] = [];
+  rows.forEach((row, index) => {
+    const flags = row.flags ?? [];
+    if (!flags.includes('reconciliation_divergence')) return;
+    const aiOnly = row.source === 'ai';
+    const value = row.value ?? null;
+    const reasons: string[] = [];
+    if (aiOnly) reasons.push('Somente a IA identificou esta célula — não existe valor local para autoaceite');
+    if (value != null && (value < 0 || value > 10)) reasons.push('Valor local fora da escala 0–10');
+    DIVERGENCE_BLOCKING_FLAGS.forEach((f) => {
+      if (flags.includes(f)) reasons.push(`Célula com alerta bloqueante: ${f}`);
+    });
+    divergences.push({
+      index,
+      subject: row.subject ?? '—',
+      period: row.period ?? '—',
+      page: row.source_page ?? row.page ?? null,
+      local_raw: aiOnly ? null : (row.raw_value ?? null),
+      local_value: aiOnly ? null : value,
+      ai_raw: row.second_pass_value ?? (aiOnly ? row.raw_value ?? null : null),
+      confidence: row.confidence ?? null,
+      source: row.source as DivergenceDetail['source'],
+      ai_only: aiOnly,
+      local_eligible: reasons.length === 0,
+      reasons,
+    });
+  });
+  return {
+    divergences,
+    hasDivergence: divergences.length > 0,
+    allLocallyEligible: divergences.length > 0 && divergences.every((d) => d.local_eligible),
+    hasAiOnly: divergences.some((d) => d.ai_only),
+  };
+};
 
 export interface AutoAcceptInput {
   detected: DetectedStudent;
@@ -58,6 +149,12 @@ export interface AutoAcceptResult {
   reasons: string[];
   /** Exceções efetivamente aplicadas nesta página. */
   appliedExceptions: string[];
+  /** Códigos estáveis das exceções aplicadas (auditoria / confirmation_mode). */
+  appliedExceptionCodes: string[];
+  /** Diagnóstico completo das divergências LOCAL × IA da página. */
+  divergences: DivergenceDetail[];
+  /** Verdadeiro quando a única pendência relevante é divergência localmente elegível. */
+  divergenceOnlyBlocker: boolean;
 }
 
 /** Regra ESTRITA: só é elegível quando não há nenhum problema pendente na página. */
@@ -72,6 +169,7 @@ export const evaluateAutoAccept = (input: AutoAcceptInput): AutoAcceptResult => 
   } = input;
   const reasons: string[] = [];
   const applied: string[] = [];
+  const appliedCodes: string[] = [];
   const registryExceptionOn = rules.use_pdf_registry && canUsePdfRegistry;
   const fuzzyExceptionOn = rules.accept_unique_fuzzy;
 
@@ -86,7 +184,10 @@ export const evaluateAutoAccept = (input: AutoAcceptInput): AutoAcceptResult => 
     reasons.push('Aluno não identificado na turma');
   } else if (detected.status === 'fuzzy') {
     // Exceção B: só vale com candidato ÚNICO por semelhança (o parser já garante isso).
-    if (fuzzyExceptionOn && detected.match_score >= 0.85) applied.push('Nome semelhante com candidato único');
+    if (fuzzyExceptionOn && detected.match_score >= 0.85) {
+      applied.push('Nome semelhante com candidato único');
+      appliedCodes.push('fuzzy_unique');
+    }
     else reasons.push('Aluno identificado apenas por semelhança de nome');
   }
   if (detected.conflicts.includes('ambiguous_match') || detected.conflicts.includes('duplicate_link')) {
@@ -113,10 +214,21 @@ export const evaluateAutoAccept = (input: AutoAcceptInput): AutoAcceptResult => 
   if (flagged.has('invalid_value')) reasons.push('Nota inválida na página');
   if (flagged.has('out_of_scale')) reasons.push('Nota fora da escala 0–10');
   if (flagged.has('low_confidence')) reasons.push('Célula com baixa confiança');
-  if (flagged.has('reconciliation_divergence')) reasons.push('Divergência entre leituras');
   if (flagged.has('conflicting_duplicate')) reasons.push('Duplicidade conflitante');
   if (flagged.has('missing_subject')) reasons.push('Disciplina ausente');
   if (flagged.has('unmatched_student')) reasons.push('Aluno não identificado na turma');
+
+  // Divergência LOCAL × IA: tratada linha a linha para manter segurança.
+  const diag = analyzeDivergences(rows);
+  const divergenceBlocking = diag.hasDivergence
+    && !(rules.use_local_on_reconciliation && diag.allLocallyEligible);
+  const reasonsBeforeDivergence = [...new Set(reasons)].length;
+  if (divergenceBlocking) {
+    reasons.push('Divergência entre leituras');
+  } else if (diag.hasDivergence) {
+    applied.push('Leitura local do boletim adotada em divergência de validação');
+    appliedCodes.push('local_reconciliation');
+  }
 
   if (rows.some((r) => r.value != null && (r.value < 0 || r.value > 10))) {
     reasons.push('Nota fora da escala 0–10');
@@ -131,6 +243,7 @@ export const evaluateAutoAccept = (input: AutoAcceptInput): AutoAcceptResult => 
   };
   if (registryExceptionOn) {
     applied.push('Dados cadastrais do boletim aplicados automaticamente');
+    appliedCodes.push('pdf_registry');
   } else if (regDecision) {
     critical(detected.pdf_code, detected.current?.school_code ?? null, 'Código');
     critical(detected.pdf_birth_date, detected.current?.birth_date ?? null, 'data de nascimento');
@@ -139,5 +252,16 @@ export const evaluateAutoAccept = (input: AutoAcceptInput): AutoAcceptResult => 
   }
 
   const unique = [...new Set(reasons)];
-  return { eligible: unique.length === 0, reasons: unique, appliedExceptions: [...new Set(applied)] };
+  return {
+    eligible: unique.length === 0,
+    reasons: unique,
+    appliedExceptions: [...new Set(applied)],
+    appliedExceptionCodes: [...new Set(appliedCodes)],
+    divergences: diag.divergences,
+    // Única pendência = divergência, e todas as divergências podem adotar a leitura local.
+    divergenceOnlyBlocker: divergenceBlocking
+      && diag.allLocallyEligible
+      && reasonsBeforeDivergence === 0
+      && unique.length === 1,
+  };
 };

@@ -145,7 +145,13 @@ export const GradesReviewTable = ({
                     </Badge>
                   )}
                   {row.second_pass_value !== undefined && row.second_pass_value !== null && (
-                    <span className="text-[10px] text-muted-foreground">2ª leitura: {row.second_pass_value}</span>
+                    row.flags.includes('reconciliation_divergence') ? (
+                      <span className="text-[10px] font-medium text-destructive">
+                        Local: {row.source === 'ai' ? '—' : (row.raw_value?.trim() || 'vazio')} · IA: {row.second_pass_value}
+                      </span>
+                    ) : (
+                      <span className="text-[10px] text-muted-foreground">2ª leitura: {row.second_pass_value}</span>
+                    )
                   )}
                 </div>
               </td>
