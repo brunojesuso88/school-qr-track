@@ -396,7 +396,7 @@ export async function buildIraRankingPdf(entries: RankingEntry[], options: Ranki
   infoY += 4.4;
   doc.text(`Emitido em ${format(new Date(), 'dd/MM/yyyy')}`, cxT, infoY, { align: 'center' });
 
-  // Faixa azul "OS TOP 15 - MELHORES IRA" (empurrada conforme a altura do bloco acima)
+  // Faixa azul "TOP 15 — MELHORES IRAs" (empurrada conforme a altura do bloco acima)
   const bandY = Math.max(margin + 51, infoY + 4);
   const bandH = 9.6;
   doc.setFillColor(...NAVY);
@@ -405,9 +405,9 @@ export async function buildIraRankingPdf(entries: RankingEntry[], options: Ranki
   doc.roundedRect(margin, bandY + bandH - 2.2, pageWidth - margin * 2, 2.2, 1.1, 1.1, 'F');
   doc.setTextColor(255, 255, 255);
   doc.setFont('helvetica', 'bold');
-  // Hierarquia: "OS TOP 15" maior, "- MELHORES IRA" menor, na mesma faixa.
-  const strong = `OS TOP ${RANKING_LIMIT}`;
-  const weak = '- MELHORES IRA';
+  // Hierarquia: "TOP 15" maior, "— MELHORES IRAs" menor, na mesma faixa.
+  const strong = `TOP ${RANKING_LIMIT}`;
+  const weak = '— MELHORES IRAs';
   doc.setFontSize(13.5);
   const strongW = doc.getTextWidth(`${strong} `);
   doc.setFontSize(10);
@@ -448,11 +448,11 @@ export async function buildIraRankingPdf(entries: RankingEntry[], options: Ranki
     },
     alternateRowStyles: { fillColor: LIGHT },
     columnStyles: {
-      0: { halign: 'center', cellWidth: 34, fontStyle: 'bold' },
-      1: { halign: 'center' },
-      2: { halign: 'center' },
-      3: { halign: 'center' },
-      4: { halign: 'center', fontStyle: 'bold', cellWidth: 34, textColor: ROYAL, fontSize: 11 },
+      0: { halign: 'center', cellWidth: 26, fontStyle: 'bold' },
+      1: { halign: 'center', cellWidth: 56 },
+      2: { halign: 'center', cellWidth: 46 },
+      3: { halign: 'center', overflow: 'linebreak', cellWidth: 'auto' },
+      4: { halign: 'center', fontStyle: 'bold', cellWidth: 30, textColor: ROYAL, fontSize: 11 },
     },
     didParseCell: (data) => {
       if (data.section !== 'body') return;
