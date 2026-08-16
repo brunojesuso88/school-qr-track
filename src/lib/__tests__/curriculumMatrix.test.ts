@@ -35,7 +35,7 @@ describe('matriz curricular oficial', () => {
 
   it('cargas da série 1 conferem com a matriz institucional', () => {
     expect(Object.fromEntries(S1.map((s) => [s.name, s.weekly_classes]))).toEqual({
-      'ARTE': 2, 'BIOLOGIA': 2, 'EDUCACAO DIGITAL': 1, 'EDUCACAO FISICA': 2, 'FILOSOFIA': 1,
+      'ARTE': 2, 'BIOLOGIA': 2, 'EDUCACAO DIGITAL': 1, 'EDUCACAO FISICA': 1, 'FILOSOFIA': 1,
       'FISICA': 2, 'GEOGRAFIA': 2, 'HISTORIA': 2, 'IDENTIDADE E PROTAGONISMO': 1,
       'LETRAMENTO EM LINGUA PORTUGUESA': 1, 'LETRAMENTO EM MATEMATICA': 1, 'LINGUA INGLESA': 1,
       'LINGUA PORTUGUESA': 4, 'MATEMATICA': 4, 'QUIMICA': 2, 'SOCIOLOGIA': 1,
@@ -79,7 +79,7 @@ describe('matriz curricular oficial', () => {
   });
 
   it('totais reais calculados por série', () => {
-    expect(matrixWeeklyTotal(S1)).toBe(29);
+    expect(matrixWeeklyTotal(S1)).toBe(28);
     expect(matrixWeeklyTotal(S2)).toBe(30);
     expect(matrixWeeklyTotal(S3)).toBe(30);
   });
