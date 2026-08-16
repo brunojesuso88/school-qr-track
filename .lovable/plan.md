@@ -1,82 +1,63 @@
-# Auditoria: "aluno não identificado na turma" na importação de boletim
+# Auditoria: 16 células "somente a IA identificou" na reconciliação do boletim
 
-## Causa raiz (confirmada em dados reais)
+## Diagnóstico
 
-O diálogo de importação carrega os alunos da turma **pelo NOME da turma vindo da prop `classItem`**, e essa prop fica **desatualizada depois que a turma é renomeada dentro do próprio diálogo** (opção "usar o nome da turma do PDF"). Resultado: a consulta volta **zero alunos**, o contexto de matching vai vazio e **todas as páginas** caem em "aluno não identificado na turma".
+A causa raiz não é a IA inventando linhas nem falha geométrica do `subjectColumnEnd`. É uma regra explícita do parser local: uma linha de disciplina só é aceita se tiver ao menos um token dentro da grade. As quatro disciplinas relatadas (APROFUNDAMENTO IF - CNS - I, FILOSOFIA, HISTORIA, IDENTIDADE E PROTAGONISMO) aparecem no boletim com os 4 períodos totalmente vazios, então a linha é descartada localmente e nenhuma célula local existe. A IA lista as mesmas 4 disciplinas × 4 períodos com valor `—`. Na reconciliação essas 16 células caem no ramo "célula que só a IA viu", recebem `reconciliation_divergence` + `ai_only` e bloqueiam sempre — mesmo sem nenhuma nota em disputa.
 
-Evidência em banco (turma MM300CNS -> 26RMM-CNS-300, hoje):
+Evidência no banco: a turma `26RMM-CNS-300` tem 12 registros em `grade_subjects` contra 16 disciplinas no mapeamento — faltam exatamente Filosofia, História, Identidade e Protagonismo e o Aprofundamento I. O padrão "linha vazia = disciplina inexistente" já se repete nessa turma.
 
-```text
-13:45:59  sessao de importacao da turma 877d042c...  -> contexto com 44 alunos (nome antigo ainda valido)
-13:46:41  audit_logs: 40+ alunos com class "MM300CNS" -> "26RMM-CNS-300" (renomeacao aplicada no dialogo)
-13:52:46  NOVA sessao da MESMA turma                  -> contexto com 0 alunos   <-- bug
-```
+## Evidências no código
 
-Hoje a turma `26RMM-CNS-300` (id `877d042c-…`) tem **46 alunos** em `students` — eles existem; apenas não são carregados.
+1. `expectedSubjects` (`GradesImportDialog.tsx:333-343`) vem somente de `mapping_class_subjects` filtrado por `classes.mapping_class_id`. Sem `mapping_class_id`, a lista esperada é vazia. `grade_subjects` só é lido para conflito de notas (`:410`) e escrito na gravação (`:995-1020`); nunca serve de âncora de leitura.
+2. Nomenclatura divergente: no mapeamento dessa turma os nomes são `Aprfl`, `Aprfll`, `Português`, `Inglês`; no PDF e em `grade_subjects` são `APROFUNDAMENTO IF - CNS - II`, `LINGUA PORTUGUESA`, `LINGUA INGLESA`. A `similarity()` por tokens (`normalize.ts`) não casa esses pares, a cobertura cai, `validate.ts` acusa "Disciplinas lidas abaixo do esperado" e a página escala para IA — o gatilho da reconciliação.
+3. Linha descartada: `layout.ts:201-207` exige `insideGrid` (token dentro de `columns`/`absenceColumns`/`ignoredColumns`). Linha só com o nome da disciplina → `continue`, sem `subjects.push` e sem células.
+4. Filtro adicional: `isSubjectLabel` + `SUBJECT_STOPWORDS` (`layout.ts:155-173`). `HISTORIA` e `FILOSOFIA` passam, mas nomes longos como `APROFUNDAMENTO IF - CNS - I` dependem de estar inteiros na mesma linha e à esquerda de `subjectColumnEnd`; se quebrarem em duas linhas, geram duas "meias-linhas" sem tokens na grade.
+5. `classes.series` existe, mas hoje só é usada no filtro do PDF de ranking do IRA — não influencia disciplina alguma.
+6. Reconciliação: `reconcile.ts:61-69` empurra toda célula vista só pela IA para `rows` com `source: 'ai'`; `gradesAutoAccept.ts` marca `ai_only` e bloqueia sempre, inclusive quando o valor da IA é vazio (`—`).
 
-Trechos envolvidos:
-- `src/components/grades/GradesImportDialog.tsx:253-286` (`loadContext`) — filtra `students` por `.eq('class', classItem.name)`.
-- `src/components/grades/GradesImportDialog.tsx:636-666` (`handleRenameClass`) — atualiza banco e o estado local `effectiveName`, mas **não** a prop `classItem`.
-- `src/pages/Classes.tsx:1366-1370` — `GradesImportDialog` é montado **sem** `onImported`, então a lista de turmas da página nunca é recarregada; a prop continua com o nome antigo até um refresh manual (F5).
+## Como distinguir "IA inventou" de "linha existe e o local não viu"
 
-### Por que apareceu depois da unificação
-A unificação tornou `classes` canônica e introduziu o fluxo de conflito de nome de turma (`GradesClassMismatchPanel` + renomeação dentro do diálogo). Antes, renomear turma no meio da importação não acontecia. O vínculo aluno↔turma continua sendo **texto** (`students.class`), não `class_id`; qualquer renomeação cria uma janela em que a UI fica fora de sincronia. `mapping_class_id` **não** é usado para buscar alunos (apenas disciplinas esperadas, linhas 269-277), portanto o backfill não é a causa.
+Critério determinístico, sem IA: procurar na página uma linha cujo trecho à esquerda de `subjectColumnEnd` case com a disciplina (nome exato, alias, abreviação ou similaridade alta com candidato único). Se essa linha existe, a disciplina é real e o parser local deve materializá-la com 4 células `null`. Se não há token algum na coluna de disciplinas correspondente, a linha foi alucinada e deve ser descartada, não bloqueada.
 
-### Causas secundárias (ordenadas por impacto)
-1. **Vínculo frágil por texto** (`students.class`): renomeação, espaços ou caixa quebram o contexto inteiro. Impacto alto, latente.
-2. **Ausência de guarda para contexto vazio**: com 0 alunos carregados o sistema não avisa e trata todos como novos — risco real de duplicatas via "Cadastrar novo aluno" (`:692-712`).
-3. **Sem distinção "existe no sistema, mas em outra turma"**: `matchStudent` (`src/lib/gradePageLocal/parseGradePageLocal.ts:57-73`) e o equivalente na Edge Function (`supabase/functions/parse-grade-page/index.ts:505-525`) só olham a lista da turma.
-4. **Fuzzy sem trava de ambiguidade**: aceita o melhor score mesmo com dois candidatos parecidos (fuzzy a partir de 0,6), sem exigir candidato único.
-5. **Normalização de nome**: `normalizeText` remove acentos/pontuação e colapsa espaços — adequada; porém não trata partículas (DA/DE/DOS) nem ordem invertida de sobrenomes. Não é a causa atual.
+## Arquitetura recomendada
 
-Verificados e **descartados** como causa: coluna de código (PDF grava e compara sempre `school_code`, consistente nos dois matchers); RLS de `students` (SELECT liberado para admin/direction/teacher, sem filtro por turma); uso de `mapping_class_id` para buscar alunos (não ocorre).
+Não criar tabelas novas. Falta apenas uma entidade canônica para "matriz por série" e um catálogo de aliases:
 
-## Solução recomendada (menor risco)
+- `mapping_global_subjects` passa a ser o catálogo canônico (já tem `name`, `abbreviation`, `default_weekly_classes`), acrescido de `series` (1/2/3, nulo = todas) e `aliases text[]` com os nomes como aparecem no boletim (`LINGUA PORTUGUESA`, `APROFUNDAMENTO IF - CNS - I`).
+- `classes.series` (já existe) passa a ser obrigatória ao vincular mapeamento e seleciona a matriz padrão.
+- `mapping_class_subjects` continua a matriz da turma (herda da série, permite extras e edição).
+- `grade_subjects` continua sendo o que o boletim realmente trouxe — nunca semeado sem PDF.
 
-1. **Fonte única do nome no diálogo**: `loadContext` passa a usar `effectiveName` (fallback `classItem.name`) e o contexto é recarregado imediatamente após a renomeação.
-2. **Resolver o nome por `classes.id`**: antes de cada `loadContext`, ler `classes.name` pelo `classItem.id` no banco (uma query), eliminando a dependência de prop desatualizada.
-3. **Passar `onImported` em `Classes.tsx`**, refazendo o fetch de turmas após renomeação/importação.
-4. **Guarda de segurança**: contexto com 0 alunos bloqueia a importação com aviso explícito, em vez de marcar todos como novos.
-5. **Matching em camadas** (abaixo) e painel de conflito com três estados distintos.
+Fluxo: matriz por série no catálogo global → herança para `mapping_class_subjects` ao vincular série+mapeamento → `GradesImportDialog` monta `expectedSubjects` de `mapping_class_subjects` ∪ `grade_subjects` da turma ∪ aliases do catálogo → parser local usa essa lista como âncora.
 
-Nada disso altera o motor do IRA, a leitura de notas nem o cálculo.
+## Algoritmo local para linha totalmente vazia (sem nota falsa)
 
-## Algoritmo de matching proposto
+1. Montar por sessão um índice de âncoras: `normalizeText(nome)` + aliases + abreviação de cada disciplina esperada.
+2. Em `buildCells`, quando `insideGrid` for falso, tentar âncora com o texto à esquerda de `subjectColumnEnd`: igualdade normalizada, prefixo, ou `similarity >= 0.82` com candidato único.
+3. Fusão de linhas: se não casar, concatenar com a linha adjacente quando ambas só têm tokens na coluna de disciplinas e o `y` é contíguo (nome quebrado em duas linhas).
+4. Casando, criar uma célula por período com `raw_value: null`, `value: null`, `invalid: false`, `confidence: 1`, flag `empty_cell` e marca `anchored_subject_row`. Vazio continua `null`.
+5. Sem âncora, mantém o comportamento atual (linha ignorada).
+6. `validate.ts`: contar linhas ancoradas na cobertura e registrar motivo informativo "disciplina reconhecida por âncora, sem notas" (não bloqueante).
 
-```text
-A. codigo: digitos(pdf_code) == digitos(school_code) na turma        -> match exato (score 1)
-B. nome normalizado exato na turma                                  -> match (score 1)
-C. nome muito semelhante (limiar alto) E exatamente 1 candidato     -> sugerir vinculo (nunca autoaceitar)
-D. match por codigo/nome exato FORA da turma                        -> "existe em outra turma" (decisao manual)
-E. nenhum dos casos                                                 -> conflito manual (vincular / cadastrar / ignorar)
-```
+## Reconciliação de linhas IA-only vazias
 
-Normalização de nome: NFD sem acentos, minúsculas, pontuação convertida em espaço, espaços colapsados, remoção de caracteres invisíveis, descarte de partículas (da/de/do/dos/das/e) na comparação por tokens e comparação por conjunto de tokens (ordem irrelevante). Ambiguidade (dois ou mais candidatos acima do limiar) nunca autoaceita.
+- IA-only com valor vazio e disciplina presente localmente (agora ancorada) → não é divergência: casa com a célula local `null` (`reconciled_match`).
+- IA-only vazia e disciplina sem âncora nem token na página → descartar com nota `ai_only_empty_discarded`; não bloqueia.
+- IA-only com valor numérico → continua divergência bloqueante, como hoje.
 
-## Fluxo de atualização cadastral (após match existente)
+## Riscos
 
-Mantém `GradesRegistrationAudit` / `gradesConflicts.ts`: campo vazio no cadastro sugere preenchimento; campo divergente exibe **diff antes/depois** com escolha "manter" ou "atualizar", sem sobrescrita silenciosa. Campos: `school_code`, `birth_date`, `mother_name`, `father_name` (e `class`, quando o aluno vem de outra turma, com confirmação). Somente admin/direção alteram esses campos — o trigger `restrict_report_card_fields` já garante isso.
+- Alias mal cadastrado pode ancorar disciplina errada: mitigado por candidato único e limiar alto.
+- Fusão de linhas pode juntar legenda/rodapé: mitigado pelos `HARD_STOPWORDS` existentes e pela exigência de âncora.
+- Herança por série não deve sobrescrever turma já ajustada: aplicar só em turma sem disciplinas ou via ação explícita.
+- Descartar IA-only vazia remove um bloqueio: aceitável porque não há nota em jogo (vazio = `null` nos dois lados).
 
-## Banco de dados
+## Plano de implementação em etapas
 
-Nenhuma migration é necessária para corrigir o bug. Melhoria opcional em fase posterior, fora deste escopo: coluna `students.class_id` referenciando `classes(id)`, populada por nome e mantida em sincronia, para eliminar a dependência de texto.
-
-## Testes de regressão
-
-- `loadContext` usa o nome atual após renomeação: contexto com 46 alunos na turma `26RMM-CNS-300`.
-- Renomear a turma no diálogo e iniciar nova sessão: nenhum "não identificado" para alunos existentes.
-- Match por código com pontos e zeros à esquerda ("0012.345" vs "12345").
-- Match por nome com acento, cedilha, espaço duplo e ordem de partículas.
-- Dois candidatos semelhantes: conflito manual, sem autoaceite.
-- Aluno de outra turma: estado "existe em outra turma", nunca "novo".
-- Contexto vazio: importação bloqueada com aviso.
-- Atualização cadastral: divergência exige confirmação; campo vazio sugere preenchimento.
-
-## Critérios de aceitação
-
-1. Nenhum aluno cadastrado na turma aparece como "não identificado".
-2. Renomeação de turma durante a importação não zera o contexto de alunos.
-3. Duplicatas não são criadas: "cadastrar novo" só após checagem global.
-4. O diálogo distingue os três estados (na turma / em outra turma / novo).
-5. Atualização cadastral com diff e confirmação explícita.
-6. Notas, IRA e fluxo página a página inalterados; typecheck e testes passando.
+1. Catálogo: migration com `series` e `aliases` em `mapping_global_subjects`; UI em Mapeamento > Disciplinas para editar ambos, semeando aliases a partir dos nomes já vistos em `grade_subjects`.
+2. Herança: `classes.series` obrigatória no vínculo e ação "aplicar matriz da série" que popula `mapping_class_subjects` preservando extras.
+3. Contexto de leitura: `GradesImportDialog` monta `expectedSubjects` de `mapping_class_subjects` ∪ `grade_subjects` ∪ aliases, com campo `aliases` por disciplina.
+4. Parser local: âncoras, fusão de linhas e linhas totalmente vazias em `layout.ts`/`parseGradePageLocal.ts`; ajuste de cobertura em `validate.ts`.
+5. Reconciliação: novo tratamento de IA-only vazia em `reconcile.ts` e `gradesAutoAccept.ts`; `GradesDivergencePanel` distingue "vazio confirmado" de "divergência real".
+6. Testes vitest: 4 períodos vazios ancorados; nome quebrado em duas linhas; alias `Aprfl` → `APROFUNDAMENTO IF - CNS - I`; IA-only vazia com âncora (match) e sem âncora (descartada); IA-only com número (bloqueia); nenhuma nota falsa criada.
+7. Verificação em dados reais na turma `26RMM-CNS-300`: as 4 disciplinas passam a aparecer com os 4 períodos vazios e sem pendência.
