@@ -128,7 +128,7 @@ export async function buildIraRanking(classIds: string[]): Promise<RankingResult
   const classNames = classes.map((c) => c.name);
 
   const [studentsRes, subjRes, perRes, settingsRes] = await Promise.all([
-    supabase.from('students').select('id, school_code, student_id, birth_date, class, status').in('class', classNames),
+    supabase.from('students').select('id, school_code, student_id, full_name, birth_date, class, status').in('class', classNames),
     supabase.from('grade_subjects').select('*').in('class_id', classIds).eq('legacy_excluded', false).order('sort_order'),
     supabase.from('grade_periods').select('*').in('class_id', classIds).order('sort_order'),
     supabase.from('ira_settings').select('*').in('class_id', classIds),
@@ -139,7 +139,7 @@ export async function buildIraRanking(classIds: string[]): Promise<RankingResult
   if (settingsRes.error) throw settingsRes.error;
 
   const students = (studentsRes.data || []).filter((s) => s.status !== 'inactive') as {
-    id: string; school_code: string | null; student_id: string; birth_date: string | null; class: string;
+    id: string; school_code: string | null; student_id: string; full_name: string | null; birth_date: string | null; class: string;
   }[];
   const subjects = (subjRes.data || []) as unknown as GradeSubjectRow[];
   const periods = (perRes.data || []) as unknown as GradePeriodRow[];
@@ -193,6 +193,7 @@ export async function buildIraRanking(classIds: string[]): Promise<RankingResult
     ranked.push({
       studentId: s.id,
       code: s.school_code || null,
+      fullName: s.full_name || '',
       birthDate: s.birth_date,
       className: s.class,
       ira: result.value,
