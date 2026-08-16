@@ -372,7 +372,7 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
     }));
     // Matriz efetiva de âncoras: mapeamento da turma + disciplinas já importadas + catálogo da série.
     const [{ data: gradeSubj }, { data: classRow }] = await Promise.all([
-      supabase.from('grade_subjects').select('name, weekly_classes').eq('class_id', classItem.id),
+      supabase.from('grade_subjects').select('name, weekly_classes').eq('class_id', classItem.id).eq('legacy_excluded', false),
       supabase.from('classes').select('series').eq('id', classItem.id).maybeSingle(),
     ]);
     const series = (classRow as { series?: string | null } | null)?.series ?? null;

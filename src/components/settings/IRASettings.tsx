@@ -97,7 +97,7 @@ const IRASettings = () => {
   const loadClassData = useCallback(async (classId: string) => {
     setLoadingClass(true);
     const [subjRes, perRes, settingsRes] = await Promise.all([
-      supabase.from('grade_subjects').select('id, name, weekly_classes, include_in_ira, custom_ira_weight, mapping_class_subject_id').eq('class_id', classId).order('sort_order'),
+      supabase.from('grade_subjects').select('id, name, weekly_classes, include_in_ira, custom_ira_weight, mapping_class_subject_id').eq('class_id', classId).eq('legacy_excluded', false).order('sort_order'),
       supabase.from('grade_periods').select('id, label, kind, normalized_label').eq('class_id', classId).order('sort_order'),
       supabase.from('ira_settings').select('*').eq('class_id', classId).maybeSingle(),
     ]);
