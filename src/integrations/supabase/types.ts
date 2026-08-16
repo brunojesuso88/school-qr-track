@@ -135,6 +135,44 @@ export type Database = {
           },
         ]
       }
+      curriculum_matrix_subjects: {
+        Row: {
+          created_at: string
+          id: string
+          include_in_ira: boolean
+          series: string
+          subject_id: string
+          updated_at: string
+          weekly_classes: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          include_in_ira?: boolean
+          series: string
+          subject_id: string
+          updated_at?: string
+          weekly_classes: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          include_in_ira?: boolean
+          series?: string
+          subject_id?: string
+          updated_at?: string
+          weekly_classes?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "curriculum_matrix_subjects_subject_id_fkey"
+            columns: ["subject_id"]
+            isOneToOne: false
+            referencedRelation: "mapping_global_subjects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       grade_import_jobs: {
         Row: {
           class_id: string
@@ -1633,6 +1671,7 @@ export type Database = {
         Args: { _year: number }
         Returns: number
       }
+      normalize_subject_key: { Args: { _name: string }; Returns: string }
       update_student_photo: {
         Args: { _photo_url: string; _student_id: string }
         Returns: undefined
