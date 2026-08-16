@@ -1388,6 +1388,33 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
 
             <div className="rounded-lg border p-3 space-y-2">
               <p className="text-sm font-medium">Aluno correspondente no sistema</p>
+              {otherClassMatch && (
+                <Alert>
+                  <AlertTriangle className="w-4 h-4" />
+                  <AlertTitle className="text-sm">Este aluno já existe em outra turma</AlertTitle>
+                  <AlertDescription className="text-xs space-y-2">
+                    <p>
+                      <span className="font-medium">{otherClassMatch.full_name}</span> está cadastrado na turma{' '}
+                      <span className="font-medium">{otherClassMatch.class}</span>
+                      {otherClassMatch.school_code ? ` (Código ${otherClassMatch.school_code})` : ''} — identificado por{' '}
+                      {otherClassMatch.by === 'code' ? 'Código do boletim' : 'nome idêntico'}.
+                      Cadastrar novo aluno criaria duplicidade.
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      <Button size="sm" onClick={handleMoveStudentToClass} disabled={movingStudent}>
+                        {movingStudent && <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" />}
+                        Mover para {effectiveName || classItem.name}
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={handleIgnorePage} disabled={movingStudent}>
+                        Manter na turma atual e ignorar esta página
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => setOtherClassMatch(null)} disabled={movingStudent}>
+                        Decidir manualmente
+                      </Button>
+                    </div>
+                  </AlertDescription>
+                </Alert>
+              )}
               <div className="flex flex-wrap items-center gap-2">
                 <Select
                   value={pageAction === 'link' ? linkStudentId ?? undefined : undefined}
@@ -1403,6 +1430,7 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
                   </SelectContent>
                 </Select>
                 <Button size="sm" variant={pageAction === 'create' ? 'default' : 'outline'}
+                  disabled={Boolean(otherClassMatch) || classStudents.length === 0}
                   onClick={() => { setPageAction('create'); setLinkStudentId(null); }}>
                   Cadastrar novo aluno
                 </Button>
@@ -1450,6 +1478,7 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
               <GradesRegistrationAudit
                 entries={[preview.detected]}
                 decisions={{ [preview.detected.key]: regDecision }}
+                canEdit={canEditRegistration}
                 onDecide={(_key, field, decision) =>
                   setRegDecision((prev) => ({ ...(prev ?? defaultRegistrationDecision(preview.detected)), [field]: decision }))}
               />
