@@ -10,8 +10,9 @@ import { Loader2, Trophy, AlertTriangle, Medal, FileDown } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatIra } from '@/lib/ira';
 import {
-  RANKING_LIMIT, RankingResult, buildIraRanking, formatBirthDate, generateIraRankingPdf,
+  RANKING_LIMIT, RankingResult, buildIraRanking, formatBirthDate, formatStudentCode, generateIraRankingPdf,
 } from '@/lib/iraRanking';
+import logoAsset from '@/assets/logo-cepans.png.asset.json';
 
 interface ClassOption {
   id: string;
@@ -30,6 +31,7 @@ const medalColor = (place: number) =>
 const IraRankingExport = ({ classes, classesWithGrades }: Props) => {
   const [selected, setSelected] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [result, setResult] = useState<RankingResult | null>(null);
 
   const options = useMemo(
@@ -67,14 +69,23 @@ const IraRankingExport = ({ classes, classesWithGrades }: Props) => {
     }
   };
 
-  const exportPdf = () => {
+  const exportPdf = async () => {
     if (!result || result.top.length === 0) return;
-    generateIraRankingPdf(result.top, {
-      classNames: selectedNames,
-      periodsLabel: result.periodsLabel,
-      totalEligible: result.eligibleCount,
-    });
-    toast.success(`PDF gerado com ${result.top.length} colocação(ões).`);
+    setExporting(true);
+    try {
+      await generateIraRankingPdf(result.top, {
+        classNames: selectedNames,
+        periodsLabel: result.periodsLabel,
+        totalEligible: result.eligibleCount,
+        logoUrl: logoAsset.url,
+      });
+      toast.success(`PDF gerado com ${result.top.length} colocação(ões).`);
+    } catch (e) {
+      console.error(e);
+      toast.error('Não foi possível gerar o PDF da classificação.');
+    } finally {
+      setExporting(false);
+    }
   };
 
   const outOfTop = result ? Math.max(0, result.eligibleCount - result.top.length) : 0;
@@ -143,9 +154,9 @@ const IraRankingExport = ({ classes, classesWithGrades }: Props) => {
                 size="sm"
                 variant="default"
                 onClick={exportPdf}
-                disabled={!result || result.top.length === 0}
+                disabled={!result || result.top.length === 0 || exporting}
               >
-                <FileDown className="w-3 h-3 mr-2" />
+                {exporting ? <Loader2 className="w-3 h-3 mr-2 animate-spin" /> : <FileDown className="w-3 h-3 mr-2" />}
                 Gerar PDF da classificação
               </Button>
             </div>
@@ -229,7 +240,7 @@ const IraRankingExport = ({ classes, classesWithGrades }: Props) => {
                                 </span>
                               </TableCell>
                               <TableCell>
-                                {e.code || <span className="text-amber-600">não informado</span>}
+                                {formatStudentCode(e.code) || <span className="text-amber-600">não informado</span>}
                               </TableCell>
                               <TableCell>
                                 {e.birthDate ? formatBirthDate(e.birthDate) : <span className="text-amber-600">não informada</span>}
