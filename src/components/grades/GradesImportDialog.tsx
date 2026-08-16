@@ -156,7 +156,7 @@ const parseValue = (raw: string | null): { value: number | null; invalid: boolea
 };
 
 /** Comparação semântica de notas: 7,5 == 7,50; 0 == 0,00; null == vazio. */
-export { sameGradeValue } from '@/lib/gradePageLocal/gradeCompare';
+export { sameGradeValue };
 
 /** Classificação canônica de uma coluna do boletim (rótulo tem prioridade sobre o kind recebido). */
 const columnIsPeriod = (label: string, kind?: string | null) => {
