@@ -18,8 +18,9 @@ import {
 import { GradesReviewTable, ReviewRow } from './GradesReviewTable';
 import { GradesRegistrationAudit } from './GradesRegistrationAudit';
 import { GradesClassMismatchPanel } from './GradesClassMismatchPanel';
+import { GradesDivergencePanel } from './GradesDivergencePanel';
 import {
-  AutoAcceptRules, DEFAULT_AUTO_ACCEPT_RULES, evaluateAutoAccept, parseAutoAcceptRules,
+  analyzeDivergences, AutoAcceptRules, DEFAULT_AUTO_ACCEPT_RULES, evaluateAutoAccept, parseAutoAcceptRules,
 } from './gradesAutoAccept';
 import { useAuth } from '@/contexts/AuthContext';
 import {
@@ -750,7 +751,12 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
 
   /** Avaliação estrita da autoaceitação da página atual (não grava nada). */
   const autoEval = useMemo(() => {
-    if (!preview) return { eligible: false, reasons: [] as string[], appliedExceptions: [] as string[] };
+    if (!preview) {
+      return {
+        eligible: false, reasons: [] as string[], appliedExceptions: [] as string[],
+        appliedExceptionCodes: [] as string[], divergences: [], divergenceOnlyBlocker: false,
+      } as ReturnType<typeof evaluateAutoAccept>;
+    }
     return evaluateAutoAccept({
       detected: preview.detected,
       rows,
@@ -768,6 +774,29 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
     preview, rows, classDecision, pageHasConflicts, pageAction, linkStudentId, regDecision,
     autoRules, canEditRegistration, otherClassMatch, contextBlock,
   ]);
+
+  /** Diagnóstico das divergências LOCAL × IA — sempre visível, independente do modo automático. */
+  const divergenceDiag = useMemo(() => analyzeDivergences(rows), [rows]);
+  const otherBlockers = useMemo(
+    () => autoEval.reasons.filter((r) => r !== 'Divergência entre leituras'),
+    [autoEval.reasons],
+  );
+
+  /** Ação contextual: adota a leitura local do boletim e retoma o fluxo automático. */
+  const handleUseLocalReading = async () => {
+    setApplyingLocalReading(true);
+    try {
+      if (!autoAccept) await handleToggleAutoAccept(true);
+      await handleToggleRule('use_local_on_reconciliation', true);
+      if (otherBlockers.length > 0) {
+        toast.warning('Leitura local adotada, mas ainda existem outras pendências nesta página.');
+      } else {
+        toast.info('Leitura local do boletim adotada — continuando automaticamente.');
+      }
+    } finally {
+      setApplyingLocalReading(false);
+    }
+  };
 
   /**
    * Exceção A ativa: a decisão cadastral da página passa a ser "Atualizar pelo boletim"
