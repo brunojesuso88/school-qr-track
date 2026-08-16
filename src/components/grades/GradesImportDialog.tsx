@@ -773,7 +773,15 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
         old_data: { name: oldName } as never,
         new_data: { name: newName, reason: 'Divergência de turma no boletim importado (página a página)', page: preview.page } as never,
       });
+      effectiveNameRef.current = newName;
       setEffectiveName(newName);
+      // Recarrega o contexto com o nome NOVO: sem isso os alunos ficam invisíveis para o matching.
+      try {
+        await loadContext();
+        if (preview) await applyPreview(preview);
+      } catch (e) {
+        console.error('Não foi possível recarregar o contexto após renomear a turma:', e);
+      }
       setClassDecision('resolved');
       toast.success(`Turma renomeada para ${newName}.`);
       onImported?.();
@@ -782,6 +790,54 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
       setError(e instanceof Error ? e.message : 'Não foi possível alterar o nome da turma.');
     } finally {
       setRenamingClass(false);
+    }
+  };
+
+  /** Move para esta turma o aluno já cadastrado em outra turma (evita duplicidade). */
+  const handleMoveStudentToClass = async () => {
+    if (!classItem || !otherClassMatch) return;
+    setMovingStudent(true);
+    try {
+      const { data: userData } = await supabase.auth.getUser();
+      const target = effectiveNameRef.current || classItem.name;
+      const previousClass = otherClassMatch.class;
+      const { error: moveError } = await supabase
+        .from('students')
+        .update({ class: target })
+        .eq('id', otherClassMatch.id);
+      if (moveError) throw moveError;
+      await supabase.from('audit_logs').insert({
+        user_id: userData?.user?.id ?? null,
+        action: 'UPDATE',
+        table_name: 'students',
+        record_id: otherClassMatch.id,
+        old_data: { class: previousClass } as never,
+        new_data: { class: target, reason: 'Aluno localizado em outra turma durante importação de boletim' } as never,
+      });
+      await loadContext();
+      setOtherClassMatch(null);
+      setPageAction('link');
+      setLinkStudentId(otherClassMatch.id);
+      toast.success(`${otherClassMatch.full_name} movido de ${previousClass} para ${target}.`);
+      onImported?.();
+    } catch (e) {
+      console.error(e);
+      toast.error(e instanceof Error ? e.message : 'Não foi possível mover o aluno para esta turma.');
+    } finally {
+      setMovingStudent(false);
+    }
+  };
+
+  /** Recarrega turma e contexto após falha de carregamento (guarda de contexto vazio). */
+  const handleReloadContext = async () => {
+    try {
+      await loadContext();
+      setContextBlock(null);
+      setStep(session ? 'resume' : 'select');
+      onImported?.();
+      toast.success('Contexto da turma recarregado.');
+    } catch (e) {
+      if (!(e instanceof Error && e.message === 'CONTEXT_EMPTY')) console.error(e);
     }
   };
 
