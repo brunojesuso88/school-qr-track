@@ -31,6 +31,9 @@ import {
 } from '@/lib/gradePageLocal/pdfText';
 import { parseGradePageLocal } from '@/lib/gradePageLocal/parseGradePageLocal';
 import { reconcileLocalWithAi } from '@/lib/gradePageLocal/reconcile';
+import {
+  manualConfirmationBlockers, rowsForManualLocalConfirmation, shouldValidateWithAi,
+} from './gradesManualConfirm';
 import { LocalContextStudent, LocalExpectedSubject } from '@/lib/gradePageLocal/types';
 import { CatalogSubject, buildEffectiveSubjectMatrix } from '@/lib/gradePageLocal/effectiveMatrix';
 import { fetchCurriculumMatrix, matrixToExpectedSubjects } from '@/lib/curriculumMatrix';
@@ -95,8 +98,19 @@ interface PagePreview {
     divergences?: number;
     absence_tokens_dropped?: number;
     duration_ms?: number;
+    /** Autoridade da leitura local nesta página. */
+    authority?: 'authoritative' | 'needs_validation';
+    /** IA foi efetivamente chamada. */
+    ai_used?: boolean;
+    /** Códigos bloqueantes/informativos da leitura local. */
+    blockers?: string[];
+    advisories?: string[];
     /** Células vazias vistas só pela IA e descartadas na reconciliação. */
     ai_empty_ignored?: number;
+    /** Notas sugeridas apenas pela IA e descartadas por autoridade local. */
+    ai_only_numeric_ignored?: number;
+    /** Marca de resolução humana da validação nesta página. */
+    resolved_by?: string;
     /** Disciplinas materializadas pela matriz da turma (sem notas lançadas). */
     anchored_subjects?: string[];
     /** Linhas de disciplina com nome quebrado em duas linhas e fundidas. */
@@ -554,9 +568,17 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
       }
       if (cancelledRef.current) return;
 
-      // Caminho 100% local: página conclusiva e sem nenhum motivo de dúvida.
-      if (readingMode === 'local_ai' && local?.preview && local.ok && local.confident) {
+      // Caminho 100% local: leitura AUTORITATIVA (sem risco real) dispensa a IA.
+      const localOk = Boolean(local?.preview && local.ok);
+      const localAuthoritative = Boolean(local?.authoritative);
+      const useAi = shouldValidateWithAi({ mode: readingMode, localOk, localAuthoritative });
+      if (!useAi && local?.preview) {
         const localPreview = local.preview as unknown as PagePreview;
+        if (localPreview.reading) {
+          localPreview.reading = {
+            ...localPreview.reading, mode: 'local', authority: 'authoritative', ai_used: false,
+          };
+        }
         await persistPreview(sessionId, pageNumber, localPreview);
         setLocalSolvedPages((prev) => prev + 1);
         setSession((prev) => (prev ? { ...prev, current_page: pageNumber } : prev));
@@ -575,9 +597,10 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
       let finalPreview = aiPreview;
       if (local?.preview && local.ok) {
         // A IA valida: a leitura local permanece visível e as divergências são sinalizadas.
-        const { preview: merged, aiEmptyIgnored } = reconcileLocalWithAi(
+        const { preview: merged, aiEmptyIgnored, aiOnlyNumericIgnored } = reconcileLocalWithAi(
           local.preview as unknown as PagePreview,
           aiPreview as unknown as { rows: ReviewRow[]; notes?: string[] },
+          { localAuthoritative },
         );
         finalPreview = {
           ...merged,
@@ -585,6 +608,7 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
             ? {
                 ...merged.reading,
                 ai_empty_ignored: aiEmptyIgnored,
+                ai_only_numeric_ignored: aiOnlyNumericIgnored,
                 anchored_subjects: (local.preview as unknown as PagePreview).reading?.anchored_subjects ?? [],
                 merged_subject_lines: (local.preview as unknown as PagePreview).reading?.merged_subject_lines ?? 0,
               }
@@ -784,6 +808,8 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
   }, [pageAction, linkStudentId]);
 
   const invalidCount = useMemo(() => rows.filter((r) => r.flags.includes('invalid_value')).length, [rows]);
+  /** Erros reais que continuam bloqueando até a confirmação manual. */
+  const manualBlockers = useMemo(() => manualConfirmationBlockers(rows), [rows]);
   /** Contagem ATUAL de divergências (reflete correções manuais), não o valor gravado na prévia. */
   const currentDivergenceCount = useMemo(() => analyzeDivergences(rows).divergences.length, [rows]);
   const pageHasConflicts = useMemo(
@@ -794,6 +820,7 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
   const canConfirmPage =
     classDecision === 'resolved' &&
     invalidCount === 0 &&
+    manualBlockers.length === 0 &&
     !otherClassMatch &&
     (pageAction === 'create' || (pageAction === 'link' && Boolean(linkStudentId)));
 
@@ -1074,8 +1101,12 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
         (subjectRows || []).forEach((s: { id: string; normalized_name: string }) => subjectIdByNorm.set(s.normalized_name, s.id));
       }
 
+      // Confirmação manual é SOBERANA: apenas leitura local/edições manuais,
+      // sem linhas da IA e sem flags de reconciliação no payload acadêmico.
+      const academicRows = mode === 'manual' ? rowsForManualLocalConfirmation(rows) : rows;
+
       // Notas da página (vazio = null; 0,00 = zero real; faltas nunca chegam aqui)
-      const payload = rows
+      const payload = academicRows
         .filter((r) => !r.flags.includes('invalid_value'))
         .map((row) => {
           const subjectId = subjectIdByNorm.get(normalize(row.subject));
@@ -1147,7 +1178,14 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
             ? (autoEval.appliedExceptionCodes.length > 0
               ? `auto:${autoEval.appliedExceptionCodes.join(',')}`
               : 'auto')
-            : 'manual',
+            : 'manual:local_confirmed',
+          preview_json: {
+            ...preview,
+            rows: academicRows,
+            reading: preview.reading
+              ? { ...preview.reading, divergences: 0, resolved_by: 'manual_local_confirmation' }
+              : preview.reading,
+          } as never,
         })
         .eq('session_id', session.id).eq('page_number', preview.page);
 
@@ -1562,10 +1600,13 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
                 onUseLocalReading={handleUseLocalReading}
                 aiEmptyIgnored={preview.reading?.ai_empty_ignored ?? 0}
                 anchoredSubjects={preview.reading?.anchored_subjects ?? []}
+                advisoryOnly={divergenceDiag.onlyAdvisory}
+                aiOnlyNumericIgnored={preview.reading?.ai_only_numeric_ignored ?? 0}
               />
             )}
             {!divergenceDiag.hasDivergence
               && ((preview.reading?.ai_empty_ignored ?? 0) > 0
+                || (preview.reading?.ai_only_numeric_ignored ?? 0) > 0
                 || (preview.reading?.anchored_subjects?.length ?? 0) > 0) && (
               <GradesDivergencePanel
                 divergences={[]}
@@ -1574,6 +1615,7 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
                 hasOtherBlockers={false}
                 aiEmptyIgnored={preview.reading?.ai_empty_ignored ?? 0}
                 anchoredSubjects={preview.reading?.anchored_subjects ?? []}
+                aiOnlyNumericIgnored={preview.reading?.ai_only_numeric_ignored ?? 0}
               />
             )}
             {sessionSummary}
@@ -1817,7 +1859,9 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
                 Ignorar página
               </Button>
               <Button onClick={() => handleConfirmPage('manual')} disabled={!canConfirmPage}>
-                Confirmar e próxima página
+                {divergenceDiag.hasDivergence
+                  ? 'Confirmar leitura local e próxima página'
+                  : 'Confirmar e próxima página'}
               </Button>
             </>
           )}

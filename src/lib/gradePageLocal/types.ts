@@ -101,4 +101,8 @@ export interface LocalValidation {
   /** 0..1 — qualidade da leitura local */
   score: number;
   reasons: string[];
+  /** Códigos estáveis de risco real (impedem autoridade da leitura local). */
+  blockers?: string[];
+  /** Códigos estáveis informativos (não impedem autoridade). */
+  advisories?: string[];
 }

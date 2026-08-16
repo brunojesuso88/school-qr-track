@@ -8,7 +8,7 @@ import { normalizeText, periodRank, similarity } from './normalize';
 import { matchStudentInClass } from './studentMatch';
 import { digitsOnly } from './studentMatch';
 import { buildSubjectAnchors, matchSubjectAnchor } from './subjectAnchors';
-import { isLocallyConfident, validateLocalPage } from './validate';
+import { isLocalAuthoritative, validateLocalPage } from './validate';
 import {
   LocalContextStudent, LocalParseContext, LocalValidation, TextToken,
 } from './types';
@@ -47,18 +47,30 @@ export interface LocalPagePreview {
     divergences: number;
     absence_tokens_dropped: number;
     duration_ms?: number;
+    /** Autoridade da leitura local: `authoritative` = fonte de verdade sem IA. */
+    authority?: 'authoritative' | 'needs_validation';
+    /** IA foi efetivamente chamada nesta página. */
+    ai_used?: boolean;
+    /** Códigos bloqueantes da leitura local. */
+    blockers?: string[];
+    /** Códigos informativos da leitura local. */
+    advisories?: string[];
     /** Disciplinas reais reconhecidas por âncora curricular, sem notas lançadas. */
     anchored_subjects?: string[];
     /** Linhas de disciplina fundidas (nome quebrado em duas linhas). */
     merged_subject_lines?: number;
     /** Células vazias que só a IA listou e foram ignoradas (não são notas). */
     ai_empty_ignored?: number;
+    /** Notas sugeridas apenas pela IA e descartadas por autoridade local. */
+    ai_only_numeric_ignored?: number;
   };
 }
 
 export interface LocalParseResult {
   ok: boolean;
   confident: boolean;
+  /** Leitura local é fonte de verdade (sem bloqueantes). */
+  authoritative: boolean;
   validation: LocalValidation;
   preview: LocalPagePreview | null;
 }
@@ -77,9 +89,9 @@ export function parseGradePageLocal(tokens: TextToken[], context: LocalParseCont
   if (!grid) {
     const validation = validateLocalPage({
       tokens, grid: null, cells: [], subjects: [], expectedSubjects: context.expectedSubjects,
-      ambiguousCells: 0, orphanTokens: 0, studentName: null, matchScore: 0,
+      ambiguousCells: 0, orphanTokens: 0, orphanGradeTokens: 0, studentName: null, matchScore: 0,
     });
-    return { ok: false, confident: false, validation, preview: null };
+    return { ok: false, confident: false, authoritative: false, validation, preview: null };
   }
 
   const header = extractHeader(lines, grid.headerLineIndex);
@@ -91,8 +103,10 @@ export function parseGradePageLocal(tokens: TextToken[], context: LocalParseCont
     tokens, grid, cells: built.cells, subjects: built.subjects,
     expectedSubjects: context.expectedSubjects,
     ambiguousCells: built.ambiguousCells, orphanTokens: built.orphanTokens,
+    orphanGradeTokens: built.orphanGradeTokens,
     studentName: header.name, matchScore,
   });
+  const authoritative = isLocalAuthoritative(validation);
 
   const status: 'matched' | 'fuzzy' | 'unmatched' =
     matchStatus === 'matched' ? 'matched' : matchStatus === 'fuzzy' ? 'fuzzy' : 'unmatched';
@@ -241,6 +255,10 @@ export function parseGradePageLocal(tokens: TextToken[], context: LocalParseCont
       mode: 'local',
       escalated: false,
       reasons: validation.reasons,
+      authority: authoritative ? 'authoritative' : 'needs_validation',
+      ai_used: false,
+      blockers: validation.blockers ?? [],
+      advisories: validation.advisories ?? [],
       local_score: Number(validation.score.toFixed(3)),
       divergences: 0,
       absence_tokens_dropped: built.droppedAbsenceTokens,
@@ -251,7 +269,8 @@ export function parseGradePageLocal(tokens: TextToken[], context: LocalParseCont
 
   return {
     ok: validation.conclusive,
-    confident: isLocallyConfident(validation),
+    confident: authoritative,
+    authoritative,
     validation,
     preview,
   };

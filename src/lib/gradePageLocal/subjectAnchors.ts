@@ -28,6 +28,25 @@ export interface AnchorMatch {
 
 export const ANCHOR_MIN_SIMILARITY = 0.82;
 
+/** Palavras sem significado disciplinar (conectores/ordinais) na comparação por contenção. */
+const NON_SIGNIFICANT_WORDS = new Set([
+  'de', 'da', 'do', 'das', 'dos', 'e', 'em', 'no', 'na', 'a', 'o', 'i', 'ii', 'iii', 'iv',
+]);
+
+/**
+ * Contenção só é aceita quando o texto extra NÃO carrega palavra significativa.
+ * Evita colapsar disciplinas distintas: "LETRAMENTO EM MATEMÁTICA" nunca vira "MATEMÁTICA".
+ */
+const containsWithoutExtraMeaning = (a: string, b: string): boolean => {
+  const shorter = a.length <= b.length ? a : b;
+  const longer = a.length > b.length ? a : b;
+  if (!longer.includes(shorter)) return false;
+  const shortWords = new Set(shorter.split(' ').filter(Boolean));
+  const extra = longer.split(' ').filter(Boolean)
+    .filter((w) => !shortWords.has(w) && !NON_SIGNIFICANT_WORDS.has(w));
+  return extra.length === 0;
+};
+
 /** Constrói o índice de âncoras a partir das disciplinas esperadas da turma. */
 export function buildSubjectAnchors(expected: LocalExpectedSubject[]): SubjectAnchor[] {
   const byCanonical = new Map<string, SubjectAnchor>();
@@ -87,7 +106,7 @@ export function matchSubjectAnchor(
   // 3) prefixo / contém — só com candidato único e texto suficientemente longo
   if (norm.length >= 4) {
     const contains = anchors.filter((a) => a.keys.some((k) =>
-      k.length >= 4 && (k.startsWith(norm) || norm.startsWith(k) || k.includes(norm) || norm.includes(k))));
+      k.length >= 4 && containsWithoutExtraMeaning(norm, k)));
     if (contains.length === 1) return { anchor: contains[0], kind: 'contains', score: 0.9 };
     if (contains.length > 1) return null;
   }

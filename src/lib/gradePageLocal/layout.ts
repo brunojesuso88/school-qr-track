@@ -179,6 +179,8 @@ export interface BuildCellsResult {
   ambiguousCells: number;
   droppedAbsenceTokens: number;
   orphanTokens: number;
+  /** Tokens fora das colunas conhecidas que PARECEM nota (risco real de leitura). */
+  orphanGradeTokens: number;
   /** Disciplinas reconhecidas por âncora curricular sem nenhuma nota lançada. */
   anchoredSubjects: string[];
   /** Linhas de disciplina fundidas (nome quebrado em duas linhas do PDF). */
@@ -197,6 +199,7 @@ export function buildCells(lines: TokenLine[], grid: GridLayout, anchors: Subjec
   let ambiguousCells = 0;
   let droppedAbsenceTokens = 0;
   let orphanTokens = 0;
+  let orphanGradeTokens = 0;
   let mergedSubjectLines = 0;
 
   const firstDataLine = (grid.subHeaderLineIndex ?? grid.headerLineIndex) + 1;
@@ -281,7 +284,11 @@ export function buildCells(lines: TokenLine[], grid: GridLayout, anchors: Subjec
       if (grid.ignoredColumns.some((a) => center >= a.start && center < a.end)) continue;
 
       const owners = grid.columns.filter((c) => center >= c.start && center < c.end);
-      if (owners.length === 0) { orphanTokens++; continue; }
+      if (owners.length === 0) {
+        if (looksLikeGradeToken(text)) orphanGradeTokens++;
+        else orphanTokens++;
+        continue;
+      }
       const column = owners[0];
       // Token cruzando a fronteira de duas colunas aceitas => ambíguo.
       const spansBoundary = owners.length > 1 ||
@@ -319,7 +326,7 @@ export function buildCells(lines: TokenLine[], grid: GridLayout, anchors: Subjec
   }
 
   return {
-    cells, subjects, ambiguousCells, droppedAbsenceTokens, orphanTokens,
+    cells, subjects, ambiguousCells, droppedAbsenceTokens, orphanTokens, orphanGradeTokens,
     anchoredSubjects, mergedSubjectLines,
   };
 }
