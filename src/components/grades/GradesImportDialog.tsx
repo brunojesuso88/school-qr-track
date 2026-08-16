@@ -224,7 +224,7 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
   const [readingMode, setReadingMode] = useState<ReadingMode>('local_ai');
   const pdfDocRef = useRef<LocalPdfDocument | null>(null);
   const localStudentsRef = useRef<LocalContextStudent[]>([]);
-  const localExpectedRef = useRef<{ name: string; weekly_classes?: number | null }[]>([]);
+  const localExpectedRef = useRef<LocalExpectedSubject[]>([]);
   const [localTimings, setLocalTimings] = useState<number[]>([]);
   const [localSolvedPages, setLocalSolvedPages] = useState(0);
 
