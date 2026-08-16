@@ -12,6 +12,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Loader2, Calculator, AlertTriangle, Link2, Info } from 'lucide-react';
 import { isAutoWeightEligible, resolveWeight, weightForWeeklyClasses } from '@/lib/ira';
 import { cn } from '@/lib/utils';
+import IraRankingExport from '@/components/settings/IraRankingExport';
 
 interface ClassRow {
   id: string;
@@ -486,6 +487,8 @@ const IRASettings = () => {
           )}
         </CardContent>
       </Card>
+
+      <IraRankingExport classes={classes} classesWithGrades={classesWithGrades} />
     </div>
   );
 };
