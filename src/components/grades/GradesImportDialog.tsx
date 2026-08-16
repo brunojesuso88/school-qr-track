@@ -1600,6 +1600,8 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
                 onUseLocalReading={handleUseLocalReading}
                 aiEmptyIgnored={preview.reading?.ai_empty_ignored ?? 0}
                 anchoredSubjects={preview.reading?.anchored_subjects ?? []}
+                advisoryOnly={divergenceDiag.onlyAdvisory}
+                aiOnlyNumericIgnored={preview.reading?.ai_only_numeric_ignored ?? 0}
               />
             )}
             {!divergenceDiag.hasDivergence
@@ -1612,6 +1614,7 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
                 hasOtherBlockers={false}
                 aiEmptyIgnored={preview.reading?.ai_empty_ignored ?? 0}
                 anchoredSubjects={preview.reading?.anchored_subjects ?? []}
+                aiOnlyNumericIgnored={preview.reading?.ai_only_numeric_ignored ?? 0}
               />
             )}
             {sessionSummary}
