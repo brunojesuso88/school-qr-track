@@ -57,8 +57,9 @@ export function classifyPeriodLabel(label: string): { kind: string; canonical: s
   return null;
 }
 
+// Rótulos já normalizados (sem acento, minúsculos) — devem casar com normalizeText().
 export const PERIOD_ORDER = [
-  '1º período', '2º período', '3º período', '4º período',
+  '1º periodo', '2º periodo', '3º periodo', '4º periodo',
   'media final', 'rec final', 'cons class', 'pendencia', 'final',
 ];
 
