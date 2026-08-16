@@ -818,6 +818,7 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
   const canConfirmPage =
     classDecision === 'resolved' &&
     invalidCount === 0 &&
+    manualBlockers.length === 0 &&
     !otherClassMatch &&
     (pageAction === 'create' || (pageAction === 'link' && Boolean(linkStudentId)));
 
