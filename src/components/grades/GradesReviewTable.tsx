@@ -23,7 +23,7 @@ export interface ReviewRow {
   match_score: number;
   flags: string[];
   second_pass_value?: string | null;
-  source?: 'import' | 'manual';
+  source?: 'import' | 'manual' | 'local' | 'ai';
 }
 
 const FLAG_LABELS: Record<string, { label: string; variant: 'destructive' | 'secondary' | 'outline' }> = {
@@ -41,6 +41,12 @@ const FLAG_LABELS: Record<string, { label: string; variant: 'destructive' | 'sec
   missing_subject: { label: 'Disciplina ausente', variant: 'destructive' },
   manual: { label: 'Corrigido manualmente', variant: 'outline' },
   second_reading: { label: 'Validação adicional', variant: 'secondary' },
+};
+
+const SOURCE_LABELS: Record<string, string> = {
+  local: 'Leitura local',
+  ai: 'Leitura IA',
+  manual: 'Manual',
 };
 
 interface GradesReviewTableProps {
@@ -122,6 +128,9 @@ export const GradesReviewTable = ({
                 <div className="flex flex-wrap gap-1 items-center">
                   {row.confidence != null && (
                     <span className="text-[11px] text-muted-foreground">{(row.confidence * 100).toFixed(0)}%</span>
+                  )}
+                  {row.source && SOURCE_LABELS[row.source] && (
+                    <Badge variant="outline" className="text-[10px]">{SOURCE_LABELS[row.source]}</Badge>
                   )}
                   {row.flags.map((flag) => {
                     const meta = FLAG_LABELS[flag];
