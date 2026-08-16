@@ -446,6 +446,16 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
     try {
       const { students, expected } = await loadContext();
       const pdfBase64 = await fileToBase64(file);
+      // Documento aberto UMA vez por sessão e reutilizado em todas as páginas.
+      if (readingMode !== 'ai_only') {
+        try {
+          closePdfDocument(pdfDocRef.current);
+          pdfDocRef.current = await openPdfDocument(await file.arrayBuffer());
+        } catch (e) {
+          console.error('Não foi possível abrir o PDF localmente:', e);
+          pdfDocRef.current = null;
+        }
+      }
       const { data, error: fnError } = await supabase.functions.invoke('parse-grade-page', {
         body: {
           action: 'create',
@@ -911,6 +921,23 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
                 <Upload className="w-4 h-4 mr-2" />
                 Selecionar PDF
               </Button>
+            </div>
+            <div className="rounded-lg border p-3 space-y-2">
+              <Label className="text-sm font-medium">Modo de leitura</Label>
+              <Select value={readingMode} onValueChange={(v) => setReadingMode(v as ReadingMode)}>
+                <SelectTrigger className="h-8 text-xs w-full sm:w-[320px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="local_ai">{READING_MODE_LABELS.local_ai}</SelectItem>
+                  <SelectItem value="always_ai">{READING_MODE_LABELS.always_ai}</SelectItem>
+                  <SelectItem value="ai_only">{READING_MODE_LABELS.ai_only}</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-[11px] text-muted-foreground">
+                No modo padrão a página é lida no próprio dispositivo por texto e coordenadas; a IA só entra quando a
+                leitura local não é conclusiva e atua como validadora — nunca substitui a leitura local sem aviso.
+              </p>
             </div>
             {classItem && !classItem.mapping_class_id && (
               <Alert>
