@@ -17,9 +17,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import {
   CLASS_SERIES_OPTIONS, HighSchoolSeries, classSeriesLabel, detectClassSeries, parseClassSeries,
 } from '@/lib/iraRanking';
-import {
-  fetchCurriculumMatrix, findMatrixWeeklyDivergences, selectMissingMatrixSubjects,
-} from '@/lib/curriculumMatrix';
+import { syncClassCurriculum } from '@/lib/classCurriculum/sync';
 
 interface ClassRow {
   id: string;
