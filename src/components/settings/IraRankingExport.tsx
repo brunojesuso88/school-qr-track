@@ -4,13 +4,16 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Loader2, Trophy, AlertTriangle, Medal, FileDown } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatIra } from '@/lib/ira';
 import {
-  RANKING_LIMIT, RankingResult, buildIraRanking, formatBirthDate, formatStudentCode, generateIraRankingPdf,
+  HIGH_SCHOOL_SERIES, HighSchoolSeries, RANKING_LIMIT, RankingResult, buildIraRanking, detectClassSeries,
+  formatBirthDate, formatStudentCode, generateIraRankingPdf, seriesLabel,
 } from '@/lib/iraRanking';
 import logoAsset from '@/assets/logo-cepans.png.asset.json';
 
@@ -30,18 +33,42 @@ const medalColor = (place: number) =>
 
 const IraRankingExport = ({ classes, classesWithGrades }: Props) => {
   const [selected, setSelected] = useState<string[]>([]);
+  const [series, setSeries] = useState<HighSchoolSeries | ''>('');
   const [loading, setLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [result, setResult] = useState<RankingResult | null>(null);
 
-  const options = useMemo(
+  /** Turmas com boletim importado. */
+  const withGrades = useMemo(
     () => classes.filter((c) => classesWithGrades.has(c.id)),
     [classes, classesWithGrades],
   );
+
+  /** Somente turmas compatíveis com a série escolhida (ambíguas ficam de fora). */
+  const options = useMemo(() => {
+    if (!series) return [];
+    return withGrades.filter((c) => detectClassSeries(c.name) === series);
+  }, [withGrades, series]);
+
+  const ambiguous = useMemo(
+    () => withGrades.filter((c) => detectClassSeries(c.name) === null).map((c) => c.name),
+    [withGrades],
+  );
+
   const selectedNames = useMemo(
     () => options.filter((c) => selected.includes(c.id)).map((c) => c.name),
     [options, selected],
   );
+
+  const changeSeries = (value: HighSchoolSeries) => {
+    setSeries(value);
+    setResult(null);
+    // Limpa automaticamente turmas de outra série.
+    setSelected((prev) => prev.filter((id) => {
+      const c = withGrades.find((w) => w.id === id);
+      return !!c && detectClassSeries(c.name) === value;
+    }));
+  };
 
   const toggle = (id: string, checked: boolean) => {
     setResult(null);
@@ -49,6 +76,10 @@ const IraRankingExport = ({ classes, classesWithGrades }: Props) => {
   };
 
   const loadPreview = async () => {
+    if (!series) {
+      toast.error('Escolha a série do Ensino Médio antes de calcular a classificação.');
+      return;
+    }
     if (selected.length === 0) {
       toast.error('Selecione ao menos uma turma para compor a classificação.');
       return;
@@ -78,6 +109,7 @@ const IraRankingExport = ({ classes, classesWithGrades }: Props) => {
         periodsLabel: result.periodsLabel,
         totalEligible: result.eligibleCount,
         logoUrl: logoAsset.url,
+        series: series || undefined,
       });
       toast.success(`PDF gerado com ${result.top.length} colocação(ões).`);
     } catch (e) {
