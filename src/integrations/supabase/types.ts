@@ -887,11 +887,14 @@ export type Database = {
           created_by: string | null
           cronograma: Json
           culminancia: string | null
+          description: string | null
           enfoque: string | null
+          event_date: string | null
           id: string
           images: Json
           is_continuous: boolean
           justificativa: string | null
+          legacy_simple_id: string | null
           metas: string | null
           metodologia: string | null
           objetivo_geral: string | null
@@ -917,11 +920,14 @@ export type Database = {
           created_by?: string | null
           cronograma?: Json
           culminancia?: string | null
+          description?: string | null
           enfoque?: string | null
+          event_date?: string | null
           id?: string
           images?: Json
           is_continuous?: boolean
           justificativa?: string | null
+          legacy_simple_id?: string | null
           metas?: string | null
           metodologia?: string | null
           objetivo_geral?: string | null
@@ -947,11 +953,14 @@ export type Database = {
           created_by?: string | null
           cronograma?: Json
           culminancia?: string | null
+          description?: string | null
           enfoque?: string | null
+          event_date?: string | null
           id?: string
           images?: Json
           is_continuous?: boolean
           justificativa?: string | null
+          legacy_simple_id?: string | null
           metas?: string | null
           metodologia?: string | null
           objetivo_geral?: string | null
