@@ -65,6 +65,18 @@ export interface LocalCell {
   ambiguous: boolean;
 }
 
+/** Disciplina esperada da turma (matriz efetiva + catálogo canônico). */
+export interface LocalExpectedSubject {
+  /** Nome canônico da disciplina na matriz da turma/catálogo. */
+  name: string;
+  weekly_classes?: number | null;
+  /** Nomes equivalentes como aparecem no boletim em PDF. */
+  aliases?: string[];
+  abbreviation?: string | null;
+  /** Origem para diagnóstico: matriz da turma, boletim já importado, catálogo. */
+  origin?: ('mapping' | 'grade' | 'catalog')[];
+}
+
 export interface LocalContextStudent {
   id: string;
   full_name: string;
@@ -79,7 +91,7 @@ export interface LocalParseContext {
   page: number;
   totalPages: number;
   students: LocalContextStudent[];
-  expectedSubjects: { name: string; weekly_classes?: number | null }[];
+  expectedSubjects: LocalExpectedSubject[];
 }
 
 export interface LocalValidation {
