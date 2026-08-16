@@ -34,6 +34,20 @@ describe('matchStudentInClass', () => {
     expect(out.student?.id).toBe('1');
   });
 
+  it('código repetido na turma não trava: cai para o nome', () => {
+    const messy = [s('1', 'Angela Oliveira Santos', '24'), s('2', 'Carlos Eduardo de Lima Dutra', '24')];
+    const out = matchStudentInClass({ name: 'CARLOS EDUARDO DE LIMA DUTRA', code: '24' }, messy);
+    expect(out.status).toBe('matched');
+    expect(out.student?.id).toBe('2');
+  });
+
+  it('desempata homônimos pelo código quando isola um deles', () => {
+    const twins = [s('1', 'Ana Souza', '1001'), s('2', 'Ana Souza', '2002')];
+    const out = matchStudentInClass({ name: 'Ana Souza', code: '2002' }, twins);
+    expect(out.status).toBe('matched');
+    expect(out.student?.id).toBe('2');
+  });
+
   it('marca ambiguidade quando dois alunos batem pelo nome', () => {
     const dup = [s('1', 'Ana Souza'), s('2', 'Ana Souza')];
     const out = matchStudentInClass({ name: 'Ana Souza' }, dup);
