@@ -80,6 +80,9 @@ export const sameNormalizedName = (a: unknown, b: unknown) => {
  *  C. semelhança >= 0.85 com candidato ÚNICO    -> fuzzy (sugestão, exige confirmação)
  *  D. dois ou mais candidatos plausíveis        -> ambiguous (conflito manual)
  *  E. nada                                      -> unmatched
+ *
+ * Código repetido na turma (dado cadastral ruim, ex. vários alunos com "24") NÃO trava o
+ * casamento: cai para o nome. Só há ambiguidade quando o próprio NOME é indistinguível.
  */
 export function matchStudentInClass<T extends MatchCandidate>(
   pdf: { name: string | null | undefined; code?: string | null },
@@ -89,15 +92,17 @@ export function matchStudentInClass<T extends MatchCandidate>(
   if (!students || students.length === 0) return empty;
 
   const pdfCode = digitsOnly(pdf.code);
-  if (pdfCode) {
-    const byCode = students.filter((s) => digitsOnly(s.school_code) === pdfCode);
-    if (byCode.length === 1) return { student: byCode[0], score: 1, status: 'matched', by: 'code', candidates: byCode };
-    if (byCode.length > 1) return { student: null, score: 1, status: 'ambiguous', by: 'code', candidates: byCode };
-  }
+  const byCode = pdfCode ? students.filter((s) => digitsOnly(s.school_code) === pdfCode) : [];
+  if (byCode.length === 1) return { student: byCode[0], score: 1, status: 'matched', by: 'code', candidates: byCode };
 
   const byName = students.filter((s) => sameNormalizedName(pdf.name, s.full_name));
   if (byName.length === 1) return { student: byName[0], score: 1, status: 'matched', by: 'name', candidates: byName };
-  if (byName.length > 1) return { student: null, score: 1, status: 'ambiguous', by: 'name', candidates: byName };
+  if (byName.length > 1) {
+    // Homônimos: o código só desempata se isolar exatamente um deles.
+    const intersect = byName.filter((s) => byCode.some((c) => c.id === s.id));
+    if (intersect.length === 1) return { student: intersect[0], score: 1, status: 'matched', by: 'code', candidates: intersect };
+    return { student: null, score: 1, status: 'ambiguous', by: 'name', candidates: byName };
+  }
 
   const scored = students
     .map((s) => ({ student: s, score: tokenSetSimilarity(pdf.name, s.full_name) }))
