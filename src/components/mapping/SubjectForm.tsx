@@ -2,6 +2,9 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Textarea } from "@/components/ui/textarea";
 import { useSchoolMapping, MappingGlobalSubject } from "@/contexts/SchoolMappingContext";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
@@ -10,6 +13,11 @@ interface SubjectFormProps {
   subject?: MappingGlobalSubject | null;
   onClose: () => void;
 }
+
+const SERIES_OPTIONS = ["1º ano", "2º ano", "3º ano"];
+
+const parseAliases = (value: string) =>
+  [...new Set(value.split(/[\n;,]+/).map((a) => a.trim()).filter(Boolean))];
 
 const SubjectForm = ({ subject, onClose }: SubjectFormProps) => {
   const { addGlobalSubject, updateGlobalSubject, refreshData } = useSchoolMapping();
@@ -20,7 +28,12 @@ const SubjectForm = ({ subject, onClose }: SubjectFormProps) => {
   const [defaultWeeklyClasses, setDefaultWeeklyClasses] = useState(
     subject?.default_weekly_classes?.toString() || "4"
   );
+  const [aliasesText, setAliasesText] = useState((subject?.aliases ?? []).join("\n"));
+  const [series, setSeries] = useState<string[]>(subject?.series ?? []);
   const [loading, setLoading] = useState(false);
+
+  const toggleSeries = (value: string) =>
+    setSeries((prev) => (prev.includes(value) ? prev.filter((s) => s !== value) : [...prev, value]));
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -35,7 +48,9 @@ const SubjectForm = ({ subject, onClose }: SubjectFormProps) => {
       const data = {
         name: name.trim(),
         abbreviation: abbreviation.trim() ? abbreviation.trim().toUpperCase() : null,
-        default_weekly_classes: parseInt(defaultWeeklyClasses)
+        default_weekly_classes: parseInt(defaultWeeklyClasses),
+        aliases: parseAliases(aliasesText),
+        series,
       };
 
       if (subject) {
@@ -113,6 +128,39 @@ const SubjectForm = ({ subject, onClose }: SubjectFormProps) => {
           value={defaultWeeklyClasses}
           onChange={e => setDefaultWeeklyClasses(e.target.value)}
         />
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="aliases">Nomes equivalentes no boletim (aliases)</Label>
+        <Textarea
+          id="aliases"
+          value={aliasesText}
+          onChange={(e) => setAliasesText(e.target.value)}
+          placeholder={"Um por linha. Ex:\nLÍNGUA PORTUGUESA\nPORTUGUES"}
+          rows={3}
+        />
+        <p className="text-xs text-muted-foreground">
+          Usado na leitura de boletins em PDF: quando o boletim escreve a disciplina de outra forma, o alias evita
+          divergências falsas. {parseAliases(aliasesText).length} alias(es) cadastrado(s).
+        </p>
+      </div>
+
+      <div className="space-y-2">
+        <Label>Séries em que compõe a matriz padrão</Label>
+        <div className="flex flex-wrap gap-3">
+          {SERIES_OPTIONS.map((option) => (
+            <label key={option} className="flex items-center gap-2 text-sm">
+              <Checkbox checked={series.includes(option)} onCheckedChange={() => toggleSeries(option)} />
+              {option}
+            </label>
+          ))}
+          {series.length === 0 && (
+            <Badge variant="outline" className="text-[10px]">Nenhuma série vinculada</Badge>
+          )}
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Turmas com série definida herdam estas disciplinas como âncoras na leitura do boletim.
+        </p>
       </div>
 
       <div className="flex justify-end gap-2 pt-4">
