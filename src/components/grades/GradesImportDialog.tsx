@@ -156,11 +156,7 @@ const parseValue = (raw: string | null): { value: number | null; invalid: boolea
 };
 
 /** Comparação semântica de notas: 7,5 == 7,50; 0 == 0,00; null == vazio. */
-export const sameGradeValue = (a: number | null, b: number | null) => {
-  if (a == null && b == null) return true;
-  if (a == null || b == null) return false;
-  return Math.round(a * 100) === Math.round(b * 100);
-};
+export { sameGradeValue } from '@/lib/gradePageLocal/gradeCompare';
 
 /** Classificação canônica de uma coluna do boletim (rótulo tem prioridade sobre o kind recebido). */
 const columnIsPeriod = (label: string, kind?: string | null) => {
@@ -753,10 +749,18 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
     setRows((prev) => prev.map((row, i) => {
       if (i !== index) return row;
       const { value, invalid } = parseValue(raw || null);
-      const flags = row.flags.filter((f) => !['invalid_value', 'low_confidence', 'empty_cell', 'out_of_scale'].includes(f));
+      // Flags de reconciliação antigas são descartadas e recalculadas contra a 2ª leitura.
+      const flags = stripReconciliationFlags(row.flags)
+        .filter((f) => !['invalid_value', 'low_confidence', 'empty_cell', 'out_of_scale'].includes(f));
       if (invalid) flags.push('invalid_value');
       if (!invalid && value == null) flags.push('empty_cell');
       if (value === 0) flags.push('explicit_zero');
+      if (value != null && (value < 0 || value > 10)) flags.push('out_of_scale');
+      if (row.second_pass_value !== undefined && row.second_pass_value !== null) {
+        flags.push(matchesSecondPass(value, row.second_pass_value)
+          ? 'reconciled_match'
+          : 'reconciliation_divergence');
+      }
       return {
         ...row,
         raw_value: raw || null,
