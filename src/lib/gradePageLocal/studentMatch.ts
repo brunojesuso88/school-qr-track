@@ -138,14 +138,15 @@ export function findGlobalMatch<T extends MatchCandidate>(
   students: T[],
 ): { student: T | null; by: 'code' | 'name' | null; ambiguous: boolean } {
   const pdfCode = digitsOnly(pdf.code);
-  if (pdfCode) {
-    const byCode = students.filter((s) => digitsOnly(s.school_code) === pdfCode);
-    if (byCode.length === 1) return { student: byCode[0], by: 'code', ambiguous: false };
-    if (byCode.length > 1) return { student: null, by: 'code', ambiguous: true };
-  }
+  const byCode = pdfCode ? students.filter((s) => digitsOnly(s.school_code) === pdfCode) : [];
+  if (byCode.length === 1) return { student: byCode[0], by: 'code', ambiguous: false };
   const byName = students.filter((s) => sameNormalizedName(pdf.name, s.full_name));
   if (byName.length === 1) return { student: byName[0], by: 'name', ambiguous: false };
-  if (byName.length > 1) return { student: null, by: 'name', ambiguous: true };
+  if (byName.length > 1) {
+    const intersect = byName.filter((s) => byCode.some((c) => c.id === s.id));
+    if (intersect.length === 1) return { student: intersect[0], by: 'code', ambiguous: false };
+    return { student: null, by: 'name', ambiguous: true };
+  }
   return { student: null, by: null, ambiguous: false };
 }
 
