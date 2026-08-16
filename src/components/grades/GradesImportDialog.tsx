@@ -18,9 +18,13 @@ import {
 import { GradesReviewTable, ReviewRow } from './GradesReviewTable';
 import { GradesRegistrationAudit } from './GradesRegistrationAudit';
 import { GradesClassMismatchPanel } from './GradesClassMismatchPanel';
-import { evaluateAutoAccept } from './gradesAutoAccept';
+import {
+  AutoAcceptRules, DEFAULT_AUTO_ACCEPT_RULES, evaluateAutoAccept, parseAutoAcceptRules,
+} from './gradesAutoAccept';
 import { useAuth } from '@/contexts/AuthContext';
-import { digitsOnly, findGlobalMatch, nameTokens, pickClassName } from '@/lib/gradePageLocal/studentMatch';
+import {
+  digitsOnly, findGlobalMatch, nameTokens, pickClassName, sanitizeSchoolCodeForStorage,
+} from '@/lib/gradePageLocal/studentMatch';
 import {
   closePdfDocument, extractPageTokens, LocalPdfDocument, openPdfDocument,
 } from '@/lib/gradePageLocal/pdfText';
@@ -94,6 +98,7 @@ interface SessionState {
   ignored_pages: number;
   notes_imported: number;
   auto_accept?: boolean;
+  auto_accept_rules?: AutoAcceptRules;
 }
 
 interface GradesImportDialogProps {
