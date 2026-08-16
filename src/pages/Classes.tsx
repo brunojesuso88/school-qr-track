@@ -10,7 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { toast } from 'sonner';
-import { Plus, Edit2, Trash2, GraduationCap, Search, Users, Loader2, AlertCircle, ImagePlus, CalendarIcon, Download, BookOpen } from 'lucide-react';
+import { Plus, Edit2, Trash2, GraduationCap, Search, Users, Loader2, AlertCircle, CheckCircle2, ImagePlus, CalendarIcon, Download, BookOpen } from 'lucide-react';
 import { classSchema } from '@/lib/validations';
 import { classSeriesLabel, parseSeriesValue } from '@/lib/series';
 import { cn } from '@/lib/utils';
@@ -574,6 +574,11 @@ const Classes = () => {
                       <div>
                         <h3 className="font-medium">{classItem.name}</h3>
                         <p className="text-xs text-muted-foreground">{getShiftLabel(classItem.shift)}</p>
+                        {parseSeriesValue(classItem.series) ? (
+                          <p className="text-[10px] text-muted-foreground">{classSeriesLabel(parseSeriesValue(classItem.series))}</p>
+                        ) : (
+                          <p className="text-[10px] text-amber-600">Série não definida</p>
+                        )}
                       </div>
                     </div>
                   </div>
