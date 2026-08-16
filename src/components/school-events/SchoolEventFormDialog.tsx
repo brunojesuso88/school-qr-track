@@ -109,17 +109,18 @@ export default function SchoolEventFormDialog({ open, onOpenChange, event, onSav
     try {
       const { data: u } = await supabase.auth.getUser();
       const payload = {
-        name: data.name.trim(),
+        title: data.name.trim(),
         event_date: data.event_date || null,
+        prazo_inicio: data.event_date || null,
         description: data.description || '',
         cover_image: data.cover_image,
         images: data.images,
       };
       if (data.id) {
-        const { error } = await supabase.from('school_event_simple').update(payload).eq('id', data.id);
+        const { error } = await supabase.from('school_events').update(payload).eq('id', data.id);
         if (error) throw error;
       } else {
-        const { error } = await supabase.from('school_event_simple').insert({ ...payload, created_by: u.user?.id });
+        const { error } = await supabase.from('school_events').insert({ ...payload, tags: ['evento'], created_by: u.user?.id });
         if (error) throw error;
       }
       toast.success('Evento salvo');
