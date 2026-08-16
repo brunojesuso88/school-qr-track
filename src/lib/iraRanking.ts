@@ -244,12 +244,10 @@ const NAVY: [number, number, number] = [10, 46, 92];
 const ROYAL: [number, number, number] = [21, 101, 192];
 const LIGHT: [number, number, number] = [232, 241, 252];
 const FRAME: [number, number, number] = [176, 202, 232];
-const GOLD: [number, number, number] = [212, 175, 55];
-const GOLD_DARK: [number, number, number] = [150, 115, 18];
-const GOLD_LIGHT: [number, number, number] = [240, 214, 120];
 
-/** Carrega o brasão da escola como dataURL (falha silenciosa). */
-async function loadLogo(url: string): Promise<string | null> {
+/** Carrega uma imagem como dataURL (falha silenciosa, nunca quebra o PDF). */
+async function loadImageDataUrl(url: string): Promise<string | null> {
+  if (!url) return null;
   try {
     const res = await fetch(url);
     if (!res.ok) return null;
@@ -265,49 +263,21 @@ async function loadLogo(url: string): Promise<string | null> {
   }
 }
 
-/** Troféu dourado vetorial (taça, alças, pedestal e louros). */
-function drawGoldenTrophy(doc: jsPDF, cx: number, cy: number, scale = 1) {
-  const s = scale;
-  // Louros laterais
-  doc.setDrawColor(...GOLD_DARK);
-  doc.setLineWidth(0.5 * s);
-  for (let i = 0; i < 4; i++) {
-    const dy = cy - 2 * s + i * 2.6 * s;
-    doc.setFillColor(...GOLD_LIGHT);
-    doc.ellipse(cx - 11 * s + i * 0.7 * s, dy, 2.2 * s, 1.1 * s, 'FD');
-    doc.ellipse(cx + 11 * s - i * 0.7 * s, dy, 2.2 * s, 1.1 * s, 'FD');
+/** Detecta o formato aceito pelo jsPDF a partir do dataURL. */
+const imageFormat = (dataUrl: string): 'PNG' | 'JPEG' | 'WEBP' =>
+  /^data:image\/(jpe?g)/i.test(dataUrl) ? 'JPEG' : /^data:image\/webp/i.test(dataUrl) ? 'WEBP' : 'PNG';
+
+/** Insere a imagem encaixada proporcionalmente dentro de um box (sem deformar). */
+function drawFittedImage(doc: jsPDF, dataUrl: string, x: number, y: number, box: number) {
+  try {
+    const props = doc.getImageProperties(dataUrl);
+    const ratio = props.width && props.height ? props.width / props.height : 1;
+    const w = ratio >= 1 ? box : box * ratio;
+    const h = ratio >= 1 ? box / ratio : box;
+    doc.addImage(dataUrl, imageFormat(dataUrl), x + (box - w) / 2, y + (box - h) / 2, w, h);
+  } catch {
+    /* imagem inválida — segue sem ela */
   }
-  // Alças
-  doc.setDrawColor(...GOLD_DARK);
-  doc.setLineWidth(1.1 * s);
-  doc.line(cx - 6.2 * s, cy - 6 * s, cx - 8.6 * s, cy - 2.4 * s);
-  doc.line(cx - 8.6 * s, cy - 2.4 * s, cx - 6.0 * s, cy - 0.6 * s);
-  doc.line(cx + 6.2 * s, cy - 6 * s, cx + 8.6 * s, cy - 2.4 * s);
-  doc.line(cx + 8.6 * s, cy - 2.4 * s, cx + 6.0 * s, cy - 0.6 * s);
-  // Copa
-  doc.setFillColor(...GOLD);
-  doc.setDrawColor(...GOLD_DARK);
-  doc.setLineWidth(0.4 * s);
-  doc.triangle(
-    cx - 6.4 * s, cy - 6.6 * s,
-    cx + 6.4 * s, cy - 6.6 * s,
-    cx, cy + 3.4 * s,
-    'FD',
-  );
-  doc.setFillColor(...GOLD_LIGHT);
-  doc.triangle(cx - 4.4 * s, cy - 5.6 * s, cx - 1.2 * s, cy - 5.6 * s, cx - 2.6 * s, cy - 0.4 * s, 'F');
-  // Borda superior
-  doc.setFillColor(...GOLD);
-  doc.setDrawColor(...GOLD_DARK);
-  doc.roundedRect(cx - 7.2 * s, cy - 7.8 * s, 14.4 * s, 1.9 * s, 0.7 * s, 0.7 * s, 'FD');
-  // Haste e base
-  doc.setFillColor(...GOLD);
-  doc.rect(cx - 1.1 * s, cy + 3.0 * s, 2.2 * s, 3.2 * s, 'F');
-  doc.roundedRect(cx - 4.6 * s, cy + 6.0 * s, 9.2 * s, 1.8 * s, 0.5 * s, 0.5 * s, 'FD');
-  doc.roundedRect(cx - 6.4 * s, cy + 7.6 * s, 12.8 * s, 2.4 * s, 0.7 * s, 0.7 * s, 'FD');
-  // Estrela discreta na copa
-  doc.setFillColor(255, 255, 255);
-  doc.circle(cx, cy - 3.0 * s, 0.9 * s, 'F');
 }
 
 /** Pequena estrela (losango de 4 pontas) usada nas faixas. */
@@ -320,7 +290,7 @@ function drawStar(doc: jsPDF, cx: number, cy: number, r: number, color: [number,
 }
 
 /** Única frase motivacional exibida no rodapé do PDF. */
-export const FOOTER_MESSAGE = 'CONTINUE AVANÇANDO. O MELHOR AINDA ESTÁ POR VIR!';
+export const FOOTER_MESSAGE = 'Você não precisa ser melhor que ninguém para ser o melhor de si';
 
 /** Rodapé motivacional: faixa única, elegante, com a frase centralizada. */
 function drawMotivationFooter(doc: jsPDF, x: number, y: number, width: number, height: number) {
@@ -332,16 +302,22 @@ function drawMotivationFooter(doc: jsPDF, x: number, y: number, width: number, h
   const cy = y + height / 2 + 1.4;
   doc.setTextColor(255, 255, 255);
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(11);
-  doc.text(FOOTER_MESSAGE, x + width / 2, cy, { align: 'center', charSpace: 0.5 });
 
-  // jsPDF centraliza ignorando o charSpace, então o texto "cresce" para a direita.
-  const baseW = doc.getTextWidth(FOOTER_MESSAGE);
-  const extra = 0.5 * (FOOTER_MESSAGE.length - 1);
+  // Reduz a fonte até a frase caber com folga para as estrelas laterais.
+  const available = width - 34;
+  let size = 11.5;
+  doc.setFontSize(size);
+  while (size > 9 && doc.getTextWidth(FOOTER_MESSAGE) > available) {
+    size -= 0.25;
+    doc.setFontSize(size);
+  }
   const cxF = x + width / 2;
+  doc.text(FOOTER_MESSAGE, cxF, cy, { align: 'center' });
+
+  const baseW = doc.getTextWidth(FOOTER_MESSAGE);
   const starY = y + height / 2 + 0.4;
   drawStar(doc, cxF - baseW / 2 - 7, starY, 1.8, [186, 214, 245]);
-  drawStar(doc, cxF + baseW / 2 + extra + 7, starY, 1.8, [186, 214, 245]);
+  drawStar(doc, cxF + baseW / 2 + 7, starY, 1.8, [186, 214, 245]);
 }
 
 /** Monta o documento da classificação (uma única página A4 paisagem). */
