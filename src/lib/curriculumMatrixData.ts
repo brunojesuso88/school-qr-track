@@ -26,7 +26,7 @@ export const OFFICIAL_CURRICULUM_MATRIX: OfficialMatrixSubject[] = [
   { name: 'ARTE', abbreviation: 'ART', aliases: ['ARTES'], weekly: { '1': 2, '2': 1, '3': 1 } },
   { name: 'BIOLOGIA', abbreviation: 'BIO', aliases: [], weekly: { '1': 2, '2': 2, '3': 2 } },
   { name: 'EDUCACAO DIGITAL', abbreviation: 'ED', aliases: ['EDUCAÇÃO DIGITAL'], weekly: { '1': 1, '2': 1, '3': 1 } },
-  { name: 'EDUCACAO FISICA', abbreviation: 'EF', aliases: ['EDUCAÇÃO FÍSICA', 'ED FISICA'], weekly: { '1': 2, '2': 1, '3': 1 } },
+  { name: 'EDUCACAO FISICA', abbreviation: 'EF', aliases: ['EDUCAÇÃO FÍSICA', 'ED FISICA'], weekly: { '1': 1, '2': 1, '3': 1 } },
   { name: 'FILOSOFIA', abbreviation: 'FIL', aliases: [], weekly: { '1': 1, '2': 2, '3': 1 } },
   { name: 'FISICA', abbreviation: 'FIS', aliases: ['FÍSICA'], weekly: { '1': 2, '2': 2, '3': 2 } },
   { name: 'GEOGRAFIA', abbreviation: 'GEO', aliases: [], weekly: { '1': 2, '2': 2, '3': 2 } },
