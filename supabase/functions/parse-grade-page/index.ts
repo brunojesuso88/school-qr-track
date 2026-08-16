@@ -590,7 +590,7 @@ serve(async (req) => {
       }
       return [{
         student_name: pdfName,
-        student_code: header.student_code ?? null,
+        student_code: pdfCodeFull,
         class_code: header.class_code ?? null,
         subject: subject.name,
         period: period.label,
@@ -623,7 +623,7 @@ serve(async (req) => {
     if (linkedStudent) {
       const same = (a?: string | null, b?: string | null) =>
         (a ?? '').trim().toLowerCase() === (b ?? '').trim().toLowerCase();
-      if (header.student_code && linkedStudent.school_code && !same(String(header.student_code), linkedStudent.school_code)) conflicts.push('code_mismatch');
+      if (pdfCodeFull && linkedStudent.school_code && digitsOnly(pdfCodeFull) !== digitsOnly(linkedStudent.school_code)) conflicts.push('code_mismatch');
       if (header.birth_date && linkedStudent.birth_date && header.birth_date !== linkedStudent.birth_date) conflicts.push('birth_date_mismatch');
       if (header.mother_name && linkedStudent.mother_name && !same(header.mother_name, linkedStudent.mother_name)) conflicts.push('mother_mismatch');
       if (header.father_name && linkedStudent.father_name && !same(header.father_name, linkedStudent.father_name)) conflicts.push('father_mismatch');
@@ -636,7 +636,7 @@ serve(async (req) => {
       pdf_class_code: header.class_code ?? null,
       student: {
         pdf_name: pdfName,
-        pdf_code: header.student_code ?? null,
+        pdf_code: pdfCodeFull,
         pdf_birth_date: header.birth_date ?? null,
         pdf_mother_name: header.mother_name ?? null,
         pdf_father_name: header.father_name ?? null,
@@ -644,7 +644,7 @@ serve(async (req) => {
       detected: {
         key: normalize(pdfName) || `pagina-${pageNumber}`,
         pdf_name: pdfName,
-        pdf_code: header.student_code ?? null,
+        pdf_code: pdfCodeFull,
         pdf_birth_date: header.birth_date ?? null,
         pdf_mother_name: header.mother_name ?? null,
         pdf_father_name: header.father_name ?? null,
