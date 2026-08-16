@@ -1219,10 +1219,6 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
           </div>
         )}
 
-        {step === 'failed' && (
-          <></>
-        )}
-
         {step === 'context_error' && contextBlock && (
           <div className="space-y-4">
             <Alert variant="destructive">
