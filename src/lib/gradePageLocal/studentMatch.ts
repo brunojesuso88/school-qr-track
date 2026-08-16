@@ -36,6 +36,29 @@ export const digitsOnly = (value: unknown) => {
   return trimmed || '0';
 };
 
+/**
+ * Valor a ARMAZENAR em students.school_code: todos os dígitos do código lido do boletim,
+ * sem pontos/vírgulas/espaços/barras/hífens e PRESERVANDO zeros à esquerda.
+ * Nunca truncar: "26.123.456" -> "26123456"; "0012.345-6" -> "00123456".
+ * Diferente de digitsOnly(), que é apenas comparativo (remove zeros à esquerda).
+ */
+export const sanitizeSchoolCodeForStorage = (value: unknown): string | null => {
+  const digits = String(value ?? '').replace(INVISIBLE, '').replace(/\D+/g, '');
+  return digits ? digits : null;
+};
+
+/**
+ * Recompõe o valor do rótulo "Código" a partir de um trecho de texto do cabeçalho:
+ * captura a sequência inteira de dígitos e separadores (., , - / espaço) e sanitiza.
+ * Evita a captura parcial do primeiro grupo de dígitos (causa do código "26").
+ */
+export const extractSchoolCodeFromText = (text: unknown): string | null => {
+  const raw = String(text ?? '').replace(INVISIBLE, ' ');
+  const match = raw.match(/\d[\d.,\-/\s]*\d|\d/);
+  if (!match) return null;
+  return sanitizeSchoolCodeForStorage(match[0]);
+};
+
 /** NFD sem acentos, minúsculo, pontuação/invisíveis => espaço, espaços colapsados. */
 export const normalizeNameForMatch = (value: unknown) =>
   String(value ?? '')
