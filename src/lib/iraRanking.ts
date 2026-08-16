@@ -451,35 +451,62 @@ export async function buildIraRankingPdf(entries: RankingEntry[], options: Ranki
   const footerH = 13;
   const footerY = pageHeight - margin - footerH;
 
+  const columns = orderRankingColumns(
+    options.columns && options.columns.length > 0 ? options.columns : DEFAULT_RANKING_PDF_COLUMNS,
+  );
+  const headerOf = (c: RankingPdfColumn) =>
+    RANKING_PDF_COLUMN_OPTIONS.find((o) => o.value === c)!.header;
+  const valueOf = (c: RankingPdfColumn, e: RankingEntry, i: number) => {
+    switch (c) {
+      case 'position': return `${i + 1}º`;
+      case 'code': return formatStudentCode(e.code) || 'não informado';
+      case 'fullName': return e.fullName || 'não informado';
+      case 'birthDate': return formatBirthDate(e.birthDate);
+      case 'className': return e.className;
+      case 'ira': return formatIra(e.ira);
+    }
+  };
+  const FIXED: Partial<Record<RankingPdfColumn, number>> = {
+    position: 26, code: 56, birthDate: 46, ira: 30,
+  };
+  const dense = columns.includes('fullName') && columns.length >= 5;
+  const columnStyles: Record<number, Record<string, unknown>> = {};
+  columns.forEach((c, idx) => {
+    const base: Record<string, unknown> = { halign: 'center' };
+    if (FIXED[c]) base.cellWidth = FIXED[c];
+    if (c === 'position') base.fontStyle = 'bold';
+    if (c === 'fullName' || c === 'className') {
+      base.cellWidth = 'auto';
+      base.overflow = 'linebreak';
+      if (c === 'fullName') base.halign = 'left';
+    }
+    if (c === 'ira') {
+      base.fontStyle = 'bold';
+      base.textColor = ROYAL;
+      base.fontSize = dense ? 10 : 11;
+    }
+    columnStyles[idx] = base;
+  });
+  const positionIndex = columns.indexOf('position');
+  const iraIndex = columns.indexOf('ira');
+
   autoTable(doc, {
     startY: bandY + bandH + 3,
     margin: { left: margin, right: margin, bottom: footerH + margin + 3 },
-    head: [['POSIÇÃO', 'CÓDIGO DO ALUNO', 'DATA DE NASCIMENTO', 'TURMA / SÉRIE', 'IRA']],
-    body: rows.map((e, i) => [
-      `${i + 1}º`,
-      formatStudentCode(e.code) || 'não informado',
-      formatBirthDate(e.birthDate),
-      e.className,
-      formatIra(e.ira),
-    ]),
+    head: [columns.map(headerOf)],
+    body: rows.map((e, i) => columns.map((c) => valueOf(c, e, i))),
     theme: 'grid',
     tableWidth: pageWidth - margin * 2,
     styles: {
-      fontSize: 8.6, cellPadding: 1.15, textColor: [32, 44, 58],
+      fontSize: dense ? 8 : 8.6, cellPadding: dense ? 0.95 : 1.15, textColor: [32, 44, 58],
       lineColor: [206, 224, 245], lineWidth: 0.2, valign: 'middle',
     },
     headStyles: {
       fillColor: ROYAL, textColor: 255, fontStyle: 'bold', halign: 'center',
-      fontSize: 8.6, cellPadding: 1.5,
+      fontSize: dense ? 8 : 8.6, cellPadding: dense ? 1.2 : 1.5,
     },
     alternateRowStyles: { fillColor: LIGHT },
-    columnStyles: {
-      0: { halign: 'center', cellWidth: 26, fontStyle: 'bold' },
-      1: { halign: 'center', cellWidth: 56 },
-      2: { halign: 'center', cellWidth: 46 },
-      3: { halign: 'center', overflow: 'linebreak', cellWidth: 'auto' },
-      4: { halign: 'center', fontStyle: 'bold', cellWidth: 30, textColor: ROYAL, fontSize: 11 },
-    },
+    columnStyles,
     didParseCell: (data) => {
       if (data.section !== 'body') return;
       const place = data.row.index + 1;
@@ -487,12 +514,12 @@ export async function buildIraRankingPdf(entries: RankingEntry[], options: Ranki
         data.cell.styles.fillColor = place === 1 ? [214, 233, 255] : place === 2 ? [226, 239, 252] : [235, 244, 253];
         data.cell.styles.fontStyle = 'bold';
         data.cell.styles.textColor = NAVY;
-        if (data.column.index === 0) data.cell.text = [`      ${place}º`];
+        if (positionIndex >= 0 && data.column.index === positionIndex) data.cell.text = [`      ${place}º`];
       }
-      if (data.column.index === 4) data.cell.styles.textColor = ROYAL;
+      if (iraIndex >= 0 && data.column.index === iraIndex) data.cell.styles.textColor = ROYAL;
     },
     didDrawCell: (data) => {
-      if (data.section === 'body' && data.column.index === 0 && data.row.index + 1 <= 3) {
+      if (data.section === 'body' && positionIndex >= 0 && data.column.index === positionIndex && data.row.index + 1 <= 3) {
         drawMedal(doc, data.cell.x + 7, data.cell.y + data.cell.height / 2, data.row.index + 1);
       }
     },
