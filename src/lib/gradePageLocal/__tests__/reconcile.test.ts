@@ -1,7 +1,22 @@
 import { describe, expect, it } from 'vitest';
 import { reconcileLocalWithAi } from '../reconcile';
 
-const localPreview = {
+interface TestRow {
+  subject: string;
+  period: string;
+  raw_value: string | null;
+  value: number | null;
+  flags: string[];
+  source: string;
+  second_pass_value?: string | null;
+}
+
+const localPreview: {
+  rows: TestRow[];
+  notes: string[];
+  stats: Record<string, number>;
+  reading: { mode: string; escalated: boolean; reasons: string[]; local_score: number; divergences: number };
+} = {
   rows: [
     { subject: 'ARTE', period: '1º Período', raw_value: '7,00', value: 7, flags: [], source: 'local' },
     { subject: 'ARTE', period: '2º Período', raw_value: '0,00', value: 0, flags: ['explicit_zero'], source: 'local' },
