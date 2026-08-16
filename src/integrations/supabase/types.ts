@@ -466,6 +466,7 @@ export type Database = {
           custom_ira_weight: number | null
           id: string
           include_in_ira: boolean
+          legacy_excluded: boolean
           mapping_class_subject_id: string | null
           name: string
           normalized_name: string
@@ -479,6 +480,7 @@ export type Database = {
           custom_ira_weight?: number | null
           id?: string
           include_in_ira?: boolean
+          legacy_excluded?: boolean
           mapping_class_subject_id?: string | null
           name: string
           normalized_name: string
@@ -492,6 +494,7 @@ export type Database = {
           custom_ira_weight?: number | null
           id?: string
           include_in_ira?: boolean
+          legacy_excluded?: boolean
           mapping_class_subject_id?: string | null
           name?: string
           normalized_name?: string
