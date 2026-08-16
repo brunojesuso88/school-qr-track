@@ -88,6 +88,12 @@ interface PagePreview {
     divergences?: number;
     absence_tokens_dropped?: number;
     duration_ms?: number;
+    /** Células vazias vistas só pela IA e descartadas na reconciliação. */
+    ai_empty_ignored?: number;
+    /** Disciplinas materializadas pela matriz da turma (sem notas lançadas). */
+    anchored_subjects?: string[];
+    /** Linhas de disciplina com nome quebrado em duas linhas e fundidas. */
+    merged_subject_lines?: number;
   };
 }
 
