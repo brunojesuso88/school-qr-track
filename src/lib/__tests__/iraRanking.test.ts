@@ -14,6 +14,7 @@ const store = new Map<string, string>();
 const {
   buildIraRankingPdf, formatStudentCode, RANKING_LIMIT, detectClassSeries, FOOTER_MESSAGE, seriesLabel,
   parseClassSeries, classSeriesLabel, CLASS_SERIES_OPTIONS,
+  DEFAULT_RANKING_PDF_COLUMNS, RANKING_PDF_COLUMN_OPTIONS, orderRankingColumns,
 } = await import('@/lib/iraRanking');
 type RankingEntry = import('@/lib/iraRanking').RankingEntry;
 type HighSchoolSeries = import('@/lib/iraRanking').HighSchoolSeries;
@@ -21,6 +22,7 @@ type HighSchoolSeries = import('@/lib/iraRanking').HighSchoolSeries;
 const entries: RankingEntry[] = Array.from({ length: 25 }, (_, i) => ({
   studentId: `s${i}`,
   code: `1.234.${String(i).padStart(3, '0')}-9`,
+  fullName: `Aluno Sobrenome Composto Numero ${i}`,
   birthDate: '2008-03-15',
   className: '3ª Série A',
   ira: 10 - i * 0.1,
@@ -139,5 +141,41 @@ describe('exportação da classificação do IRA', () => {
       classNames: ['26RMM-CNS-300 Sala Fora'], periodsLabel: '', totalEligible: longEntries.length, series: '3',
     });
     expect(doc.getNumberOfPages()).toBe(1);
+  });
+
+  it('não inclui Nome completo nas colunas padrão', () => {
+    expect(DEFAULT_RANKING_PDF_COLUMNS).toEqual(['position', 'code', 'birthDate', 'className', 'ira']);
+    expect(RANKING_PDF_COLUMN_OPTIONS).toHaveLength(6);
+    expect(orderRankingColumns(['ira', 'position'])).toEqual(['position', 'ira']);
+  });
+
+  it('omite o nome completo do PDF quando a coluna não é selecionada', async () => {
+    const doc = await buildIraRankingPdf(entries, {
+      classNames: ['3ª Série A'], periodsLabel: '', totalEligible: entries.length, series: '3',
+    });
+    const raw = Buffer.from(doc.output('datauristring').split(',')[1], 'base64').toString('latin1');
+    expect(raw).not.toContain('NOME COMPLETO');
+    expect(doc.getNumberOfPages()).toBe(1);
+  });
+
+  it('inclui o nome completo e mantém uma página com todas as colunas e turma longa', async () => {
+    const longEntries = entries.map((e) => ({ ...e, className: '26RMM-CNS-300 Sala Fora' }));
+    const doc = await buildIraRankingPdf(longEntries, {
+      classNames: ['26RMM-CNS-300 Sala Fora'], periodsLabel: '', totalEligible: longEntries.length, series: '3',
+      columns: RANKING_PDF_COLUMN_OPTIONS.map((o) => o.value),
+    });
+    expect(doc.getNumberOfPages()).toBe(1);
+    const raw = Buffer.from(doc.output('datauristring').split(',')[1], 'base64').toString('latin1');
+    expect(raw).toContain('NOME COMPLETO');
+  });
+
+  it('não desenha a coluna de posição quando desmarcada', async () => {
+    const doc = await buildIraRankingPdf(entries, {
+      classNames: ['3ª Série A'], periodsLabel: '', totalEligible: entries.length, series: '3',
+      columns: ['code', 'ira'],
+    });
+    expect(doc.getNumberOfPages()).toBe(1);
+    const raw = Buffer.from(doc.output('datauristring').split(',')[1], 'base64').toString('latin1');
+    expect(raw).not.toContain('POSI');
   });
 });
