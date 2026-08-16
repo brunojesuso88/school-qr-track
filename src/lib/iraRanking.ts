@@ -231,8 +231,6 @@ export function generateIraRankingPdf(entries: RankingEntry[], options: RankingP
   );
   doc.setFont('helvetica', 'normal');
 
-  const medalRows: { row: number; place: number }[] = [];
-
   autoTable(doc, {
     startY: 52,
     margin: { left: margin, right: margin, bottom: 18 },
@@ -266,7 +264,6 @@ export function generateIraRankingPdf(entries: RankingEntry[], options: RankingP
     },
     didDrawCell: (data) => {
       if (data.section === 'body' && data.column.index === 0 && data.row.index + 1 <= 3) {
-        medalRows.push({ place: data.row.index + 1, row: data.row.index });
         drawMedal(doc, data.cell.x + 6, data.cell.y + data.cell.height / 2, data.row.index + 1);
       }
     },
@@ -285,6 +282,5 @@ export function generateIraRankingPdf(entries: RankingEntry[], options: RankingP
     },
   });
 
-  void medalRows;
   doc.save(`classificacao_ira_${format(new Date(), 'yyyy-MM-dd')}.pdf`);
 }
