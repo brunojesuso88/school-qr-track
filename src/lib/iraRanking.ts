@@ -329,10 +329,13 @@ function drawMotivationFooter(doc: jsPDF, x: number, y: number, width: number, h
   doc.setFontSize(11);
   doc.text(FOOTER_MESSAGE, x + width / 2, cy, { align: 'center', charSpace: 0.5 });
 
-  const textW = doc.getTextWidth(FOOTER_MESSAGE) + 0.5 * (FOOTER_MESSAGE.length - 1);
-  const half = textW / 2 + 7;
-  drawStar(doc, x + width / 2 - half, y + height / 2 + 0.4, 1.8, [186, 214, 245]);
-  drawStar(doc, x + width / 2 + half, y + height / 2 + 0.4, 1.8, [186, 214, 245]);
+  // jsPDF centraliza ignorando o charSpace, então o texto "cresce" para a direita.
+  const baseW = doc.getTextWidth(FOOTER_MESSAGE);
+  const extra = 0.5 * (FOOTER_MESSAGE.length - 1);
+  const cxF = x + width / 2;
+  const starY = y + height / 2 + 0.4;
+  drawStar(doc, cxF - baseW / 2 - 7, starY, 1.8, [186, 214, 245]);
+  drawStar(doc, cxF + baseW / 2 + extra + 7, starY, 1.8, [186, 214, 245]);
 }
 
 /** Monta o documento da classificação (uma única página A4 paisagem). */
