@@ -146,7 +146,7 @@ REGRAS OBRIGATÓRIAS:
 
 Responda SOMENTE com JSON válido:
 {
-  "student": {"name": "NOME", "student_code": "123456", "birth_date": "2009-03-14", "mother_name": "MAE", "father_name": "PAI", "class_code": "26RMM100"},
+  "student": {"name": "NOME", "student_code": "26.123.456", "birth_date": "2009-03-14", "mother_name": "MAE", "father_name": "PAI", "class_code": "26RMM100"},
   "periods": [{"label": "1º Período", "kind": "period"}],
   "subjects": ["ARTE", "BIOLOGIA"],
   "rows": [{"subject": "ARTE", "period": "1º Período", "note_raw": "3,17", "confidence": 0.98}],
@@ -505,6 +505,14 @@ serve(async (req) => {
       if (!d) return '';
       return d.replace(/^0+/, '') || '0';
     };
+    // Código do boletim COMPLETO (todos os dígitos, zeros à esquerda preservados).
+    const fullCode = (v: unknown) => {
+      const raw = String(v ?? '').replace(/[\u200b-\u200d\u2060\ufeff]/g, ' ');
+      const m = raw.match(/\d(?:[\d.,\-/]|[ ](?=\d))*\d|\d/);
+      const digits = m ? m[0].replace(/\D+/g, '') : '';
+      return digits || null;
+    };
+    const pdfCodeFull = fullCode(header.student_code);
     const PARTICLES = new Set(['da', 'de', 'do', 'das', 'dos', 'e', 'di', 'del', 'della', 'du']);
     const tokensOf = (v: unknown) =>
       normalize(String(v ?? '')).split(' ').filter((t) => t && !PARTICLES.has(t));
