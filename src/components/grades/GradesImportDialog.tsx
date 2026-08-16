@@ -1606,6 +1606,7 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
             )}
             {!divergenceDiag.hasDivergence
               && ((preview.reading?.ai_empty_ignored ?? 0) > 0
+                || (preview.reading?.ai_only_numeric_ignored ?? 0) > 0
                 || (preview.reading?.anchored_subjects?.length ?? 0) > 0) && (
               <GradesDivergencePanel
                 divergences={[]}
@@ -1858,7 +1859,9 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
                 Ignorar página
               </Button>
               <Button onClick={() => handleConfirmPage('manual')} disabled={!canConfirmPage}>
-                Confirmar e próxima página
+                {divergenceDiag.hasDivergence
+                  ? 'Confirmar leitura local e próxima página'
+                  : 'Confirmar e próxima página'}
               </Button>
             </>
           )}
