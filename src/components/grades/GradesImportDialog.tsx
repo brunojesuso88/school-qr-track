@@ -31,7 +31,8 @@ import {
 } from '@/lib/gradePageLocal/pdfText';
 import { parseGradePageLocal } from '@/lib/gradePageLocal/parseGradePageLocal';
 import { reconcileLocalWithAi } from '@/lib/gradePageLocal/reconcile';
-import { LocalContextStudent } from '@/lib/gradePageLocal/types';
+import { LocalContextStudent, LocalExpectedSubject } from '@/lib/gradePageLocal/types';
+import { CatalogSubject, buildEffectiveSubjectMatrix } from '@/lib/gradePageLocal/effectiveMatrix';
 import { classifyPeriodLabel, isPeriodKind, periodRank } from '@/lib/gradePageLocal/normalize';
 import {
   CONFLICT_LABELS, DetectedStudent, FieldDecision, RegistrationDecision,
