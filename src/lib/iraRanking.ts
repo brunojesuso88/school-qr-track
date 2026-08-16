@@ -15,7 +15,13 @@ import {
 } from '@/hooks/useStudentGrades';
 import { formatIra } from '@/lib/ira';
 
-export const RANKING_LIMIT = 30;
+export const RANKING_LIMIT = 15;
+
+/** Código do aluno apenas com dígitos (sem pontos, vírgulas, traços ou espaços). */
+export const formatStudentCode = (code: string | null) => {
+  const digits = (code || '').replace(/\D/g, '');
+  return digits || '';
+};
 
 export interface RankingEntry {
   studentId: string;
@@ -160,9 +166,9 @@ export const formatBirthDate = (value: string | null) => {
 };
 
 const MEDALS: Record<number, { fill: [number, number, number]; ring: [number, number, number] }> = {
-  1: { fill: [212, 175, 55], ring: [150, 116, 20] },
-  2: { fill: [176, 184, 193], ring: [120, 128, 136] },
-  3: { fill: [176, 121, 74], ring: [124, 82, 46] },
+  1: { fill: [21, 101, 192], ring: [10, 60, 120] },
+  2: { fill: [144, 164, 184], ring: [90, 110, 130] },
+  3: { fill: [96, 125, 150], ring: [55, 75, 96] },
 };
 
 /** Desenha uma medalha discreta (círculo com anel) centrada em (cx, cy). */
@@ -172,9 +178,9 @@ function drawMedal(doc: jsPDF, cx: number, cy: number, place: number) {
   doc.setFillColor(...m.fill);
   doc.setDrawColor(...m.ring);
   doc.setLineWidth(0.4);
-  doc.circle(cx, cy, 2.1, 'FD');
+  doc.circle(cx, cy, 2.0, 'FD');
   doc.setFillColor(255, 255, 255);
-  doc.circle(cx, cy, 0.7, 'F');
+  doc.circle(cx, cy, 0.65, 'F');
 }
 
 export interface RankingPdfOptions {
@@ -184,81 +190,113 @@ export interface RankingPdfOptions {
 }
 
 const SCHOOL = 'Professor Antônio Nonato Sampaio';
-const BRAND: [number, number, number] = [15, 82, 122];
-const ACCENT: [number, number, number] = [13, 148, 136];
+const BRAND: [number, number, number] = [12, 64, 122];
+const BRAND_MID: [number, number, number] = [21, 101, 192];
+const ACCENT: [number, number, number] = [37, 128, 214];
+
+/** Carrega o brasão da escola como dataURL (falha silenciosa). */
+async function loadLogo(url: string): Promise<string | null> {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const blob = await res.blob();
+    return await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  } catch {
+    return null;
+  }
+}
 
 /** Gera e baixa o PDF da classificação. Nenhum nome de aluno é usado. */
-export function generateIraRankingPdf(entries: RankingEntry[], options: RankingPdfOptions) {
+export async function generateIraRankingPdf(entries: RankingEntry[], options: RankingPdfOptions) {
   const doc = new jsPDF('landscape', 'mm', 'a4');
   const pageWidth = doc.internal.pageSize.getWidth();
-  const margin = 14;
+  const margin = 10;
 
-  // Faixa institucional
+  // Faixa institucional (degradê discreto em azuis)
   doc.setFillColor(...BRAND);
-  doc.rect(0, 0, pageWidth, 30, 'F');
+  doc.rect(0, 0, pageWidth, 28, 'F');
+  doc.setFillColor(...BRAND_MID);
+  doc.rect(0, 24, pageWidth, 4, 'F');
+
+  const logo = await loadLogo(options.logoUrl ?? '');
+  if (logo) {
+    doc.setFillColor(255, 255, 255);
+    doc.circle(margin + 11, 14, 11.4, 'F');
+    try {
+      doc.addImage(logo, 'PNG', margin + 1.5, 4.5, 19, 19);
+    } catch {
+      /* ignora logo inválido */
+    }
+  }
+
   doc.setTextColor(255, 255, 255);
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(10);
-  doc.text(SCHOOL.toUpperCase(), pageWidth / 2, 10, { align: 'center' });
+  doc.setFontSize(9.5);
+  doc.text(SCHOOL.toUpperCase(), pageWidth / 2, 9, { align: 'center' });
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(17);
-  doc.text('CLASSIFICAÇÃO DE DESEMPENHO — RANKING DO IRA', pageWidth / 2, 19, { align: 'center' });
+  doc.setFontSize(16);
+  doc.text('RANKING DO IRA — TOP 15', pageWidth / 2, 17, { align: 'center' });
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(9);
-  doc.text(
-    `Melhores resultados acadêmicos das turmas selecionadas${options.periodsLabel ? ` · Base: ${options.periodsLabel}` : ''}`,
-    pageWidth / 2, 26, { align: 'center' },
-  );
-
-  doc.setTextColor(60, 60, 60);
   doc.setFontSize(8.5);
-  doc.text(`Turmas/Séries: ${options.classNames.join(', ')}`, margin, 38, { maxWidth: pageWidth - margin * 2 });
   doc.text(
-    `Emitido em ${format(new Date(), 'dd/MM/yyyy')} · ${entries.length} de ${options.totalEligible} classificado(s) elegível(is)`,
-    pageWidth - margin, 38, { align: 'right' },
+    `Os melhores desempenhos acadêmicos${options.periodsLabel ? ` · Base: ${options.periodsLabel}` : ''}`,
+    pageWidth / 2, 22.5, { align: 'center' },
   );
 
-  doc.setDrawColor(...ACCENT);
-  doc.setLineWidth(0.6);
-  doc.line(margin, 41, pageWidth - margin, 41);
+  doc.setTextColor(70, 80, 90);
+  doc.setFontSize(8);
+  doc.text(`Turmas/Séries: ${options.classNames.join(', ')}`, margin, 34, { maxWidth: pageWidth - margin * 2 - 70 });
+  doc.text(
+    `Emitido em ${format(new Date(), 'dd/MM/yyyy')} · ${entries.length} de ${options.totalEligible} elegível(is)`,
+    pageWidth - margin, 34, { align: 'right' },
+  );
 
-  doc.setFont('helvetica', 'italic');
+  doc.setFont('helvetica', 'bold');
   doc.setFontSize(9.5);
   doc.setTextColor(...ACCENT);
   doc.text(
-    'Excelência acadêmica se constrói com dedicação, constância e superação.',
-    pageWidth / 2, 47, { align: 'center' },
+    'SUPERE SEUS LIMITES — O PRÓXIMO NOME NO TOPO PODE SER O SEU.',
+    pageWidth / 2, 41, { align: 'center' },
   );
   doc.setFont('helvetica', 'normal');
 
   autoTable(doc, {
-    startY: 52,
-    margin: { left: margin, right: margin, bottom: 18 },
+    startY: 45,
+    margin: { left: margin, right: margin, bottom: 8 },
     head: [['Colocação', 'Código do aluno', 'Data de nascimento', 'Turma/Série', 'IRA']],
     body: entries.map((e, i) => [
       `${i + 1}º`,
-      e.code || 'não informado',
+      formatStudentCode(e.code) || 'não informado',
       formatBirthDate(e.birthDate),
       e.className,
       formatIra(e.ira),
     ]),
     theme: 'grid',
-    styles: { fontSize: 9.5, cellPadding: 2.4, textColor: [40, 40, 40], lineColor: [220, 226, 230] },
-    headStyles: { fillColor: BRAND, textColor: 255, fontStyle: 'bold', halign: 'center' },
-    alternateRowStyles: { fillColor: [246, 249, 251] },
+    styles: {
+      fontSize: 10, cellPadding: 2.6, textColor: [35, 45, 55],
+      lineColor: [214, 228, 244], lineWidth: 0.2, valign: 'middle',
+    },
+    headStyles: { fillColor: BRAND, textColor: 255, fontStyle: 'bold', halign: 'center', fontSize: 10 },
+    alternateRowStyles: { fillColor: [240, 246, 253] },
     columnStyles: {
-      0: { halign: 'center', cellWidth: 34, fontStyle: 'bold' },
+      0: { halign: 'center', cellWidth: 30, fontStyle: 'bold' },
       1: { halign: 'center' },
       2: { halign: 'center' },
       3: { halign: 'center' },
-      4: { halign: 'center', fontStyle: 'bold', cellWidth: 30, textColor: BRAND, fontSize: 11 },
+      4: { halign: 'center', fontStyle: 'bold', cellWidth: 32, textColor: BRAND, fontSize: 12 },
     },
     didParseCell: (data) => {
       if (data.section !== 'body') return;
       const place = data.row.index + 1;
       if (place <= 3) {
-        data.cell.styles.fillColor = place === 1 ? [255, 248, 225] : place === 2 ? [242, 244, 246] : [250, 240, 231];
+        data.cell.styles.fillColor = place === 1 ? [214, 233, 255] : place === 2 ? [228, 240, 252] : [236, 245, 253];
         data.cell.styles.fontStyle = 'bold';
+        data.cell.styles.textColor = BRAND;
         if (data.column.index === 0) data.cell.text = [`      ${place}º`];
       }
     },
@@ -266,19 +304,6 @@ export function generateIraRankingPdf(entries: RankingEntry[], options: RankingP
       if (data.section === 'body' && data.column.index === 0 && data.row.index + 1 <= 3) {
         drawMedal(doc, data.cell.x + 6, data.cell.y + data.cell.height / 2, data.row.index + 1);
       }
-    },
-    didDrawPage: () => {
-      const pageHeight = doc.internal.pageSize.getHeight();
-      doc.setFontSize(8);
-      doc.setTextColor(120, 120, 120);
-      doc.text(
-        'Documento de divulgação de desempenho acadêmico — sem identificação nominal.',
-        margin, pageHeight - 8,
-      );
-      doc.text(
-        `Página ${doc.getNumberOfPages()}`,
-        pageWidth - margin, pageHeight - 8, { align: 'right' },
-      );
     },
   });
 
