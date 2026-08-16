@@ -61,7 +61,7 @@ const TimetableLayout = ({ children, title, description }: TimetableLayoutProps)
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => navigate('/home')}
+            onClick={() => navigate('/dashboard')}
           >
             <ChevronLeft className="h-5 w-5" />
           </Button>
@@ -89,7 +89,7 @@ const TimetableLayout = ({ children, title, description }: TimetableLayoutProps)
                   <Button
                     variant="ghost"
                     size="icon"
-                    onClick={() => { navigate('/home'); setSidebarOpen(false); }}
+                    onClick={() => { navigate('/dashboard'); setSidebarOpen(false); }}
                   >
                     <ChevronLeft className="h-5 w-5" />
                   </Button>

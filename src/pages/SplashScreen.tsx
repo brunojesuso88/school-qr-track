@@ -23,7 +23,7 @@ const SplashScreen = () => {
         return;
       }
       if (userRole === 'admin' || userRole === 'direction') {
-        navigate("/home");
+        navigate("/dashboard");
       } else {
         navigate("/dashboard");
       }
