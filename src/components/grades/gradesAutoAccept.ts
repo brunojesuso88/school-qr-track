@@ -68,6 +68,8 @@ export interface DivergenceDetail {
   ai_only: boolean;
   /** Elegível para adoção automática da leitura local. */
   local_eligible: boolean;
+  /** Discordância apenas informativa: leitura local autoritativa foi preservada. */
+  advisory: boolean;
   /** Motivos de inelegibilidade desta célula. */
   reasons: string[];
 }
@@ -91,11 +93,14 @@ export const analyzeDivergences = (rows: DivergenceRow[]): {
   hasDivergence: boolean;
   allLocallyEligible: boolean;
   hasAiOnly: boolean;
+  /** Todas as divergências são apenas discordância da IA (advisory). */
+  onlyAdvisory: boolean;
 } => {
   const divergences: DivergenceDetail[] = [];
   rows.forEach((row, index) => {
     const flags = row.flags ?? [];
-    if (!flags.includes('reconciliation_divergence')) return;
+    const advisory = flags.includes('ai_validation_disagreement');
+    if (!flags.includes('reconciliation_divergence') && !advisory) return;
     const aiOnly = row.source === 'ai';
     // Defensivo: flag obsoleta (ex.: correção manual posterior) não é divergência.
     if (!aiOnly && matchesSecondPass(row.value ?? null, row.second_pass_value)) return;
@@ -118,6 +123,7 @@ export const analyzeDivergences = (rows: DivergenceRow[]): {
       source: row.source as DivergenceDetail['source'],
       ai_only: aiOnly,
       local_eligible: reasons.length === 0,
+      advisory,
       reasons,
     });
   });
@@ -126,6 +132,7 @@ export const analyzeDivergences = (rows: DivergenceRow[]): {
     hasDivergence: divergences.length > 0,
     allLocallyEligible: divergences.length > 0 && divergences.every((d) => d.local_eligible),
     hasAiOnly: divergences.some((d) => d.ai_only),
+    onlyAdvisory: divergences.length > 0 && divergences.every((d) => d.advisory),
   };
 };
 
@@ -224,13 +231,17 @@ export const evaluateAutoAccept = (input: AutoAcceptInput): AutoAcceptResult => 
   // Divergência LOCAL × IA: tratada linha a linha para manter segurança.
   const diag = analyzeDivergences(rows);
   const divergenceBlocking = diag.hasDivergence
+    && !diag.onlyAdvisory
     && !(rules.use_local_on_reconciliation && diag.allLocallyEligible);
   const reasonsBeforeDivergence = [...new Set(reasons)].length;
   if (divergenceBlocking) {
     reasons.push('Divergência entre leituras');
-  } else if (diag.hasDivergence) {
+  } else if (diag.hasDivergence && !diag.onlyAdvisory) {
     applied.push('Leitura local do boletim adotada em divergência de validação');
     appliedCodes.push('local_reconciliation');
+  } else if (diag.hasDivergence) {
+    applied.push('Discordância da IA registrada como aviso (leitura local autoritativa)');
+    appliedCodes.push('local_authoritative');
   }
 
   if (rows.some((r) => r.value != null && (r.value < 0 || r.value > 10))) {
