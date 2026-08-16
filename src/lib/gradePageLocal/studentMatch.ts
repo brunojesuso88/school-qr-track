@@ -54,7 +54,8 @@ export const sanitizeSchoolCodeForStorage = (value: unknown): string | null => {
  */
 export const extractSchoolCodeFromText = (text: unknown): string | null => {
   const raw = String(text ?? '').replace(INVISIBLE, ' ');
-  const match = raw.match(/\d[\d.,\-/\s]*\d|\d/);
+  // Dígitos, separadores e, no máximo, UM espaço entre dígitos (tokens quebrados pelo PDF).
+  const match = raw.match(/\d(?:[\d.,\-/]|[ ](?=\d))*\d|\d/);
   if (!match) return null;
   return sanitizeSchoolCodeForStorage(match[0]);
 };
