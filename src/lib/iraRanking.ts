@@ -105,7 +105,7 @@ export async function buildIraRanking(classIds: string[]): Promise<RankingResult
 
   const [studentsRes, subjRes, perRes, settingsRes] = await Promise.all([
     supabase.from('students').select('id, school_code, student_id, birth_date, class, status').in('class', classNames),
-    supabase.from('grade_subjects').select('*').in('class_id', classIds).order('sort_order'),
+    supabase.from('grade_subjects').select('*').in('class_id', classIds).eq('legacy_excluded', false).order('sort_order'),
     supabase.from('grade_periods').select('*').in('class_id', classIds).order('sort_order'),
     supabase.from('ira_settings').select('*').in('class_id', classIds),
   ]);

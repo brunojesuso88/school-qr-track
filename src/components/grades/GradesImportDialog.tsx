@@ -19,6 +19,7 @@ import { GradesReviewTable, ReviewRow } from './GradesReviewTable';
 import { GradesRegistrationAudit } from './GradesRegistrationAudit';
 import { GradesClassMismatchPanel } from './GradesClassMismatchPanel';
 import { GradesDivergencePanel } from './GradesDivergencePanel';
+import { ClassCurriculumGate } from './ClassCurriculumGate';
 import {
   analyzeDivergences, AutoAcceptRules, DEFAULT_AUTO_ACCEPT_RULES, evaluateAutoAccept, parseAutoAcceptRules,
 } from './gradesAutoAccept';
@@ -212,6 +213,8 @@ const keepOnlyPeriodColumns = (p: PagePreview): PagePreview => {
 };
 
 export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }: GradesImportDialogProps) => {
+  /** Turma só libera upload após série definida + matriz oficial sincronizada. */
+  const [curriculumReady, setCurriculumReady] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { userRole } = useAuth();
   const canEditRegistration = userRole === 'admin' || userRole === 'direction';
@@ -372,7 +375,7 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
     }));
     // Matriz efetiva de âncoras: mapeamento da turma + disciplinas já importadas + catálogo da série.
     const [{ data: gradeSubj }, { data: classRow }] = await Promise.all([
-      supabase.from('grade_subjects').select('name, weekly_classes').eq('class_id', classItem.id),
+      supabase.from('grade_subjects').select('name, weekly_classes').eq('class_id', classItem.id).eq('legacy_excluded', false),
       supabase.from('classes').select('series').eq('id', classItem.id).maybeSingle(),
     ]);
     const series = (classRow as { series?: string | null } | null)?.series ?? null;
@@ -381,9 +384,10 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
       .select('name, abbreviation, aliases, series, default_weekly_classes');
     // Matriz curricular OFICIAL da série tem prioridade máxima como âncora.
     const parsedSeries = parseSeriesValue(series);
-    const official = parsedSeries
-      ? matrixToExpectedSubjects(await fetchCurriculumMatrix(parsedSeries).catch(() => []))
-      : [];
+    if (!parsedSeries) {
+      throw new Error('Defina a série da turma e aplique a matriz curricular oficial antes de importar o boletim.');
+    }
+    const official = matrixToExpectedSubjects(await fetchCurriculumMatrix(parsedSeries).catch(() => []));
     localExpectedRef.current = buildEffectiveSubjectMatrix({
       matrix: official,
       mapping: expected.map((s) => ({ name: s.name, weekly_classes: s.weekly_classes })),
@@ -1305,6 +1309,12 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
 
         {step === 'select' && (
           <div className="space-y-4">
+            {classItem && (
+              <ClassCurriculumGate
+                classId={classItem.id}
+                onReadyChange={setCurriculumReady}
+              />
+            )}
             <div className="border-2 border-dashed rounded-lg p-8 text-center">
               <FileText className="w-12 h-12 mx-auto text-muted-foreground mb-3" />
               <p className="text-sm text-muted-foreground mb-4">
@@ -1320,10 +1330,15 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
                   if (file) startImport(file);
                 }}
               />
-              <Button onClick={() => fileInputRef.current?.click()}>
+              <Button onClick={() => fileInputRef.current?.click()} disabled={!curriculumReady}>
                 <Upload className="w-4 h-4 mr-2" />
                 Selecionar PDF
               </Button>
+              {!curriculumReady && (
+                <p className="text-[11px] text-muted-foreground mt-3">
+                  Defina a série e aplique a matriz curricular oficial acima para liberar a importação.
+                </p>
+              )}
             </div>
             <div className="rounded-lg border p-3 space-y-2">
               <Label className="text-sm font-medium">Modo de leitura</Label>

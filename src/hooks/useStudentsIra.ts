@@ -74,7 +74,7 @@ export function useStudentsIra(students: { id: string; class: string }[]) {
         }
 
         const [subjRes, perRes, settingsRes] = await Promise.all([
-          supabase.from('grade_subjects').select('*').in('class_id', classIds).order('sort_order'),
+          supabase.from('grade_subjects').select('*').in('class_id', classIds).eq('legacy_excluded', false).order('sort_order'),
           supabase.from('grade_periods').select('*').in('class_id', classIds).order('sort_order'),
           supabase.from('ira_settings').select('*').in('class_id', classIds),
         ]);
