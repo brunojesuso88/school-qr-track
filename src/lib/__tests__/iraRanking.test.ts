@@ -82,8 +82,7 @@ describe('exportação da classificação do IRA', () => {
     expect(doc.getNumberOfPages()).toBe(1);
     const raw = Buffer.from(doc.output('datauristring').split(',')[1], 'base64').toString('latin1');
     expect(raw).toContain('RANKING DO IRA');
-    expect(raw).toContain('SERIE DO ENSINO M') // acentos codificados; confere trecho ASCII
-      ;
+    expect(raw).toContain('RIE DO ENSINO M'); // "SÉRIE DO ENSINO MÉDIO" (acentos codificados)
     expect(seriesLabel('2')).toBe('2ª Série do Ensino Médio');
     expect(FOOTER_MESSAGE).toBe('CONTINUE AVANÇANDO. O MELHOR AINDA ESTÁ POR VIR!');
     ['CADA PONTO TE APROXIMA DO TOPO', 'SUPERE SEUS LIMITES', 'MAIOR PODER'].forEach((t) =>
