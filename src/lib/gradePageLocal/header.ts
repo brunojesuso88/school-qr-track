@@ -1,5 +1,6 @@
 /** Cabeçalho do aluno lido por rótulos âncora nas linhas acima da grade. */
 import { normalizeAligned, toIsoDate } from './normalize';
+import { extractSchoolCodeFromText } from './studentMatch';
 import { LocalHeader, TokenLine } from './types';
 
 const LABELS: { field: keyof LocalHeader; pattern: RegExp }[] = [
@@ -51,7 +52,10 @@ export function extractHeader(lines: TokenLine[], gridHeaderIndex: number | null
       const value = clean(raw.slice(from, Math.max(from, to)));
       if (!value) return;
       if (hit.field === 'birth_date') header.birth_date = toIsoDate(value);
-      else if (hit.field === 'student_code') header.student_code = (value.match(/[0-9A-Za-z]+/) ?? [null])[0];
+      else if (hit.field === 'student_code') {
+        // Código COMPLETO: recompõe dígitos + separadores e sanitiza (nunca só o 1º grupo).
+        header.student_code = extractSchoolCodeFromText(value);
+      }
       else header[hit.field] = value;
     });
   }

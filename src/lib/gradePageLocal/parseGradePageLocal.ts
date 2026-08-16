@@ -6,6 +6,7 @@ import { buildCells, detectGrid, groupLines } from './layout';
 import { extractHeader } from './header';
 import { normalizeText, periodRank, similarity } from './normalize';
 import { matchStudentInClass } from './studentMatch';
+import { digitsOnly } from './studentMatch';
 import { isLocallyConfident, validateLocalPage } from './validate';
 import {
   LocalContextStudent, LocalParseContext, LocalValidation, TextToken,
@@ -164,7 +165,8 @@ export function parseGradePageLocal(tokens: TextToken[], context: LocalParseCont
   if (linked) {
     const same = (a?: string | null, b?: string | null) =>
       (a ?? '').trim().toLowerCase() === (b ?? '').trim().toLowerCase();
-    if (header.student_code && linked.school_code && !same(header.student_code, linked.school_code)) conflicts.push('code_mismatch');
+    if (header.student_code && linked.school_code
+      && digitsOnly(header.student_code) !== digitsOnly(linked.school_code)) conflicts.push('code_mismatch');
     if (header.birth_date && linked.birth_date && header.birth_date !== linked.birth_date) conflicts.push('birth_date_mismatch');
     if (header.mother_name && linked.mother_name && !same(header.mother_name, linked.mother_name)) conflicts.push('mother_mismatch');
     if (header.father_name && linked.father_name && !same(header.father_name, linked.father_name)) conflicts.push('father_mismatch');

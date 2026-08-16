@@ -146,7 +146,7 @@ REGRAS OBRIGATÓRIAS:
 
 Responda SOMENTE com JSON válido:
 {
-  "student": {"name": "NOME", "student_code": "123456", "birth_date": "2009-03-14", "mother_name": "MAE", "father_name": "PAI", "class_code": "26RMM100"},
+  "student": {"name": "NOME", "student_code": "26.123.456", "birth_date": "2009-03-14", "mother_name": "MAE", "father_name": "PAI", "class_code": "26RMM100"},
   "periods": [{"label": "1º Período", "kind": "period"}],
   "subjects": ["ARTE", "BIOLOGIA"],
   "rows": [{"subject": "ARTE", "period": "1º Período", "note_raw": "3,17", "confidence": 0.98}],
@@ -505,6 +505,14 @@ serve(async (req) => {
       if (!d) return '';
       return d.replace(/^0+/, '') || '0';
     };
+    // Código do boletim COMPLETO (todos os dígitos, zeros à esquerda preservados).
+    const fullCode = (v: unknown) => {
+      const raw = String(v ?? '').replace(/[\u200b-\u200d\u2060\ufeff]/g, ' ');
+      const m = raw.match(/\d(?:[\d.,\-/]|[ ](?=\d))*\d|\d/);
+      const digits = m ? m[0].replace(/\D+/g, '') : '';
+      return digits || null;
+    };
+    const pdfCodeFull = fullCode(header.student_code);
     const PARTICLES = new Set(['da', 'de', 'do', 'das', 'dos', 'e', 'di', 'del', 'della', 'du']);
     const tokensOf = (v: unknown) =>
       normalize(String(v ?? '')).split(' ').filter((t) => t && !PARTICLES.has(t));
@@ -582,7 +590,7 @@ serve(async (req) => {
       }
       return [{
         student_name: pdfName,
-        student_code: header.student_code ?? null,
+        student_code: pdfCodeFull,
         class_code: header.class_code ?? null,
         subject: subject.name,
         period: period.label,
@@ -615,7 +623,7 @@ serve(async (req) => {
     if (linkedStudent) {
       const same = (a?: string | null, b?: string | null) =>
         (a ?? '').trim().toLowerCase() === (b ?? '').trim().toLowerCase();
-      if (header.student_code && linkedStudent.school_code && !same(String(header.student_code), linkedStudent.school_code)) conflicts.push('code_mismatch');
+      if (pdfCodeFull && linkedStudent.school_code && digitsOnly(pdfCodeFull) !== digitsOnly(linkedStudent.school_code)) conflicts.push('code_mismatch');
       if (header.birth_date && linkedStudent.birth_date && header.birth_date !== linkedStudent.birth_date) conflicts.push('birth_date_mismatch');
       if (header.mother_name && linkedStudent.mother_name && !same(header.mother_name, linkedStudent.mother_name)) conflicts.push('mother_mismatch');
       if (header.father_name && linkedStudent.father_name && !same(header.father_name, linkedStudent.father_name)) conflicts.push('father_mismatch');
@@ -628,7 +636,7 @@ serve(async (req) => {
       pdf_class_code: header.class_code ?? null,
       student: {
         pdf_name: pdfName,
-        pdf_code: header.student_code ?? null,
+        pdf_code: pdfCodeFull,
         pdf_birth_date: header.birth_date ?? null,
         pdf_mother_name: header.mother_name ?? null,
         pdf_father_name: header.father_name ?? null,
@@ -636,7 +644,7 @@ serve(async (req) => {
       detected: {
         key: normalize(pdfName) || `pagina-${pageNumber}`,
         pdf_name: pdfName,
-        pdf_code: header.student_code ?? null,
+        pdf_code: pdfCodeFull,
         pdf_birth_date: header.birth_date ?? null,
         pdf_mother_name: header.mother_name ?? null,
         pdf_father_name: header.father_name ?? null,

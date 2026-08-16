@@ -18,9 +18,13 @@ import {
 import { GradesReviewTable, ReviewRow } from './GradesReviewTable';
 import { GradesRegistrationAudit } from './GradesRegistrationAudit';
 import { GradesClassMismatchPanel } from './GradesClassMismatchPanel';
-import { evaluateAutoAccept } from './gradesAutoAccept';
+import {
+  AutoAcceptRules, DEFAULT_AUTO_ACCEPT_RULES, evaluateAutoAccept, parseAutoAcceptRules,
+} from './gradesAutoAccept';
 import { useAuth } from '@/contexts/AuthContext';
-import { digitsOnly, findGlobalMatch, nameTokens, pickClassName } from '@/lib/gradePageLocal/studentMatch';
+import {
+  digitsOnly, findGlobalMatch, nameTokens, pickClassName, sanitizeSchoolCodeForStorage,
+} from '@/lib/gradePageLocal/studentMatch';
 import {
   closePdfDocument, extractPageTokens, LocalPdfDocument, openPdfDocument,
 } from '@/lib/gradePageLocal/pdfText';
@@ -94,6 +98,7 @@ interface SessionState {
   ignored_pages: number;
   notes_imported: number;
   auto_accept?: boolean;
+  auto_accept_rules?: AutoAcceptRules;
 }
 
 interface GradesImportDialogProps {
@@ -210,6 +215,7 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
   const [savedTotal, setSavedTotal] = useState(0);
   const cancelledRef = useRef(false);
   const [autoAccept, setAutoAccept] = useState(false);
+  const [autoRules, setAutoRules] = useState<AutoAcceptRules>(DEFAULT_AUTO_ACCEPT_RULES);
   const [autoApprovedPage, setAutoApprovedPage] = useState<number | null>(null);
   const autoRunRef = useRef<string | null>(null);
   const [readingMode, setReadingMode] = useState<ReadingMode>('local_ai');
@@ -240,6 +246,7 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
     setMovingStudent(false);
     setSavedTotal(0);
     setAutoAccept(false);
+    setAutoRules(DEFAULT_AUTO_ACCEPT_RULES);
     setAutoApprovedPage(null);
     autoRunRef.current = null;
     cancelledRef.current = false;
@@ -566,7 +573,7 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
     (async () => {
       const { data } = await supabase
         .from('grade_import_sessions')
-        .select('id, file_name, total_pages, current_page, confirmed_pages, ignored_pages, notes_imported, status, auto_accept')
+        .select('id, file_name, total_pages, current_page, confirmed_pages, ignored_pages, notes_imported, status, auto_accept, auto_accept_rules')
         .eq('class_id', classItem.id)
         .in('status', ['processing_page', 'awaiting_confirmation'])
         .order('created_at', { ascending: false })
@@ -582,8 +589,10 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
         ignored_pages: data.ignored_pages,
         notes_imported: data.notes_imported,
         auto_accept: Boolean(data.auto_accept),
+        auto_accept_rules: parseAutoAcceptRules(data.auto_accept_rules),
       });
       setAutoAccept(Boolean(data.auto_accept));
+      setAutoRules(parseAutoAcceptRules(data.auto_accept_rules));
       setStep('resume');
     })();
     return () => { cancelled = true; };
@@ -643,11 +652,12 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
         ignored_pages: 0,
         notes_imported: 0,
         auto_accept: autoAccept,
+        auto_accept_rules: autoRules,
       };
       setSession(newSession);
-      if (autoAccept) {
-        await supabase.from('grade_import_sessions').update({ auto_accept: true }).eq('id', newSession.id);
-      }
+      await supabase.from('grade_import_sessions')
+        .update({ auto_accept: autoAccept, auto_accept_rules: autoRules as never })
+        .eq('id', newSession.id);
       await processPage(newSession.id, 1);
     } catch (e) {
       console.error(e);
@@ -735,9 +745,12 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
     !otherClassMatch &&
     (pageAction === 'create' || (pageAction === 'link' && Boolean(linkStudentId)));
 
+  /** Exceção cadastral vale apenas para quem pode alterar cadastro (RLS/trigger inalterados). */
+  const registryExceptionActive = autoAccept && autoRules.use_pdf_registry && canEditRegistration;
+
   /** Avaliação estrita da autoaceitação da página atual (não grava nada). */
   const autoEval = useMemo(() => {
-    if (!preview) return { eligible: false, reasons: [] as string[] };
+    if (!preview) return { eligible: false, reasons: [] as string[], appliedExceptions: [] as string[] };
     return evaluateAutoAccept({
       detected: preview.detected,
       rows,
@@ -746,8 +759,30 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
       linkedStudentId: pageAction === 'link' ? linkStudentId : null,
       suggestedStudentId: preview.detected.student_id,
       regDecision,
+      rules: autoRules,
+      canUsePdfRegistry: canEditRegistration,
+      otherClassMatch: Boolean(otherClassMatch),
+      contextBlocked: Boolean(contextBlock),
     });
-  }, [preview, rows, classDecision, pageHasConflicts, pageAction, linkStudentId, regDecision]);
+  }, [
+    preview, rows, classDecision, pageHasConflicts, pageAction, linkStudentId, regDecision,
+    autoRules, canEditRegistration, otherClassMatch, contextBlock,
+  ]);
+
+  /**
+   * Exceção A ativa: a decisão cadastral da página passa a ser "Atualizar pelo boletim"
+   * em todo campo presente no PDF (inclusive quando o cadastro está vazio).
+   */
+  useEffect(() => {
+    if (!registryExceptionActive || !preview) return;
+    const d = preview.detected;
+    setRegDecision({
+      code: d.pdf_code ? 'update' : 'keep',
+      birth_date: d.pdf_birth_date ? 'update' : 'keep',
+      mother: d.pdf_mother_name ? 'update' : 'keep',
+      father: d.pdf_father_name ? 'update' : 'keep',
+    });
+  }, [registryExceptionActive, preview]);
 
   /** Persiste a preferência na sessão para valer também ao retomar. */
   const handleToggleAutoAccept = async (value: boolean) => {
@@ -755,6 +790,18 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
     if (session) {
       await supabase.from('grade_import_sessions').update({ auto_accept: value }).eq('id', session.id);
       setSession((prev) => (prev ? { ...prev, auto_accept: value } : prev));
+    }
+  };
+
+  /** Persiste as exceções por sessão (retomada mantém a mesma configuração). */
+  const handleToggleRule = async (rule: keyof AutoAcceptRules, value: boolean) => {
+    const next = { ...autoRules, [rule]: value };
+    setAutoRules(next);
+    if (session) {
+      await supabase.from('grade_import_sessions')
+        .update({ auto_accept_rules: next as never })
+        .eq('id', session.id);
+      setSession((prev) => (prev ? { ...prev, auto_accept_rules: next } : prev));
     }
   };
 
@@ -881,7 +928,7 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
             class: effectiveName || classItem.name,
             shift: classItem.shift as never,
             qr_code: `STU-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`,
-            school_code: detected.pdf_code,
+            school_code: sanitizeSchoolCodeForStorage(detected.pdf_code),
             birth_date: detected.pdf_birth_date,
             mother_name: detected.pdf_mother_name,
             father_name: detected.pdf_father_name,
@@ -985,13 +1032,29 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
       // Atualização cadastral conforme decisões explícitas (só quando o aluno já existia)
       if (pageAction === 'link' && regDecision) {
         const update: { school_code?: string; birth_date?: string; mother_name?: string; father_name?: string } = {};
-        if (detected.pdf_code && regDecision.code === 'update') update.school_code = detected.pdf_code;
+        const storedCode = sanitizeSchoolCodeForStorage(detected.pdf_code);
+        if (storedCode && regDecision.code === 'update') update.school_code = storedCode;
         if (detected.pdf_birth_date && regDecision.birth_date === 'update') update.birth_date = detected.pdf_birth_date;
         if (detected.pdf_mother_name && regDecision.mother === 'update') update.mother_name = detected.pdf_mother_name;
         if (detected.pdf_father_name && regDecision.father === 'update') update.father_name = detected.pdf_father_name;
         if (Object.keys(update).length > 0) {
           const { error: updError } = await supabase.from('students').update(update).eq('id', studentId);
           if (updError) throw updError;
+          // Auditoria explícita quando a alteração veio do autoaceite do boletim.
+          if (mode === 'auto') {
+            await supabase.from('audit_logs').insert({
+              user_id: userId,
+              action: 'UPDATE',
+              table_name: 'students',
+              record_id: studentId,
+              new_data: {
+                ...update,
+                reason: 'Autoaceite do boletim — exceção “usar dados do boletim”',
+                session_id: session.id,
+                page: preview.page,
+              } as never,
+            });
+          }
         }
       }
 
@@ -1000,7 +1063,11 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
           status: 'confirmed',
           confirmed_by: userId,
           confirmed_at: new Date().toISOString(),
-          confirmation_mode: mode === 'auto' ? 'auto' : 'manual',
+          confirmation_mode: mode === 'auto'
+            ? (autoEval.appliedExceptions.length > 0
+              ? `auto:${autoEval.appliedExceptions.map((e) => (e.startsWith('Nome') ? 'fuzzy_unique' : 'pdf_registry')).join(',')}`
+              : 'auto')
+            : 'manual',
         })
         .eq('session_id', session.id).eq('page_number', preview.page);
 
@@ -1319,6 +1386,52 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
                 Páginas sem qualquer erro ou conflito serão gravadas automaticamente. Páginas com qualquer divergência
                 continuarão exigindo sua confirmação. Células vazias não são erro e faltas seguem ignoradas.
               </p>
+              {autoAccept && (
+                <div className="rounded-md border bg-muted/40 p-2 space-y-2">
+                  <p className="text-[11px] font-medium">Exceções permitidas (ignorar estes avisos no modo automático)</p>
+                  <div className="flex items-start gap-2">
+                    <Switch
+                      id="rule-registry"
+                      className="mt-0.5"
+                      checked={autoRules.use_pdf_registry && canEditRegistration}
+                      disabled={!canEditRegistration}
+                      onCheckedChange={(v) => handleToggleRule('use_pdf_registry', v)}
+                    />
+                    <div>
+                      <Label htmlFor="rule-registry" className="text-xs font-medium">
+                        Dados cadastrais divergentes — usar automaticamente os dados do boletim
+                      </Label>
+                      <p className="text-[11px] text-muted-foreground">
+                        Código, data de nascimento, nome da mãe e nome do pai são atualizados pelo boletim (inclusive
+                        quando o cadastro está vazio) e a alteração fica registrada na auditoria.
+                        {!canEditRegistration && ' Disponível apenas para administração e direção.'}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <Switch
+                      id="rule-fuzzy"
+                      className="mt-0.5"
+                      checked={autoRules.accept_unique_fuzzy}
+                      onCheckedChange={(v) => handleToggleRule('accept_unique_fuzzy', v)}
+                    />
+                    <div>
+                      <Label htmlFor="rule-fuzzy" className="text-xs font-medium">
+                        Nome semelhante com candidato único — aceitar vínculo sugerido automaticamente
+                      </Label>
+                      <p className="text-[11px] text-muted-foreground">
+                        Vale somente para semelhança ≥ 0,85 com exatamente um aluno da turma. Homônimos, ambiguidade e
+                        aluno de outra turma continuam exigindo decisão manual.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+              {autoAccept && autoEval.appliedExceptions.length > 0 && (
+                <p className="text-[11px] text-amber-600">
+                  Exceções aplicadas nesta página: {autoEval.appliedExceptions.join(' · ')}
+                </p>
+              )}
               {autoAccept && (
                 autoEval.eligible && canConfirmPage ? (
                   <Badge className="text-[10px] bg-green-600 hover:bg-green-600">⚡ Aprovada automaticamente</Badge>
