@@ -34,6 +34,7 @@ const FLAG_LABELS: Record<string, { label: string; variant: 'destructive' | 'sec
   out_of_scale: { label: 'Fora da escala', variant: 'destructive' },
   low_confidence: { label: 'Baixa confiança', variant: 'secondary' },
   reconciliation_divergence: { label: 'Divergência entre leituras', variant: 'destructive' },
+  ai_validation_disagreement: { label: 'IA discordou (leitura local mantida)', variant: 'secondary' },
   reconciled_match: { label: 'Confirmado 2ª leitura', variant: 'outline' },
   duplicate_cell: { label: 'Célula duplicada', variant: 'secondary' },
   conflicting_duplicate: { label: 'Duplicidade conflitante', variant: 'destructive' },

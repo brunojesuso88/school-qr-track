@@ -31,6 +31,9 @@ import {
 } from '@/lib/gradePageLocal/pdfText';
 import { parseGradePageLocal } from '@/lib/gradePageLocal/parseGradePageLocal';
 import { reconcileLocalWithAi } from '@/lib/gradePageLocal/reconcile';
+import {
+  manualConfirmationBlockers, rowsForManualLocalConfirmation, shouldValidateWithAi,
+} from './gradesManualConfirm';
 import { LocalContextStudent, LocalExpectedSubject } from '@/lib/gradePageLocal/types';
 import { CatalogSubject, buildEffectiveSubjectMatrix } from '@/lib/gradePageLocal/effectiveMatrix';
 import { fetchCurriculumMatrix, matrixToExpectedSubjects } from '@/lib/curriculumMatrix';
