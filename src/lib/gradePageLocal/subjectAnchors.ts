@@ -4,7 +4,7 @@
  *
  * Nada aqui cria nota: a âncora só diz "esta linha é a disciplina X".
  */
-import { normalizeText, similarity } from './normalize';
+import { canonicalSubjectKey, normalizeText, similarity } from './normalize';
 import { LocalExpectedSubject } from './types';
 
 export interface SubjectAnchor {
@@ -34,11 +34,11 @@ export function buildSubjectAnchors(expected: LocalExpectedSubject[]): SubjectAn
   for (const item of expected) {
     const canonical = String(item?.name ?? '').trim();
     if (!canonical) continue;
-    const key = normalizeText(canonical);
+    const key = canonicalSubjectKey(canonical);
     if (!key) continue;
     const existing = byCanonical.get(key);
     const aliasKeys = (item.aliases ?? [])
-      .map((a) => normalizeText(a))
+      .map((a) => canonicalSubjectKey(a))
       .filter((a) => a.length >= 3);
     const abbreviation = item.abbreviation ? normalizeText(item.abbreviation) : null;
     if (existing) {
@@ -67,14 +67,14 @@ export function matchSubjectAnchor(
   anchors: SubjectAnchor[],
   minSimilarity = ANCHOR_MIN_SIMILARITY,
 ): AnchorMatch | null {
-  const norm = normalizeText(text);
+  const norm = canonicalSubjectKey(text);
   if (!norm || anchors.length === 0) return null;
 
   // 1) igualdade normalizada com nome ou alias
   const exact = anchors.filter((a) => a.keys.includes(norm));
   if (exact.length === 1) {
     const anchor = exact[0];
-    const kind: AnchorMatchKind = normalizeText(anchor.canonical) === norm ? 'exact' : 'alias';
+    const kind: AnchorMatchKind = canonicalSubjectKey(anchor.canonical) === norm ? 'exact' : 'alias';
     return { anchor, kind, score: 1 };
   }
   if (exact.length > 1) return null;

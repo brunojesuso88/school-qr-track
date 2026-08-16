@@ -33,6 +33,8 @@ import { parseGradePageLocal } from '@/lib/gradePageLocal/parseGradePageLocal';
 import { reconcileLocalWithAi } from '@/lib/gradePageLocal/reconcile';
 import { LocalContextStudent, LocalExpectedSubject } from '@/lib/gradePageLocal/types';
 import { CatalogSubject, buildEffectiveSubjectMatrix } from '@/lib/gradePageLocal/effectiveMatrix';
+import { fetchCurriculumMatrix, matrixToExpectedSubjects } from '@/lib/curriculumMatrix';
+import { parseSeriesValue } from '@/lib/series';
 import { classifyPeriodLabel, isPeriodKind, periodRank } from '@/lib/gradePageLocal/normalize';
 import {
   CONFLICT_LABELS, DetectedStudent, FieldDecision, RegistrationDecision,
@@ -362,7 +364,13 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
     const { data: catalog } = await supabase
       .from('mapping_global_subjects')
       .select('name, abbreviation, aliases, series, default_weekly_classes');
+    // Matriz curricular OFICIAL da série tem prioridade máxima como âncora.
+    const parsedSeries = parseSeriesValue(series);
+    const official = parsedSeries
+      ? matrixToExpectedSubjects(await fetchCurriculumMatrix(parsedSeries).catch(() => []))
+      : [];
     localExpectedRef.current = buildEffectiveSubjectMatrix({
+      matrix: official,
       mapping: expected.map((s) => ({ name: s.name, weekly_classes: s.weekly_classes })),
       imported: (gradeSubj || []) as { name: string; weekly_classes: number | null }[],
       catalog: (catalog || []) as CatalogSubject[],

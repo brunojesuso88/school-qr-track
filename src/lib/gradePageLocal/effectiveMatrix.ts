@@ -16,6 +16,11 @@ export interface CatalogSubject {
 }
 
 interface BuildEffectiveMatrixInput {
+  /**
+   * Matriz curricular OFICIAL da série (`curriculum_matrix_subjects`).
+   * Tem prioridade máxima: define nome canônico, aliases e carga da série.
+   */
+  matrix?: LocalExpectedSubject[];
   mapping: { name: string; weekly_classes?: number | null }[];
   imported?: { name: string; weekly_classes?: number | null }[];
   catalog?: CatalogSubject[];
@@ -44,14 +49,16 @@ export function selectMissingSeriesMatrixSubjects(
 }
 
 export function buildEffectiveSubjectMatrix({
-  mapping, imported = [], catalog = [], series = null,
+  matrix = [], mapping, imported = [], catalog = [], series = null,
 }: BuildEffectiveMatrixInput): LocalExpectedSubject[] {
   const result = new Map<string, LocalExpectedSubject>();
 
   const add = (
     name: string,
     weekly: number | null | undefined,
-    origin: 'mapping' | 'grade' | 'catalog',
+    origin: 'matrix' | 'mapping' | 'grade' | 'catalog',
+    aliases: string[] = [],
+    abbreviation: string | null = null,
   ) => {
     const clean = String(name ?? '').trim();
     const key = normalizeText(clean);
@@ -60,11 +67,18 @@ export function buildEffectiveSubjectMatrix({
     if (existing) {
       existing.weekly_classes = existing.weekly_classes ?? (weekly ?? null);
       existing.origin = [...new Set([...(existing.origin ?? []), origin])];
+      existing.aliases = [...new Set([...(existing.aliases ?? []), ...aliases])];
+      existing.abbreviation = existing.abbreviation ?? abbreviation;
       return;
     }
-    result.set(key, { name: clean, weekly_classes: weekly ?? null, aliases: [], origin: [origin] });
+    result.set(key, {
+      name: clean, weekly_classes: weekly ?? null, aliases: [...aliases],
+      abbreviation, origin: [origin],
+    });
   };
 
+  // 1) Matriz oficial da série: identidade e carga de referência.
+  matrix.forEach((s) => add(s.name, s.weekly_classes, 'matrix', s.aliases ?? [], s.abbreviation ?? null));
   mapping.forEach((s) => add(s.name, s.weekly_classes, 'mapping'));
   imported.forEach((s) => add(s.name, s.weekly_classes, 'grade'));
   // Catálogo só amplia a matriz quando a série está definida (herança determinística).

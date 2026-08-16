@@ -75,8 +75,8 @@ export interface LocalExpectedSubject {
   /** Nomes equivalentes como aparecem no boletim em PDF. */
   aliases?: string[];
   abbreviation?: string | null;
-  /** Origem para diagnóstico: matriz da turma, boletim já importado, catálogo. */
-  origin?: ('mapping' | 'grade' | 'catalog')[];
+  /** Origem para diagnóstico: matriz oficial da série, matriz da turma, boletim importado, catálogo. */
+  origin?: ('matrix' | 'mapping' | 'grade' | 'catalog')[];
 }
 
 export interface LocalContextStudent {

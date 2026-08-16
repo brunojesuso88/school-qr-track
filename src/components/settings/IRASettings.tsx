@@ -17,7 +17,9 @@ import { useAuth } from '@/contexts/AuthContext';
 import {
   CLASS_SERIES_OPTIONS, HighSchoolSeries, classSeriesLabel, detectClassSeries, parseClassSeries,
 } from '@/lib/iraRanking';
-import { selectMissingSeriesMatrixSubjects } from '@/lib/gradePageLocal/effectiveMatrix';
+import {
+  fetchCurriculumMatrix, findMatrixWeeklyDivergences, selectMissingMatrixSubjects,
+} from '@/lib/curriculumMatrix';
 
 interface ClassRow {
   id: string;
@@ -179,8 +181,10 @@ const IRASettings = () => {
   };
 
   /**
-   * Herança da matriz padrão da série: cria no mapeamento da turma as disciplinas do catálogo
-   * vinculadas à série que ainda não existem. Nunca remove nem sobrescreve disciplinas existentes.
+   * Herança da matriz curricular OFICIAL da série (`curriculum_matrix_subjects`):
+   * cria no mapeamento da turma os componentes da série que ainda não existem, com a
+   * carga semanal DAQUELA SÉRIE. Nunca remove nem sobrescreve disciplinas existentes —
+   * divergências de carga são apenas relatadas.
    */
   const applySeriesMatrix = async () => {
     if (!selectedClass?.mapping_class_id) return;
@@ -191,18 +195,23 @@ const IRASettings = () => {
     }
     setApplyingMatrix(true);
     try {
-      const [{ data: catalog }, { data: existing }] = await Promise.all([
-        supabase.from('mapping_global_subjects').select('name, default_weekly_classes, series'),
-        supabase.from('mapping_class_subjects').select('subject_name').eq('class_id', selectedClass.mapping_class_id),
+      const [matrix, { data: existing }] = await Promise.all([
+        fetchCurriculumMatrix(series),
+        supabase.from('mapping_class_subjects')
+          .select('subject_name, weekly_classes').eq('class_id', selectedClass.mapping_class_id),
       ]);
       const label = classSeriesLabel(series);
-      // Comparação canônica ('1'|'2'|'3'), tolerando rótulos legados gravados antes da unificação.
+      const rows = (existing || []) as { subject_name: string; weekly_classes: number | null }[];
       // Só ADICIONA o que falta: disciplinas extras e cargas horárias da turma são preservadas.
-      const missing = selectMissingSeriesMatrixSubjects(
-        series,
-        (catalog || []) as { name: string; default_weekly_classes?: number | null; series?: string[] | null }[],
-        (existing || []) as { subject_name: string }[],
-      );
+      const missing = selectMissingMatrixSubjects(matrix, rows);
+      const divergences = findMatrixWeeklyDivergences(matrix, rows);
+      if (divergences.length > 0) {
+        toast.warning(
+          `${divergences.length} disciplina(s) com carga diferente da matriz de ${label} — ` +
+          'a configuração atual da turma foi preservada: ' +
+          divergences.slice(0, 4).map((d) => `${d.name} (${d.current ?? '—'} ≠ ${d.expected})`).join(', '),
+        );
+      }
       if (missing.length === 0) {
         toast.info('A matriz da turma já contém todas as disciplinas padrão da série.');
         return;
@@ -211,7 +220,7 @@ const IRASettings = () => {
         missing.map((c) => ({
           class_id: selectedClass.mapping_class_id as string,
           subject_name: c.name,
-          weekly_classes: c.default_weekly_classes ?? 1,
+          weekly_classes: c.weekly_classes,
         })),
       );
       if (error) throw error;

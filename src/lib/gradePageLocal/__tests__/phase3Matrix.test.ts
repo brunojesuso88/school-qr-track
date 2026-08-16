@@ -12,6 +12,8 @@ import {
 import { reconcileLocalWithAi } from '../reconcile';
 import { TextToken } from '../types';
 import { CLASS_SERIES_OPTIONS, normalizeSeriesList, parseSeriesValue } from '../../series';
+import { matrixToExpectedSubjects } from '../../curriculumMatrixCore';
+import { officialMatrixForSeries } from '../../curriculumMatrixData';
 import { DEFAULT_AUTO_ACCEPT_RULES, evaluateAutoAccept } from '../../../components/grades/gradesAutoAccept';
 
 /** Disciplinas REAIS da turma 26RMM-CNS-300 citadas na auditoria. */
@@ -260,5 +262,28 @@ describe('Fase 3 — autoaceite', () => {
     } as never);
     expect(result.reasons).toEqual([]);
     expect(result.eligible).toBe(true);
+  });
+});
+
+describe('Matriz oficial — Aprofundamento com eixo (CHL/CNS/ETT)', () => {
+  const officialAnchors = buildSubjectAnchors(
+    matrixToExpectedSubjects(officialMatrixForSeries('2').map((s, i) => ({
+      id: `m${i}`, subject_id: `s${i}`, series: '2' as const, weekly_classes: s.weekly_classes,
+      include_in_ira: true, name: s.name, abbreviation: s.abbreviation, aliases: s.aliases,
+    }))),
+  );
+
+  it('APROFUNDAMENTO IF - CNS - I sem notas => 4 células null ancoradas no canônico', () => {
+    const result = build([{ subject: 'APROFUNDAMENTO IF - CNS - I' }], officialAnchors);
+    expect(result.cells).toHaveLength(4);
+    expect(result.cells.every((c) => c.raw_value === null && c.value === null && c.anchored === true)).toBe(true);
+    expect([...new Set(result.cells.map((c) => c.subject))]).toEqual(['APROFUNDAMENTO IF - I']);
+  });
+
+  it('IA também vazia => zero divergências', () => {
+    const rows = PERIODS.map((p) => localRow('APROFUNDAMENTO IF - I', p, null, null));
+    const out = reconcileLocalWithAi({ rows }, { rows: PERIODS.map((p) => localRow('APROFUNDAMENTO IF - I', p, '—', null)) });
+    expect(out.divergences).toBe(0);
+    expect(out.aiEmptyIgnored).toBe(0);
   });
 });
