@@ -7,7 +7,7 @@ import { OFFICIAL_CURRICULUM_MATRIX, officialMatrixForSeries } from '../curricul
 import {
   CurriculumMatrixItem, findMatrixWeeklyDivergences, matrixToExpectedSubjects,
   matrixWeeklyTotal, selectMissingMatrixSubjects,
-} from '../curriculumMatrix';
+} from '../curriculumMatrixCore';
 import { canonicalSubjectKey, normalizeText } from '../gradePageLocal/normalize';
 import { buildSubjectAnchors, matchSubjectAnchor } from '../gradePageLocal/subjectAnchors';
 import { buildEffectiveSubjectMatrix } from '../gradePageLocal/effectiveMatrix';
