@@ -88,7 +88,13 @@ describe('Fase 3 — parser local com âncoras curriculares', () => {
   });
 
   it('nome de disciplina quebrado em duas linhas é fundido e gera 4 células null', () => {
-    const result = build([{ subject: ['APROFUNDAMENTO IF -', 'CNS - I'] }]);
+    // Fragmento inicial ambíguo (duas trilhas de aprofundamento): só a fusão resolve.
+    const twoTracks = buildSubjectAnchors([
+      { name: 'APROFUNDAMENTO IF - CNS - I', weekly_classes: 2 },
+      { name: 'APROFUNDAMENTO IF - CNS - II', weekly_classes: 2 },
+    ]);
+    expect(matchSubjectAnchor('APROFUNDAMENTO IF -', twoTracks)).toBeNull();
+    const result = build([{ subject: ['APROFUNDAMENTO IF -', 'CNS - I'] }], twoTracks);
     expect(result.mergedSubjectLines).toBeGreaterThan(0);
     expect(result.cells).toHaveLength(4);
     expect(result.cells.every((c) => c.value === null && c.anchored === true)).toBe(true);
