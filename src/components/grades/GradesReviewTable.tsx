@@ -3,6 +3,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
+import { matchesSecondPass } from '@/lib/gradePageLocal/gradeCompare';
 
 export interface ReviewRow {
   student_name: string;
@@ -85,8 +86,13 @@ export const GradesReviewTable = ({
         {rows.map((row, index) => {
           const key = `${row.student_id}||${row.subject}||${row.period}`;
           const hasConflict = row.student_id ? conflictKeys.has(key) : false;
-          const hasError = row.flags.some((f) =>
-            ['unmatched_student', 'invalid_value', 'out_of_scale', 'reconciliation_divergence', 'conflicting_duplicate'].includes(f));
+          // Divergência resolvida (valor atual == 2ª leitura) não pinta a linha nem exibe alerta.
+          const staleDivergence = row.flags.includes('reconciliation_divergence')
+            && row.source !== 'ai'
+            && matchesSecondPass(row.value ?? null, row.second_pass_value);
+          const realDivergence = row.flags.includes('reconciliation_divergence') && !staleDivergence;
+          const hasError = realDivergence || row.flags.some((f) =>
+            ['unmatched_student', 'invalid_value', 'out_of_scale', 'conflicting_duplicate'].includes(f));
           return (
             <tr key={index} className={cn('border-b last:border-0', hasError && 'bg-destructive/5')}>
               <td className="py-2 px-3 min-w-[220px]">
@@ -133,19 +139,23 @@ export const GradesReviewTable = ({
                     <Badge variant="outline" className="text-[10px]">{SOURCE_LABELS[row.source]}</Badge>
                   )}
                   {row.flags.map((flag) => {
+                    if (flag === 'reconciliation_divergence' && staleDivergence) return null;
                     const meta = FLAG_LABELS[flag];
                     if (!meta) return null;
                     return (
                       <Badge key={flag} variant={meta.variant} className="text-[10px]">{meta.label}</Badge>
                     );
                   })}
+                  {staleDivergence && !row.flags.includes('reconciled_match') && (
+                    <Badge variant="outline" className="text-[10px]">Confirmado 2ª leitura</Badge>
+                  )}
                   {hasConflict && (
                     <Badge variant="secondary" className="text-[10px] bg-amber-500/15 text-amber-600">
                       Nota já existente
                     </Badge>
                   )}
                   {row.second_pass_value !== undefined && row.second_pass_value !== null && (
-                    row.flags.includes('reconciliation_divergence') ? (
+                    realDivergence ? (
                       <span className="text-[10px] font-medium text-destructive">
                         Local: {row.source === 'ai' ? '—' : (row.raw_value?.trim() || 'vazio')} · IA: {row.second_pass_value}
                       </span>
