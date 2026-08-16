@@ -1220,6 +1220,30 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
         )}
 
         {step === 'failed' && (
+          <></>
+        )}
+
+        {step === 'context_error' && contextBlock && (
+          <div className="space-y-4">
+            <Alert variant="destructive">
+              <AlertTriangle className="w-4 h-4" />
+              <AlertTitle className="text-sm">Não foi possível carregar os alunos desta turma</AlertTitle>
+              <AlertDescription className="text-xs space-y-1">
+                <p>
+                  A turma <span className="font-medium">{contextBlock.className}</span> tem {contextBlock.found} aluno(s)
+                  no sistema, mas a consulta retornou lista vazia. Importar agora marcaria todos como “não identificados”.
+                </p>
+                <p>Nenhuma nota foi gravada. Recarregue a turma e tente novamente.</p>
+              </AlertDescription>
+            </Alert>
+            <div className="flex flex-wrap gap-2">
+              <Button onClick={handleReloadContext}>Recarregar turma</Button>
+              <Button variant="ghost" onClick={handleCancelSession}>Cancelar importação</Button>
+            </div>
+          </div>
+        )}
+
+        {step === 'failed' && (
           <div className="space-y-4">
             <Alert variant="destructive">
               <AlertTriangle className="w-4 h-4" />
