@@ -17,6 +17,41 @@ import { formatIra } from '@/lib/ira';
 
 export const RANKING_LIMIT = 15;
 
+/** Séries do Ensino Médio aceitas na classificação. */
+export type HighSchoolSeries = '1' | '2' | '3';
+
+export const HIGH_SCHOOL_SERIES: { value: HighSchoolSeries; label: string }[] = [
+  { value: '1', label: '1ª Série do Ensino Médio' },
+  { value: '2', label: '2ª Série do Ensino Médio' },
+  { value: '3', label: '3ª Série do Ensino Médio' },
+];
+
+export const seriesLabel = (s: HighSchoolSeries) =>
+  HIGH_SCHOOL_SERIES.find((o) => o.value === s)!.label;
+
+/**
+ * Detecta a série do Ensino Médio pelo nome da turma (fallback seguro).
+ * Retorna `null` quando não há indicação clara ou quando há indicação ambígua
+ * (mais de uma série citada no mesmo nome).
+ */
+export function detectClassSeries(className: string): HighSchoolSeries | null {
+  const n = className.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const found = new Set<HighSchoolSeries>();
+  const re = /(^|[^0-9])([123])\s*(a|o|º|ª|\.)?\s*(serie|ser|ano|em)?\b/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(n))) {
+    // Exige marcador ordinal (1ª/1º/1a/1o) ou palavra (serie/ano/em)
+    if (m[3] || m[4]) found.add(m[2] as HighSchoolSeries);
+  }
+  if (found.size !== 1) {
+    if (found.size > 1) {
+      console.warn(`[IRA Ranking] Turma com série ambígua, ignorada: "${className}"`);
+    }
+    return null;
+  }
+  return [...found][0];
+}
+
 /** Código do aluno apenas com dígitos (sem pontos, vírgulas, traços ou espaços). */
 export const formatStudentCode = (code: string | null) => {
   const digits = (code || '').replace(/\D/g, '');
