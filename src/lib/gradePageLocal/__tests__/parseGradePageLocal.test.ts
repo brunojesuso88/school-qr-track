@@ -30,10 +30,12 @@ describe('parseGradePageLocal — páginas de regressão do boletim real', () =>
     expect(result.preview!.student.pdf_code).toBe(spec.header.code);
     expect(result.preview!.pdf_class_code).toBe(spec.header.classCode);
     expect(result.preview!.detected.status).toBe('matched');
-    // períodos: 4 períodos + Média Final, nunca Faltas
+    // períodos: exatamente 1º→4º, nunca Faltas nem colunas finais
     expect(result.preview!.periods.map((p) => p.label)).toEqual([
-      '1º Período', '2º Período', '3º Período', '4º Período', 'Média Final',
+      '1º Período', '2º Período', '3º Período', '4º Período',
     ]);
+    expect(result.preview!.periods.every((p) => p.kind === 'period')).toBe(true);
+    expect(result.preview!.rows.some((r) => /media final|rec final|cons class|pendencia|^final$/i.test(normalizeText(String(r.period))))).toBe(false);
     expect(result.preview!.periods.some((p) => /falta/i.test(p.label))).toBe(false);
     // disciplinas completas
     expect(result.preview!.subjects).toHaveLength(DEFAULT_SUBJECTS.length);
@@ -61,7 +63,7 @@ describe('parseGradePageLocal — páginas de regressão do boletim real', () =>
     expect(cell(result, 'FILOSOFIA', '1º Período')?.value).toBeNull();
     // zero real continua zero na mesma página
     expect(cell(result, 'MATEMATICA', '1º Período')?.value).toBe(0);
-    expect(result.preview!.stats.empty_cells).toBeGreaterThan(30);
+    expect(result.preview!.stats.empty_cells).toBeGreaterThan(20);
     expect(result.preview!.stats.invalid_values).toBe(0);
   });
 
