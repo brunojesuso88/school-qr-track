@@ -62,7 +62,8 @@ describe('planClassCurriculumSync', () => {
       include_in_ira: true, legacy_excluded: false, sort_order: i,
     }));
     expect(synced.length).toBe(3);
-    const plan = planClassCurriculumSync({ matrix, gradeSubjects: rows });
+    const mappingRows = ordered.map((m) => ({ id: `m-${m.name}`, subject_name: m.name, weekly_classes: m.weekly_classes }));
+    const plan = planClassCurriculumSync({ matrix, mappingSubjects: mappingRows, gradeSubjects: rows });
     expect(isPlanInSync(plan)).toBe(true);
   });
 
