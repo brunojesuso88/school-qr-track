@@ -268,13 +268,33 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
       reader.readAsDataURL(file);
     });
 
+  /**
+   * Nome ATUAL da turma lido de `classes` pelo id — nunca confiar na prop `classItem.name`,
+   * que fica desatualizada quando a turma é renomeada durante a importação.
+   */
+  const resolveCurrentClassName = useCallback(async () => {
+    if (!classItem) return '';
+    const { data, error } = await supabase
+      .from('classes')
+      .select('name')
+      .eq('id', classItem.id)
+      .maybeSingle();
+    if (error) console.error('Não foi possível resolver o nome atual da turma:', error);
+    return pickClassName(error ? null : data?.name, effectiveNameRef.current, classItem.name);
+  }, [classItem]);
+
   /** Alunos da turma + disciplinas esperadas (contexto persistido na sessão). */
   const loadContext = useCallback(async () => {
     if (!classItem) throw new Error('Turma não selecionada.');
+    const className = await resolveCurrentClassName();
+    if (className && className !== effectiveNameRef.current) {
+      effectiveNameRef.current = className;
+      setEffectiveName(className);
+    }
     const { data: studentsData, error: studentsError } = await supabase
       .from('students')
       .select('id, full_name, student_id, school_code, birth_date, mother_name, father_name')
-      .eq('class', classItem.name)
+      .eq('class', className)
       .order('full_name');
     if (studentsError) throw studentsError;
     const students = (studentsData || []) as {
@@ -282,6 +302,23 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
       school_code: string | null; birth_date: string | null;
       mother_name: string | null; father_name: string | null;
     }[];
+
+    // Guarda: contexto vazio com alunos existentes no banco = falha de carregamento/desincronia.
+    if (students.length === 0) {
+      const [current, byProp] = await Promise.all([
+        supabase.from('students').select('id', { count: 'exact', head: true }).eq('class', className),
+        className !== classItem.name
+          ? supabase.from('students').select('id', { count: 'exact', head: true }).eq('class', classItem.name)
+          : Promise.resolve({ count: 0 } as { count: number | null }),
+      ]);
+      const found = (current.count ?? 0) + (byProp.count ?? 0);
+      if (found > 0) {
+        setContextBlock({ className, found });
+        setStep('context_error');
+        throw new Error('CONTEXT_EMPTY');
+      }
+    }
+    setContextBlock(null);
     setClassStudents(students.map((s) => ({ id: s.id, full_name: s.full_name })));
 
     let expected: { id: string; name: string; weekly_classes: number }[] = [];
@@ -301,8 +338,57 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
       mother_name: s.mother_name, father_name: s.father_name,
     }));
     localExpectedRef.current = expected.map((s) => ({ name: s.name, weekly_classes: s.weekly_classes }));
-    return { students, expected };
-  }, [classItem]);
+    return { students, expected, className };
+  }, [classItem, resolveCurrentClassName]);
+
+  /**
+   * Aluno sem match na turma: procura identidade forte (código ou nome exato) no restante do
+   * sistema antes de permitir "cadastrar novo aluno" — evita duplicatas.
+   */
+  const lookupOtherClass = useCallback(async (detected: DetectedStudent, className: string) => {
+    const code = digitsOnly(detected.pdf_code);
+    const tokens = nameTokens(detected.pdf_name);
+    const queries: PromiseLike<{ data: unknown[] | null }>[] = [];
+    if (code) {
+      queries.push(supabase
+        .from('students')
+        .select('id, full_name, class, school_code')
+        .neq('class', className)
+        .ilike('school_code', `%${code}%`)
+        .limit(50));
+    }
+    if (tokens.length > 0) {
+      queries.push(supabase
+        .from('students')
+        .select('id, full_name, class, school_code')
+        .neq('class', className)
+        .ilike('full_name', `%${tokens[0]}%`)
+        .limit(200));
+      if (tokens.length > 1) {
+        queries.push(supabase
+          .from('students')
+          .select('id, full_name, class, school_code')
+          .neq('class', className)
+          .ilike('full_name', `%${tokens[tokens.length - 1]}%`)
+          .limit(200));
+      }
+    }
+    if (queries.length === 0) return null;
+    const results = await Promise.all(queries);
+    const byId = new Map<string, { id: string; full_name: string; class: string; school_code: string | null }>();
+    results.forEach((res) => (res.data || []).forEach((row) => {
+      const s = row as { id: string; full_name: string; class: string; school_code: string | null };
+      byId.set(s.id, s);
+    }));
+    const candidates = [...byId.values()];
+    if (candidates.length === 0) return null;
+    const { student, by } = findGlobalMatch(
+      { name: detected.pdf_name, code: detected.pdf_code },
+      candidates.map((s) => ({ ...s, school_code: s.school_code })),
+    );
+    if (!student || !by) return null;
+    return { ...student, by } as OtherClassMatch;
+  }, []);
 
   /**
    * Notas já existentes para o aluno desta página (aluno + disciplina + período).
