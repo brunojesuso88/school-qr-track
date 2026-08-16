@@ -187,47 +187,23 @@ const IRASettings = () => {
    * divergências de carga são apenas relatadas.
    */
   const applySeriesMatrix = async () => {
-    if (!selectedClass?.mapping_class_id) return;
+    if (!selectedClass) return;
     const series = parseClassSeries(selectedClass.series);
     if (!series) {
-      toast.error('Defina a série da turma antes de aplicar a matriz padrão.');
+      toast.error('Defina a série da turma antes de aplicar a matriz oficial.');
       return;
     }
     setApplyingMatrix(true);
     try {
-      const [matrix, { data: existing }] = await Promise.all([
-        fetchCurriculumMatrix(series),
-        supabase.from('mapping_class_subjects')
-          .select('subject_name, weekly_classes').eq('class_id', selectedClass.mapping_class_id),
-      ]);
-      const label = classSeriesLabel(series);
-      const rows = (existing || []) as { subject_name: string; weekly_classes: number | null }[];
-      // Só ADICIONA o que falta: disciplinas extras e cargas horárias da turma são preservadas.
-      const missing = selectMissingMatrixSubjects(matrix, rows);
-      const divergences = findMatrixWeeklyDivergences(matrix, rows);
-      if (divergences.length > 0) {
-        toast.warning(
-          `${divergences.length} disciplina(s) com carga diferente da matriz de ${label} — ` +
-          'a configuração atual da turma foi preservada: ' +
-          divergences.slice(0, 4).map((d) => `${d.name} (${d.current ?? '—'} ≠ ${d.expected})`).join(', '),
-        );
-      }
-      if (missing.length === 0) {
-        toast.info('A matriz da turma já contém todas as disciplinas padrão da série.');
-        return;
-      }
-      const { error } = await supabase.from('mapping_class_subjects').insert(
-        missing.map((c) => ({
-          class_id: selectedClass.mapping_class_id as string,
-          subject_name: c.name,
-          weekly_classes: c.weekly_classes,
-        })),
+      const result = await syncClassCurriculum(selectedClass.id, series);
+      const c = result.applied;
+      toast.success(
+        `Matriz de ${classSeriesLabel(series)} aplicada: ${c.created} criada(s), ${c.reused} reaproveitada(s), ` +
+        `${c.updated} atualizada(s), ${c.excludedLegacy} legada(s) fora do IRA (histórico preservado).`,
       );
-      if (error) throw error;
-      toast.success(`${missing.length} disciplina(s) da matriz de ${label} adicionada(s) à turma.`);
       loadClassData(selectedClassId);
     } catch (e) {
-      toast.error('Não foi possível aplicar a matriz padrão da série.');
+      toast.error(e instanceof Error ? e.message : 'Não foi possível aplicar a matriz oficial da série.');
     } finally {
       setApplyingMatrix(false);
     }
@@ -436,15 +412,16 @@ const IRASettings = () => {
                   Apenas administração e direção podem alterar a série da turma.
                 </p>
               )}
-              {canEditSeries && parseClassSeries(selectedClass.series) && selectedClass.mapping_class_id && (
+              {canEditSeries && parseClassSeries(selectedClass.series) && (
                 <div className="space-y-1 pt-1">
                   <Button size="sm" variant="outline" onClick={applySeriesMatrix} disabled={applyingMatrix}>
                     {applyingMatrix && <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" />}
-                    Aplicar matriz padrão da série
+                    Aplicar matriz oficial da série
                   </Button>
                   <p className="text-xs text-muted-foreground">
-                    Adiciona à turma as disciplinas do catálogo vinculadas a esta série. Nada é removido ou
-                    sobrescrito — a matriz serve de âncora na leitura dos boletins em PDF.
+                    Faz a turma herdar as disciplinas e a carga semanal oficiais da série (1º ano = 28 aulas;
+                    2º e 3º anos = 30 aulas). Nada é apagado: disciplinas fora da matriz saem do IRA e da
+                    visualização de notas, mas o histórico continua no banco.
                   </p>
                 </div>
               )}
