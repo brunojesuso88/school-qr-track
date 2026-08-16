@@ -1038,12 +1038,28 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
                 Página {preview.page} de {preview.total_pages}
               </Badge>
               {preview.reading && (
-                <Badge
-                  variant={preview.reading.escalated ? 'secondary' : 'outline'}
-                  className="text-[10px]"
-                >
-                  {preview.reading.escalated ? 'Validação adicional aplicada' : 'Lida em modo rápido'}
-                </Badge>
+                <div className="flex items-center gap-1 flex-wrap">
+                  <Badge
+                    variant={preview.reading.mode === 'local' ? 'outline' : 'secondary'}
+                    className="text-[10px]"
+                  >
+                    {preview.reading.mode === 'local'
+                      ? 'Leitura local'
+                      : preview.reading.mode === 'local_validated'
+                        ? 'Leitura local + validação IA'
+                        : preview.reading.mode === 'ai_fallback'
+                          ? 'Leitura por IA (fallback)'
+                          : preview.reading.escalated ? 'Validação adicional aplicada' : 'Lida em modo rápido'}
+                  </Badge>
+                  {preview.reading.duration_ms != null && (
+                    <span className="text-[10px] text-muted-foreground">{preview.reading.duration_ms}ms</span>
+                  )}
+                  {Boolean(preview.reading.divergences) && (
+                    <Badge variant="destructive" className="text-[10px]">
+                      {preview.reading.divergences} divergência(s) local × IA
+                    </Badge>
+                  )}
+                </div>
               )}
               <Progress value={progress} className="flex-1 min-w-[160px]" />
             </div>
