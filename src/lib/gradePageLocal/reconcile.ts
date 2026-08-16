@@ -3,6 +3,7 @@
  * Divergência => flag `reconciliation_divergence`, valor local visível e valor da IA em `second_pass_value`.
  */
 import { isEmptyMarker, normalizeText } from './normalize';
+import { sameGradeValue, stripReconciliationFlags } from './gradeCompare';
 
 interface AnyRow {
   subject: string;
@@ -21,11 +22,7 @@ interface AnyPreview {
   notes?: string[];
 }
 
-const sameValue = (a: number | null, b: number | null) => {
-  if (a == null && b == null) return true;
-  if (a == null || b == null) return false;
-  return Math.round(a * 100) === Math.round(b * 100);
-};
+const sameValue = sameGradeValue;
 
 const cellKey = (r: AnyRow) => `${normalizeText(r.subject)}||${normalizeText(r.period)}`;
 
@@ -55,7 +52,8 @@ export function reconcileLocalWithAi<T>(local: T, ai: AnyPreview): ReconcileResu
     const key = cellKey(row);
     const aiRow = aiByKey.get(key);
     aiByKey.delete(key);
-    const flags = new Set(row.flags ?? []);
+    // Estado de reconciliação anterior nunca é preservado: sempre recalculado.
+    const flags = new Set(stripReconciliationFlags(row.flags));
     if (!aiRow) return { ...row, flags: [...flags] };
     if (sameValue(row.value ?? null, aiRow.value ?? null)) {
       flags.add('reconciled_match');
