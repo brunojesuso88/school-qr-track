@@ -634,7 +634,7 @@ serve(async (req) => {
         pdf_father_name: header.father_name ?? null,
       },
       detected: {
-        key: normName || `pagina-${pageNumber}`,
+        key: normalize(pdfName) || `pagina-${pageNumber}`,
         pdf_name: pdfName,
         pdf_code: header.student_code ?? null,
         pdf_birth_date: header.birth_date ?? null,
