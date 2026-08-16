@@ -20,6 +20,12 @@ import { GradesRegistrationAudit } from './GradesRegistrationAudit';
 import { GradesClassMismatchPanel } from './GradesClassMismatchPanel';
 import { evaluateAutoAccept } from './gradesAutoAccept';
 import {
+  closePdfDocument, extractPageTokens, LocalPdfDocument, openPdfDocument,
+} from '@/lib/gradePageLocal/pdfText';
+import { parseGradePageLocal } from '@/lib/gradePageLocal/parseGradePageLocal';
+import { reconcileLocalWithAi } from '@/lib/gradePageLocal/reconcile';
+import { LocalContextStudent } from '@/lib/gradePageLocal/types';
+import {
   CONFLICT_LABELS, DetectedStudent, FieldDecision, RegistrationDecision,
   defaultRegistrationDecision, formatDate,
 } from './gradesConflicts';
@@ -66,9 +72,13 @@ interface PagePreview {
   };
   notes: string[];
   reading?: {
-    mode: 'fast' | 'validated';
+    mode: 'fast' | 'validated' | 'local' | 'local_validated' | 'ai_fallback';
     escalated: boolean;
     reasons: string[];
+    local_score?: number;
+    divergences?: number;
+    absence_tokens_dropped?: number;
+    duration_ms?: number;
   };
 }
 
@@ -92,6 +102,14 @@ interface GradesImportDialogProps {
 
 type Step = 'select' | 'resume' | 'processing' | 'page' | 'saving' | 'summary' | 'failed';
 type PageAction = 'link' | 'create' | 'ignore' | null;
+/** Modo de leitura (feature flag). Padrão: local com validação da IA quando necessário. */
+type ReadingMode = 'local_ai' | 'always_ai' | 'ai_only';
+
+const READING_MODE_LABELS: Record<ReadingMode, string> = {
+  local_ai: 'Leitura local + validação por IA',
+  always_ai: 'Sempre validar com IA',
+  ai_only: 'Somente IA (modo anterior)',
+};
 
 const normalize = (s: unknown) =>
   String(s ?? '')
@@ -143,6 +161,12 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
   const [autoAccept, setAutoAccept] = useState(false);
   const [autoApprovedPage, setAutoApprovedPage] = useState<number | null>(null);
   const autoRunRef = useRef<string | null>(null);
+  const [readingMode, setReadingMode] = useState<ReadingMode>('local_ai');
+  const pdfDocRef = useRef<LocalPdfDocument | null>(null);
+  const localStudentsRef = useRef<LocalContextStudent[]>([]);
+  const localExpectedRef = useRef<{ name: string; weekly_classes?: number | null }[]>([]);
+  const [localTimings, setLocalTimings] = useState<number[]>([]);
+  const [localSolvedPages, setLocalSolvedPages] = useState(0);
 
   const reset = useCallback(() => {
     setStep('select');
@@ -165,6 +189,12 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
     setAutoApprovedPage(null);
     autoRunRef.current = null;
     cancelledRef.current = false;
+    closePdfDocument(pdfDocRef.current);
+    pdfDocRef.current = null;
+    localStudentsRef.current = [];
+    localExpectedRef.current = [];
+    setLocalTimings([]);
+    setLocalSolvedPages(0);
     if (fileInputRef.current) fileInputRef.current.value = '';
   }, []);
 
