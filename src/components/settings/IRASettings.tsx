@@ -17,7 +17,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import {
   CLASS_SERIES_OPTIONS, HighSchoolSeries, classSeriesLabel, detectClassSeries, parseClassSeries,
 } from '@/lib/iraRanking';
-import { seriesListMatches } from '@/lib/series';
+import { selectMissingSeriesMatrixSubjects } from '@/lib/gradePageLocal/effectiveMatrix';
 
 interface ClassRow {
   id: string;
