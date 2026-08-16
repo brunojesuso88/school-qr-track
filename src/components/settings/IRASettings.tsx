@@ -176,6 +176,50 @@ const IRASettings = () => {
     toast.success(`Série definida: ${classSeriesLabel(value)}.`);
   };
 
+  /**
+   * Herança da matriz padrão da série: cria no mapeamento da turma as disciplinas do catálogo
+   * vinculadas à série que ainda não existem. Nunca remove nem sobrescreve disciplinas existentes.
+   */
+  const applySeriesMatrix = async () => {
+    if (!selectedClass?.mapping_class_id) return;
+    const series = parseClassSeries(selectedClass.series);
+    if (!series) {
+      toast.error('Defina a série da turma antes de aplicar a matriz padrão.');
+      return;
+    }
+    setApplyingMatrix(true);
+    try {
+      const [{ data: catalog }, { data: existing }] = await Promise.all([
+        supabase.from('mapping_global_subjects').select('name, default_weekly_classes, series'),
+        supabase.from('mapping_class_subjects').select('subject_name').eq('class_id', selectedClass.mapping_class_id),
+      ]);
+      const have = new Set((existing || []).map((e) => normalize(e.subject_name)));
+      const label = classSeriesLabel(series);
+      const missing = (catalog || [])
+        .filter((c) => ((c as { series?: string[] | null }).series ?? []).some((s) => normalize(s) === normalize(label)
+          || normalize(s) === normalize(series)))
+        .filter((c) => !have.has(normalize(c.name)));
+      if (missing.length === 0) {
+        toast.info('A matriz da turma já contém todas as disciplinas padrão da série.');
+        return;
+      }
+      const { error } = await supabase.from('mapping_class_subjects').insert(
+        missing.map((c) => ({
+          class_id: selectedClass.mapping_class_id as string,
+          subject_name: c.name,
+          weekly_classes: c.default_weekly_classes ?? 1,
+        })),
+      );
+      if (error) throw error;
+      toast.success(`${missing.length} disciplina(s) da matriz de ${label} adicionada(s) à turma.`);
+      loadClassData(selectedClassId);
+    } catch (e) {
+      toast.error('Não foi possível aplicar a matriz padrão da série.');
+    } finally {
+      setApplyingMatrix(false);
+    }
+  };
+
   const updateSubject = async (subject: SubjectRow, patch: Partial<SubjectRow>) => {
     setSubjects((prev) => prev.map((s) => (s.id === subject.id ? { ...s, ...patch } : s)));
     const { error } = await supabase.from('grade_subjects').update(patch as never).eq('id', subject.id);
@@ -378,6 +422,18 @@ const IRASettings = () => {
                 <p className="text-xs text-muted-foreground">
                   Apenas administração e direção podem alterar a série da turma.
                 </p>
+              )}
+              {canEditSeries && parseClassSeries(selectedClass.series) && selectedClass.mapping_class_id && (
+                <div className="space-y-1 pt-1">
+                  <Button size="sm" variant="outline" onClick={applySeriesMatrix} disabled={applyingMatrix}>
+                    {applyingMatrix && <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" />}
+                    Aplicar matriz padrão da série
+                  </Button>
+                  <p className="text-xs text-muted-foreground">
+                    Adiciona à turma as disciplinas do catálogo vinculadas a esta série. Nada é removido ou
+                    sobrescrito — a matriz serve de âncora na leitura dos boletins em PDF.
+                  </p>
+                </div>
               )}
             </div>
           )}
