@@ -1,6 +1,6 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
-import { LayoutDashboard, Users, Calendar, Bell, Settings, Menu, X, BookOpen, LogOut, ChevronRight, ArrowLeft, Heart, FileText, Lock, RefreshCw, Download, Info, Trash2, Sun, Moon, Monitor, ClipboardList, CalendarDays, FileWarning } from 'lucide-react';
+import { LayoutDashboard, Users, Calendar, Bell, Settings, Menu, X, BookOpen, LogOut, ChevronRight, Heart, FileText, Lock, RefreshCw, Download, Info, Trash2, Sun, Moon, Monitor, ClipboardList, CalendarDays, FileWarning, Map, Clock } from 'lucide-react';
 import { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/components/ThemeProvider';
@@ -25,18 +25,21 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 const allNavigation = [
-  { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, roles: ['admin', 'direction', 'teacher'] },
-  { name: 'Alunos', href: '/students', icon: Users, roles: ['admin', 'direction', 'teacher'] },
-  { name: 'Sistema AEE', href: '/aee', icon: Heart, roles: ['admin', 'direction', 'teacher'] },
-  { name: 'Turmas', href: '/classes', icon: BookOpen, roles: ['admin', 'direction', 'teacher'] },
-  { name: 'Frequência', href: '/attendance', icon: Calendar, roles: ['admin', 'direction', 'teacher'] },
-  { name: 'Projetos', href: '/events', icon: ClipboardList, roles: ['admin', 'direction', 'teacher'] },
-  { name: 'Eventos', href: '/school-events', icon: CalendarDays, roles: ['admin', 'direction', 'teacher'] },
-  { name: 'Declarações', href: '/declarations', icon: FileText, roles: ['admin', 'direction'] },
-  { name: 'Notificação Docente', href: '/teacher-notifications', icon: FileWarning, roles: ['admin', 'direction'] },
-  
-  { name: 'Configurações', href: '/settings', icon: Settings, roles: ['admin', 'direction'] },
+  { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, roles: ['admin', 'direction', 'teacher'], group: 'Visão Geral' },
+  { name: 'Alunos', href: '/students', icon: Users, roles: ['admin', 'direction', 'teacher'], group: 'Secretaria' },
+  { name: 'Sistema AEE', href: '/aee', icon: Heart, roles: ['admin', 'direction', 'teacher'], group: 'Secretaria' },
+  { name: 'Turmas', href: '/classes', icon: BookOpen, roles: ['admin', 'direction', 'teacher'], group: 'Secretaria' },
+  { name: 'Frequência', href: '/attendance', icon: Calendar, roles: ['admin', 'direction', 'teacher'], group: 'Secretaria' },
+  { name: 'Mapeamento Escolar', href: '/school-mapping', icon: Map, roles: ['admin', 'direction'], group: 'Acadêmico' },
+  { name: 'Criação do Horário', href: '/timetable', icon: Clock, roles: ['admin', 'direction'], group: 'Acadêmico' },
+  { name: 'Projetos', href: '/events', icon: ClipboardList, roles: ['admin', 'direction', 'teacher'], group: 'Projetos e Eventos' },
+  { name: 'Eventos', href: '/school-events', icon: CalendarDays, roles: ['admin', 'direction', 'teacher'], group: 'Projetos e Eventos' },
+  { name: 'Declarações', href: '/declarations', icon: FileText, roles: ['admin', 'direction'], group: 'Documentos' },
+  { name: 'Notificação Docente', href: '/teacher-notifications', icon: FileWarning, roles: ['admin', 'direction'], group: 'Documentos' },
+  { name: 'Configurações', href: '/settings', icon: Settings, roles: ['admin', 'direction'], group: 'Sistema' },
 ];
+
+const NAV_GROUPS = ['Visão Geral', 'Secretaria', 'Acadêmico', 'Projetos e Eventos', 'Documentos', 'Sistema'];
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -176,15 +179,9 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
         <div className="flex flex-col h-full">
           {/* Header */}
           <div className="flex items-center gap-3 px-6 py-5 border-b border-sidebar-border">
-            <button
-              onClick={() => navigate('/home')}
-              className="p-2 -ml-2 rounded-lg hover:bg-sidebar-accent transition-colors"
-            >
-              <ArrowLeft className="w-5 h-5 text-sidebar-foreground" />
-            </button>
             <div className="flex-1 min-w-0">
-              <h1 className="font-semibold text-sidebar-foreground text-sm leading-tight">Sistema de Gestão</h1>
-              <p className="text-xs text-sidebar-foreground/60">Gestão Escolar</p>
+              <h1 className="font-semibold text-sidebar-foreground text-sm leading-tight">EDUNEXUS</h1>
+              <p className="text-xs text-sidebar-foreground/60">Sistema Digital de Secretaria Escolar</p>
             </div>
             <button
               className="lg:hidden text-sidebar-foreground"
@@ -196,18 +193,29 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
 
           {/* Navigation */}
           <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-            {navigation.map((item) => {
-              const isActive = location.pathname === item.href;
+            {NAV_GROUPS.map((group) => {
+              const items = navigation.filter((item) => item.group === group);
+              if (!items.length) return null;
               return (
-                <Link
-                  key={item.name}
-                  to={item.href}
-                  onClick={() => setSidebarOpen(false)}
-                  className={cn('sidebar-item', isActive ? 'sidebar-item-active' : 'sidebar-item-inactive')}
-                >
-                  <item.icon className="w-5 h-5" />
-                  {item.name}
-                </Link>
+                <div key={group} className="pb-2">
+                  <p className="px-3 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wider text-sidebar-foreground/40">
+                    {group}
+                  </p>
+                  {items.map((item) => {
+                    const isActive = location.pathname === item.href || location.pathname.startsWith(`${item.href}/`);
+                    return (
+                      <Link
+                        key={item.name}
+                        to={item.href}
+                        onClick={() => setSidebarOpen(false)}
+                        className={cn('sidebar-item', isActive ? 'sidebar-item-active' : 'sidebar-item-inactive')}
+                      >
+                        <item.icon className="w-5 h-5" />
+                        {item.name}
+                      </Link>
+                    );
+                  })}
+                </div>
               );
             })}
           </nav>
