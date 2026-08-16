@@ -166,9 +166,10 @@ export const formatBirthDate = (value: string | null) => {
 };
 
 const MEDALS: Record<number, { fill: [number, number, number]; ring: [number, number, number] }> = {
-  1: { fill: [21, 101, 192], ring: [10, 60, 120] },
-  2: { fill: [144, 164, 184], ring: [90, 110, 130] },
-  3: { fill: [96, 125, 150], ring: [55, 75, 96] },
+  // Tons metálicos: ouro, prata e bronze.
+  1: { fill: [212, 175, 55], ring: [150, 118, 20] },
+  2: { fill: [188, 194, 200], ring: [132, 138, 145] },
+  3: { fill: [176, 124, 74], ring: [120, 80, 44] },
 };
 
 /** Desenha uma medalha discreta (círculo com anel) centrada em (cx, cy). */
@@ -191,7 +192,8 @@ export interface RankingPdfOptions {
   logoUrl?: string;
 }
 
-const SCHOOL = 'Professor Antônio Nonato Sampaio';
+const SCHOOL = 'Centro de Ensino Professor Antônio Nonato Sampaio';
+const TITLE = 'CLASSIFICAÇÃO DE DESEMPENHO — RANKING DO IRA';
 const BRAND: [number, number, number] = [12, 64, 122];
 const BRAND_MID: [number, number, number] = [21, 101, 192];
 const ACCENT: [number, number, number] = [37, 128, 214];
