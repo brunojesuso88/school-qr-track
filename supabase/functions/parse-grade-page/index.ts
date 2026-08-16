@@ -456,11 +456,13 @@ serve(async (req) => {
     const header = parsed.student ?? {};
     const pdfName = String(header.name ?? '').trim();
 
-    // Períodos desta página (Faltas descartadas)
+    // Períodos desta página (Faltas e colunas finais descartadas)
     const periodMap = new Map<string, { label: string; normalized_label: string; kind: string; sort_order: number }>();
     const registerPeriod = (label: string, hinted?: string | null) => {
       if (!label || isAbsenceLabel(label)) return null;
       const { kind, canonical } = classifyPeriod(label, hinted);
+      // Média Final, Rec. Final, Cons. Class, Pendência e Final nunca são notas de período.
+      if (kind !== 'period') return null;
       const norm = normalize(canonical);
       if (!periodMap.has(norm)) {
         periodMap.set(norm, { label: canonical, normalized_label: norm, kind, sort_order: periodRank(canonical) });
