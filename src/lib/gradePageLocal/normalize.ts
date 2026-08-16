@@ -11,6 +11,19 @@ export const normalizeText = (s: unknown) =>
 
 export const EMPTY_MARKERS = ['-', '--', '---', '—', '–', 'n/a', 'na', 'nc', '*', '.', '..'];
 
+/**
+ * Normalização que PRESERVA o comprimento e os índices do texto original,
+ * permitindo casar rótulos no texto normalizado e recortar o valor no texto original.
+ */
+export const normalizeAligned = (s: unknown) =>
+  Array.from(String(s ?? ''))
+    .map((ch) => {
+      const base = ch.normalize('NFD').replace(/[\u0300-\u036f]/g, '')[0] ?? ' ';
+      const lower = base.toLowerCase();
+      return /[a-z0-9º°ª]/.test(lower) ? lower : ' ';
+    })
+    .join('');
+
 /** Vazio => null. `0,00` => 0 real. Fora do padrão => invalid. */
 export function parseGradeToken(raw: string | null | undefined): { value: number | null; invalid: boolean } {
   if (raw == null) return { value: null, invalid: false };
