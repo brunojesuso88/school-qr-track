@@ -195,12 +195,14 @@ const IRASettings = () => {
         supabase.from('mapping_global_subjects').select('name, default_weekly_classes, series'),
         supabase.from('mapping_class_subjects').select('subject_name').eq('class_id', selectedClass.mapping_class_id),
       ]);
-      const have = new Set((existing || []).map((e) => normalize(e.subject_name)));
       const label = classSeriesLabel(series);
-      const missing = (catalog || [])
-        // Comparação canônica ('1'|'2'|'3'), tolerando rótulos legados gravados antes da unificação.
-        .filter((c) => seriesListMatches(series, (c as { series?: string[] | null }).series))
-        .filter((c) => !have.has(normalize(c.name)));
+      // Comparação canônica ('1'|'2'|'3'), tolerando rótulos legados gravados antes da unificação.
+      // Só ADICIONA o que falta: disciplinas extras e cargas horárias da turma são preservadas.
+      const missing = selectMissingSeriesMatrixSubjects(
+        series,
+        (catalog || []) as { name: string; default_weekly_classes?: number | null; series?: string[] | null }[],
+        (existing || []) as { subject_name: string }[],
+      );
       if (missing.length === 0) {
         toast.info('A matriz da turma já contém todas as disciplinas padrão da série.');
         return;

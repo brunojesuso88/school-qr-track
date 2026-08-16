@@ -27,6 +27,22 @@ interface BuildEffectiveMatrixInput {
 export const seriesMatches = (series: string | null | undefined, list: string[] | null | undefined) =>
   seriesListMatches(series, list);
 
+/**
+ * Disciplinas do catálogo da série que ainda NÃO existem no mapeamento da turma.
+ * Nunca remove nem sobrescreve: disciplinas extras da turma e cargas horárias já
+ * definidas permanecem intactas.
+ */
+export function selectMissingSeriesMatrixSubjects(
+  series: string | null | undefined,
+  catalog: CatalogSubject[],
+  existing: { subject_name: string }[],
+): CatalogSubject[] {
+  const have = new Set((existing ?? []).map((e) => normalizeText(e.subject_name)));
+  return (catalog ?? [])
+    .filter((c) => seriesMatches(series, c.series ?? null))
+    .filter((c) => !have.has(normalizeText(c.name)));
+}
+
 export function buildEffectiveSubjectMatrix({
   mapping, imported = [], catalog = [], series = null,
 }: BuildEffectiveMatrixInput): LocalExpectedSubject[] {
