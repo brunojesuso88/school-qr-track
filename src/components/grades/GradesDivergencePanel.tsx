@@ -15,6 +15,10 @@ interface GradesDivergencePanelProps {
   hasOtherBlockers: boolean;
   applying?: boolean;
   onUseLocalReading?: () => void;
+  /** Células vazias que só a IA listou e foram descartadas (não são notas). */
+  aiEmptyIgnored?: number;
+  /** Disciplinas reconhecidas pela matriz da turma sem notas lançadas. */
+  anchoredSubjects?: string[];
 }
 
 const fmt = (raw: string | null) => (raw && raw.trim() ? raw : 'vazio (não informado no boletim)');
@@ -26,8 +30,37 @@ export const GradesDivergencePanel = ({
   hasOtherBlockers,
   applying = false,
   onUseLocalReading,
+  aiEmptyIgnored = 0,
+  anchoredSubjects = [],
 }: GradesDivergencePanelProps) => {
-  if (divergences.length === 0) return null;
+  const info = aiEmptyIgnored > 0 || anchoredSubjects.length > 0;
+  if (divergences.length === 0 && !info) return null;
+
+  const infoBlock = info ? (
+    <div className="rounded-md border bg-background/60 p-2 space-y-1 text-muted-foreground">
+      {aiEmptyIgnored > 0 && (
+        <p>
+          {aiEmptyIgnored} célula(s) vazia(s) apontada(s) apenas pela IA foram desconsideradas: célula sem nota no
+          boletim não é divergência.
+        </p>
+      )}
+      {anchoredSubjects.length > 0 && (
+        <p>
+          Disciplinas reconhecidas pela matriz da turma sem notas lançadas: {anchoredSubjects.join(', ')}.
+        </p>
+      )}
+    </div>
+  ) : null;
+
+  if (divergences.length === 0) {
+    return (
+      <Alert>
+        <ScanSearch className="w-4 h-4" />
+        <AlertTitle className="text-sm">Conferência das leituras</AlertTitle>
+        <AlertDescription className="text-xs space-y-2">{infoBlock}</AlertDescription>
+      </Alert>
+    );
+  }
   return (
     <Alert variant="destructive">
       <ScanSearch className="w-4 h-4" />
@@ -77,6 +110,7 @@ export const GradesDivergencePanel = ({
             ))}
           </ul>
         </ScrollArea>
+        {infoBlock}
         {allLocallyEligible ? (
           <div className="space-y-1">
             {onUseLocalReading && !ruleActive && (
