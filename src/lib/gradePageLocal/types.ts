@@ -63,6 +63,8 @@ export interface LocalCell {
   invalid: boolean;
   confidence: number;
   ambiguous: boolean;
+  /** Linha materializada por âncora curricular (disciplina real sem notas lançadas). */
+  anchored?: boolean;
 }
 
 /** Disciplina esperada da turma (matriz efetiva + catálogo canônico). */
