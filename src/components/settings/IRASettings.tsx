@@ -57,6 +57,7 @@ const IRASettings = () => {
   const { userRole } = useAuth();
   const canEditSeries = userRole === 'admin' || userRole === 'direction';
   const [savingSeries, setSavingSeries] = useState(false);
+  const [applyingMatrix, setApplyingMatrix] = useState(false);
   const [mappingClasses, setMappingClasses] = useState<MappingClassRow[]>([]);
   const [selectedClassId, setSelectedClassId] = useState<string>('');
   const [subjects, setSubjects] = useState<SubjectRow[]>([]);
