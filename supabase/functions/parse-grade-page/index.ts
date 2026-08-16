@@ -536,12 +536,16 @@ serve(async (req) => {
 
     if (byCode.length === 1) {
       matchedStudent = byCode[0]; matchScore = 1; status = 'matched';
-    } else if (byCode.length > 1) {
-      matchScore = 1; ambiguous = true;
     } else if (byName.length === 1) {
       matchedStudent = byName[0]; matchScore = 1; status = 'matched';
     } else if (byName.length > 1) {
-      matchScore = 1; ambiguous = true;
+      // Código repetido na turma não trava o casamento; só desempata se isolar um homônimo.
+      const intersect = byName.filter((s) => byCode.some((c) => c.id === s.id));
+      if (intersect.length === 1) {
+        matchedStudent = intersect[0]; matchScore = 1; status = 'matched';
+      } else {
+        matchScore = 1; ambiguous = true;
+      }
     } else {
       const scored = students
         .map((s) => ({ s, score: tokenSim(pdfName, s.full_name) }))
