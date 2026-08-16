@@ -7,6 +7,7 @@ import { extractHeader } from './header';
 import { normalizeText, periodRank, similarity } from './normalize';
 import { matchStudentInClass } from './studentMatch';
 import { digitsOnly } from './studentMatch';
+import { buildSubjectAnchors, matchSubjectAnchor } from './subjectAnchors';
 import { isLocallyConfident, validateLocalPage } from './validate';
 import {
   LocalContextStudent, LocalParseContext, LocalValidation, TextToken,
@@ -46,6 +47,12 @@ export interface LocalPagePreview {
     divergences: number;
     absence_tokens_dropped: number;
     duration_ms?: number;
+    /** Disciplinas reais reconhecidas por âncora curricular, sem notas lançadas. */
+    anchored_subjects?: string[];
+    /** Linhas de disciplina fundidas (nome quebrado em duas linhas). */
+    merged_subject_lines?: number;
+    /** Células vazias que só a IA listou e foram ignoradas (não são notas). */
+    ai_empty_ignored?: number;
   };
 }
 
@@ -65,6 +72,7 @@ function matchStudent(name: string, code: string | null, students: LocalContextS
 export function parseGradePageLocal(tokens: TextToken[], context: LocalParseContext): LocalParseResult {
   const lines = groupLines(tokens);
   const grid = detectGrid(lines);
+  const anchors = buildSubjectAnchors(context.expectedSubjects);
 
   if (!grid) {
     const validation = validateLocalPage({
@@ -75,7 +83,7 @@ export function parseGradePageLocal(tokens: TextToken[], context: LocalParseCont
   }
 
   const header = extractHeader(lines, grid.headerLineIndex);
-  const built = buildCells(lines, grid);
+  const built = buildCells(lines, grid, anchors);
   const { student: matched, score: matchScore, status: matchStatus } =
     matchStudent(header.name ?? '', header.student_code, context.students);
 
@@ -99,18 +107,25 @@ export function parseGradePageLocal(tokens: TextToken[], context: LocalParseCont
 
   const subjects = [...subjectOrder.entries()].map(([norm, order]) => {
     const name = built.subjects.find((s) => normalizeText(s) === norm) ?? norm;
-    let matchedExpected: string | null = null;
-    let best = 0;
-    for (const e of context.expectedSubjects) {
-      const value = similarity(norm, normalizeText(e.name));
-      if (value > best) { best = value; matchedExpected = e.name; }
+    // Identidade canônica via âncoras (nome, aliases, abreviação); fallback: semelhança simples.
+    const anchorMatch = matchSubjectAnchor(name, anchors);
+    let matchedExpected: string | null = anchorMatch?.anchor.canonical ?? null;
+    if (!matchedExpected) {
+      let best = 0;
+      for (const e of context.expectedSubjects) {
+        const value = similarity(norm, normalizeText(e.name));
+        if (value > best) { best = value; matchedExpected = e.name; }
+      }
+      if (best < 0.7) matchedExpected = null;
     }
-    const expected = best >= 0.7 ? context.expectedSubjects.find((e) => e.name === matchedExpected) : undefined;
+    const expected = matchedExpected
+      ? context.expectedSubjects.find((e) => e.name === matchedExpected)
+      : undefined;
     return {
       normalized_name: norm,
       name,
       weekly_classes: expected?.weekly_classes ?? null,
-      matched_expected: expected ? matchedExpected : null,
+      matched_expected: expected ? expected.name : null,
       sort_order: order,
     };
   });
@@ -130,6 +145,7 @@ export function parseGradePageLocal(tokens: TextToken[], context: LocalParseCont
     if (cell.value === 0) flags.push('explicit_zero');
     if (cell.value != null && (cell.value < 0 || cell.value > 10)) flags.push('out_of_scale');
     if (cell.confidence < 0.7) flags.push('low_confidence');
+    if (cell.anchored) flags.push('anchored_subject_row');
     if (status === 'fuzzy') flags.push('fuzzy_student_match');
     if (status === 'unmatched') flags.push('unmatched_student');
     return {
@@ -228,6 +244,8 @@ export function parseGradePageLocal(tokens: TextToken[], context: LocalParseCont
       local_score: Number(validation.score.toFixed(3)),
       divergences: 0,
       absence_tokens_dropped: built.droppedAbsenceTokens,
+      anchored_subjects: [...new Set(built.anchoredSubjects)],
+      merged_subject_lines: built.mergedSubjectLines,
     },
   };
 

@@ -2,7 +2,7 @@
  * Reconciliação LOCAL × IA. A IA é validadora: nunca sobrescreve a leitura local.
  * Divergência => flag `reconciliation_divergence`, valor local visível e valor da IA em `second_pass_value`.
  */
-import { normalizeText } from './normalize';
+import { isEmptyMarker, normalizeText } from './normalize';
 
 interface AnyRow {
   subject: string;
@@ -29,9 +29,18 @@ const sameValue = (a: number | null, b: number | null) => {
 
 const cellKey = (r: AnyRow) => `${normalizeText(r.subject)}||${normalizeText(r.period)}`;
 
+/** Célula da IA sem nota: vazio, `—`, `null`. Nunca representa uma nota. */
+const isEmptyAiCell = (r: AnyRow) => {
+  if (r.value != null) return false;
+  const raw = (r.raw_value ?? '').trim();
+  return raw === '' || isEmptyMarker(raw);
+};
+
 export interface ReconcileResult<T> {
   preview: T;
   divergences: number;
+  /** Células vazias que só a IA listou e foram descartadas (não bloqueiam). */
+  aiEmptyIgnored: number;
 }
 
 /** Mantém a estrutura da prévia LOCAL e apenas anota a comparação com a leitura da IA. */
@@ -41,6 +50,7 @@ export function reconcileLocalWithAi<T>(local: T, ai: AnyPreview): ReconcileResu
   (ai.rows || []).forEach((r) => aiByKey.set(cellKey(r), r));
 
   let divergences = 0;
+  let aiEmptyIgnored = 0;
   const rows: AnyRow[] = (base.rows || []).map((row) => {
     const key = cellKey(row);
     const aiRow = aiByKey.get(key);
@@ -57,8 +67,11 @@ export function reconcileLocalWithAi<T>(local: T, ai: AnyPreview): ReconcileResu
     return { ...row, flags: [...flags], second_pass_value: aiRow.raw_value ?? '—' };
   });
 
-  // Células que só a IA viu entram como linhas divergentes para revisão humana.
+  // Células que só a IA viu:
+  // - sem nota (vazio/`—`) => descartadas: a IA não pode criar disciplina vazia inexistente;
+  // - com nota numérica => divergência obrigatória para revisão humana.
   aiByKey.forEach((aiRow) => {
+    if (isEmptyAiCell(aiRow)) { aiEmptyIgnored++; return; }
     divergences++;
     rows.push({
       ...aiRow,
@@ -86,8 +99,9 @@ export function reconcileLocalWithAi<T>(local: T, ai: AnyPreview): ReconcileResu
       mode: 'local_validated',
       escalated: true,
       divergences,
+      ai_empty_ignored: aiEmptyIgnored,
     },
   } as unknown as T;
 
-  return { preview, divergences };
+  return { preview, divergences, aiEmptyIgnored };
 }
