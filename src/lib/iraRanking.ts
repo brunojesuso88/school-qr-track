@@ -313,24 +313,6 @@ function drawStar(doc: jsPDF, cx: number, cy: number, r: number, color: [number,
   doc.triangle(cx + r, cy, cx, cy - r * 0.45, cx, cy + r * 0.45, 'F');
 }
 
-/** Seta de crescimento (desempenho) em azul. */
-function drawGrowthIcon(doc: jsPDF, x: number, y: number, s = 1) {
-  doc.setFillColor(...ROYAL);
-  doc.rect(x, y + 2.4 * s, 1.5 * s, 2.2 * s, 'F');
-  doc.rect(x + 2.2 * s, y + 1.2 * s, 1.5 * s, 3.4 * s, 'F');
-  doc.rect(x + 4.4 * s, y, 1.5 * s, 4.6 * s, 'F');
-}
-
-/** Alvo (foco) em azul. */
-function drawTargetIcon(doc: jsPDF, cx: number, cy: number, r: number) {
-  doc.setDrawColor(...ROYAL);
-  doc.setLineWidth(0.5);
-  doc.circle(cx, cy, r, 'S');
-  doc.circle(cx, cy, r * 0.6, 'S');
-  doc.setFillColor(...ROYAL);
-  doc.circle(cx, cy, r * 0.22, 'F');
-}
-
 /** Única frase motivacional exibida no rodapé do PDF. */
 export const FOOTER_MESSAGE = 'CONTINUE AVANÇANDO. O MELHOR AINDA ESTÁ POR VIR!';
 
@@ -408,7 +390,6 @@ export async function buildIraRankingPdf(entries: RankingEntry[], options: Ranki
   // Troféu dourado (canto superior direito)
   drawGoldenTrophy(doc, pageWidth - margin - 22, margin + 20, 1.5);
   doc.setFont('helvetica', 'normal');
-  drawTargetIcon(doc, margin + 27, margin + 52.5, 0.001); // no-op visual (mantém API usada)
 
   // Metadados discretos (esquerda)
   doc.setTextColor(90, 105, 125);
