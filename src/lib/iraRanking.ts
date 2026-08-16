@@ -17,6 +17,41 @@ import { formatIra } from '@/lib/ira';
 
 export const RANKING_LIMIT = 15;
 
+/** Séries do Ensino Médio aceitas na classificação. */
+export type HighSchoolSeries = '1' | '2' | '3';
+
+export const HIGH_SCHOOL_SERIES: { value: HighSchoolSeries; label: string }[] = [
+  { value: '1', label: '1ª Série do Ensino Médio' },
+  { value: '2', label: '2ª Série do Ensino Médio' },
+  { value: '3', label: '3ª Série do Ensino Médio' },
+];
+
+export const seriesLabel = (s: HighSchoolSeries) =>
+  HIGH_SCHOOL_SERIES.find((o) => o.value === s)!.label;
+
+/**
+ * Detecta a série do Ensino Médio pelo nome da turma (fallback seguro).
+ * Retorna `null` quando não há indicação clara ou quando há indicação ambígua
+ * (mais de uma série citada no mesmo nome).
+ */
+export function detectClassSeries(className: string): HighSchoolSeries | null {
+  const n = className.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const found = new Set<HighSchoolSeries>();
+  const re = /(^|[^0-9])([123])\s*(a|o|º|ª|\.)?\s*(serie|ser|ano|em)?\b/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(n))) {
+    // Exige marcador ordinal (1ª/1º/1a/1o) ou palavra (serie/ano/em)
+    if (m[3] || m[4]) found.add(m[2] as HighSchoolSeries);
+  }
+  if (found.size !== 1) {
+    if (found.size > 1) {
+      console.warn(`[IRA Ranking] Turma com série ambígua, ignorada: "${className}"`);
+    }
+    return null;
+  }
+  return [...found][0];
+}
+
 /** Código do aluno apenas com dígitos (sem pontos, vírgulas, traços ou espaços). */
 export const formatStudentCode = (code: string | null) => {
   const digits = (code || '').replace(/\D/g, '');
@@ -190,6 +225,8 @@ export interface RankingPdfOptions {
   totalEligible: number;
   /** URL do brasão da escola (opcional). */
   logoUrl?: string;
+  /** Série do Ensino Médio da classificação (obrigatória no fluxo da UI). */
+  series?: HighSchoolSeries;
 }
 
 const SCHOOL_LINE_1 = 'CENTRO DE ENSINO';
@@ -276,53 +313,29 @@ function drawStar(doc: jsPDF, cx: number, cy: number, r: number, color: [number,
   doc.triangle(cx + r, cy, cx, cy - r * 0.45, cx, cy + r * 0.45, 'F');
 }
 
-/** Seta de crescimento (desempenho) em azul. */
-function drawGrowthIcon(doc: jsPDF, x: number, y: number, s = 1) {
-  doc.setFillColor(...ROYAL);
-  doc.rect(x, y + 2.4 * s, 1.5 * s, 2.2 * s, 'F');
-  doc.rect(x + 2.2 * s, y + 1.2 * s, 1.5 * s, 3.4 * s, 'F');
-  doc.rect(x + 4.4 * s, y, 1.5 * s, 4.6 * s, 'F');
-}
+/** Única frase motivacional exibida no rodapé do PDF. */
+export const FOOTER_MESSAGE = 'CONTINUE AVANÇANDO. O MELHOR AINDA ESTÁ POR VIR!';
 
-/** Alvo (foco) em azul. */
-function drawTargetIcon(doc: jsPDF, cx: number, cy: number, r: number) {
-  doc.setDrawColor(...ROYAL);
-  doc.setLineWidth(0.5);
-  doc.circle(cx, cy, r, 'S');
-  doc.circle(cx, cy, r * 0.6, 'S');
-  doc.setFillColor(...ROYAL);
-  doc.circle(cx, cy, r * 0.22, 'F');
-}
-
-const FOOTER_MESSAGES = [
-  'CADA PONTO TE APROXIMA DO TOPO!',
-  'SUPERE SEUS LIMITES, ALCANCE SEUS SONHOS!',
-  'O CONHECIMENTO É O SEU MAIOR PODER!',
-  'CONTINUE AVANÇANDO. O MELHOR AINDA ESTÁ POR VIR!',
-];
-
-/** Rodapé motivacional em faixa azul escura, dividido em 4 blocos. */
+/** Rodapé motivacional: faixa única, elegante, com a frase centralizada. */
 function drawMotivationFooter(doc: jsPDF, x: number, y: number, width: number, height: number) {
   doc.setFillColor(...NAVY);
-  doc.rect(x, y, width, height, 'F');
+  doc.roundedRect(x, y, width, height, 1.5, 1.5, 'F');
   doc.setFillColor(...ROYAL);
-  doc.rect(x, y, width, 1.1, 'F');
+  doc.roundedRect(x, y, width, 1.4, 0.7, 0.7, 'F');
 
-  const block = width / FOOTER_MESSAGES.length;
+  const cy = y + height / 2 + 1.4;
   doc.setTextColor(255, 255, 255);
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(7.2);
-  FOOTER_MESSAGES.forEach((msg, i) => {
-    const bx = x + block * i;
-    const cy = y + height / 2;
-    if (i > 0) {
-      doc.setDrawColor(60, 110, 170);
-      doc.setLineWidth(0.3);
-      doc.line(bx, y + 2.4, bx, y + height - 2.4);
-    }
-    drawStar(doc, bx + 5.4, cy, 1.6, [186, 214, 245]);
-    doc.text(msg, bx + 9.5, cy + 1.1, { maxWidth: block - 13 });
-  });
+  doc.setFontSize(11);
+  doc.text(FOOTER_MESSAGE, x + width / 2, cy, { align: 'center', charSpace: 0.5 });
+
+  // jsPDF centraliza ignorando o charSpace, então o texto "cresce" para a direita.
+  const baseW = doc.getTextWidth(FOOTER_MESSAGE);
+  const extra = 0.5 * (FOOTER_MESSAGE.length - 1);
+  const cxF = x + width / 2;
+  const starY = y + height / 2 + 0.4;
+  drawStar(doc, cxF - baseW / 2 - 7, starY, 1.8, [186, 214, 245]);
+  drawStar(doc, cxF + baseW / 2 + extra + 7, starY, 1.8, [186, 214, 245]);
 }
 
 /** Monta o documento da classificação (uma única página A4 paisagem). */
@@ -340,83 +353,67 @@ export async function buildIraRankingPdf(entries: RankingEntry[], options: Ranki
   doc.setLineWidth(0.3);
   doc.rect(margin - 1.6, margin - 1.6, pageWidth - (margin - 1.6) * 2, pageHeight - (margin - 1.6) * 2, 'S');
 
-  // Brasão (canto superior esquerdo), cores originais preservadas
+  // Brasão (canto superior esquerdo) em destaque, cores originais preservadas
   const logo = await loadLogo(options.logoUrl ?? '');
   if (logo) {
     try {
-      doc.addImage(logo, 'PNG', margin + 1, margin + 1, 30, 30);
+      // Encaixe proporcional dentro do box do brasão (sem distorcer).
+      const box = 46;
+      const props = doc.getImageProperties(logo);
+      const ratio = props.width && props.height ? props.width / props.height : 1;
+      const w = ratio >= 1 ? box : box * ratio;
+      const h = ratio >= 1 ? box / ratio : box;
+      doc.addImage(logo, 'PNG', margin + 1 + (box - w) / 2, margin + 1 + (box - h) / 2, w, h);
     } catch {
       /* ignora logo inválido */
     }
   }
 
-  // Cabeçalho institucional (centro)
+  // Cabeçalho institucional — bloco de texto entre o brasão (esq.) e o troféu (dir.)
   const cx = pageWidth / 2;
+  const cxT = (margin + 50 + (pageWidth - margin - 46)) / 2;
   doc.setTextColor(...NAVY);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(10);
-  doc.text(SCHOOL_LINE_1, cx, margin + 7, { align: 'center', charSpace: 0.8 });
-  doc.setFontSize(15);
-  doc.text(SCHOOL_LINE_2, cx, margin + 14.5, { align: 'center' });
+  doc.text(SCHOOL_LINE_1, cxT, margin + 8, { align: 'center', charSpace: 0.8 });
+  doc.setFontSize(14);
+  doc.text(SCHOOL_LINE_2, cxT, margin + 15.5, { align: 'center' });
 
   doc.setDrawColor(...FRAME);
   doc.setLineWidth(0.5);
-  doc.line(cx - 52, margin + 17.6, cx + 52, margin + 17.6);
+  doc.line(cxT - 52, margin + 18.4, cxT + 52, margin + 18.4);
 
-  doc.setFontSize(11);
-  doc.text(TITLE_TOP, cx, margin + 24, { align: 'center', charSpace: 0.5 });
+  doc.setFontSize(10.5);
+  doc.text(TITLE_TOP, cxT, margin + 24.5, { align: 'center', charSpace: 0.5 });
   doc.setTextColor(...ROYAL);
-  doc.setFontSize(26);
-  doc.text(TITLE_MAIN, cx, margin + 36, { align: 'center' });
-
-  // Faixa motivacional central discreta
-  const phrase = 'Seu esforço hoje, sua conquista amanhã!';
-  doc.setFont('helvetica', 'italic');
-  doc.setFontSize(9);
-  const phraseWidth = doc.getTextWidth(phrase);
-  const chipW = phraseWidth + 16;
-  doc.setFillColor(...LIGHT);
-  doc.roundedRect(cx - chipW / 2, margin + 39.6, chipW, 7.6, 3.8, 3.8, 'F');
-  drawGrowthIcon(doc, cx - chipW / 2 + 4.5, margin + 41.4, 1);
-  doc.setTextColor(...NAVY);
-  doc.text(phrase, cx - chipW / 2 + 13.5, margin + 44.6);
-  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(16);
+  const mainTitle = options.series
+    ? `${TITLE_MAIN} — ${options.series}ª SÉRIE DO ENSINO MÉDIO`
+    : TITLE_MAIN;
+  doc.text(mainTitle, cxT, margin + 34, { align: 'center' });
+  doc.setDrawColor(...ROYAL);
+  doc.setLineWidth(0.8);
+  const underline = doc.getTextWidth(mainTitle) / 2 + 3;
+  doc.line(cxT - underline, margin + 36.6, cxT + underline, margin + 36.6);
 
   // Troféu dourado (canto superior direito)
-  drawGoldenTrophy(doc, pageWidth - margin - 24, margin + 13, 1.15);
-
-  // Bloco motivacional à direita, abaixo do troféu
-  const boxW = 66;
-  const boxX = pageWidth - margin - boxW - 1;
-  const boxY = margin + 27;
-  doc.setFillColor(...LIGHT);
-  doc.setDrawColor(...FRAME);
-  doc.setLineWidth(0.4);
-  doc.roundedRect(boxX, boxY, boxW, 18, 2, 2, 'FD');
-  drawTargetIcon(doc, boxX + 8, boxY + 9, 4.4);
-  doc.setTextColor(...NAVY);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(7);
-  doc.text('FOCO • DISCIPLINA • DETERMINAÇÃO', boxX + 15, boxY + 7.6, { maxWidth: boxW - 18 });
+  drawGoldenTrophy(doc, pageWidth - margin - 22, margin + 20, 1.5);
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(6.6);
-  doc.setTextColor(...ROYAL);
-  doc.text('LÍDERES DE HOJE, INSPIRAÇÃO DE AMANHÃ!', boxX + 15, boxY + 12.6, { maxWidth: boxW - 18 });
 
   // Metadados discretos (esquerda)
   doc.setTextColor(90, 105, 125);
   doc.setFontSize(7);
   doc.text(
     `Turmas/Séries: ${options.classNames.join(', ')}`,
-    margin + 1, margin + 35, { maxWidth: 110 },
+    cxT, margin + 42.5, { align: 'center', maxWidth: 190 },
   );
   doc.text(
     `Emitido em ${format(new Date(), 'dd/MM/yyyy')}${options.periodsLabel ? ` · Base: ${options.periodsLabel}` : ''} · ${rows.length} de ${options.totalEligible} elegível(is)`,
-    margin + 1, margin + 39.5, { maxWidth: 110 },
+    cxT, margin + 46.8, { align: 'center', maxWidth: 190 },
   );
 
   // Faixa azul "TOP 15 — MELHORES IRA"
-  const bandY = margin + 50;
+  const bandY = margin + 51;
   const bandH = 9.6;
   doc.setFillColor(...NAVY);
   doc.roundedRect(margin, bandY, pageWidth - margin * 2, bandH, 1.5, 1.5, 'F');
@@ -428,7 +425,7 @@ export async function buildIraRankingPdf(entries: RankingEntry[], options: Ranki
   doc.text(`TOP ${RANKING_LIMIT} — MELHORES IRA`, cx, bandY + 6.4, { align: 'center', charSpace: 0.6 });
   [-70, -62, 62, 70].forEach((dx) => drawStar(doc, cx + dx, bandY + 4.6, 1.7, [255, 255, 255]));
 
-  const footerH = 15;
+  const footerH = 13;
   const footerY = pageHeight - margin - footerH;
 
   autoTable(doc, {
@@ -445,12 +442,12 @@ export async function buildIraRankingPdf(entries: RankingEntry[], options: Ranki
     theme: 'grid',
     tableWidth: pageWidth - margin * 2,
     styles: {
-      fontSize: 9, cellPadding: 1.35, textColor: [32, 44, 58],
+      fontSize: 8.6, cellPadding: 1.15, textColor: [32, 44, 58],
       lineColor: [206, 224, 245], lineWidth: 0.2, valign: 'middle',
     },
     headStyles: {
       fillColor: ROYAL, textColor: 255, fontStyle: 'bold', halign: 'center',
-      fontSize: 9, cellPadding: 1.8,
+      fontSize: 8.6, cellPadding: 1.5,
     },
     alternateRowStyles: { fillColor: LIGHT },
     columnStyles: {
