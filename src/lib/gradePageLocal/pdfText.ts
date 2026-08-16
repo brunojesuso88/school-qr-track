@@ -31,7 +31,7 @@ export async function extractPageTokens(doc: LocalPdfDocument, pageNumber: numbe
         x: Number(transform[4] ?? 0),
         y: Number(transform[5] ?? 0),
         w: Number(item.width ?? 0),
-        h: Number(item.height ?? Math.abs(Number(transform[3] ?? 0)) || 8),
+        h: Number(item.height ?? (Math.abs(Number(transform[3] ?? 0)) || 8)),
       });
     }
     return tokens;
