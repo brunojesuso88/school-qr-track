@@ -12,6 +12,7 @@ import {
 import { reconcileLocalWithAi } from '../reconcile';
 import { TextToken } from '../types';
 import { CLASS_SERIES_OPTIONS, normalizeSeriesList, parseSeriesValue } from '../../series';
+import { DEFAULT_AUTO_ACCEPT_RULES, evaluateAutoAccept } from '../../../components/grades/gradesAutoAccept';
 
 /** Disciplinas REAIS da turma 26RMM-CNS-300 citadas na auditoria. */
 const TARGET_SUBJECTS = [
@@ -154,7 +155,7 @@ describe('Fase 3 — reconciliação local × IA', () => {
     expect(rows).toHaveLength(16);
     expect(out.divergences).toBe(0);
     expect(out.aiEmptyIgnored).toBe(0);
-    expect((out.preview as { rows: { flags: string[] }[] }).rows.every((r) => r.flags.includes('reconciled_match'))).toBe(true);
+    expect((out.preview as unknown as { rows: { flags: string[] }[] }).rows.every((r) => r.flags.includes('reconciled_match'))).toBe(true);
   });
 
   it('célula vazia só da IA é descartada e não bloqueia', () => {
@@ -164,7 +165,7 @@ describe('Fase 3 — reconciliação local × IA', () => {
     );
     expect(out.aiEmptyIgnored).toBe(1);
     expect(out.divergences).toBe(0);
-    expect((out.preview as { rows: unknown[] }).rows).toHaveLength(1);
+    expect((out.preview as unknown as { rows: unknown[] }).rows).toHaveLength(1);
   });
 
   it('célula numérica só da IA gera divergência bloqueante', () => {
@@ -182,7 +183,7 @@ describe('Fase 3 — reconciliação local × IA', () => {
       { rows: [localRow('HISTORIA', '1º Período', '9,00', 9)] },
     );
     expect(out.divergences).toBe(1);
-    const row = (out.preview as { rows: { value: number; second_pass_value: string; flags: string[] }[] }).rows[0];
+    const row = (out.preview as unknown as { rows: { value: number; second_pass_value: string; flags: string[] }[] }).rows[0];
     expect(row.value).toBe(7);
     expect(row.second_pass_value).toBe('9,00');
     expect(row.flags).toContain('reconciliation_divergence');
@@ -238,5 +239,27 @@ describe('Fase 3 — série canônica 1/2/3', () => {
     // nenhuma disciplina existente é tocada nem removida
     expect(missing.some((m) => m.name === 'HISTORIA')).toBe(false);
     expect(missing.some((m) => m.name === 'APROFUNDAMENTO IF - CNS - I')).toBe(false);
+  });
+});
+
+describe('Fase 3 — autoaceite', () => {
+  it('`anchored_subject_row` não bloqueia o autoaceite', () => {
+    const rows = TARGET_SUBJECTS.flatMap((s) => PERIODS.map((p) => ({
+      subject: s, period: p, raw_value: null, value: null, confidence: 1,
+      flags: ['anchored_subject_row', 'empty_cell', 'reconciled_match'],
+    })));
+    const result = evaluateAutoAccept({
+      rules: { ...DEFAULT_AUTO_ACCEPT_RULES, enabled: true },
+      preview: {
+        rows,
+        detected: { status: 'matched', score: 1 },
+        stats: { cells_total: rows.length, invalid_values: 0, low_confidence: 0 },
+        reading: { divergences: 0 },
+      },
+      hasConflicts: false,
+      hasClassMismatch: false,
+    } as never);
+    expect(result.reasons).toEqual([]);
+    expect(result.canAutoAccept).toBe(true);
   });
 });
