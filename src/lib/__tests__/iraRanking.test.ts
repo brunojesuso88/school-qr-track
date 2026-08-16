@@ -123,14 +123,21 @@ describe('exportação da classificação do IRA', () => {
       expect(raw).not.toContain(t));
   });
 
-  it('usa a faixa "OS TOP 15 - MELHORES IRA" com hífen simples', async () => {
+  it('usa a faixa "TOP 15 — MELHORES IRAs"', async () => {
     const doc = await buildIraRankingPdf(entries, {
       classNames: ['1ª Série A', '1ª Série B'], periodsLabel: '', totalEligible: entries.length, series: '1',
     });
     expect(doc.getNumberOfPages()).toBe(1);
     const raw = Buffer.from(doc.output('datauristring').split(',')[1], 'base64').toString('latin1');
-    expect(raw).toContain('OS TOP 15');
-    expect(raw).toContain('- MELHORES IRA');
-    expect(raw).not.toContain('TOP 15 \\227');
+    expect(raw).toContain('TOP 15');
+    expect(raw).toContain('MELHORES IRAs');
+  });
+
+  it('mantém uma única página com turma longa "Sala Fora"', async () => {
+    const longEntries = entries.map((e) => ({ ...e, className: '26RMM-CNS-300 Sala Fora' }));
+    const doc = await buildIraRankingPdf(longEntries, {
+      classNames: ['26RMM-CNS-300 Sala Fora'], periodsLabel: '', totalEligible: longEntries.length, series: '3',
+    });
+    expect(doc.getNumberOfPages()).toBe(1);
   });
 });
