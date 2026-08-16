@@ -37,6 +37,11 @@ import { fetchCurriculumMatrix, matrixToExpectedSubjects } from '@/lib/curriculu
 import { parseSeriesValue } from '@/lib/series';
 import { classifyPeriodLabel, isPeriodKind, periodRank } from '@/lib/gradePageLocal/normalize';
 import {
+  matchesSecondPass,
+  sameGradeValue,
+  stripReconciliationFlags,
+} from '@/lib/gradePageLocal/gradeCompare';
+import {
   CONFLICT_LABELS, DetectedStudent, FieldDecision, RegistrationDecision,
   defaultRegistrationDecision, formatDate,
 } from './gradesConflicts';
