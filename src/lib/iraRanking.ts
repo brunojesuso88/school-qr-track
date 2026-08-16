@@ -29,6 +29,20 @@ export const HIGH_SCHOOL_SERIES: { value: HighSchoolSeries; label: string }[] = 
 export const seriesLabel = (s: HighSchoolSeries) =>
   HIGH_SCHOOL_SERIES.find((o) => o.value === s)!.label;
 
+/** Rótulos usados no cadastro da turma (Configurações → IRA). */
+export const CLASS_SERIES_OPTIONS: { value: HighSchoolSeries; label: string }[] = [
+  { value: '1', label: '1º ano do Ensino Médio' },
+  { value: '2', label: '2º ano do Ensino Médio' },
+  { value: '3', label: '3º ano do Ensino Médio' },
+];
+
+export const classSeriesLabel = (s: HighSchoolSeries | null | undefined) =>
+  (s && CLASS_SERIES_OPTIONS.find((o) => o.value === s)?.label) || 'Série não definida';
+
+/** Normaliza o valor persistido em `classes.series` para o tipo da série. */
+export const parseClassSeries = (value: string | null | undefined): HighSchoolSeries | null =>
+  value === '1' || value === '2' || value === '3' ? value : null;
+
 /**
  * Detecta a série do Ensino Médio pelo nome da turma (fallback seguro).
  * Retorna `null` quando não há indicação clara ou quando há indicação ambígua
