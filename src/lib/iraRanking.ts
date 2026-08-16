@@ -215,9 +215,10 @@ async function loadLogo(url: string): Promise<string | null> {
   }
 }
 
-/** Gera e baixa o PDF da classificação. Nenhum nome de aluno é usado. */
-export async function generateIraRankingPdf(entries: RankingEntry[], options: RankingPdfOptions) {
+/** Monta o documento da classificação (uma única página A4 paisagem). */
+export async function buildIraRankingPdf(entries: RankingEntry[], options: RankingPdfOptions): Promise<jsPDF> {
   const doc = new jsPDF('landscape', 'mm', 'a4');
+  const rows = entries.slice(0, RANKING_LIMIT);
   const pageWidth = doc.internal.pageSize.getWidth();
   const margin = 10;
 
@@ -243,8 +244,8 @@ export async function generateIraRankingPdf(entries: RankingEntry[], options: Ra
   doc.setFontSize(9.5);
   doc.text(SCHOOL.toUpperCase(), pageWidth / 2, 9, { align: 'center' });
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(16);
-  doc.text('RANKING DO IRA — TOP 15', pageWidth / 2, 17, { align: 'center' });
+  doc.setFontSize(14.5);
+  doc.text(TITLE, pageWidth / 2, 17, { align: 'center' });
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8.5);
   doc.text(
@@ -256,7 +257,7 @@ export async function generateIraRankingPdf(entries: RankingEntry[], options: Ra
   doc.setFontSize(8);
   doc.text(`Turmas/Séries: ${options.classNames.join(', ')}`, margin, 34, { maxWidth: pageWidth - margin * 2 - 70 });
   doc.text(
-    `Emitido em ${format(new Date(), 'dd/MM/yyyy')} · ${entries.length} de ${options.totalEligible} elegível(is)`,
+    `Emitido em ${format(new Date(), 'dd/MM/yyyy')} · ${rows.length} de ${options.totalEligible} elegível(is)`,
     pageWidth - margin, 34, { align: 'right' },
   );
 
@@ -273,7 +274,7 @@ export async function generateIraRankingPdf(entries: RankingEntry[], options: Ra
     startY: 45,
     margin: { left: margin, right: margin, bottom: 8 },
     head: [['Colocação', 'Código do aluno', 'Data de nascimento', 'Turma/Série', 'IRA']],
-    body: entries.map((e, i) => [
+    body: rows.map((e, i) => [
       `${i + 1}º`,
       formatStudentCode(e.code) || 'não informado',
       formatBirthDate(e.birthDate),
@@ -282,17 +283,17 @@ export async function generateIraRankingPdf(entries: RankingEntry[], options: Ra
     ]),
     theme: 'grid',
     styles: {
-      fontSize: 10, cellPadding: 2.6, textColor: [35, 45, 55],
+      fontSize: 9.5, cellPadding: 1.7, textColor: [35, 45, 55],
       lineColor: [214, 228, 244], lineWidth: 0.2, valign: 'middle',
     },
-    headStyles: { fillColor: BRAND, textColor: 255, fontStyle: 'bold', halign: 'center', fontSize: 10 },
+    headStyles: { fillColor: BRAND, textColor: 255, fontStyle: 'bold', halign: 'center', fontSize: 9.5 },
     alternateRowStyles: { fillColor: [240, 246, 253] },
     columnStyles: {
       0: { halign: 'center', cellWidth: 30, fontStyle: 'bold' },
       1: { halign: 'center' },
       2: { halign: 'center' },
       3: { halign: 'center' },
-      4: { halign: 'center', fontStyle: 'bold', cellWidth: 32, textColor: BRAND, fontSize: 12 },
+      4: { halign: 'center', fontStyle: 'bold', cellWidth: 32, textColor: BRAND, fontSize: 11 },
     },
     didParseCell: (data) => {
       if (data.section !== 'body') return;
@@ -311,5 +312,11 @@ export async function generateIraRankingPdf(entries: RankingEntry[], options: Ra
     },
   });
 
+  return doc;
+}
+
+/** Gera e baixa o PDF da classificação. Nenhum nome de aluno é usado. */
+export async function generateIraRankingPdf(entries: RankingEntry[], options: RankingPdfOptions) {
+  const doc = await buildIraRankingPdf(entries, options);
   doc.save(`classificacao_ira_${format(new Date(), 'yyyy-MM-dd')}.pdf`);
 }
