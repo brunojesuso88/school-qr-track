@@ -25,6 +25,7 @@ import {
 import { parseGradePageLocal } from '@/lib/gradePageLocal/parseGradePageLocal';
 import { reconcileLocalWithAi } from '@/lib/gradePageLocal/reconcile';
 import { LocalContextStudent } from '@/lib/gradePageLocal/types';
+import { classifyPeriodLabel, isPeriodKind, periodRank } from '@/lib/gradePageLocal/normalize';
 import {
   CONFLICT_LABELS, DetectedStudent, FieldDecision, RegistrationDecision,
   defaultRegistrationDecision, formatDate,
@@ -134,6 +135,40 @@ export const sameGradeValue = (a: number | null, b: number | null) => {
   if (a == null && b == null) return true;
   if (a == null || b == null) return false;
   return Math.round(a * 100) === Math.round(b * 100);
+};
+
+/** Classificação canônica de uma coluna do boletim (rótulo tem prioridade sobre o kind recebido). */
+const columnIsPeriod = (label: string, kind?: string | null) => {
+  const byLabel = classifyPeriodLabel(label);
+  if (byLabel) return byLabel.kind === 'period';
+  return isPeriodKind(kind);
+};
+
+/**
+ * Mantém apenas 1º→4º Período. Média Final, Rec. Final, Cons. Class, Pendência e Final
+ * são descartadas da prévia (não são exibidas, não são gravadas e não entram no IRA).
+ */
+const keepOnlyPeriodColumns = (p: PagePreview): PagePreview => {
+  const periods = (p.periods || [])
+    .filter((period) => columnIsPeriod(period.label, period.kind))
+    .sort((a, b) => periodRank(a.label) - periodRank(b.label) || a.sort_order - b.sort_order)
+    .map((period, index) => ({ ...period, kind: 'period', sort_order: index }));
+  const allowed = new Set(periods.map((period) => normalize(period.label)));
+  const rows = (p.rows || []).filter((r) => allowed.has(normalize(r.period)));
+  return {
+    ...p,
+    periods,
+    rows,
+    stats: {
+      ...p.stats,
+      cells_total: rows.length,
+      grades_read: rows.filter((r) => r.value != null).length,
+      empty_cells: rows.filter((r) => r.value == null && !(r.flags || []).includes('invalid_value')).length,
+      explicit_zero_cells: rows.filter((r) => r.value === 0).length,
+      invalid_values: rows.filter((r) => (r.flags || []).includes('invalid_value')).length,
+      periods: periods.length,
+    },
+  };
 };
 
 export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }: GradesImportDialogProps) => {
@@ -297,6 +332,7 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
   }, [classItem]);
 
   const applyPreview = useCallback(async (p: PagePreview) => {
+    p = keepOnlyPeriodColumns(p);
     setPreview(p);
     setRows((p.rows || []).map((r) => ({ ...r, flags: r.flags || [], source: r.source ?? 'import' })));
     setEditing(false);
@@ -314,6 +350,7 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
 
   /** Grava a prévia da leitura local na sessão (mesmo contrato da Edge Function). */
   const persistPreview = useCallback(async (sessionId: string, pageNumber: number, p: PagePreview) => {
+    p = keepOnlyPeriodColumns(p);
     await supabase.from('grade_import_session_pages')
       .update({ status: 'awaiting_confirmation', preview_json: p as never, error: null })
       .eq('session_id', sessionId).eq('page_number', pageNumber);
@@ -677,13 +714,13 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
       if (!studentId) throw new Error('Selecione o aluno correspondente antes de salvar a página.');
 
       // Períodos e disciplinas desta página
-      const periodPayload = preview.periods.map((p) => ({
+      const periodPayload = preview.periods
+        .filter((p) => columnIsPeriod(p.label, p.kind))
+        .map((p) => ({
         class_id: classItem.id,
         label: p.label,
         normalized_label: p.normalized_label || normalize(p.label),
-        kind: p.kind === 'period'
-          ? 'period'
-          : ['final', 'media_final', 'rec_final', 'cons_class', 'pendencia'].includes(p.kind) ? 'final' : 'unknown',
+        kind: 'period',
         sort_order: p.sort_order,
       }));
       const periodIdByNorm = new Map<string, string>();

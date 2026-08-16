@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { calculateIraMultiPeriod, IraPeriodRef, IraResult, IraSubjectInput } from '@/lib/ira';
+import { isPeriodKind, periodRank } from '@/lib/gradePageLocal/normalize';
 
 export interface GradeSubjectRow {
   id: string;
@@ -171,7 +172,11 @@ async function fetchClassGrades(classId: string, studentIds?: string[]): Promise
   ]);
 
   const subjects = (subjectsRes.data || []) as unknown as GradeSubjectRow[];
-  const periods = (periodsRes.data || []) as unknown as GradePeriodRow[];
+  // Somente 1º→4º Período alimentam as notas exibidas e o IRA. Colunas finais do boletim
+  // (Média Final, Rec. Final, Cons. Class, Pendência, Final) são descartadas na origem.
+  const periods = ((periodsRes.data || []) as unknown as GradePeriodRow[])
+    .filter((p) => isPeriodKind(p.kind))
+    .sort((a, b) => periodRank(a.label) - periodRank(b.label) || a.sort_order - b.sort_order);
   const subjectIds = subjects.map((s) => s.id);
 
   const grades = await fetchGradesPaged(subjectIds, studentIds);
