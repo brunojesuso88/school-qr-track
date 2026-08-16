@@ -1,7 +1,7 @@
 /** Reconstrução da grade do boletim a partir de tokens + coordenadas. Determinístico, sem IA. */
 import {
   classifyPeriodLabel, isAbsenceLabel, isEmptyMarker, isGradeLabel, looksLikeGradeToken,
-  normalizeText, parseGradeToken, periodRank,
+  isIgnoredPeriodKind, normalizeText, parseGradeToken, periodRank,
 } from './normalize';
 import { GridLayout, LocalCell, TextToken, TokenLine } from './types';
 
@@ -99,8 +99,14 @@ export function detectGrid(lines: TokenLine[]): GridLayout | null {
 
   const columns: GridLayout['columns'] = [];
   const absenceColumns: GridLayout['absenceColumns'] = [];
+  const ignoredColumns: GridLayout['ignoredColumns'] = [];
 
   for (const b of bounds) {
+    // Colunas finais (Média Final, Rec. Final, Cons. Class, Pendência, Final) nunca viram nota.
+    if (isIgnoredPeriodKind(b.hit.kind)) {
+      ignoredColumns.push({ start: b.start, end: b.end });
+      continue;
+    }
     const subTokens = subIndex == null
       ? []
       : lines[subIndex].tokens.filter((t) => {
@@ -139,6 +145,7 @@ export function detectGrid(lines: TokenLine[]): GridLayout | null {
   return {
     columns: columns.sort((a, b) => a.sort_order - b.sort_order || a.start - b.start),
     absenceColumns,
+    ignoredColumns,
     subjectColumnEnd,
     headerLineIndex: bestIndex,
     subHeaderLineIndex: subIndex,
@@ -194,7 +201,8 @@ export function buildCells(lines: TokenLine[], grid: GridLayout): BuildCellsResu
     const insideGrid = valueTokens.some((t) => {
       const center = t.x + t.w / 2;
       return grid.columns.some((c) => center >= c.start && center < c.end)
-        || grid.absenceColumns.some((a) => center >= a.start && center < a.end);
+        || grid.absenceColumns.some((a) => center >= a.start && center < a.end)
+        || grid.ignoredColumns.some((a) => center >= a.start && center < a.end);
     });
     if (!insideGrid) continue;
     const byColumn = new Map<string, { texts: string[]; ambiguous: boolean }>();
@@ -209,6 +217,9 @@ export function buildCells(lines: TokenLine[], grid: GridLayout): BuildCellsResu
         droppedAbsenceTokens++;
         continue;
       }
+
+      // Colunas finais do boletim: descartadas antes de qualquer parsing.
+      if (grid.ignoredColumns.some((a) => center >= a.start && center < a.end)) continue;
 
       const owners = grid.columns.filter((c) => center >= c.start && center < c.end);
       if (owners.length === 0) { orphanTokens++; continue; }
