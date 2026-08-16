@@ -1437,9 +1437,9 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
                   {preview.reading.duration_ms != null && (
                     <span className="text-[10px] text-muted-foreground">{preview.reading.duration_ms}ms</span>
                   )}
-                  {Boolean(preview.reading.divergences) && (
+                  {currentDivergenceCount > 0 && (
                     <Badge variant="destructive" className="text-[10px]">
-                      {preview.reading.divergences} divergência(s) local × IA
+                      {currentDivergenceCount} divergência(s) local × IA
                     </Badge>
                   )}
                 </div>
