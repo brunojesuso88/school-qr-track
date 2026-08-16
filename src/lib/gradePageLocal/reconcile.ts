@@ -5,6 +5,14 @@
 import { isEmptyMarker, normalizeText } from './normalize';
 import { sameGradeValue, stripReconciliationFlags } from './gradeCompare';
 
+export interface ReconcilePolicy {
+  /**
+   * Leitura local é fonte de verdade: divergências da IA viram AVISO
+   * (`ai_validation_disagreement`) e nunca bloqueiam a confirmação manual.
+   */
+  localAuthoritative?: boolean;
+}
+
 interface AnyRow {
   subject: string;
   period: string;
@@ -38,16 +46,21 @@ export interface ReconcileResult<T> {
   divergences: number;
   /** Células vazias que só a IA listou e foram descartadas (não bloqueiam). */
   aiEmptyIgnored: number;
+  /** Notas numéricas que só a IA viu e foram descartadas por autoridade local. */
+  aiOnlyNumericIgnored: number;
 }
 
 /** Mantém a estrutura da prévia LOCAL e apenas anota a comparação com a leitura da IA. */
-export function reconcileLocalWithAi<T>(local: T, ai: AnyPreview): ReconcileResult<T> {
+export function reconcileLocalWithAi<T>(local: T, ai: AnyPreview, policy: ReconcilePolicy = {}): ReconcileResult<T> {
   const base = local as unknown as AnyPreview;
+  const authoritative = policy.localAuthoritative === true;
+  const divergenceFlag = authoritative ? 'ai_validation_disagreement' : 'reconciliation_divergence';
   const aiByKey = new Map<string, AnyRow>();
   (ai.rows || []).forEach((r) => aiByKey.set(cellKey(r), r));
 
   let divergences = 0;
   let aiEmptyIgnored = 0;
+  let aiOnlyNumericIgnored = 0;
   const rows: AnyRow[] = (base.rows || []).map((row) => {
     const key = cellKey(row);
     const aiRow = aiByKey.get(key);
@@ -60,16 +73,18 @@ export function reconcileLocalWithAi<T>(local: T, ai: AnyPreview): ReconcileResu
       return { ...row, flags: [...flags], second_pass_value: aiRow.raw_value ?? null };
     }
     divergences++;
-    flags.add('reconciliation_divergence');
+    flags.add(divergenceFlag);
     // valor LOCAL permanece visível; o da IA vai para diagnóstico/2ª leitura
     return { ...row, flags: [...flags], second_pass_value: aiRow.raw_value ?? '—' };
   });
 
   // Células que só a IA viu:
   // - sem nota (vazio/`—`) => descartadas: a IA não pode criar disciplina vazia inexistente;
-  // - com nota numérica => divergência obrigatória para revisão humana.
+  // - com nota numérica e leitura local NÃO autoritativa => revisão humana obrigatória;
+  // - com nota numérica e leitura local AUTORITATIVA => descartada (IA nunca cria nota).
   aiByKey.forEach((aiRow) => {
     if (isEmptyAiCell(aiRow)) { aiEmptyIgnored++; return; }
+    if (authoritative) { aiOnlyNumericIgnored++; return; }
     divergences++;
     rows.push({
       ...aiRow,
@@ -96,10 +111,13 @@ export function reconcileLocalWithAi<T>(local: T, ai: AnyPreview): ReconcileResu
       ...(base.reading ?? {}),
       mode: 'local_validated',
       escalated: true,
+      authority: authoritative ? 'authoritative' : 'needs_validation',
+      ai_used: true,
       divergences,
       ai_empty_ignored: aiEmptyIgnored,
+      ai_only_numeric_ignored: aiOnlyNumericIgnored,
     },
   } as unknown as T;
 
-  return { preview, divergences, aiEmptyIgnored };
+  return { preview, divergences, aiEmptyIgnored, aiOnlyNumericIgnored };
 }
