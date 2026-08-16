@@ -176,6 +176,7 @@ const IRASettings = () => {
     toast.success(`Série definida: ${classSeriesLabel(value)}.`);
   };
 
+  const updateSubject = async (subject: SubjectRow, patch: Partial<SubjectRow>) => {
     setSubjects((prev) => prev.map((s) => (s.id === subject.id ? { ...s, ...patch } : s)));
     const { error } = await supabase.from('grade_subjects').update(patch as never).eq('id', subject.id);
     if (error) {
