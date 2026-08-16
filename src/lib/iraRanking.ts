@@ -329,35 +329,25 @@ function drawTargetIcon(doc: jsPDF, cx: number, cy: number, r: number) {
   doc.circle(cx, cy, r * 0.22, 'F');
 }
 
-const FOOTER_MESSAGES = [
-  'CADA PONTO TE APROXIMA DO TOPO!',
-  'SUPERE SEUS LIMITES, ALCANCE SEUS SONHOS!',
-  'O CONHECIMENTO É O SEU MAIOR PODER!',
-  'CONTINUE AVANÇANDO. O MELHOR AINDA ESTÁ POR VIR!',
-];
+/** Única frase motivacional exibida no rodapé do PDF. */
+export const FOOTER_MESSAGE = 'CONTINUE AVANÇANDO. O MELHOR AINDA ESTÁ POR VIR!';
 
-/** Rodapé motivacional em faixa azul escura, dividido em 4 blocos. */
+/** Rodapé motivacional: faixa única, elegante, com a frase centralizada. */
 function drawMotivationFooter(doc: jsPDF, x: number, y: number, width: number, height: number) {
   doc.setFillColor(...NAVY);
-  doc.rect(x, y, width, height, 'F');
+  doc.roundedRect(x, y, width, height, 1.5, 1.5, 'F');
   doc.setFillColor(...ROYAL);
-  doc.rect(x, y, width, 1.1, 'F');
+  doc.roundedRect(x, y, width, 1.4, 0.7, 0.7, 'F');
 
-  const block = width / FOOTER_MESSAGES.length;
+  const cy = y + height / 2 + 1.4;
   doc.setTextColor(255, 255, 255);
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(7.2);
-  FOOTER_MESSAGES.forEach((msg, i) => {
-    const bx = x + block * i;
-    const cy = y + height / 2;
-    if (i > 0) {
-      doc.setDrawColor(60, 110, 170);
-      doc.setLineWidth(0.3);
-      doc.line(bx, y + 2.4, bx, y + height - 2.4);
-    }
-    drawStar(doc, bx + 5.4, cy, 1.6, [186, 214, 245]);
-    doc.text(msg, bx + 9.5, cy + 1.1, { maxWidth: block - 13 });
-  });
+  doc.setFontSize(11);
+  doc.text(FOOTER_MESSAGE, x + width / 2, cy, { align: 'center', charSpace: 0.5 });
+
+  const half = doc.getTextWidth(FOOTER_MESSAGE) / 2 + 8;
+  drawStar(doc, x + width / 2 - half, y + height / 2 + 0.4, 1.8, [186, 214, 245]);
+  drawStar(doc, x + width / 2 + half, y + height / 2 + 0.4, 1.8, [186, 214, 245]);
 }
 
 /** Monta o documento da classificação (uma única página A4 paisagem). */
