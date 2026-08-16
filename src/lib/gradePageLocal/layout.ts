@@ -293,7 +293,11 @@ export function buildCells(lines: TokenLine[], grid: GridLayout, anchors: Subjec
       byColumn.set(column.label, entry);
     }
 
-    subjects.push(rowName);
+    // Identidade canônica: alias/eixo do boletim (ex. "APROFUNDAMENTO IF - CNS - I")
+    // passa a ser gravado com o nome canônico da matriz, evitando duplicatas.
+    const rowAnchor = anchors.length > 0 ? matchSubjectAnchor(rowName, anchors) : null;
+    const canonicalName = rowAnchor?.anchor.canonical ?? rowName;
+    subjects.push(canonicalName);
     for (const column of grid.columns) {
       const entry = byColumn.get(column.label);
       const distinct = [...new Set((entry?.texts ?? []).filter((t) => !isEmptyMarker(t)))];
@@ -302,7 +306,7 @@ export function buildCells(lines: TokenLine[], grid: GridLayout, anchors: Subjec
       const { value, invalid } = parseGradeToken(rawValue);
       if (ambiguous) ambiguousCells++;
       cells.push({
-        subject: rowName,
+        subject: canonicalName,
         period: column.label,
         period_kind: column.kind,
         raw_value: rawValue,
