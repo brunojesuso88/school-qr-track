@@ -1096,8 +1096,12 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
         (subjectRows || []).forEach((s: { id: string; normalized_name: string }) => subjectIdByNorm.set(s.normalized_name, s.id));
       }
 
+      // Confirmação manual é SOBERANA: apenas leitura local/edições manuais,
+      // sem linhas da IA e sem flags de reconciliação no payload acadêmico.
+      const academicRows = mode === 'manual' ? rowsForManualLocalConfirmation(rows) : rows;
+
       // Notas da página (vazio = null; 0,00 = zero real; faltas nunca chegam aqui)
-      const payload = rows
+      const payload = academicRows
         .filter((r) => !r.flags.includes('invalid_value'))
         .map((row) => {
           const subjectId = subjectIdByNorm.get(normalize(row.subject));
@@ -1169,7 +1173,14 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
             ? (autoEval.appliedExceptionCodes.length > 0
               ? `auto:${autoEval.appliedExceptionCodes.join(',')}`
               : 'auto')
-            : 'manual',
+            : 'manual:local_confirmed',
+          preview_json: {
+            ...preview,
+            rows: academicRows,
+            reading: preview.reading
+              ? { ...preview.reading, divergences: 0, resolved_by: 'manual_local_confirmation' }
+              : preview.reading,
+          } as never,
         })
         .eq('session_id', session.id).eq('page_number', preview.page);
 
