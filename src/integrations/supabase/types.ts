@@ -265,6 +265,7 @@ export type Database = {
       grade_import_sessions: {
         Row: {
           auto_accept: boolean
+          auto_accept_rules: Json
           class_id: string
           confirmed_pages: number
           context: Json
@@ -283,6 +284,7 @@ export type Database = {
         }
         Insert: {
           auto_accept?: boolean
+          auto_accept_rules?: Json
           class_id: string
           confirmed_pages?: number
           context?: Json
@@ -301,6 +303,7 @@ export type Database = {
         }
         Update: {
           auto_accept?: boolean
+          auto_accept_rules?: Json
           class_id?: string
           confirmed_pages?: number
           context?: Json
