@@ -44,6 +44,11 @@ describe('exportação da classificação do IRA', () => {
     const raw = Buffer.from(text.split(',')[1], 'base64').toString('latin1');
     expect(raw).not.toContain('Documento de divulga');
     expect(raw).not.toContain('gina 1');
+    // Metadados removidos: sem "Base:" e sem contagem de elegíveis
+    expect(raw).not.toContain('Base:');
+    expect(raw).not.toContain('eleg');
+    expect(raw).toContain('Emitido em');
+    expect(raw).toContain('Turmas/S');
 
     const rows = entries.slice(0, RANKING_LIMIT);
     expect(rows).toHaveLength(15);
@@ -113,8 +118,19 @@ describe('exportação da classificação do IRA', () => {
     expect(raw).toContain('RANKING DO IRA');
     expect(raw).toContain('RIE DO ENSINO M'); // "SÉRIE DO ENSINO MÉDIO" (acentos codificados)
     expect(seriesLabel('2')).toBe('2ª Série do Ensino Médio');
-    expect(FOOTER_MESSAGE).toBe('CONTINUE AVANÇANDO. O MELHOR AINDA ESTÁ POR VIR!');
-    ['CADA PONTO TE APROXIMA DO TOPO', 'SUPERE SEUS LIMITES', 'MAIOR PODER'].forEach((t) =>
+    expect(FOOTER_MESSAGE).toBe('Você não precisa ser melhor que ninguém para ser o melhor de si');
+    ['CONTINUE AVAN', 'CADA PONTO TE APROXIMA DO TOPO', 'SUPERE SEUS LIMITES', 'MAIOR PODER'].forEach((t) =>
       expect(raw).not.toContain(t));
+  });
+
+  it('usa a faixa "OS TOP 15 - MELHORES IRA" com hífen simples', async () => {
+    const doc = await buildIraRankingPdf(entries, {
+      classNames: ['1ª Série A', '1ª Série B'], periodsLabel: '', totalEligible: entries.length, series: '1',
+    });
+    expect(doc.getNumberOfPages()).toBe(1);
+    const raw = Buffer.from(doc.output('datauristring').split(',')[1], 'base64').toString('latin1');
+    expect(raw).toContain('OS TOP 15');
+    expect(raw).toContain('- MELHORES IRA');
+    expect(raw).not.toContain('TOP 15 \\227');
   });
 });
