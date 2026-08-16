@@ -4,6 +4,7 @@ import {
   isIgnoredPeriodKind, normalizeText, parseGradeToken, periodRank,
 } from './normalize';
 import { GridLayout, LocalCell, TextToken, TokenLine } from './types';
+import { AnchorMatch, SubjectAnchor, anchorConfidence, matchSubjectAnchor } from './subjectAnchors';
 
 /** Agrupa tokens em linhas por proximidade vertical (tolerância proporcional à fonte). */
 export function groupLines(tokens: TextToken[]): TokenLine[] {
@@ -178,23 +179,55 @@ export interface BuildCellsResult {
   ambiguousCells: number;
   droppedAbsenceTokens: number;
   orphanTokens: number;
+  /** Disciplinas reconhecidas por âncora curricular sem nenhuma nota lançada. */
+  anchoredSubjects: string[];
+  /** Linhas de disciplina fundidas (nome quebrado em duas linhas do PDF). */
+  mergedSubjectLines: number;
 }
 
-/** Vincula cada token numérico à célula (disciplina × período) pela geometria. */
-export function buildCells(lines: TokenLine[], grid: GridLayout): BuildCellsResult {
+/**
+ * Vincula cada token numérico à célula (disciplina × período) pela geometria.
+ * Quando a linha tem nome de disciplina e nenhum token dentro da grade, tenta reconhecer
+ * a disciplina pelas âncoras curriculares da turma e materializa 4 células vazias (null).
+ */
+export function buildCells(lines: TokenLine[], grid: GridLayout, anchors: SubjectAnchor[] = []): BuildCellsResult {
   const cells: LocalCell[] = [];
   const subjects: string[] = [];
+  const anchoredSubjects: string[] = [];
   let ambiguousCells = 0;
   let droppedAbsenceTokens = 0;
   let orphanTokens = 0;
+  let mergedSubjectLines = 0;
 
   const firstDataLine = (grid.subHeaderLineIndex ?? grid.headerLineIndex) + 1;
+
+  /** Nome de disciplina pendente: linha só com texto que ainda não casou com âncora. */
+  let pending: { text: string; y: number; height: number } | null = null;
+
+  /** Materializa a linha inteira vazia (uma célula null por período). */
+  const pushAnchoredRow = (name: string, match: AnchorMatch) => {
+    anchoredSubjects.push(match.anchor.canonical);
+    subjects.push(name);
+    for (const column of grid.columns) {
+      cells.push({
+        subject: name,
+        period: column.label,
+        period_kind: column.kind,
+        raw_value: null,
+        value: null,
+        invalid: false,
+        confidence: anchorConfidence(match.kind),
+        ambiguous: false,
+        anchored: true,
+      });
+    }
+  };
 
   for (let i = firstDataLine; i < lines.length; i++) {
     const line = lines[i];
     const subjectTokens = line.tokens.filter((t) => t.x + t.w / 2 < grid.subjectColumnEnd);
     const subjectName = subjectTokens.map((t) => t.text.trim()).filter(Boolean).join(' ').trim();
-    if (!subjectName || !isSubjectLabel(subjectName)) continue;
+    if (!subjectName || !isSubjectLabel(subjectName)) { pending = null; continue; }
 
     const valueTokens = line.tokens.filter((t) => t.x + t.w / 2 >= grid.subjectColumnEnd);
     // Linha de dados só é considerada se houver token DENTRO da grade (nota ou falta).
@@ -204,7 +237,33 @@ export function buildCells(lines: TokenLine[], grid: GridLayout): BuildCellsResu
         || grid.absenceColumns.some((a) => center >= a.start && center < a.end)
         || grid.ignoredColumns.some((a) => center >= a.start && center < a.end);
     });
-    if (!insideGrid) continue;
+
+    // Fusão segura: nome quebrado em duas linhas verticalmente próximas na coluna de disciplinas.
+    const mergeable = pending
+      && Math.abs(pending.y - line.y) <= Math.max(pending.height, line.height) * 2.2;
+    const mergedName = mergeable ? `${pending!.text} ${subjectName}`.replace(/\s+/g, ' ').trim() : null;
+
+    let rowName = subjectName;
+    if (mergedName && anchors.length > 0) {
+      const plain = matchSubjectAnchor(subjectName, anchors);
+      const merged = matchSubjectAnchor(mergedName, anchors);
+      if (!plain && merged) { rowName = mergedName; mergedSubjectLines++; }
+    }
+
+    if (!insideGrid) {
+      // Linha real de disciplina sem nenhuma nota lançada: só entra se a âncora for reconhecida.
+      if (anchors.length > 0) {
+        const direct = matchSubjectAnchor(subjectName, anchors);
+        if (direct) { pushAnchoredRow(subjectName, direct); pending = null; continue; }
+        if (mergedName) {
+          const merged = matchSubjectAnchor(mergedName, anchors);
+          if (merged) { mergedSubjectLines++; pushAnchoredRow(mergedName, merged); pending = null; continue; }
+        }
+      }
+      pending = { text: subjectName, y: line.y, height: line.height };
+      continue;
+    }
+    pending = null;
     const byColumn = new Map<string, { texts: string[]; ambiguous: boolean }>();
 
     for (const token of valueTokens) {
@@ -234,7 +293,7 @@ export function buildCells(lines: TokenLine[], grid: GridLayout): BuildCellsResu
       byColumn.set(column.label, entry);
     }
 
-    subjects.push(subjectName);
+    subjects.push(rowName);
     for (const column of grid.columns) {
       const entry = byColumn.get(column.label);
       const distinct = [...new Set((entry?.texts ?? []).filter((t) => !isEmptyMarker(t)))];
@@ -243,7 +302,7 @@ export function buildCells(lines: TokenLine[], grid: GridLayout): BuildCellsResu
       const { value, invalid } = parseGradeToken(rawValue);
       if (ambiguous) ambiguousCells++;
       cells.push({
-        subject: subjectName,
+        subject: rowName,
         period: column.label,
         period_kind: column.kind,
         raw_value: rawValue,
@@ -255,5 +314,8 @@ export function buildCells(lines: TokenLine[], grid: GridLayout): BuildCellsResu
     }
   }
 
-  return { cells, subjects, ambiguousCells, droppedAbsenceTokens, orphanTokens };
+  return {
+    cells, subjects, ambiguousCells, droppedAbsenceTokens, orphanTokens,
+    anchoredSubjects, mergedSubjectLines,
+  };
 }

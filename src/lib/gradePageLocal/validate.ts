@@ -1,13 +1,14 @@
 /** Validação determinística da leitura local + score de confiança (critérios da Fase 2). */
 import { normalizeText } from './normalize';
-import { GridLayout, LocalCell, LocalValidation, TextToken } from './types';
+import { buildSubjectAnchors, matchSubjectAnchor } from './subjectAnchors';
+import { GridLayout, LocalCell, LocalExpectedSubject, LocalValidation, TextToken } from './types';
 
 export interface ValidateInput {
   tokens: TextToken[];
   grid: GridLayout | null;
   cells: LocalCell[];
   subjects: string[];
-  expectedSubjects: { name: string }[];
+  expectedSubjects: LocalExpectedSubject[];
   ambiguousCells: number;
   orphanTokens: number;
   studentName: string | null;
@@ -37,9 +38,22 @@ export function validateLocalPage(input: ValidateInput): LocalValidation {
   if (subjects.length === 0) reasons.push('Nenhuma linha de disciplina reconhecida');
 
   const uniqueSubjects = new Set(subjects.map((s) => normalizeText(s)));
-  const coverage = expectedSubjects.length > 0 ? uniqueSubjects.size / expectedSubjects.length : 1;
-  if (expectedSubjects.length > 0 && coverage < SUBJECT_COVERAGE_CONFIDENT) {
-    reasons.push(`Disciplinas lidas abaixo do esperado (${uniqueSubjects.size}/${expectedSubjects.length})`);
+  // Cobertura por identidade canônica (nome/alias/abreviação), não por igualdade bruta de string.
+  const anchors = buildSubjectAnchors(expectedSubjects);
+  const matchedCanonical = new Set<string>();
+  let unrecognized = 0;
+  uniqueSubjects.forEach((norm) => {
+    const match = matchSubjectAnchor(norm, anchors);
+    if (match) matchedCanonical.add(normalizeText(match.anchor.canonical));
+    else unrecognized++;
+  });
+  const expectedCoverage = expectedSubjects.length > 0 ? matchedCanonical.size / expectedSubjects.length : 1;
+  const recognition = uniqueSubjects.size > 0 ? matchedCanonical.size / uniqueSubjects.size : 1;
+  // Disciplinas esperadas que simplesmente não constam do boletim não são erro de leitura;
+  // o sinal real de dúvida é a linha lida que NÃO foi reconhecida na matriz da turma.
+  const coverage = expectedSubjects.length > 0 ? Math.max(expectedCoverage, recognition) : 1;
+  if (expectedSubjects.length > 0 && recognition < SUBJECT_COVERAGE_CONFIDENT) {
+    reasons.push(`Disciplinas lidas não reconhecidas na matriz da turma (${unrecognized}/${uniqueSubjects.size})`);
   }
   if (ambiguousCells > 0) reasons.push(`${ambiguousCells} célula(s) ambígua(s) por geometria`);
   if (orphanTokens > 0) reasons.push(`${orphanTokens} valor(es) fora das colunas conhecidas`);

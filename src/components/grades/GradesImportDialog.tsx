@@ -31,7 +31,8 @@ import {
 } from '@/lib/gradePageLocal/pdfText';
 import { parseGradePageLocal } from '@/lib/gradePageLocal/parseGradePageLocal';
 import { reconcileLocalWithAi } from '@/lib/gradePageLocal/reconcile';
-import { LocalContextStudent } from '@/lib/gradePageLocal/types';
+import { LocalContextStudent, LocalExpectedSubject } from '@/lib/gradePageLocal/types';
+import { CatalogSubject, buildEffectiveSubjectMatrix } from '@/lib/gradePageLocal/effectiveMatrix';
 import { classifyPeriodLabel, isPeriodKind, periodRank } from '@/lib/gradePageLocal/normalize';
 import {
   CONFLICT_LABELS, DetectedStudent, FieldDecision, RegistrationDecision,
@@ -87,6 +88,12 @@ interface PagePreview {
     divergences?: number;
     absence_tokens_dropped?: number;
     duration_ms?: number;
+    /** Células vazias vistas só pela IA e descartadas na reconciliação. */
+    ai_empty_ignored?: number;
+    /** Disciplinas materializadas pela matriz da turma (sem notas lançadas). */
+    anchored_subjects?: string[];
+    /** Linhas de disciplina com nome quebrado em duas linhas e fundidas. */
+    merged_subject_lines?: number;
   };
 }
 
@@ -223,7 +230,7 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
   const [readingMode, setReadingMode] = useState<ReadingMode>('local_ai');
   const pdfDocRef = useRef<LocalPdfDocument | null>(null);
   const localStudentsRef = useRef<LocalContextStudent[]>([]);
-  const localExpectedRef = useRef<{ name: string; weekly_classes?: number | null }[]>([]);
+  const localExpectedRef = useRef<LocalExpectedSubject[]>([]);
   const [localTimings, setLocalTimings] = useState<number[]>([]);
   const [localSolvedPages, setLocalSolvedPages] = useState(0);
 
@@ -346,7 +353,21 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
       school_code: s.school_code, birth_date: s.birth_date,
       mother_name: s.mother_name, father_name: s.father_name,
     }));
-    localExpectedRef.current = expected.map((s) => ({ name: s.name, weekly_classes: s.weekly_classes }));
+    // Matriz efetiva de âncoras: mapeamento da turma + disciplinas já importadas + catálogo da série.
+    const [{ data: gradeSubj }, { data: classRow }] = await Promise.all([
+      supabase.from('grade_subjects').select('name, weekly_classes').eq('class_id', classItem.id),
+      supabase.from('classes').select('series').eq('id', classItem.id).maybeSingle(),
+    ]);
+    const series = (classRow as { series?: string | null } | null)?.series ?? null;
+    const { data: catalog } = await supabase
+      .from('mapping_global_subjects')
+      .select('name, abbreviation, aliases, series, default_weekly_classes');
+    localExpectedRef.current = buildEffectiveSubjectMatrix({
+      mapping: expected.map((s) => ({ name: s.name, weekly_classes: s.weekly_classes })),
+      imported: (gradeSubj || []) as { name: string; weekly_classes: number | null }[],
+      catalog: (catalog || []) as CatalogSubject[],
+      series,
+    });
     return { students, expected, className };
   }, [classItem, resolveCurrentClassName]);
 
@@ -545,11 +566,21 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
       let finalPreview = aiPreview;
       if (local?.preview && local.ok) {
         // A IA valida: a leitura local permanece visível e as divergências são sinalizadas.
-        const { preview: merged } = reconcileLocalWithAi(
+        const { preview: merged, aiEmptyIgnored } = reconcileLocalWithAi(
           local.preview as unknown as PagePreview,
           aiPreview as unknown as { rows: ReviewRow[]; notes?: string[] },
         );
-        finalPreview = merged;
+        finalPreview = {
+          ...merged,
+          reading: merged.reading
+            ? {
+                ...merged.reading,
+                ai_empty_ignored: aiEmptyIgnored,
+                anchored_subjects: (local.preview as unknown as PagePreview).reading?.anchored_subjects ?? [],
+                merged_subject_lines: (local.preview as unknown as PagePreview).reading?.merged_subject_lines ?? 0,
+              }
+            : merged.reading,
+        };
         await persistPreview(sessionId, pageNumber, finalPreview);
       } else if (finalPreview.reading) {
         finalPreview = {
@@ -1510,6 +1541,20 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
                 hasOtherBlockers={otherBlockers.length > 0}
                 applying={applyingLocalReading}
                 onUseLocalReading={handleUseLocalReading}
+                aiEmptyIgnored={preview.reading?.ai_empty_ignored ?? 0}
+                anchoredSubjects={preview.reading?.anchored_subjects ?? []}
+              />
+            )}
+            {!divergenceDiag.hasDivergence
+              && ((preview.reading?.ai_empty_ignored ?? 0) > 0
+                || (preview.reading?.anchored_subjects?.length ?? 0) > 0) && (
+              <GradesDivergencePanel
+                divergences={[]}
+                ruleActive={autoRules.use_local_on_reconciliation}
+                allLocallyEligible
+                hasOtherBlockers={false}
+                aiEmptyIgnored={preview.reading?.ai_empty_ignored ?? 0}
+                anchoredSubjects={preview.reading?.anchored_subjects ?? []}
               />
             )}
             {sessionSummary}

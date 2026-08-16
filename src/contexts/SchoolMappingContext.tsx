@@ -28,6 +28,10 @@ export interface MappingGlobalSubject {
   name: string;
   abbreviation?: string | null;
   default_weekly_classes: number;
+  /** Nomes equivalentes desta disciplina como aparecem nos boletins em PDF. */
+  aliases?: string[] | null;
+  /** Séries do Ensino Médio em que esta disciplina compõe a matriz padrão. */
+  series?: string[] | null;
   created_at: string;
 }
 
