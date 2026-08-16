@@ -19,6 +19,8 @@ import { GradesReviewTable, ReviewRow } from './GradesReviewTable';
 import { GradesRegistrationAudit } from './GradesRegistrationAudit';
 import { GradesClassMismatchPanel } from './GradesClassMismatchPanel';
 import { evaluateAutoAccept } from './gradesAutoAccept';
+import { useAuth } from '@/contexts/AuthContext';
+import { digitsOnly, findGlobalMatch, nameTokens, pickClassName } from '@/lib/gradePageLocal/studentMatch';
 import {
   closePdfDocument, extractPageTokens, LocalPdfDocument, openPdfDocument,
 } from '@/lib/gradePageLocal/pdfText';
@@ -101,8 +103,16 @@ interface GradesImportDialogProps {
   onImported?: () => void;
 }
 
-type Step = 'select' | 'resume' | 'processing' | 'page' | 'saving' | 'summary' | 'failed';
+type Step = 'select' | 'resume' | 'processing' | 'page' | 'saving' | 'summary' | 'failed' | 'context_error';
 type PageAction = 'link' | 'create' | 'ignore' | null;
+
+interface OtherClassMatch {
+  id: string;
+  full_name: string;
+  class: string;
+  school_code: string | null;
+  by: 'code' | 'name';
+}
 /** Modo de leitura (feature flag). Padrão: local com validação da IA quando necessário. */
 type ReadingMode = 'local_ai' | 'always_ai' | 'ai_only';
 
@@ -173,6 +183,8 @@ const keepOnlyPeriodColumns = (p: PagePreview): PagePreview => {
 
 export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }: GradesImportDialogProps) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { userRole } = useAuth();
+  const canEditRegistration = userRole === 'admin' || userRole === 'direction';
   const [step, setStep] = useState<Step>('select');
   const [error, setError] = useState<string | null>(null);
   const [session, setSession] = useState<SessionState | null>(null);
@@ -189,6 +201,10 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
   const [identicalKeys, setIdenticalKeys] = useState<Set<string>>(new Set());
   const [conflictStrategy, setConflictStrategy] = useState<'keep' | 'overwrite'>('keep');
   const [effectiveName, setEffectiveName] = useState('');
+  const effectiveNameRef = useRef('');
+  const [contextBlock, setContextBlock] = useState<{ className: string; found: number } | null>(null);
+  const [otherClassMatch, setOtherClassMatch] = useState<OtherClassMatch | null>(null);
+  const [movingStudent, setMovingStudent] = useState(false);
   const [classDecision, setClassDecision] = useState<'pending' | 'resolved'>('resolved');
   const [renamingClass, setRenamingClass] = useState(false);
   const [savedTotal, setSavedTotal] = useState(0);
@@ -219,6 +235,9 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
     setConflictStrategy('keep');
     setClassDecision('resolved');
     setRenamingClass(false);
+    setContextBlock(null);
+    setOtherClassMatch(null);
+    setMovingStudent(false);
     setSavedTotal(0);
     setAutoAccept(false);
     setAutoApprovedPage(null);
