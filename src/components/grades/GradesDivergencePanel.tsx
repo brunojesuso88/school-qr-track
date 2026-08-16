@@ -19,6 +19,10 @@ interface GradesDivergencePanelProps {
   aiEmptyIgnored?: number;
   /** Disciplinas reconhecidas pela matriz da turma sem notas lançadas. */
   anchoredSubjects?: string[];
+  /** Todas as divergências são apenas discordância da IA (leitura local autoritativa). */
+  advisoryOnly?: boolean;
+  /** Notas sugeridas apenas pela IA e descartadas por autoridade local. */
+  aiOnlyNumericIgnored?: number;
 }
 
 const fmt = (raw: string | null) => (raw && raw.trim() ? raw : 'vazio (não informado no boletim)');
@@ -32,8 +36,10 @@ export const GradesDivergencePanel = ({
   onUseLocalReading,
   aiEmptyIgnored = 0,
   anchoredSubjects = [],
+  advisoryOnly = false,
+  aiOnlyNumericIgnored = 0,
 }: GradesDivergencePanelProps) => {
-  const info = aiEmptyIgnored > 0 || anchoredSubjects.length > 0;
+  const info = aiEmptyIgnored > 0 || anchoredSubjects.length > 0 || aiOnlyNumericIgnored > 0;
   if (divergences.length === 0 && !info) return null;
 
   const infoBlock = info ? (
@@ -42,6 +48,12 @@ export const GradesDivergencePanel = ({
         <p>
           {aiEmptyIgnored} célula(s) vazia(s) apontada(s) apenas pela IA foram desconsideradas: célula sem nota no
           boletim não é divergência.
+        </p>
+      )}
+      {aiOnlyNumericIgnored > 0 && (
+        <p>
+          A IA sugeriu {aiOnlyNumericIgnored} valor(es) não encontrado(s) pela leitura local; a leitura local
+          autoritativa foi preservada.
         </p>
       )}
       {anchoredSubjects.length > 0 && (
@@ -62,12 +74,21 @@ export const GradesDivergencePanel = ({
     );
   }
   return (
-    <Alert variant="destructive">
+    <Alert className={advisoryOnly ? 'border-amber-500/50 text-amber-700 dark:text-amber-400' : undefined}
+      variant={advisoryOnly ? 'default' : 'destructive'}>
       <ScanSearch className="w-4 h-4" />
       <AlertTitle className="text-sm">
-        Divergência entre leituras — {divergences.length} célula(s)
+        {advisoryOnly
+          ? `Validação IA discordou da leitura local — ${divergences.length} célula(s)`
+          : `Divergência entre leituras — ${divergences.length} célula(s)`}
       </AlertTitle>
       <AlertDescription className="text-xs space-y-2">
+        {advisoryOnly && (
+          <p className="font-medium">
+            Validação IA discordou da leitura local. A leitura local possui alta confiança e será preservada. Você pode
+            conferir e confirmar normalmente.
+          </p>
+        )}
         <p className="text-muted-foreground">
           <span className="font-medium">Leitura local</span> = valor extraído diretamente do PDF do boletim.{' '}
           <span className="font-medium">IA</span> = segunda leitura, usada apenas para validar. A IA nunca substitui a
@@ -111,7 +132,7 @@ export const GradesDivergencePanel = ({
           </ul>
         </ScrollArea>
         {infoBlock}
-        {allLocallyEligible ? (
+        {advisoryOnly ? null : allLocallyEligible ? (
           <div className="space-y-1">
             {onUseLocalReading && !ruleActive && (
               <Button size="sm" onClick={onUseLocalReading} disabled={applying}>
