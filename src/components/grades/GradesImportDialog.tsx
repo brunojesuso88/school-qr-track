@@ -1387,6 +1387,52 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
                 continuarão exigindo sua confirmação. Células vazias não são erro e faltas seguem ignoradas.
               </p>
               {autoAccept && (
+                <div className="rounded-md border bg-muted/40 p-2 space-y-2">
+                  <p className="text-[11px] font-medium">Exceções permitidas (ignorar estes avisos no modo automático)</p>
+                  <div className="flex items-start gap-2">
+                    <Switch
+                      id="rule-registry"
+                      className="mt-0.5"
+                      checked={autoRules.use_pdf_registry && canEditRegistration}
+                      disabled={!canEditRegistration}
+                      onCheckedChange={(v) => handleToggleRule('use_pdf_registry', v)}
+                    />
+                    <div>
+                      <Label htmlFor="rule-registry" className="text-xs font-medium">
+                        Dados cadastrais divergentes — usar automaticamente os dados do boletim
+                      </Label>
+                      <p className="text-[11px] text-muted-foreground">
+                        Código, data de nascimento, nome da mãe e nome do pai são atualizados pelo boletim (inclusive
+                        quando o cadastro está vazio) e a alteração fica registrada na auditoria.
+                        {!canEditRegistration && ' Disponível apenas para administração e direção.'}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <Switch
+                      id="rule-fuzzy"
+                      className="mt-0.5"
+                      checked={autoRules.accept_unique_fuzzy}
+                      onCheckedChange={(v) => handleToggleRule('accept_unique_fuzzy', v)}
+                    />
+                    <div>
+                      <Label htmlFor="rule-fuzzy" className="text-xs font-medium">
+                        Nome semelhante com candidato único — aceitar vínculo sugerido automaticamente
+                      </Label>
+                      <p className="text-[11px] text-muted-foreground">
+                        Vale somente para semelhança ≥ 0,85 com exatamente um aluno da turma. Homônimos, ambiguidade e
+                        aluno de outra turma continuam exigindo decisão manual.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+              {autoAccept && autoEval.appliedExceptions.length > 0 && (
+                <p className="text-[11px] text-amber-600">
+                  Exceções aplicadas nesta página: {autoEval.appliedExceptions.join(' · ')}
+                </p>
+              )}
+              {autoAccept && (
                 autoEval.eligible && canConfirmPage ? (
                   <Badge className="text-[10px] bg-green-600 hover:bg-green-600">⚡ Aprovada automaticamente</Badge>
                 ) : (
