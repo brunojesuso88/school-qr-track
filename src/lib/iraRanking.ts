@@ -335,25 +335,22 @@ export async function buildIraRankingPdf(entries: RankingEntry[], options: Ranki
   doc.setLineWidth(0.3);
   doc.rect(margin - 1.6, margin - 1.6, pageWidth - (margin - 1.6) * 2, pageHeight - (margin - 1.6) * 2, 'S');
 
-  // Brasão (canto superior esquerdo) em destaque, cores originais preservadas
-  const logo = await loadLogo(options.logoUrl ?? '');
-  if (logo) {
-    try {
-      // Encaixe proporcional dentro do box do brasão (sem distorcer).
-      const box = 46;
-      const props = doc.getImageProperties(logo);
-      const ratio = props.width && props.height ? props.width / props.height : 1;
-      const w = ratio >= 1 ? box : box * ratio;
-      const h = ratio >= 1 ? box / ratio : box;
-      doc.addImage(logo, 'PNG', margin + 1 + (box - w) / 2, margin + 1 + (box - h) / 2, w, h);
-    } catch {
-      /* ignora logo inválido */
-    }
-  }
+  // Brasão (canto superior esquerdo) e mascote (canto superior direito).
+  const LOGO_BOX = 46;
+  const MASCOT_BOX = 40; // ~40 mm
+  const [logo, mascot] = await Promise.all([
+    loadImageDataUrl(options.logoUrl ?? ''),
+    loadImageDataUrl(mascotAsset),
+  ]);
+  if (logo) drawFittedImage(doc, logo, margin + 1, margin + 1, LOGO_BOX);
+  if (mascot) drawFittedImage(doc, mascot, pageWidth - margin - 1 - MASCOT_BOX, margin + 1, MASCOT_BOX);
 
-  // Cabeçalho institucional — bloco de texto entre o brasão (esq.) e o troféu (dir.)
+  // Cabeçalho institucional — bloco de texto entre o brasão (esq.) e o mascote (dir.)
   const cx = pageWidth / 2;
-  const cxT = (margin + 50 + (pageWidth - margin - 46)) / 2;
+  const textLeft = margin + 1 + LOGO_BOX + 4;
+  const textRight = pageWidth - margin - 1 - MASCOT_BOX - 4;
+  const cxT = (textLeft + textRight) / 2;
+  const textWidth = textRight - textLeft;
   doc.setTextColor(...NAVY);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(10);
@@ -378,24 +375,28 @@ export async function buildIraRankingPdf(entries: RankingEntry[], options: Ranki
   const underline = doc.getTextWidth(mainTitle) / 2 + 3;
   doc.line(cxT - underline, margin + 36.6, cxT + underline, margin + 36.6);
 
-  // Troféu dourado (canto superior direito)
-  drawGoldenTrophy(doc, pageWidth - margin - 22, margin + 20, 1.5);
   doc.setFont('helvetica', 'normal');
 
-  // Metadados discretos (esquerda)
+  // Bloco "Turmas/Séries" (rótulo + nomes com quebra automática) e data de emissão.
   doc.setTextColor(90, 105, 125);
-  doc.setFontSize(7);
-  doc.text(
-    `Turmas/Séries: ${options.classNames.join(', ')}`,
-    cxT, margin + 42.5, { align: 'center', maxWidth: 190 },
-  );
-  doc.text(
-    `Emitido em ${format(new Date(), 'dd/MM/yyyy')}${options.periodsLabel ? ` · Base: ${options.periodsLabel}` : ''} · ${rows.length} de ${options.totalEligible} elegível(is)`,
-    cxT, margin + 46.8, { align: 'center', maxWidth: 190 },
-  );
+  doc.setFontSize(7.4);
+  doc.setFont('helvetica', 'bold');
+  let infoY = margin + 41.5;
+  doc.text('Turmas/Séries:', cxT, infoY, { align: 'center' });
+  doc.setFont('helvetica', 'normal');
+  const classLines = doc.splitTextToSize(
+    options.classNames.join(', ') || '—',
+    Math.max(60, textWidth),
+  ) as string[];
+  classLines.forEach((line) => {
+    infoY += 3.6;
+    doc.text(line, cxT, infoY, { align: 'center' });
+  });
+  infoY += 4.4;
+  doc.text(`Emitido em ${format(new Date(), 'dd/MM/yyyy')}`, cxT, infoY, { align: 'center' });
 
-  // Faixa azul "TOP 15 — MELHORES IRA"
-  const bandY = margin + 51;
+  // Faixa azul "OS TOP 15 - MELHORES IRA" (empurrada conforme a altura do bloco acima)
+  const bandY = Math.max(margin + 51, infoY + 4);
   const bandH = 9.6;
   doc.setFillColor(...NAVY);
   doc.roundedRect(margin, bandY, pageWidth - margin * 2, bandH, 1.5, 1.5, 'F');
@@ -403,9 +404,22 @@ export async function buildIraRankingPdf(entries: RankingEntry[], options: Ranki
   doc.roundedRect(margin, bandY + bandH - 2.2, pageWidth - margin * 2, 2.2, 1.1, 1.1, 'F');
   doc.setTextColor(255, 255, 255);
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(11.5);
-  doc.text(`TOP ${RANKING_LIMIT} — MELHORES IRA`, cx, bandY + 6.4, { align: 'center', charSpace: 0.6 });
-  [-70, -62, 62, 70].forEach((dx) => drawStar(doc, cx + dx, bandY + 4.6, 1.7, [255, 255, 255]));
+  // Hierarquia: "OS TOP 15" maior, "- MELHORES IRA" menor, na mesma faixa.
+  const strong = `OS TOP ${RANKING_LIMIT}`;
+  const weak = '- MELHORES IRA';
+  doc.setFontSize(13.5);
+  const strongW = doc.getTextWidth(`${strong} `);
+  doc.setFontSize(10);
+  const weakW = doc.getTextWidth(weak);
+  const totalW = strongW + weakW;
+  const bandTextY = bandY + 6.3;
+  const startX = cx - totalW / 2;
+  doc.setFontSize(13.5);
+  doc.text(strong, startX, bandTextY);
+  doc.setFontSize(10);
+  doc.text(weak, startX + strongW, bandTextY);
+  drawStar(doc, startX - 8, bandY + 4.6, 1.7, [255, 255, 255]);
+  drawStar(doc, startX + totalW + 8, bandY + 4.6, 1.7, [255, 255, 255]);
 
   const footerH = 13;
   const footerY = pageHeight - margin - footerH;
