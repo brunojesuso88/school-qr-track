@@ -162,6 +162,45 @@ const IRASettings = () => {
     }
   };
 
+  /** Salva a série estruturada da turma (apenas Admin/Direção). */
+  const saveSeries = async (value: HighSchoolSeries) => {
+    if (!selectedClass) return;
+    setSavingSeries(true);
+    const { error } = await supabase.from('classes').update({ series: value } as never).eq('id', selectedClass.id);
+    setSavingSeries(false);
+    if (error) {
+      toast.error('Não foi possível salvar a série da turma.');
+      return;
+    }
+    setClasses((prev) => prev.map((c) => (c.id === selectedClass.id ? { ...c, series: value } : c)));
+    toast.success(`Série definida: ${classSeriesLabel(value)}.`);
+  };
+
+  const syncWeeklyClassesLegacy = async (mappingClassId: string) => {
+    if (!selectedClassId) return;
+    const { data } = await supabase
+      .from('mapping_class_subjects')
+      .select('id, subject_name, weekly_classes')
+      .eq('class_id', mappingClassId);
+    const mapping = (data || []) as { id: string; subject_name: string; weekly_classes: number }[];
+    if (mapping.length === 0 || subjects.length === 0) return;
+
+    const updates = subjects.map((s) => {
+      const match = mapping.find((m) => normalize(m.subject_name) === normalize(s.name));
+      if (!match) return null;
+      return { id: s.id, mapping_class_subject_id: match.id, weekly_classes: match.weekly_classes };
+    }).filter(Boolean) as { id: string; mapping_class_subject_id: string; weekly_classes: number }[];
+
+    await Promise.all(updates.map((u) =>
+      supabase.from('grade_subjects')
+        .update({ mapping_class_subject_id: u.mapping_class_subject_id, weekly_classes: u.weekly_classes })
+        .eq('id', u.id)));
+    if (updates.length > 0) {
+      toast.success(`${updates.length} disciplina(s) sincronizada(s) com a carga semanal atual.`);
+      loadClassData(selectedClassId);
+    }
+  };
+
   const updateSubject = async (subject: SubjectRow, patch: Partial<SubjectRow>) => {
     setSubjects((prev) => prev.map((s) => (s.id === subject.id ? { ...s, ...patch } : s)));
     const { error } = await supabase.from('grade_subjects').update(patch as never).eq('id', subject.id);
