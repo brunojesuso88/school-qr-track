@@ -15,6 +15,7 @@ import {
 } from '@/hooks/useStudentGrades';
 import { formatIra } from '@/lib/ira';
 import { HighSchoolSeries } from '@/lib/series';
+import mascotAsset from '@/assets/ira-ranking-mascote.jpg';
 
 export const RANKING_LIMIT = 15;
 
