@@ -640,26 +640,32 @@ export type Database = {
       mapping_global_subjects: {
         Row: {
           abbreviation: string | null
+          aliases: string[]
           created_at: string | null
           default_weekly_classes: number
           id: string
           name: string
+          series: string[]
           shift: string
         }
         Insert: {
           abbreviation?: string | null
+          aliases?: string[]
           created_at?: string | null
           default_weekly_classes?: number
           id?: string
           name: string
+          series?: string[]
           shift?: string
         }
         Update: {
           abbreviation?: string | null
+          aliases?: string[]
           created_at?: string | null
           default_weekly_classes?: number
           id?: string
           name?: string
+          series?: string[]
           shift?: string
         }
         Relationships: []
