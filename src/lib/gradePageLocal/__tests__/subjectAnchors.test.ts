@@ -39,7 +39,7 @@ describe('matriz efetiva', () => {
       series: '1º ano',
     });
     const names = matrix.map((m) => m.name).sort();
-    expect(names).toEqual(['Filosofia', 'Language'.slice(0, 0) + 'Língua Portuguesa', 'Matemática']);
+    expect(names).toEqual(['Filosofia', 'Língua Portuguesa', 'Matemática']);
     expect(matrix.find((m) => m.name === 'Língua Portuguesa')?.aliases).toContain('PORTUGUES');
   });
 });
