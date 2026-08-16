@@ -8,13 +8,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { useSchoolMapping, MappingGlobalSubject } from "@/contexts/SchoolMappingContext";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { CLASS_SERIES_OPTIONS, HighSchoolSeries, SERIES_VALUES, normalizeSeriesList } from "@/lib/series";
 
 interface SubjectFormProps {
   subject?: MappingGlobalSubject | null;
   onClose: () => void;
 }
-
-const SERIES_OPTIONS = ["1º ano", "2º ano", "3º ano"];
 
 const parseAliases = (value: string) =>
   [...new Set(value.split(/[\n;,]+/).map((a) => a.trim()).filter(Boolean))];
@@ -29,11 +28,14 @@ const SubjectForm = ({ subject, onClose }: SubjectFormProps) => {
     subject?.default_weekly_classes?.toString() || "4"
   );
   const [aliasesText, setAliasesText] = useState((subject?.aliases ?? []).join("\n"));
-  const [series, setSeries] = useState<string[]>(subject?.series ?? []);
+  // Sempre trabalhamos com o valor persistido ('1' | '2' | '3'); rótulos legados são convertidos na leitura.
+  const [series, setSeries] = useState<HighSchoolSeries[]>(normalizeSeriesList(subject?.series));
   const [loading, setLoading] = useState(false);
 
-  const toggleSeries = (value: string) =>
-    setSeries((prev) => (prev.includes(value) ? prev.filter((s) => s !== value) : [...prev, value]));
+  const toggleSeries = (value: HighSchoolSeries) =>
+    setSeries((prev) => (prev.includes(value)
+      ? prev.filter((s) => s !== value)
+      : SERIES_VALUES.filter((v) => v === value || prev.includes(v))));
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -50,7 +52,7 @@ const SubjectForm = ({ subject, onClose }: SubjectFormProps) => {
         abbreviation: abbreviation.trim() ? abbreviation.trim().toUpperCase() : null,
         default_weekly_classes: parseInt(defaultWeeklyClasses),
         aliases: parseAliases(aliasesText),
-        series,
+        series, // persistido apenas como '1' | '2' | '3'
       };
 
       if (subject) {
@@ -148,10 +150,13 @@ const SubjectForm = ({ subject, onClose }: SubjectFormProps) => {
       <div className="space-y-2">
         <Label>Séries em que compõe a matriz padrão</Label>
         <div className="flex flex-wrap gap-3">
-          {SERIES_OPTIONS.map((option) => (
-            <label key={option} className="flex items-center gap-2 text-sm">
-              <Checkbox checked={series.includes(option)} onCheckedChange={() => toggleSeries(option)} />
-              {option}
+          {CLASS_SERIES_OPTIONS.map((option) => (
+            <label key={option.value} className="flex items-center gap-2 text-sm">
+              <Checkbox
+                checked={series.includes(option.value)}
+                onCheckedChange={() => toggleSeries(option.value)}
+              />
+              {option.label}
             </label>
           ))}
           {series.length === 0 && (

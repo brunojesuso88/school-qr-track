@@ -14,11 +14,13 @@ import {
   computeIraForStudent, fetchGradesPaged, resolveIraPeriods,
 } from '@/hooks/useStudentGrades';
 import { formatIra } from '@/lib/ira';
+import { HighSchoolSeries } from '@/lib/series';
 
 export const RANKING_LIMIT = 15;
 
 /** Séries do Ensino Médio aceitas na classificação. */
-export type HighSchoolSeries = '1' | '2' | '3';
+export type { HighSchoolSeries } from '@/lib/series';
+export { CLASS_SERIES_OPTIONS, classSeriesLabel, parseSeriesValue, normalizeSeriesList, seriesListMatches } from '@/lib/series';
 
 export const HIGH_SCHOOL_SERIES: { value: HighSchoolSeries; label: string }[] = [
   { value: '1', label: '1ª Série do Ensino Médio' },
@@ -28,16 +30,6 @@ export const HIGH_SCHOOL_SERIES: { value: HighSchoolSeries; label: string }[] = 
 
 export const seriesLabel = (s: HighSchoolSeries) =>
   HIGH_SCHOOL_SERIES.find((o) => o.value === s)!.label;
-
-/** Rótulos usados no cadastro da turma (Configurações → IRA). */
-export const CLASS_SERIES_OPTIONS: { value: HighSchoolSeries; label: string }[] = [
-  { value: '1', label: '1º ano do Ensino Médio' },
-  { value: '2', label: '2º ano do Ensino Médio' },
-  { value: '3', label: '3º ano do Ensino Médio' },
-];
-
-export const classSeriesLabel = (s: HighSchoolSeries | null | undefined) =>
-  (s && CLASS_SERIES_OPTIONS.find((o) => o.value === s)?.label) || 'Série não definida';
 
 /** Normaliza o valor persistido em `classes.series` para o tipo da série. */
 export const parseClassSeries = (value: string | null | undefined): HighSchoolSeries | null =>
