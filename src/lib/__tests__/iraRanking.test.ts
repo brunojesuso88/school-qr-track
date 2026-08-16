@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
 import { buildIraRankingPdf, formatStudentCode, RANKING_LIMIT, RankingEntry } from '@/lib/iraRanking';
 
