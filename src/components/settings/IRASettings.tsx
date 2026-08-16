@@ -13,12 +13,17 @@ import { Loader2, Calculator, AlertTriangle, Link2, Info } from 'lucide-react';
 import { isAutoWeightEligible, resolveWeight, weightForWeeklyClasses } from '@/lib/ira';
 import { cn } from '@/lib/utils';
 import IraRankingExport from '@/components/settings/IraRankingExport';
+import {
+  CLASS_SERIES_OPTIONS, HighSchoolSeries, classSeriesLabel, detectClassSeries, parseClassSeries,
+} from '@/lib/iraRanking';
 
 interface ClassRow {
   id: string;
   name: string;
   shift: string;
   mapping_class_id: string | null;
+  /** Série estruturada do Ensino Médio ('1' | '2' | '3') ou null quando não definida. */
+  series: string | null;
 }
 
 interface MappingClassRow {
@@ -68,7 +73,7 @@ const IRASettings = () => {
   useEffect(() => {
     (async () => {
       const [classesRes, mappingRes, subjRes, settingsRes] = await Promise.all([
-        supabase.from('classes').select('id, name, shift, mapping_class_id').order('name'),
+        supabase.from('classes').select('id, name, shift, mapping_class_id, series').order('name'),
         supabase.from('mapping_classes').select('id, name, shift').order('name'),
         supabase.from('grade_subjects').select('class_id'),
         supabase.from('ira_settings').select('class_id'),
