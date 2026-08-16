@@ -296,12 +296,32 @@ const IraRankingExport = ({ classes, classesWithGrades }: Props) => {
               <Button
                 size="sm"
                 variant="default"
-                onClick={exportPdf}
-                disabled={!series || !result || result.top.length === 0 || exporting}
+                onClick={openPreview}
+                disabled={!series || !result || result.top.length === 0 || previewing || activeColumns.length === 0}
               >
-                {exporting ? <Loader2 className="w-3 h-3 mr-2 animate-spin" /> : <FileDown className="w-3 h-3 mr-2" />}
-                Gerar PDF da classificação
+                {previewing ? <Loader2 className="w-3 h-3 mr-2 animate-spin" /> : <Eye className="w-3 h-3 mr-2" />}
+                Pré-visualizar PDF
               </Button>
+            </div>
+
+            <div className="space-y-2 rounded-md border bg-background p-3">
+              <p className="text-sm font-medium">Colunas do PDF</p>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {RANKING_PDF_COLUMN_OPTIONS.map((o) => (
+                  <label key={o.value} className="flex items-center gap-2 text-sm">
+                    <Checkbox
+                      checked={hasColumn(o.value)}
+                      onCheckedChange={(checked) => toggleColumn(o.value, !!checked)}
+                    />
+                    <span>{o.label}</span>
+                  </label>
+                ))}
+              </div>
+              {activeColumns.length === 0 && (
+                <p className="text-xs text-destructive">
+                  Selecione ao menos uma coluna para pré-visualizar ou exportar o PDF.
+                </p>
+              )}
             </div>
 
             {result && (
@@ -366,30 +386,36 @@ const IraRankingExport = ({ classes, classesWithGrades }: Props) => {
                       <Table>
                         <TableHeader>
                           <TableRow>
-                            <TableHead className="w-24">Colocação</TableHead>
-                            <TableHead>Código</TableHead>
-                            <TableHead>Data de nascimento</TableHead>
-                            <TableHead>Turma/Série</TableHead>
-                            <TableHead className="text-right">IRA</TableHead>
+                            {hasColumn('position') && <TableHead className="w-24">Colocação</TableHead>}
+                            {hasColumn('code') && <TableHead>Código</TableHead>}
+                            {hasColumn('fullName') && <TableHead>Nome completo</TableHead>}
+                            {hasColumn('birthDate') && <TableHead>Data de nascimento</TableHead>}
+                            {hasColumn('className') && <TableHead>Turma/Série</TableHead>}
+                            {hasColumn('ira') && <TableHead className="text-right">IRA</TableHead>}
                           </TableRow>
                         </TableHeader>
                         <TableBody>
                           {result.top.map((e, i) => (
                             <TableRow key={e.studentId}>
-                              <TableCell className="font-medium">
+                              {hasColumn('position') && <TableCell className="font-medium">
                                 <span className="flex items-center gap-1">
                                   {i < 3 && <Medal className={`w-4 h-4 ${medalColor(i + 1)}`} />}
                                   {i + 1}º
                                 </span>
-                              </TableCell>
-                              <TableCell>
+                              </TableCell>}
+                              {hasColumn('code') && <TableCell>
                                 {formatStudentCode(e.code) || <span className="text-amber-600">não informado</span>}
-                              </TableCell>
-                              <TableCell>
+                              </TableCell>}
+                              {hasColumn('fullName') && <TableCell>
+                                {e.fullName || <span className="text-amber-600">não informado</span>}
+                              </TableCell>}
+                              {hasColumn('birthDate') && <TableCell>
                                 {e.birthDate ? formatBirthDate(e.birthDate) : <span className="text-amber-600">não informada</span>}
-                              </TableCell>
-                              <TableCell>{e.className}</TableCell>
-                              <TableCell className="text-right font-semibold">{formatIra(e.ira)}</TableCell>
+                              </TableCell>}
+                              {hasColumn('className') && <TableCell>{e.className}</TableCell>}
+                              {hasColumn('ira') && (
+                                <TableCell className="text-right font-semibold">{formatIra(e.ira)}</TableCell>
+                              )}
                             </TableRow>
                           ))}
                         </TableBody>
@@ -402,6 +428,44 @@ const IraRankingExport = ({ classes, classesWithGrades }: Props) => {
           </>
         )}
       </CardContent>
+
+      <Dialog
+        open={previewOpen}
+        onOpenChange={(open) => {
+          setPreviewOpen(open);
+          if (!open) revokePreview();
+        }}
+      >
+        <DialogContent className="max-w-[95vw] sm:max-w-5xl">
+          <DialogHeader>
+            <DialogTitle>Pré-visualização do PDF</DialogTitle>
+            <DialogDescription>
+              Confira o documento com as colunas selecionadas antes de exportar.
+            </DialogDescription>
+          </DialogHeader>
+          {previewUrl ? (
+            <object data={previewUrl} type="application/pdf" className="w-full h-[65vh] rounded-md border">
+              <div className="p-4 text-sm space-y-2">
+                <p>Seu navegador não conseguiu exibir o PDF aqui.</p>
+                <Button size="sm" variant="outline" asChild>
+                  <a href={previewUrl} target="_blank" rel="noreferrer">Abrir prévia em nova aba</a>
+                </Button>
+              </div>
+            </object>
+          ) : (
+            <p className="text-sm text-muted-foreground">Prévia indisponível.</p>
+          )}
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => { setPreviewOpen(false); revokePreview(); }}>
+              Fechar
+            </Button>
+            <Button size="sm" onClick={exportPdf} disabled={exporting}>
+              {exporting ? <Loader2 className="w-3 h-3 mr-2 animate-spin" /> : <FileDown className="w-3 h-3 mr-2" />}
+              Exportar PDF
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 };
