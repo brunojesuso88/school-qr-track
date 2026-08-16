@@ -143,6 +143,11 @@ REGRAS OBRIGATÓRIAS:
 7. Use period exatamente "1º Período", "2º Período", "3º Período", "4º Período", "Média Final", "Rec. Final", "Cons. Class", "Pendência" ou "Final".
 8. Extraia os dados cadastrais do cabeçalho: Código (sem remover zeros à esquerda), Data de Nascimento (ISO AAAA-MM-DD), Mãe, Pai e Turma. Campo ausente => null. NUNCA invente.
 9. confidence entre 0 e 1 por célula (baixo quando o dígito estiver borrado/cortado ou a coluna ambígua).
+10. VERIFICAÇÃO LINHA A LINHA: percorra UMA disciplina por vez, da esquerda para a direita, e confira o alinhamento
+    vertical do valor com o SUBCABEÇALHO "Nota" daquele período antes de reportar. Se o valor não estiver claramente
+    sob a subcoluna "Nota" da linha em questão, reporte note_raw = null e registre a dúvida em "notes".
+11. É PREFERÍVEL reportar null a arriscar um palpite: nunca deslize um valor de outra linha, de outra coluna ou da
+    subcoluna Faltas para preencher uma célula vazia.
 
 Responda SOMENTE com JSON válido:
 {
