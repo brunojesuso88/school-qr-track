@@ -98,8 +98,17 @@ interface PagePreview {
     divergences?: number;
     absence_tokens_dropped?: number;
     duration_ms?: number;
+    /** Autoridade da leitura local nesta página. */
+    authority?: 'authoritative' | 'needs_validation';
+    /** IA foi efetivamente chamada. */
+    ai_used?: boolean;
+    /** Códigos bloqueantes/informativos da leitura local. */
+    blockers?: string[];
+    advisories?: string[];
     /** Células vazias vistas só pela IA e descartadas na reconciliação. */
     ai_empty_ignored?: number;
+    /** Notas sugeridas apenas pela IA e descartadas por autoridade local. */
+    ai_only_numeric_ignored?: number;
     /** Disciplinas materializadas pela matriz da turma (sem notas lançadas). */
     anchored_subjects?: string[];
     /** Linhas de disciplina com nome quebrado em duas linhas e fundidas. */
