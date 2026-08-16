@@ -207,10 +207,10 @@ export function buildCells(lines: TokenLine[], grid: GridLayout, anchors: Subjec
   /** Materializa a linha inteira vazia (uma célula null por período). */
   const pushAnchoredRow = (name: string, match: AnchorMatch) => {
     anchoredSubjects.push(match.anchor.canonical);
-    subjects.push(name);
+    subjects.push(match.anchor.canonical);
     for (const column of grid.columns) {
       cells.push({
-        subject: name,
+        subject: match.anchor.canonical,
         period: column.label,
         period_kind: column.kind,
         raw_value: null,
