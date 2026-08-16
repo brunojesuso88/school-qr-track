@@ -297,6 +297,7 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
   }, [classItem]);
 
   const applyPreview = useCallback(async (p: PagePreview) => {
+    p = keepOnlyPeriodColumns(p);
     setPreview(p);
     setRows((p.rows || []).map((r) => ({ ...r, flags: r.flags || [], source: r.source ?? 'import' })));
     setEditing(false);
@@ -314,6 +315,7 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
 
   /** Grava a prévia da leitura local na sessão (mesmo contrato da Edge Function). */
   const persistPreview = useCallback(async (sessionId: string, pageNumber: number, p: PagePreview) => {
+    p = keepOnlyPeriodColumns(p);
     await supabase.from('grade_import_session_pages')
       .update({ status: 'awaiting_confirmation', preview_json: p as never, error: null })
       .eq('session_id', sessionId).eq('page_number', pageNumber);
