@@ -197,8 +197,8 @@ const IRASettings = () => {
       const have = new Set((existing || []).map((e) => normalize(e.subject_name)));
       const label = classSeriesLabel(series);
       const missing = (catalog || [])
-        .filter((c) => ((c as { series?: string[] | null }).series ?? []).some((s) => normalize(s) === normalize(label)
-          || normalize(s) === normalize(series)))
+        // Comparação canônica ('1'|'2'|'3'), tolerando rótulos legados gravados antes da unificação.
+        .filter((c) => seriesListMatches(series, (c as { series?: string[] | null }).series))
         .filter((c) => !have.has(normalize(c.name)));
       if (missing.length === 0) {
         toast.info('A matriz da turma já contém todas as disciplinas padrão da série.');
