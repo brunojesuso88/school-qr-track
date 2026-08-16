@@ -339,6 +339,49 @@ const IRASettings = () => {
             </div>
           )}
 
+          {selectedClass && (
+            <div className="rounded-md border p-3 space-y-2 max-w-md">
+              <Label htmlFor="class-series">
+                Série da turma <span className="text-destructive">*</span>
+              </Label>
+              <Select
+                value={parseClassSeries(selectedClass.series) ?? undefined}
+                onValueChange={(v) => saveSeries(v as HighSchoolSeries)}
+                disabled={!canEditSeries || savingSeries}
+              >
+                <SelectTrigger id="class-series">
+                  <SelectValue placeholder="Selecione a série do Ensino Médio" />
+                </SelectTrigger>
+                <SelectContent>
+                  {CLASS_SERIES_OPTIONS.map((o) => (
+                    <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <div className="flex flex-wrap items-center gap-2 text-xs">
+                {parseClassSeries(selectedClass.series) ? (
+                  <Badge variant="secondary">Série: {classSeriesLabel(parseClassSeries(selectedClass.series))}</Badge>
+                ) : (
+                  <Badge variant="outline" className="text-amber-600 border-amber-500">Série não definida</Badge>
+                )}
+                {savingSeries && <Loader2 className="w-3 h-3 animate-spin text-muted-foreground" />}
+              </div>
+              {!parseClassSeries(selectedClass.series) && (
+                <p className="text-xs text-amber-600">
+                  Turmas sem série não participam do Ranking do IRA.
+                  {detectClassSeries(selectedClass.name)
+                    ? ` Sugestão pelo nome da turma: ${classSeriesLabel(detectClassSeries(selectedClass.name))} — confirme escolhendo acima.`
+                    : ''}
+                </p>
+              )}
+              {!canEditSeries && (
+                <p className="text-xs text-muted-foreground">
+                  Apenas administração e direção podem alterar a série da turma.
+                </p>
+              )}
+            </div>
+          )}
+
           {selectedClass && !selectedClass.mapping_class_id && (
             <Alert>
               <Info className="w-4 h-4" />
