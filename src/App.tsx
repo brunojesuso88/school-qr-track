@@ -2,14 +2,13 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { AuthProvider } from "./contexts/AuthContext";
 import AdminRoute from "./components/AdminRoute";
 import StaffRoute from "./components/StaffRoute";
 import UpdatePrompt from "./components/UpdatePrompt";
 import SplashScreen from "./pages/SplashScreen";
-import Home from "./pages/Home";
 import Dashboard from "./pages/Dashboard";
 import Students from "./pages/Students";
 import Classes from "./pages/Classes";
@@ -62,8 +61,10 @@ const App = () => (
               <Route path="/auth" element={<Auth />} />
               <Route path="/install" element={<InstallPWA />} />
 
+              {/* Compatibilidade: antiga Home virou redirect para a Gestão */}
+              <Route path="/home" element={<Navigate to="/dashboard" replace />} />
+
               {/* Admin Routes (Web) - Admin, Direção, Professor */}
-              <Route path="/home" element={<AdminRoute><Home /></AdminRoute>} />
               <Route path="/dashboard" element={<AdminRoute><Dashboard /></AdminRoute>} />
               <Route path="/students" element={<AdminRoute><Students /></AdminRoute>} />
               <Route path="/aee" element={<AdminRoute><AEE /></AdminRoute>} />
