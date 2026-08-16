@@ -215,6 +215,7 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
   const [savedTotal, setSavedTotal] = useState(0);
   const cancelledRef = useRef(false);
   const [autoAccept, setAutoAccept] = useState(false);
+  const [autoRules, setAutoRules] = useState<AutoAcceptRules>(DEFAULT_AUTO_ACCEPT_RULES);
   const [autoApprovedPage, setAutoApprovedPage] = useState<number | null>(null);
   const autoRunRef = useRef<string | null>(null);
   const [readingMode, setReadingMode] = useState<ReadingMode>('local_ai');
@@ -245,6 +246,7 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
     setMovingStudent(false);
     setSavedTotal(0);
     setAutoAccept(false);
+    setAutoRules(DEFAULT_AUTO_ACCEPT_RULES);
     setAutoApprovedPage(null);
     autoRunRef.current = null;
     cancelledRef.current = false;
@@ -571,7 +573,7 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
     (async () => {
       const { data } = await supabase
         .from('grade_import_sessions')
-        .select('id, file_name, total_pages, current_page, confirmed_pages, ignored_pages, notes_imported, status, auto_accept')
+        .select('id, file_name, total_pages, current_page, confirmed_pages, ignored_pages, notes_imported, status, auto_accept, auto_accept_rules')
         .eq('class_id', classItem.id)
         .in('status', ['processing_page', 'awaiting_confirmation'])
         .order('created_at', { ascending: false })
@@ -587,8 +589,10 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
         ignored_pages: data.ignored_pages,
         notes_imported: data.notes_imported,
         auto_accept: Boolean(data.auto_accept),
+        auto_accept_rules: parseAutoAcceptRules(data.auto_accept_rules),
       });
       setAutoAccept(Boolean(data.auto_accept));
+      setAutoRules(parseAutoAcceptRules(data.auto_accept_rules));
       setStep('resume');
     })();
     return () => { cancelled = true; };
@@ -648,11 +652,12 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
         ignored_pages: 0,
         notes_imported: 0,
         auto_accept: autoAccept,
+        auto_accept_rules: autoRules,
       };
       setSession(newSession);
-      if (autoAccept) {
-        await supabase.from('grade_import_sessions').update({ auto_accept: true }).eq('id', newSession.id);
-      }
+      await supabase.from('grade_import_sessions')
+        .update({ auto_accept: autoAccept, auto_accept_rules: autoRules as never })
+        .eq('id', newSession.id);
       await processPage(newSession.id, 1);
     } catch (e) {
       console.error(e);
