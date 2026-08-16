@@ -714,13 +714,13 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
       if (!studentId) throw new Error('Selecione o aluno correspondente antes de salvar a página.');
 
       // Períodos e disciplinas desta página
-      const periodPayload = preview.periods.map((p) => ({
+      const periodPayload = preview.periods
+        .filter((p) => columnIsPeriod(p.label, p.kind))
+        .map((p) => ({
         class_id: classItem.id,
         label: p.label,
         normalized_label: p.normalized_label || normalize(p.label),
-        kind: p.kind === 'period'
-          ? 'period'
-          : ['final', 'media_final', 'rec_final', 'cons_class', 'pendencia'].includes(p.kind) ? 'final' : 'unknown',
+        kind: 'period',
         sort_order: p.sort_order,
       }));
       const periodIdByNorm = new Map<string, string>();
