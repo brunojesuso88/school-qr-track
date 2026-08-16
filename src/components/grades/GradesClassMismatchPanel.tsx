@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { AlertTriangle, Info } from 'lucide-react';
+import { resolveClassNameFromPdf } from '@/lib/classNames/salaFora';
 
 interface Props {
   systemName: string;
@@ -16,7 +17,7 @@ interface Props {
   classStudents: number;
   sampleIdentifiers: { pdf_name: string; pdf_code: string | null; matched_name: string | null }[];
   renaming: boolean;
-  onRename: () => void;
+  onRename: (salaFora: boolean) => void;
   onKeep: () => void;
   onCancel: () => void;
 }
@@ -27,6 +28,8 @@ export const GradesClassMismatchPanel = ({
   classStudents, sampleIdentifiers, renaming, onRename, onKeep, onCancel,
 }: Props) => {
   const [confirmKeep, setConfirmKeep] = useState(false);
+  const [salaFora, setSalaFora] = useState(false);
+  const finalName = resolveClassNameFromPdf(pdfName, salaFora);
 
   return (
     <div className="space-y-4">
@@ -82,10 +85,20 @@ export const GradesClassMismatchPanel = ({
           <p className="text-sm font-medium">1. Alterar nome da turma para o nome do PDF</p>
           <p className="text-[11px] text-muted-foreground">
             A turma <span className="font-medium">{systemName}</span> passará a se chamar exatamente{' '}
-            <span className="font-medium">{pdfName}</span>. Nenhuma turma nova é criada e a alteração é registrada na auditoria.
+            <span className="font-medium">{finalName}</span>. Nenhuma turma nova é criada e a alteração é registrada na auditoria.
           </p>
-          <Button size="sm" variant={strongEvidence ? 'default' : 'outline'} disabled={renaming} onClick={onRename}>
-            {renaming ? 'Alterando...' : `Alterar nome para “${pdfName}”`}
+          <div className="flex items-start gap-2">
+            <Checkbox id="sala-fora" checked={salaFora} disabled={renaming} onCheckedChange={(v) => setSalaFora(Boolean(v))} />
+            <div className="space-y-0.5">
+              <Label htmlFor="sala-fora" className="text-xs font-medium">Sala Fora</Label>
+              <p className="text-[11px] text-muted-foreground">Usar esta turma como turma do anexo Sala Fora.</p>
+            </div>
+          </div>
+          <p className="text-[11px]">
+            Novo nome da turma: <span className="font-semibold">{finalName}</span>
+          </p>
+          <Button size="sm" variant={strongEvidence ? 'default' : 'outline'} disabled={renaming} onClick={() => onRename(salaFora)}>
+            {renaming ? 'Alterando...' : `Alterar nome para “${finalName}”`}
           </Button>
         </div>
 
