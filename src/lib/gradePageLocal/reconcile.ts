@@ -10,17 +10,15 @@ interface AnyRow {
   raw_value: string | null;
   value: number | null;
   flags?: string[];
-  [key: string]: unknown;
+  source?: string;
+  second_pass_value?: string | null;
 }
 
 interface AnyPreview {
   rows: AnyRow[];
-  reading?: Record<string, unknown>;
-  subjects?: unknown[];
-  periods?: unknown[];
+  reading?: { mode?: string; escalated?: boolean; reasons?: string[]; [k: string]: unknown };
   stats?: Record<string, number>;
   notes?: string[];
-  [key: string]: unknown;
 }
 
 const sameValue = (a: number | null, b: number | null) => {
@@ -37,12 +35,13 @@ export interface ReconcileResult<T> {
 }
 
 /** Mantém a estrutura da prévia LOCAL e apenas anota a comparação com a leitura da IA. */
-export function reconcileLocalWithAi<T extends AnyPreview>(local: T, ai: AnyPreview): ReconcileResult<T> {
+export function reconcileLocalWithAi<T>(local: T, ai: AnyPreview): ReconcileResult<T> {
+  const base = local as unknown as AnyPreview;
   const aiByKey = new Map<string, AnyRow>();
   (ai.rows || []).forEach((r) => aiByKey.set(cellKey(r), r));
 
   let divergences = 0;
-  const rows: AnyRow[] = (local.rows || []).map((row) => {
+  const rows: AnyRow[] = (base.rows || []).map((row) => {
     const key = cellKey(row);
     const aiRow = aiByKey.get(key);
     aiByKey.delete(key);
@@ -70,11 +69,11 @@ export function reconcileLocalWithAi<T extends AnyPreview>(local: T, ai: AnyPrev
   });
 
   const preview = {
-    ...local,
+    ...base,
     rows,
-    notes: [...new Set([...(local.notes ?? []), ...(ai.notes ?? [])])].slice(0, 10),
+    notes: [...new Set([...(base.notes ?? []), ...(ai.notes ?? [])])].slice(0, 10),
     stats: {
-      ...(local.stats ?? {}),
+      ...(base.stats ?? {}),
       cells_total: rows.length,
       grades_read: rows.filter((r) => r.value != null).length,
       empty_cells: rows.filter((r) => r.value == null && !(r.flags ?? []).includes('invalid_value')).length,
@@ -83,7 +82,7 @@ export function reconcileLocalWithAi<T extends AnyPreview>(local: T, ai: AnyPrev
       low_confidence: rows.filter((r) => (r.flags ?? []).includes('low_confidence')).length,
     },
     reading: {
-      ...(local.reading ?? {}),
+      ...(base.reading ?? {}),
       mode: 'local_validated',
       escalated: true,
       divergences,
