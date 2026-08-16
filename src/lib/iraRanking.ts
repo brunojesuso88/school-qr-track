@@ -357,7 +357,13 @@ export async function buildIraRankingPdf(entries: RankingEntry[], options: Ranki
   const logo = await loadLogo(options.logoUrl ?? '');
   if (logo) {
     try {
-      doc.addImage(logo, 'PNG', margin + 1, margin + 1, 46, 46);
+      // Encaixe proporcional dentro do box do brasão (sem distorcer).
+      const box = 46;
+      const props = doc.getImageProperties(logo);
+      const ratio = props.width && props.height ? props.width / props.height : 1;
+      const w = ratio >= 1 ? box : box * ratio;
+      const h = ratio >= 1 ? box / ratio : box;
+      doc.addImage(logo, 'PNG', margin + 1 + (box - w) / 2, margin + 1 + (box - h) / 2, w, h);
     } catch {
       /* ignora logo inválido */
     }
