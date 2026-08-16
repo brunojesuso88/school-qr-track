@@ -258,6 +258,8 @@ export interface RankingPdfOptions {
   logoUrl?: string;
   /** Série do Ensino Médio da classificação (obrigatória no fluxo da UI). */
   series?: HighSchoolSeries;
+  /** Colunas do documento. Ausente = conjunto padrão histórico. */
+  columns?: RankingPdfColumn[];
 }
 
 const SCHOOL_LINE_1 = 'CENTRO DE ENSINO';
