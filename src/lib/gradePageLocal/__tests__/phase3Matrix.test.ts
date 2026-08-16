@@ -244,22 +244,21 @@ describe('Fase 3 — série canônica 1/2/3', () => {
 
 describe('Fase 3 — autoaceite', () => {
   it('`anchored_subject_row` não bloqueia o autoaceite', () => {
-    const rows = TARGET_SUBJECTS.flatMap((s) => PERIODS.map((p) => ({
-      subject: s, period: p, raw_value: null, value: null, confidence: 1,
+    const rows = TARGET_SUBJECTS.flatMap((sub) => PERIODS.map((p) => ({
+      subject: sub, period: p, raw_value: null, value: null, confidence: 1,
       flags: ['anchored_subject_row', 'empty_cell', 'reconciled_match'],
     })));
     const result = evaluateAutoAccept({
-      rules: { ...DEFAULT_AUTO_ACCEPT_RULES, enabled: true },
-      preview: {
-        rows,
-        detected: { status: 'matched', score: 1 },
-        stats: { cells_total: rows.length, invalid_values: 0, low_confidence: 0 },
-        reading: { divergences: 0 },
-      },
-      hasConflicts: false,
-      hasClassMismatch: false,
+      rows,
+      detected: { status: 'matched', match_score: 1, conflicts: [] },
+      classDecisionPending: false,
+      pageHasExistingGrades: false,
+      linkedStudentId: 'student-1',
+      suggestedStudentId: 'student-1',
+      regDecision: null,
+      rules: DEFAULT_AUTO_ACCEPT_RULES,
     } as never);
     expect(result.reasons).toEqual([]);
-    expect(result.canAutoAccept).toBe(true);
+    expect(result.eligible).toBe(true);
   });
 });
