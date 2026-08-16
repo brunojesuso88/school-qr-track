@@ -130,20 +130,55 @@ const IraRankingExport = ({ classes, classesWithGrades }: Props) => {
           Exportação da Classificação do IRA
         </CardTitle>
         <CardDescription>
-          Selecione as turmas, confira a prévia e exporte em PDF os {RANKING_LIMIT} melhores resultados.
+          Escolha a série do Ensino Médio, selecione as turmas, confira a prévia e exporte em PDF os {RANKING_LIMIT} melhores resultados.
           O cálculo usa a configuração de IRA de cada turma. O PDF não exibe nomes de alunos.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        {options.length === 0 ? (
+        <div className="space-y-2">
+          <Label htmlFor="ira-ranking-series">
+            Série da classificação <span className="text-destructive">*</span>
+          </Label>
+          <Select value={series} onValueChange={(v) => changeSeries(v as HighSchoolSeries)}>
+            <SelectTrigger id="ira-ranking-series" className="w-full sm:w-80">
+              <SelectValue placeholder="Selecione a série do Ensino Médio" />
+            </SelectTrigger>
+            <SelectContent>
+              {HIGH_SCHOOL_SERIES.map((o) => (
+                <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {!series && (
+            <p className="text-xs text-muted-foreground">
+              A classificação nunca mistura 1ª, 2ª e 3ª série — escolha uma série para continuar.
+            </p>
+          )}
+        </div>
+
+        {ambiguous.length > 0 && series && (
+          <Alert>
+            <AlertTriangle className="w-4 h-4" />
+            <AlertTitle className="text-sm">Turmas sem série identificável</AlertTitle>
+            <AlertDescription className="text-xs">
+              {ambiguous.join(', ')} — não é possível determinar a série com segurança, por isso não aparecem na lista.
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {!series ? null : withGrades.length === 0 ? (
           <p className="text-sm text-muted-foreground">
             Nenhuma turma com boletim importado. Importe um boletim para gerar a classificação.
+          </p>
+        ) : options.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            Nenhuma turma da {seriesLabel(series)} com boletim importado.
           </p>
         ) : (
           <>
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <span className="text-sm font-medium">Turmas participantes</span>
+                <span className="text-sm font-medium">Turmas participantes · {seriesLabel(series)}</span>
                 <div className="flex gap-2">
                   <Button size="sm" variant="ghost" onClick={() => { setResult(null); setSelected(options.map((o) => o.id)); }}>
                     Selecionar todas
@@ -178,7 +213,7 @@ const IraRankingExport = ({ classes, classesWithGrades }: Props) => {
             )}
 
             <div className="flex flex-wrap gap-2">
-              <Button size="sm" onClick={loadPreview} disabled={loading || selected.length === 0}>
+              <Button size="sm" onClick={loadPreview} disabled={loading || !series || selected.length === 0}>
                 {loading && <Loader2 className="w-3 h-3 mr-2 animate-spin" />}
                 Calcular prévia da classificação
               </Button>
@@ -186,7 +221,7 @@ const IraRankingExport = ({ classes, classesWithGrades }: Props) => {
                 size="sm"
                 variant="default"
                 onClick={exportPdf}
-                disabled={!result || result.top.length === 0 || exporting}
+                disabled={!series || !result || result.top.length === 0 || exporting}
               >
                 {exporting ? <Loader2 className="w-3 h-3 mr-2 animate-spin" /> : <FileDown className="w-3 h-3 mr-2" />}
                 Gerar PDF da classificação
