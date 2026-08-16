@@ -8,7 +8,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useSchoolMapping, MappingTeacher } from "@/contexts/SchoolMappingContext";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import TeacherAvailabilityGrid from "@/components/timetable/TeacherAvailabilityGrid";
+import TeacherAvailabilityGrid from "@/components/mapping/TeacherAvailabilityGrid";
 
 interface TeacherFormProps {
   teacher?: MappingTeacher | null;

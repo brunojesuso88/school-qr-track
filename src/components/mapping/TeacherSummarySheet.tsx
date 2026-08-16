@@ -6,7 +6,7 @@ import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { MappingTeacher, MappingClass, MappingClassSubject } from "@/contexts/SchoolMappingContext";
 import { supabase } from "@/integrations/supabase/client";
-import TeacherAvailabilityGrid from "@/components/timetable/TeacherAvailabilityGrid";
+import TeacherAvailabilityGrid from "@/components/mapping/TeacherAvailabilityGrid";
 
 const SHIFT_LABELS: Record<string, string> = {
   morning: "Manhã",

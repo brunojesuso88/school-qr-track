@@ -99,50 +99,23 @@ const AboutSystemDialog = ({ open, onOpenChange }: AboutSystemDialogProps) => {
               </AccordionContent>
             </AccordionItem>
 
-            {/* 4. Mapeamento Escolar */}
-            <AccordionItem value="mapping">
+            {/* 4. Professores e Disciplinas */}
+            <AccordionItem value="staff-catalog">
               <AccordionTrigger className="text-sm">
                 <span className="flex items-center gap-2">
                   <Map className="h-4 w-4 text-amber-500" />
-                  Mapeamento Escolar
+                  Professores e Disciplinas
                 </span>
               </AccordionTrigger>
               <AccordionContent className="text-xs text-muted-foreground space-y-1">
                 <ul className="list-disc pl-4 space-y-1">
-                  <li>Cadastro de turmas com turno e carga horária semanal</li>
-                  <li>Cadastro de disciplinas globais por turno</li>
                   <li>Cadastro de professores com cor, carga horária e disponibilidade</li>
                   <li>Importação de professores em lote via PDF com IA</li>
                   <li>Associação professor ↔ disciplina ↔ turma</li>
-                  <li>Cálculo dinâmico de carga horária (sincronizado com banco)</li>
-                  <li>Indicador de sobrecarga do professor</li>
-                  <li>Resumo completo por professor e por turma</li>
-                  <li>Exportação horizontal em PDF</li>
-                </ul>
-              </AccordionContent>
-            </AccordionItem>
-
-            {/* 5. Geração de Horário com IA */}
-            <AccordionItem value="timetable">
-              <AccordionTrigger className="text-sm">
-                <span className="flex items-center gap-2">
-                  <Brain className="h-4 w-4 text-violet-500" />
-                  Geração de Horário com IA
-                </span>
-              </AccordionTrigger>
-              <AccordionContent className="text-xs text-muted-foreground space-y-1">
-                <ul className="list-disc pl-4 space-y-1">
-                  <li>Geração automática de grade horária por inteligência artificial</li>
-                  <li>3 níveis de rigor: Leve, Moderada e Rigorosa</li>
-                  <li>Detecção automática de conflitos (professor em duas turmas)</li>
-                  <li>Chat de conflitos com IA para resolução assistida</li>
-                  <li>Grade interativa com drag-and-drop (dnd-kit)</li>
-                  <li>Travamento de aulas fixas (is_locked)</li>
-                  <li>Indicador de qualidade da grade gerada</li>
-                  <li>Histórico de gerações com snapshot</li>
-                  <li>Configuração de dias, horários e intervalos</li>
-                  <li>Regras personalizáveis (distribuição, aulas geminadas, etc.)</li>
-                  <li>Disponibilidade do professor por dia/horário</li>
+                  <li>Cálculo dinâmico de carga horária e indicador de sobrecarga</li>
+                  <li>Catálogo oficial de disciplinas com abreviação e sinônimos</li>
+                  <li>Séries padrão (1º, 2º e 3º ano) e carga horária padrão</li>
+                  <li>Importação de disciplinas em lote via PDF</li>
                 </ul>
               </AccordionContent>
             </AccordionItem>
