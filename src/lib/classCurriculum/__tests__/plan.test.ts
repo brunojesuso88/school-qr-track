@@ -77,3 +77,43 @@ describe('planClassCurriculumSync', () => {
     expect(plan.gradeUpdate[0].weekly_classes).toBe(1);
   });
 });
+
+describe('turma sem camada mapping (manageMapping=false)', () => {
+  const matrix = [
+    { name: 'MATEMATICA', weekly_classes: 4, include_in_ira: true, aliases: [] },
+    { name: 'EDUCACAO FISICA', weekly_classes: 1, include_in_ira: true, aliases: [] },
+  ] as never;
+
+  it('não planeja ações de mapeamento e fica em sync com grade_subjects alinhados', () => {
+    const first = planClassCurriculumSync({ matrix, mappingSubjects: [], gradeSubjects: [], manageMapping: false });
+    expect(first.mappingCreate).toHaveLength(0);
+    expect(first.mappingUpdate).toHaveLength(0);
+    expect(first.gradeCreate).toHaveLength(2);
+    expect(isPlanInSync(first)).toBe(false);
+
+    // Estado após aplicar apenas grade_subjects (mapping ausente).
+    const gradeSubjects = first.gradeCreate.map((g, i) => ({
+      id: `g${i}`,
+      name: g.name,
+      weekly_classes: g.weekly_classes,
+      include_in_ira: true,
+      legacy_excluded: false,
+      sort_order: g.sort_order,
+    }));
+
+    const second = planClassCurriculumSync({ matrix, mappingSubjects: [], gradeSubjects, manageMapping: false });
+    expect(second.gradeCreate).toHaveLength(0);
+    expect(second.gradeUpdate).toHaveLength(0);
+    expect(second.gradeLegacy).toHaveLength(0);
+    expect(second.mappingCreate).toHaveLength(0);
+    expect(isPlanInSync(second)).toBe(true);
+  });
+
+  it('sort_order segue a ordem alfabética oficial da matriz', () => {
+    const plan = planClassCurriculumSync({ matrix, manageMapping: false });
+    expect(plan.gradeCreate.map((g) => [g.name, g.sort_order])).toEqual([
+      ['EDUCACAO FISICA', 0],
+      ['MATEMATICA', 1],
+    ]);
+  });
+});
