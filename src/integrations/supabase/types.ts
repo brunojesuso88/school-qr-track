@@ -94,6 +94,7 @@ export type Database = {
           mapping_class_id: string | null
           name: string
           photo_url: string | null
+          series: string | null
           shift: string
           status: string | null
           updated_at: string | null
@@ -106,6 +107,7 @@ export type Database = {
           mapping_class_id?: string | null
           name: string
           photo_url?: string | null
+          series?: string | null
           shift?: string
           status?: string | null
           updated_at?: string | null
@@ -118,6 +120,7 @@ export type Database = {
           mapping_class_id?: string | null
           name?: string
           photo_url?: string | null
+          series?: string | null
           shift?: string
           status?: string | null
           updated_at?: string | null

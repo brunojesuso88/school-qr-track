@@ -13,7 +13,7 @@ import { toast } from 'sonner';
 import { formatIra } from '@/lib/ira';
 import {
   HIGH_SCHOOL_SERIES, HighSchoolSeries, RANKING_LIMIT, RankingResult, buildIraRanking, detectClassSeries,
-  formatBirthDate, formatStudentCode, generateIraRankingPdf, seriesLabel,
+  formatBirthDate, formatStudentCode, generateIraRankingPdf, parseClassSeries, seriesLabel,
 } from '@/lib/iraRanking';
 import logoAsset from '@/assets/logo-cepans.png.asset.json';
 
@@ -21,6 +21,8 @@ interface ClassOption {
   id: string;
   name: string;
   shift: string;
+  /** Série estruturada da turma (`classes.series`). */
+  series?: string | null;
 }
 
 interface Props {
@@ -44,14 +46,21 @@ const IraRankingExport = ({ classes, classesWithGrades }: Props) => {
     [classes, classesWithGrades],
   );
 
-  /** Somente turmas compatíveis com a série escolhida (ambíguas ficam de fora). */
+  /**
+   * Somente turmas cuja série ESTRUTURADA corresponde à série escolhida.
+   * Turmas sem série definida nunca entram silenciosamente na classificação.
+   */
   const options = useMemo(() => {
     if (!series) return [];
-    return withGrades.filter((c) => detectClassSeries(c.name) === series);
+    return withGrades.filter((c) => parseClassSeries(c.series) === series);
   }, [withGrades, series]);
 
-  const ambiguous = useMemo(
-    () => withGrades.filter((c) => detectClassSeries(c.name) === null).map((c) => c.name),
+  /** Turmas com boletim, porém sem série estruturada definida. */
+  const withoutSeries = useMemo(
+    () => withGrades.filter((c) => parseClassSeries(c.series) === null).map((c) => ({
+      name: c.name,
+      guess: detectClassSeries(c.name),
+    })),
     [withGrades],
   );
 
@@ -66,7 +75,7 @@ const IraRankingExport = ({ classes, classesWithGrades }: Props) => {
     // Limpa automaticamente turmas de outra série.
     setSelected((prev) => prev.filter((id) => {
       const c = withGrades.find((w) => w.id === id);
-      return !!c && detectClassSeries(c.name) === value;
+      return !!c && parseClassSeries(c.series) === value;
     }));
   };
 
@@ -156,12 +165,13 @@ const IraRankingExport = ({ classes, classesWithGrades }: Props) => {
           )}
         </div>
 
-        {ambiguous.length > 0 && series && (
+        {withoutSeries.length > 0 && series && (
           <Alert>
             <AlertTriangle className="w-4 h-4" />
-            <AlertTitle className="text-sm">Turmas sem série identificável</AlertTitle>
+            <AlertTitle className="text-sm">Turmas sem série definida</AlertTitle>
             <AlertDescription className="text-xs">
-              {ambiguous.join(', ')} — não é possível determinar a série com segurança, por isso não aparecem na lista.
+              {withoutSeries.map((c) => c.name).join(', ')} — defina a série em “Configuração do IRA”
+              (campo <strong>Série da turma</strong>) para que possam participar da classificação.
             </AlertDescription>
           </Alert>
         )}

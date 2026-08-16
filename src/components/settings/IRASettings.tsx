@@ -13,12 +13,18 @@ import { Loader2, Calculator, AlertTriangle, Link2, Info } from 'lucide-react';
 import { isAutoWeightEligible, resolveWeight, weightForWeeklyClasses } from '@/lib/ira';
 import { cn } from '@/lib/utils';
 import IraRankingExport from '@/components/settings/IraRankingExport';
+import { useAuth } from '@/contexts/AuthContext';
+import {
+  CLASS_SERIES_OPTIONS, HighSchoolSeries, classSeriesLabel, detectClassSeries, parseClassSeries,
+} from '@/lib/iraRanking';
 
 interface ClassRow {
   id: string;
   name: string;
   shift: string;
   mapping_class_id: string | null;
+  /** Série estruturada do Ensino Médio ('1' | '2' | '3') ou null quando não definida. */
+  series: string | null;
 }
 
 interface MappingClassRow {
@@ -48,6 +54,9 @@ const normalize = (s: string) =>
 
 const IRASettings = () => {
   const [classes, setClasses] = useState<ClassRow[]>([]);
+  const { userRole } = useAuth();
+  const canEditSeries = userRole === 'admin' || userRole === 'direction';
+  const [savingSeries, setSavingSeries] = useState(false);
   const [mappingClasses, setMappingClasses] = useState<MappingClassRow[]>([]);
   const [selectedClassId, setSelectedClassId] = useState<string>('');
   const [subjects, setSubjects] = useState<SubjectRow[]>([]);
@@ -68,7 +77,7 @@ const IRASettings = () => {
   useEffect(() => {
     (async () => {
       const [classesRes, mappingRes, subjRes, settingsRes] = await Promise.all([
-        supabase.from('classes').select('id, name, shift, mapping_class_id').order('name'),
+        supabase.from('classes').select('id, name, shift, mapping_class_id, series').order('name'),
         supabase.from('mapping_classes').select('id, name, shift').order('name'),
         supabase.from('grade_subjects').select('class_id'),
         supabase.from('ira_settings').select('class_id'),
@@ -151,6 +160,20 @@ const IRASettings = () => {
       toast.success(`${updates.length} disciplina(s) sincronizada(s) com a carga semanal atual.`);
       loadClassData(selectedClassId);
     }
+  };
+
+  /** Salva a série estruturada da turma (apenas Admin/Direção). */
+  const saveSeries = async (value: HighSchoolSeries) => {
+    if (!selectedClass) return;
+    setSavingSeries(true);
+    const { error } = await supabase.from('classes').update({ series: value } as never).eq('id', selectedClass.id);
+    setSavingSeries(false);
+    if (error) {
+      toast.error('Não foi possível salvar a série da turma.');
+      return;
+    }
+    setClasses((prev) => prev.map((c) => (c.id === selectedClass.id ? { ...c, series: value } : c)));
+    toast.success(`Série definida: ${classSeriesLabel(value)}.`);
   };
 
   const updateSubject = async (subject: SubjectRow, patch: Partial<SubjectRow>) => {
@@ -312,6 +335,49 @@ const IRASettings = () => {
                 </span>
               ) : (
                 <span className="text-amber-600">Turma sem vínculo com o mapeamento escolar</span>
+              )}
+            </div>
+          )}
+
+          {selectedClass && (
+            <div className="rounded-md border p-3 space-y-2 max-w-md">
+              <Label htmlFor="class-series">
+                Série da turma <span className="text-destructive">*</span>
+              </Label>
+              <Select
+                value={parseClassSeries(selectedClass.series) ?? undefined}
+                onValueChange={(v) => saveSeries(v as HighSchoolSeries)}
+                disabled={!canEditSeries || savingSeries}
+              >
+                <SelectTrigger id="class-series">
+                  <SelectValue placeholder="Selecione a série do Ensino Médio" />
+                </SelectTrigger>
+                <SelectContent>
+                  {CLASS_SERIES_OPTIONS.map((o) => (
+                    <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <div className="flex flex-wrap items-center gap-2 text-xs">
+                {parseClassSeries(selectedClass.series) ? (
+                  <Badge variant="secondary">Série: {classSeriesLabel(parseClassSeries(selectedClass.series))}</Badge>
+                ) : (
+                  <Badge variant="outline" className="text-amber-600 border-amber-500">Série não definida</Badge>
+                )}
+                {savingSeries && <Loader2 className="w-3 h-3 animate-spin text-muted-foreground" />}
+              </div>
+              {!parseClassSeries(selectedClass.series) && (
+                <p className="text-xs text-amber-600">
+                  Turmas sem série não participam do Ranking do IRA.
+                  {detectClassSeries(selectedClass.name)
+                    ? ` Sugestão pelo nome da turma: ${classSeriesLabel(detectClassSeries(selectedClass.name))} — confirme escolhendo acima.`
+                    : ''}
+                </p>
+              )}
+              {!canEditSeries && (
+                <p className="text-xs text-muted-foreground">
+                  Apenas administração e direção podem alterar a série da turma.
+                </p>
               )}
             </div>
           )}

@@ -13,6 +13,7 @@ const store = new Map<string, string>();
 
 const {
   buildIraRankingPdf, formatStudentCode, RANKING_LIMIT, detectClassSeries, FOOTER_MESSAGE, seriesLabel,
+  parseClassSeries, classSeriesLabel, CLASS_SERIES_OPTIONS,
 } = await import('@/lib/iraRanking');
 type RankingEntry = import('@/lib/iraRanking').RankingEntry;
 type HighSchoolSeries = import('@/lib/iraRanking').HighSchoolSeries;
@@ -73,6 +74,34 @@ describe('exportação da classificação do IRA', () => {
     const cleaned = selected.filter((id) =>
       detectClassSeries(classes.find((c) => c.id === id)!.name) === '2');
     expect(cleaned).toEqual(['b']);
+  });
+
+  it('usa a série estruturada da turma no filtro do ranking', () => {
+    const classes = [
+      { id: 'a', name: 'Turma Alfa', series: '1' as string | null },
+      { id: 'b', name: 'Turma Beta', series: '2' as string | null },
+      { id: 'c', name: '3ª Série C', series: null as string | null },
+      { id: 'd', name: 'Turma Delta', series: 'x' as string | null },
+    ];
+    const forSeries = (s: '1' | '2' | '3') =>
+      classes.filter((c) => parseClassSeries(c.series) === s).map((c) => c.id);
+
+    expect(forSeries('1')).toEqual(['a']);
+    classes[0].series = '2';
+    expect(forSeries('1')).toEqual([]);
+    expect(forSeries('2')).toEqual(['a', 'b']);
+    // turma sem série (ou valor inválido) fica fora, mesmo com nome sugestivo
+    expect(forSeries('3')).toEqual([]);
+    expect(parseClassSeries(null)).toBeNull();
+    expect(parseClassSeries('x')).toBeNull();
+    expect(classSeriesLabel(null)).toBe('Série não definida');
+  });
+
+  it('expõe exatamente as três opções de série do cadastro', () => {
+    expect(CLASS_SERIES_OPTIONS.map((o) => o.label)).toEqual([
+      '1º ano do Ensino Médio', '2º ano do Ensino Médio', '3º ano do Ensino Médio',
+    ]);
+    expect(classSeriesLabel('1')).toBe('1º ano do Ensino Médio');
   });
 
   it('exibe a série escolhida e apenas uma frase motivacional no rodapé', async () => {
