@@ -386,7 +386,7 @@ export async function buildIraRankingPdf(entries: RankingEntry[], options: Ranki
   drawGoldenTrophy(doc, pageWidth - margin - 24, margin + 13, 1.15);
 
   // Bloco motivacional à direita, abaixo do troféu
-  const boxW = 62;
+  const boxW = 66;
   const boxX = pageWidth - margin - boxW - 1;
   const boxY = margin + 27;
   doc.setFillColor(...LIGHT);
@@ -396,10 +396,10 @@ export async function buildIraRankingPdf(entries: RankingEntry[], options: Ranki
   drawTargetIcon(doc, boxX + 8, boxY + 9, 4.4);
   doc.setTextColor(...NAVY);
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(7.6);
-  doc.text('FOCO • DISCIPLINA • DETERMINAÇÃO', boxX + 15, boxY + 7.6);
+  doc.setFontSize(7);
+  doc.text('FOCO • DISCIPLINA • DETERMINAÇÃO', boxX + 15, boxY + 7.6, { maxWidth: boxW - 18 });
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(6.8);
+  doc.setFontSize(6.6);
   doc.setTextColor(...ROYAL);
   doc.text('LÍDERES DE HOJE, INSPIRAÇÃO DE AMANHÃ!', boxX + 15, boxY + 12.6, { maxWidth: boxW - 18 });
 
@@ -426,10 +426,7 @@ export async function buildIraRankingPdf(entries: RankingEntry[], options: Ranki
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(11.5);
   doc.text(`TOP ${RANKING_LIMIT} — MELHORES IRA`, cx, bandY + 6.4, { align: 'center', charSpace: 0.6 });
-  [cx - 62, cx - 55, pageWidth - margin - 14, pageWidth - margin - 21].forEach((sx) =>
-    drawStar(doc, sx, bandY + 4.8, 1.7, [255, 255, 255]));
-  drawStar(doc, cx + 55, bandY + 4.8, 1.7, [255, 255, 255]);
-  drawStar(doc, cx + 62, bandY + 4.8, 1.7, [255, 255, 255]);
+  [-70, -62, 62, 70].forEach((dx) => drawStar(doc, cx + dx, bandY + 4.6, 1.7, [255, 255, 255]));
 
   const footerH = 15;
   const footerY = pageHeight - margin - footerH;
