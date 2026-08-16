@@ -69,10 +69,33 @@ export interface RankingEntry {
   studentId: string;
   /** Código do aluno (students.school_code) — pode faltar. */
   code: string | null;
+  /** Nome completo (students.full_name) — exibido só quando a coluna é escolhida. */
+  fullName: string;
   birthDate: string | null;
   className: string;
   ira: number;
 }
+
+/** Colunas disponíveis no PDF/prévia da classificação. */
+export type RankingPdfColumn = 'position' | 'code' | 'fullName' | 'birthDate' | 'className' | 'ira';
+
+export const RANKING_PDF_COLUMN_OPTIONS: { value: RankingPdfColumn; label: string; header: string }[] = [
+  { value: 'position', label: 'Posição', header: 'POSIÇÃO' },
+  { value: 'code', label: 'Código do aluno', header: 'CÓDIGO DO ALUNO' },
+  { value: 'fullName', label: 'Nome completo', header: 'NOME COMPLETO' },
+  { value: 'birthDate', label: 'Data de nascimento', header: 'DATA DE NASCIMENTO' },
+  { value: 'className', label: 'Turma/Série', header: 'TURMA / SÉRIE' },
+  { value: 'ira', label: 'IRA', header: 'IRA' },
+];
+
+/** Colunas padrão (comportamento histórico: sem nome completo). */
+export const DEFAULT_RANKING_PDF_COLUMNS: RankingPdfColumn[] = [
+  'position', 'code', 'birthDate', 'className', 'ira',
+];
+
+/** Mantém a ordem canônica das colunas, independente da ordem de marcação. */
+export const orderRankingColumns = (columns: RankingPdfColumn[]): RankingPdfColumn[] =>
+  RANKING_PDF_COLUMN_OPTIONS.map((o) => o.value).filter((v) => columns.includes(v));
 
 export interface RankingResult {
   /** Todos os elegíveis, ordenados (IRA desc, código asc). */
