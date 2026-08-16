@@ -1,14 +1,14 @@
 /** Cabeçalho do aluno lido por rótulos âncora nas linhas acima da grade. */
-import { normalizeText, toIsoDate } from './normalize';
+import { normalizeAligned, toIsoDate } from './normalize';
 import { LocalHeader, TokenLine } from './types';
 
 const LABELS: { field: keyof LocalHeader; pattern: RegExp }[] = [
-  { field: 'name', pattern: /alun[oa]\s*\(?a?\)?/ },
-  { field: 'student_code', pattern: /codigo/ },
-  { field: 'birth_date', pattern: /(data\s+de\s+nascimento|nascimento|dt\s+nasc)/ },
-  { field: 'mother_name', pattern: /(nome\s+da\s+)?mae/ },
-  { field: 'father_name', pattern: /(nome\s+do\s+)?pai/ },
-  { field: 'class_code', pattern: /turma/ },
+  { field: 'name', pattern: /\balun[oa]\s*a?\b/ },
+  { field: 'student_code', pattern: /\bcodigo\b/ },
+  { field: 'birth_date', pattern: /\b(data\s+de\s+nascimento|nascimento|dt\s+nasc)\b/ },
+  { field: 'mother_name', pattern: /\b(nome\s+da\s+)?mae\b/ },
+  { field: 'father_name', pattern: /\b(nome\s+do\s+)?pai\b/ },
+  { field: 'class_code', pattern: /\bturma\b/ },
 ];
 
 const clean = (value: string) => value.replace(/^[\s:.\-–—]+/, '').replace(/[\s:.\-–—]+$/, '').trim();
@@ -27,7 +27,8 @@ export function extractHeader(lines: TokenLine[], gridHeaderIndex: number | null
   for (let i = 0; i < limit; i++) {
     const raw = lines[i].text;
     if (!raw) continue;
-    const norm = normalizeText(raw);
+    // Normalização alinhada: mesmos índices do texto original.
+    const norm = normalizeAligned(raw);
 
     const hits: { field: keyof LocalHeader; start: number; end: number }[] = [];
     for (const { field, pattern } of LABELS) {
@@ -41,24 +42,12 @@ export function extractHeader(lines: TokenLine[], gridHeaderIndex: number | null
     if (hits.length === 0) continue;
     hits.sort((a, b) => a.start - b.start);
 
-    // Mapa de posições: o texto normalizado e o original mantêm a mesma quantidade de palavras.
-    const normWords = norm.split(' ');
-    const rawWords = raw.split(/\s+/);
-    const wordIndexAt = (charIndex: number) => {
-      let acc = 0;
-      for (let w = 0; w < normWords.length; w++) {
-        acc += normWords[w].length + (w > 0 ? 1 : 0);
-        if (charIndex < acc) return w;
-      }
-      return normWords.length;
-    };
-
     hits.forEach((hit, index) => {
       if (header[hit.field]) return;
-      const fromWord = wordIndexAt(hit.end) + 1;
       const next = hits[index + 1];
-      const toWord = next ? wordIndexAt(next.start) : rawWords.length;
-      const value = clean(rawWords.slice(fromWord, Math.max(fromWord, toWord)).join(' '));
+      const from = hit.end;
+      const to = next ? next.start : raw.length;
+      const value = clean(raw.slice(from, Math.max(from, to)));
       if (!value) return;
       if (hit.field === 'birth_date') header.birth_date = toIsoDate(value);
       else if (hit.field === 'student_code') header.student_code = (value.match(/[0-9A-Za-z]+/) ?? [null])[0];
