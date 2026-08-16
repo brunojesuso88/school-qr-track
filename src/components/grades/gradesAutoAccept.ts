@@ -1,6 +1,7 @@
 /** Camada de decisão automática por página (acima da confirmação manual). Nada aqui grava dados. */
 import { ReviewRow } from './GradesReviewTable';
 import { DetectedStudent, RegistrationDecision } from './gradesConflicts';
+import { matchesSecondPass } from '@/lib/gradePageLocal/gradeCompare';
 
 /** Exceções configuráveis por sessão. Padrão: nenhuma exceção. */
 export interface AutoAcceptRules {
@@ -96,6 +97,8 @@ export const analyzeDivergences = (rows: DivergenceRow[]): {
     const flags = row.flags ?? [];
     if (!flags.includes('reconciliation_divergence')) return;
     const aiOnly = row.source === 'ai';
+    // Defensivo: flag obsoleta (ex.: correção manual posterior) não é divergência.
+    if (!aiOnly && matchesSecondPass(row.value ?? null, row.second_pass_value)) return;
     const value = row.value ?? null;
     const reasons: string[] = [];
     if (aiOnly) reasons.push('Somente a IA identificou esta célula — não existe valor local para autoaceite');
