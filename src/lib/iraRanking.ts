@@ -187,6 +187,8 @@ export interface RankingPdfOptions {
   classNames: string[];
   periodsLabel: string;
   totalEligible: number;
+  /** URL do brasão da escola (opcional). */
+  logoUrl?: string;
 }
 
 const SCHOOL = 'Professor Antônio Nonato Sampaio';
