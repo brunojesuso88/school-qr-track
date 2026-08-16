@@ -1,6 +1,6 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
-import { LayoutDashboard, Users, Calendar, Bell, Settings, Menu, X, BookOpen, LogOut, ChevronRight, Heart, FileText, Lock, RefreshCw, Download, Info, Trash2, Sun, Moon, Monitor, ClipboardList, CalendarDays, FileWarning, Map, Clock } from 'lucide-react';
+import { LayoutDashboard, Users, Calendar, Bell, Settings, Menu, X, BookOpen, LogOut, ChevronRight, Heart, FileText, Lock, RefreshCw, Download, Info, Trash2, Sun, Moon, Monitor, ClipboardList, CalendarDays, FileWarning, GraduationCap, Library } from 'lucide-react';
 import { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/components/ThemeProvider';
@@ -29,9 +29,9 @@ const allNavigation = [
   { name: 'Alunos', href: '/students', icon: Users, roles: ['admin', 'direction', 'teacher'], group: 'Secretaria' },
   { name: 'Sistema AEE', href: '/aee', icon: Heart, roles: ['admin', 'direction', 'teacher'], group: 'Secretaria' },
   { name: 'Turmas', href: '/classes', icon: BookOpen, roles: ['admin', 'direction', 'teacher'], group: 'Secretaria' },
+  { name: 'Professores', href: '/teachers', icon: GraduationCap, roles: ['admin', 'direction'], group: 'Secretaria' },
+  { name: 'Disciplinas', href: '/subjects', icon: Library, roles: ['admin', 'direction'], group: 'Secretaria' },
   { name: 'Frequência', href: '/attendance', icon: Calendar, roles: ['admin', 'direction', 'teacher'], group: 'Secretaria' },
-  { name: 'Mapeamento Escolar', href: '/school-mapping', icon: Map, roles: ['admin', 'direction'], group: 'Acadêmico' },
-  { name: 'Criação do Horário', href: '/timetable', icon: Clock, roles: ['admin', 'direction'], group: 'Acadêmico' },
   { name: 'Projetos', href: '/events', icon: ClipboardList, roles: ['admin', 'direction', 'teacher'], group: 'Projetos e Eventos' },
   { name: 'Eventos', href: '/school-events', icon: CalendarDays, roles: ['admin', 'direction', 'teacher'], group: 'Projetos e Eventos' },
   { name: 'Declarações', href: '/declarations', icon: FileText, roles: ['admin', 'direction'], group: 'Documentos' },
@@ -39,7 +39,7 @@ const allNavigation = [
   { name: 'Configurações', href: '/settings', icon: Settings, roles: ['admin', 'direction'], group: 'Sistema' },
 ];
 
-const NAV_GROUPS = ['Visão Geral', 'Secretaria', 'Acadêmico', 'Projetos e Eventos', 'Documentos', 'Sistema'];
+const NAV_GROUPS = ['Visão Geral', 'Secretaria', 'Projetos e Eventos', 'Documentos', 'Sistema'];
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
