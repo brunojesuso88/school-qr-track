@@ -77,10 +77,19 @@ export function planClassCurriculumSync(input: {
   matrix: CurriculumMatrixItem[];
   mappingSubjects?: ExistingMappingSubject[];
   gradeSubjects?: ExistingGradeSubject[];
+  /**
+   * `false` quando a turma não tem `mapping_class_id`: a camada `mapping_*` é
+   * auxiliar/legada, então nenhuma ação de mapeamento é planejada e o plano pode
+   * ficar em sync apenas com `grade_subjects` alinhados.
+   */
+  manageMapping?: boolean;
 }): ClassCurriculumPlan {
+  // Ordem oficial única: alfabética (pt-BR) pelo nome da matriz — a mesma usada
+  // por `fetchCurriculumMatrix`. `sort_order` recebe exatamente este índice.
   const matrix = [...input.matrix].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
   const mappingSubjects = input.mappingSubjects ?? [];
   const gradeSubjects = input.gradeSubjects ?? [];
+  const manageMapping = input.manageMapping ?? true;
 
   const plan: ClassCurriculumPlan = {
     mappingCreate: [], mappingUpdate: [], gradeCreate: [], gradeUpdate: [], gradeLegacy: [],
@@ -94,13 +103,15 @@ export function planClassCurriculumSync(input: {
     const normalizedName = normalizeText(item.name);
 
     // --- mapping_class_subjects ---
-    const mappingMatches = mappingSubjects.filter((m) => keys.includes(canonicalSubjectKey(m.subject_name)));
-    if (mappingMatches.length === 0) {
-      plan.mappingCreate.push({ subject_name: item.name, weekly_classes: item.weekly_classes });
-    } else {
-      const chosen = pickReuse(mappingMatches.map((m) => ({ ...m, name: m.subject_name })), item.name);
-      if ((chosen.weekly_classes ?? null) !== item.weekly_classes) {
-        plan.mappingUpdate.push({ id: chosen.id, weekly_classes: item.weekly_classes });
+    if (manageMapping) {
+      const mappingMatches = mappingSubjects.filter((m) => keys.includes(canonicalSubjectKey(m.subject_name)));
+      if (mappingMatches.length === 0) {
+        plan.mappingCreate.push({ subject_name: item.name, weekly_classes: item.weekly_classes });
+      } else {
+        const chosen = pickReuse(mappingMatches.map((m) => ({ ...m, name: m.subject_name })), item.name);
+        if ((chosen.weekly_classes ?? null) !== item.weekly_classes) {
+          plan.mappingUpdate.push({ id: chosen.id, weekly_classes: item.weekly_classes });
+        }
       }
     }
 

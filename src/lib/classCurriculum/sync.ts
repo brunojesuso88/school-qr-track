@@ -61,7 +61,11 @@ async function loadState(classId: string, series: HighSchoolSeries): Promise<Cla
     series,
     matrix,
     mappingClassId,
-    plan: planClassCurriculumSync({ matrix, mappingSubjects, gradeSubjects }),
+    // Sem `mapping_class_id` a camada auxiliar é ignorada por completo: nada de
+    // mappingCreate/mappingUpdate pendentes travando o gate de importação.
+    plan: planClassCurriculumSync({
+      matrix, mappingSubjects, gradeSubjects, manageMapping: Boolean(mappingClassId),
+    }),
   };
 }
 
