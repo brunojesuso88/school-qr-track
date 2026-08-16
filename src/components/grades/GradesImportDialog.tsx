@@ -928,7 +928,7 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
             class: effectiveName || classItem.name,
             shift: classItem.shift as never,
             qr_code: `STU-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`,
-            school_code: detected.pdf_code,
+            school_code: sanitizeSchoolCodeForStorage(detected.pdf_code),
             birth_date: detected.pdf_birth_date,
             mother_name: detected.pdf_mother_name,
             father_name: detected.pdf_father_name,
@@ -1032,13 +1032,29 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
       // Atualização cadastral conforme decisões explícitas (só quando o aluno já existia)
       if (pageAction === 'link' && regDecision) {
         const update: { school_code?: string; birth_date?: string; mother_name?: string; father_name?: string } = {};
-        if (detected.pdf_code && regDecision.code === 'update') update.school_code = detected.pdf_code;
+        const storedCode = sanitizeSchoolCodeForStorage(detected.pdf_code);
+        if (storedCode && regDecision.code === 'update') update.school_code = storedCode;
         if (detected.pdf_birth_date && regDecision.birth_date === 'update') update.birth_date = detected.pdf_birth_date;
         if (detected.pdf_mother_name && regDecision.mother === 'update') update.mother_name = detected.pdf_mother_name;
         if (detected.pdf_father_name && regDecision.father === 'update') update.father_name = detected.pdf_father_name;
         if (Object.keys(update).length > 0) {
           const { error: updError } = await supabase.from('students').update(update).eq('id', studentId);
           if (updError) throw updError;
+          // Auditoria explícita quando a alteração veio do autoaceite do boletim.
+          if (mode === 'auto') {
+            await supabase.from('audit_logs').insert({
+              user_id: userId,
+              action: 'UPDATE',
+              table_name: 'students',
+              record_id: studentId,
+              new_data: {
+                ...update,
+                reason: 'Autoaceite do boletim — exceção “usar dados do boletim”',
+                session_id: session.id,
+                page: preview.page,
+              } as never,
+            });
+          }
         }
       }
 
@@ -1047,7 +1063,11 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
           status: 'confirmed',
           confirmed_by: userId,
           confirmed_at: new Date().toISOString(),
-          confirmation_mode: mode === 'auto' ? 'auto' : 'manual',
+          confirmation_mode: mode === 'auto'
+            ? (autoEval.appliedExceptions.length > 0
+              ? `auto:${autoEval.appliedExceptions.map((e) => (e.startsWith('Nome') ? 'fuzzy_unique' : 'pdf_registry')).join(',')}`
+              : 'auto')
+            : 'manual',
         })
         .eq('session_id', session.id).eq('page_number', preview.page);
 
