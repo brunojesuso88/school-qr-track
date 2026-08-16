@@ -79,10 +79,7 @@ describe('planClassCurriculumSync', () => {
 });
 
 describe('turma sem camada mapping (manageMapping=false)', () => {
-  const matrix = [
-    { name: 'MATEMATICA', weekly_classes: 4, include_in_ira: true, aliases: [] },
-    { name: 'EDUCACAO FISICA', weekly_classes: 1, include_in_ira: true, aliases: [] },
-  ] as never;
+  const matrix = [item('MATEMATICA', 4), item('EDUCACAO FISICA', 1)];
 
   it('não planeja ações de mapeamento e fica em sync com grade_subjects alinhados', () => {
     const first = planClassCurriculumSync({ matrix, mappingSubjects: [], gradeSubjects: [], manageMapping: false });
