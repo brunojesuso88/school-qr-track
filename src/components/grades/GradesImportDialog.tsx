@@ -346,7 +346,21 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
       school_code: s.school_code, birth_date: s.birth_date,
       mother_name: s.mother_name, father_name: s.father_name,
     }));
-    localExpectedRef.current = expected.map((s) => ({ name: s.name, weekly_classes: s.weekly_classes }));
+    // Matriz efetiva de âncoras: mapeamento da turma + disciplinas já importadas + catálogo da série.
+    const [{ data: gradeSubj }, { data: classRow }] = await Promise.all([
+      supabase.from('grade_subjects').select('name, weekly_classes').eq('class_id', classItem.id),
+      supabase.from('classes').select('series').eq('id', classItem.id).maybeSingle(),
+    ]);
+    const series = (classRow as { series?: string | null } | null)?.series ?? null;
+    const { data: catalog } = await supabase
+      .from('mapping_global_subjects')
+      .select('name, abbreviation, aliases, series, default_weekly_classes');
+    localExpectedRef.current = buildEffectiveSubjectMatrix({
+      mapping: expected.map((s) => ({ name: s.name, weekly_classes: s.weekly_classes })),
+      imported: (gradeSubj || []) as { name: string; weekly_classes: number | null }[],
+      catalog: (catalog || []) as CatalogSubject[],
+      series,
+    });
     return { students, expected, className };
   }, [classItem, resolveCurrentClassName]);
 
