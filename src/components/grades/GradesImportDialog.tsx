@@ -19,6 +19,8 @@ import { GradesReviewTable, ReviewRow } from './GradesReviewTable';
 import { GradesRegistrationAudit } from './GradesRegistrationAudit';
 import { GradesClassMismatchPanel } from './GradesClassMismatchPanel';
 import { evaluateAutoAccept } from './gradesAutoAccept';
+import { useAuth } from '@/contexts/AuthContext';
+import { digitsOnly, findGlobalMatch, nameTokens, pickClassName } from '@/lib/gradePageLocal/studentMatch';
 import {
   closePdfDocument, extractPageTokens, LocalPdfDocument, openPdfDocument,
 } from '@/lib/gradePageLocal/pdfText';
@@ -101,8 +103,16 @@ interface GradesImportDialogProps {
   onImported?: () => void;
 }
 
-type Step = 'select' | 'resume' | 'processing' | 'page' | 'saving' | 'summary' | 'failed';
+type Step = 'select' | 'resume' | 'processing' | 'page' | 'saving' | 'summary' | 'failed' | 'context_error';
 type PageAction = 'link' | 'create' | 'ignore' | null;
+
+interface OtherClassMatch {
+  id: string;
+  full_name: string;
+  class: string;
+  school_code: string | null;
+  by: 'code' | 'name';
+}
 /** Modo de leitura (feature flag). Padrão: local com validação da IA quando necessário. */
 type ReadingMode = 'local_ai' | 'always_ai' | 'ai_only';
 
@@ -173,6 +183,8 @@ const keepOnlyPeriodColumns = (p: PagePreview): PagePreview => {
 
 export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }: GradesImportDialogProps) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { userRole } = useAuth();
+  const canEditRegistration = userRole === 'admin' || userRole === 'direction';
   const [step, setStep] = useState<Step>('select');
   const [error, setError] = useState<string | null>(null);
   const [session, setSession] = useState<SessionState | null>(null);
@@ -189,6 +201,10 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
   const [identicalKeys, setIdenticalKeys] = useState<Set<string>>(new Set());
   const [conflictStrategy, setConflictStrategy] = useState<'keep' | 'overwrite'>('keep');
   const [effectiveName, setEffectiveName] = useState('');
+  const effectiveNameRef = useRef('');
+  const [contextBlock, setContextBlock] = useState<{ className: string; found: number } | null>(null);
+  const [otherClassMatch, setOtherClassMatch] = useState<OtherClassMatch | null>(null);
+  const [movingStudent, setMovingStudent] = useState(false);
   const [classDecision, setClassDecision] = useState<'pending' | 'resolved'>('resolved');
   const [renamingClass, setRenamingClass] = useState(false);
   const [savedTotal, setSavedTotal] = useState(0);
@@ -219,6 +235,9 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
     setConflictStrategy('keep');
     setClassDecision('resolved');
     setRenamingClass(false);
+    setContextBlock(null);
+    setOtherClassMatch(null);
+    setMovingStudent(false);
     setSavedTotal(0);
     setAutoAccept(false);
     setAutoApprovedPage(null);
@@ -249,13 +268,33 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
       reader.readAsDataURL(file);
     });
 
+  /**
+   * Nome ATUAL da turma lido de `classes` pelo id — nunca confiar na prop `classItem.name`,
+   * que fica desatualizada quando a turma é renomeada durante a importação.
+   */
+  const resolveCurrentClassName = useCallback(async () => {
+    if (!classItem) return '';
+    const { data, error } = await supabase
+      .from('classes')
+      .select('name')
+      .eq('id', classItem.id)
+      .maybeSingle();
+    if (error) console.error('Não foi possível resolver o nome atual da turma:', error);
+    return pickClassName(error ? null : data?.name, effectiveNameRef.current, classItem.name);
+  }, [classItem]);
+
   /** Alunos da turma + disciplinas esperadas (contexto persistido na sessão). */
   const loadContext = useCallback(async () => {
     if (!classItem) throw new Error('Turma não selecionada.');
+    const className = await resolveCurrentClassName();
+    if (className && className !== effectiveNameRef.current) {
+      effectiveNameRef.current = className;
+      setEffectiveName(className);
+    }
     const { data: studentsData, error: studentsError } = await supabase
       .from('students')
       .select('id, full_name, student_id, school_code, birth_date, mother_name, father_name')
-      .eq('class', classItem.name)
+      .eq('class', className)
       .order('full_name');
     if (studentsError) throw studentsError;
     const students = (studentsData || []) as {
@@ -263,6 +302,23 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
       school_code: string | null; birth_date: string | null;
       mother_name: string | null; father_name: string | null;
     }[];
+
+    // Guarda: contexto vazio com alunos existentes no banco = falha de carregamento/desincronia.
+    if (students.length === 0) {
+      const [current, byProp] = await Promise.all([
+        supabase.from('students').select('id', { count: 'exact', head: true }).eq('class', className),
+        className !== classItem.name
+          ? supabase.from('students').select('id', { count: 'exact', head: true }).eq('class', classItem.name)
+          : Promise.resolve({ count: 0 } as { count: number | null }),
+      ]);
+      const found = (current.count ?? 0) + (byProp.count ?? 0);
+      if (found > 0) {
+        setContextBlock({ className, found });
+        setStep('context_error');
+        throw new Error('CONTEXT_EMPTY');
+      }
+    }
+    setContextBlock(null);
     setClassStudents(students.map((s) => ({ id: s.id, full_name: s.full_name })));
 
     let expected: { id: string; name: string; weekly_classes: number }[] = [];
@@ -282,8 +338,57 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
       mother_name: s.mother_name, father_name: s.father_name,
     }));
     localExpectedRef.current = expected.map((s) => ({ name: s.name, weekly_classes: s.weekly_classes }));
-    return { students, expected };
-  }, [classItem]);
+    return { students, expected, className };
+  }, [classItem, resolveCurrentClassName]);
+
+  /**
+   * Aluno sem match na turma: procura identidade forte (código ou nome exato) no restante do
+   * sistema antes de permitir "cadastrar novo aluno" — evita duplicatas.
+   */
+  const lookupOtherClass = useCallback(async (detected: DetectedStudent, className: string) => {
+    const code = digitsOnly(detected.pdf_code);
+    const tokens = nameTokens(detected.pdf_name);
+    const queries: PromiseLike<{ data: unknown[] | null }>[] = [];
+    if (code) {
+      queries.push(supabase
+        .from('students')
+        .select('id, full_name, class, school_code')
+        .neq('class', className)
+        .ilike('school_code', `%${code}%`)
+        .limit(50));
+    }
+    if (tokens.length > 0) {
+      queries.push(supabase
+        .from('students')
+        .select('id, full_name, class, school_code')
+        .neq('class', className)
+        .ilike('full_name', `%${tokens[0]}%`)
+        .limit(200));
+      if (tokens.length > 1) {
+        queries.push(supabase
+          .from('students')
+          .select('id, full_name, class, school_code')
+          .neq('class', className)
+          .ilike('full_name', `%${tokens[tokens.length - 1]}%`)
+          .limit(200));
+      }
+    }
+    if (queries.length === 0) return null;
+    const results = await Promise.all(queries);
+    const byId = new Map<string, { id: string; full_name: string; class: string; school_code: string | null }>();
+    results.forEach((res) => (res.data || []).forEach((row) => {
+      const s = row as { id: string; full_name: string; class: string; school_code: string | null };
+      byId.set(s.id, s);
+    }));
+    const candidates = [...byId.values()];
+    if (candidates.length === 0) return null;
+    const { student, by } = findGlobalMatch(
+      { name: detected.pdf_name, code: detected.pdf_code },
+      candidates.map((s) => ({ ...s, school_code: s.school_code })),
+    );
+    if (!student || !by) return null;
+    return { ...student, by } as OtherClassMatch;
+  }, []);
 
   /**
    * Notas já existentes para o aluno desta página (aluno + disciplina + período).
@@ -340,13 +445,29 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
     const detected = p.detected;
     setPageAction(detected.student_id ? 'link' : null);
     setLinkStudentId(detected.student_id ?? null);
-    setRegDecision(defaultRegistrationDecision(detected));
+    // Professor/funcionário não altera Código, nascimento e filiação: mantém sempre o cadastro.
+    const baseDecision = defaultRegistrationDecision(detected);
+    setRegDecision(canEditRegistration
+      ? baseDecision
+      : { code: 'keep', birth_date: 'keep', mother: 'keep', father: 'keep' });
     await loadPageConflicts(detected.student_id, p);
     const pdfClass = (p.pdf_class_code ?? '').trim();
     const divergent = Boolean(pdfClass) && normalize(pdfClass) !== normalize(effectiveName || classItem?.name || '');
     setClassDecision(divergent ? 'pending' : 'resolved');
+    setOtherClassMatch(null);
+    if (!detected.student_id) {
+      try {
+        const found = await lookupOtherClass(detected, effectiveNameRef.current || classItem?.name || '');
+        if (found) {
+          setOtherClassMatch(found);
+          setPageAction(null);
+        }
+      } catch (e) {
+        console.error('Busca global do aluno falhou:', e);
+      }
+    }
     setStep('page');
-  }, [loadPageConflicts, effectiveName, classItem]);
+  }, [loadPageConflicts, lookupOtherClass, effectiveName, classItem, canEditRegistration]);
 
   /** Grava a prévia da leitura local na sessão (mesmo contrato da Edge Function). */
   const persistPreview = useCallback(async (sessionId: string, pageNumber: number, p: PagePreview) => {
@@ -469,7 +590,10 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
   }, [open, classItem]);
 
   useEffect(() => {
-    if (open && classItem) setEffectiveName(classItem.name);
+    if (open && classItem) {
+      effectiveNameRef.current = classItem.name;
+      setEffectiveName(classItem.name);
+    }
   }, [open, classItem]);
 
   const startImport = async (file: File) => {
@@ -608,6 +732,7 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
   const canConfirmPage =
     classDecision === 'resolved' &&
     invalidCount === 0 &&
+    !otherClassMatch &&
     (pageAction === 'create' || (pageAction === 'link' && Boolean(linkStudentId)));
 
   /** Avaliação estrita da autoaceitação da página atual (não grava nada). */
@@ -653,7 +778,15 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
         old_data: { name: oldName } as never,
         new_data: { name: newName, reason: 'Divergência de turma no boletim importado (página a página)', page: preview.page } as never,
       });
+      effectiveNameRef.current = newName;
       setEffectiveName(newName);
+      // Recarrega o contexto com o nome NOVO: sem isso os alunos ficam invisíveis para o matching.
+      try {
+        await loadContext();
+        if (preview) await applyPreview(preview);
+      } catch (e) {
+        console.error('Não foi possível recarregar o contexto após renomear a turma:', e);
+      }
       setClassDecision('resolved');
       toast.success(`Turma renomeada para ${newName}.`);
       onImported?.();
@@ -662,6 +795,54 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
       setError(e instanceof Error ? e.message : 'Não foi possível alterar o nome da turma.');
     } finally {
       setRenamingClass(false);
+    }
+  };
+
+  /** Move para esta turma o aluno já cadastrado em outra turma (evita duplicidade). */
+  const handleMoveStudentToClass = async () => {
+    if (!classItem || !otherClassMatch) return;
+    setMovingStudent(true);
+    try {
+      const { data: userData } = await supabase.auth.getUser();
+      const target = effectiveNameRef.current || classItem.name;
+      const previousClass = otherClassMatch.class;
+      const { error: moveError } = await supabase
+        .from('students')
+        .update({ class: target })
+        .eq('id', otherClassMatch.id);
+      if (moveError) throw moveError;
+      await supabase.from('audit_logs').insert({
+        user_id: userData?.user?.id ?? null,
+        action: 'UPDATE',
+        table_name: 'students',
+        record_id: otherClassMatch.id,
+        old_data: { class: previousClass } as never,
+        new_data: { class: target, reason: 'Aluno localizado em outra turma durante importação de boletim' } as never,
+      });
+      await loadContext();
+      setOtherClassMatch(null);
+      setPageAction('link');
+      setLinkStudentId(otherClassMatch.id);
+      toast.success(`${otherClassMatch.full_name} movido de ${previousClass} para ${target}.`);
+      onImported?.();
+    } catch (e) {
+      console.error(e);
+      toast.error(e instanceof Error ? e.message : 'Não foi possível mover o aluno para esta turma.');
+    } finally {
+      setMovingStudent(false);
+    }
+  };
+
+  /** Recarrega turma e contexto após falha de carregamento (guarda de contexto vazio). */
+  const handleReloadContext = async () => {
+    try {
+      await loadContext();
+      setContextBlock(null);
+      setStep(session ? 'resume' : 'select');
+      onImported?.();
+      toast.success('Contexto da turma recarregado.');
+    } catch (e) {
+      if (!(e instanceof Error && e.message === 'CONTEXT_EMPTY')) console.error(e);
     }
   };
 
@@ -1043,6 +1224,26 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
           </div>
         )}
 
+        {step === 'context_error' && contextBlock && (
+          <div className="space-y-4">
+            <Alert variant="destructive">
+              <AlertTriangle className="w-4 h-4" />
+              <AlertTitle className="text-sm">Não foi possível carregar os alunos desta turma</AlertTitle>
+              <AlertDescription className="text-xs space-y-1">
+                <p>
+                  A turma <span className="font-medium">{contextBlock.className}</span> tem {contextBlock.found} aluno(s)
+                  no sistema, mas a consulta retornou lista vazia. Importar agora marcaria todos como “não identificados”.
+                </p>
+                <p>Nenhuma nota foi gravada. Recarregue a turma e tente novamente.</p>
+              </AlertDescription>
+            </Alert>
+            <div className="flex flex-wrap gap-2">
+              <Button onClick={handleReloadContext}>Recarregar turma</Button>
+              <Button variant="ghost" onClick={handleCancelSession}>Cancelar importação</Button>
+            </div>
+          </div>
+        )}
+
         {step === 'failed' && (
           <div className="space-y-4">
             <Alert variant="destructive">
@@ -1192,6 +1393,33 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
 
             <div className="rounded-lg border p-3 space-y-2">
               <p className="text-sm font-medium">Aluno correspondente no sistema</p>
+              {otherClassMatch && (
+                <Alert>
+                  <AlertTriangle className="w-4 h-4" />
+                  <AlertTitle className="text-sm">Este aluno já existe em outra turma</AlertTitle>
+                  <AlertDescription className="text-xs space-y-2">
+                    <p>
+                      <span className="font-medium">{otherClassMatch.full_name}</span> está cadastrado na turma{' '}
+                      <span className="font-medium">{otherClassMatch.class}</span>
+                      {otherClassMatch.school_code ? ` (Código ${otherClassMatch.school_code})` : ''} — identificado por{' '}
+                      {otherClassMatch.by === 'code' ? 'Código do boletim' : 'nome idêntico'}.
+                      Cadastrar novo aluno criaria duplicidade.
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      <Button size="sm" onClick={handleMoveStudentToClass} disabled={movingStudent}>
+                        {movingStudent && <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" />}
+                        Mover para {effectiveName || classItem.name}
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={handleIgnorePage} disabled={movingStudent}>
+                        Manter na turma atual e ignorar esta página
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => setOtherClassMatch(null)} disabled={movingStudent}>
+                        Decidir manualmente
+                      </Button>
+                    </div>
+                  </AlertDescription>
+                </Alert>
+              )}
               <div className="flex flex-wrap items-center gap-2">
                 <Select
                   value={pageAction === 'link' ? linkStudentId ?? undefined : undefined}
@@ -1207,6 +1435,7 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
                   </SelectContent>
                 </Select>
                 <Button size="sm" variant={pageAction === 'create' ? 'default' : 'outline'}
+                  disabled={Boolean(otherClassMatch)}
                   onClick={() => { setPageAction('create'); setLinkStudentId(null); }}>
                   Cadastrar novo aluno
                 </Button>
@@ -1254,6 +1483,7 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
               <GradesRegistrationAudit
                 entries={[preview.detected]}
                 decisions={{ [preview.detected.key]: regDecision }}
+                canEdit={canEditRegistration}
                 onDecide={(_key, field, decision) =>
                   setRegDecision((prev) => ({ ...(prev ?? defaultRegistrationDecision(preview.detected)), [field]: decision }))}
               />

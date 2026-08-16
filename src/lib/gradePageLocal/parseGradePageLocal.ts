@@ -5,6 +5,7 @@
 import { buildCells, detectGrid, groupLines } from './layout';
 import { extractHeader } from './header';
 import { normalizeText, periodRank, similarity } from './normalize';
+import { matchStudentInClass } from './studentMatch';
 import { isLocallyConfident, validateLocalPage } from './validate';
 import {
   LocalContextStudent, LocalParseContext, LocalValidation, TextToken,
@@ -54,22 +55,10 @@ export interface LocalParseResult {
   preview: LocalPagePreview | null;
 }
 
+/** Matching em camadas (código → nome exato → semelhança única). Ambiguidade nunca é aceita. */
 function matchStudent(name: string, code: string | null, students: LocalContextStudent[]) {
-  const normName = normalizeText(name);
-  const pdfCode = (code ?? '').trim();
-  if (pdfCode) {
-    const byCode = students.find((s) => Boolean(s.school_code) && String(s.school_code).trim() === pdfCode);
-    if (byCode) return { student: byCode, score: 1 };
-  }
-  const exact = normName ? students.find((s) => normalizeText(s.full_name) === normName) : undefined;
-  if (exact) return { student: exact, score: 1 };
-  let best: LocalContextStudent | null = null;
-  let score = 0;
-  for (const s of students) {
-    const value = similarity(normName, normalizeText(s.full_name));
-    if (value > score) { score = value; best = s; }
-  }
-  return { student: best, score };
+  const outcome = matchStudentInClass({ name, code }, students);
+  return { student: outcome.student, score: outcome.score, status: outcome.status };
 }
 
 export function parseGradePageLocal(tokens: TextToken[], context: LocalParseContext): LocalParseResult {
@@ -86,7 +75,8 @@ export function parseGradePageLocal(tokens: TextToken[], context: LocalParseCont
 
   const header = extractHeader(lines, grid.headerLineIndex);
   const built = buildCells(lines, grid);
-  const { student: matched, score: matchScore } = matchStudent(header.name ?? '', header.student_code, context.students);
+  const { student: matched, score: matchScore, status: matchStatus } =
+    matchStudent(header.name ?? '', header.student_code, context.students);
 
   const validation = validateLocalPage({
     tokens, grid, cells: built.cells, subjects: built.subjects,
@@ -96,8 +86,9 @@ export function parseGradePageLocal(tokens: TextToken[], context: LocalParseCont
   });
 
   const status: 'matched' | 'fuzzy' | 'unmatched' =
-    matchScore >= 0.95 ? 'matched' : matchScore >= 0.6 ? 'fuzzy' : 'unmatched';
+    matchStatus === 'matched' ? 'matched' : matchStatus === 'fuzzy' ? 'fuzzy' : 'unmatched';
   const linked = status === 'unmatched' ? null : matched;
+  const ambiguous = matchStatus === 'ambiguous';
 
   const subjectOrder = new Map<string, number>();
   built.subjects.forEach((s) => {
@@ -167,7 +158,8 @@ export function parseGradePageLocal(tokens: TextToken[], context: LocalParseCont
   });
 
   const conflicts: string[] = [];
-  if (status === 'unmatched') conflicts.push('not_in_class');
+  if (ambiguous) conflicts.push('ambiguous_match');
+  if (status === 'unmatched' && !ambiguous) conflicts.push('not_in_class');
   if (status === 'fuzzy') conflicts.push('name_similar');
   if (linked) {
     const same = (a?: string | null, b?: string | null) =>

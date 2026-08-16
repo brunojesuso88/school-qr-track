@@ -11,6 +11,8 @@ interface Props {
   entries: DetectedStudent[];
   decisions: Record<string, RegistrationDecision>;
   onDecide: (key: string, field: keyof RegistrationDecision, decision: FieldDecision) => void;
+  /** Professor visualiza a divergência, mas não pode efetivar a atualização cadastral. */
+  canEdit?: boolean;
 }
 
 const FieldRow = ({
@@ -41,7 +43,7 @@ const FieldRow = ({
   </div>
 );
 
-export const GradesRegistrationAudit = ({ entries, decisions, onDecide }: Props) => {
+export const GradesRegistrationAudit = ({ entries, decisions, onDecide, canEdit = true }: Props) => {
   const list = entries.filter((d) => d.student_id && hasRegistrationData(d));
   if (list.length === 0) {
     return (
@@ -60,6 +62,15 @@ export const GradesRegistrationAudit = ({ entries, decisions, onDecide }: Props)
           nunca substitui a matrícula do aluno.
         </AlertDescription>
       </Alert>
+      {!canEdit && (
+        <Alert>
+          <Info className="w-4 h-4" />
+          <AlertDescription className="text-xs">
+            Somente administração e direção podem alterar Código, nascimento e filiação. As divergências abaixo são
+            apenas informativas para o seu perfil.
+          </AlertDescription>
+        </Alert>
+      )}
       <ScrollArea className="h-[300px] rounded-md border">
         <div className="divide-y">
           {list.map((d) => {
@@ -74,28 +85,28 @@ export const GradesRegistrationAudit = ({ entries, decisions, onDecide }: Props)
                   current={d.current?.school_code ?? '—'}
                   pdfValue={d.pdf_code ?? '—'}
                   decision={dec?.code ?? null}
-                  onDecide={d.pdf_code && need(d.pdf_code, d.current?.school_code ?? null) ? (v) => onDecide(d.key, 'code', v) : null}
+                  onDecide={canEdit && d.pdf_code && need(d.pdf_code, d.current?.school_code ?? null) ? (v) => onDecide(d.key, 'code', v) : null}
                 />
                 <FieldRow
                   label="Nascimento"
                   current={formatDate(d.current?.birth_date ?? null)}
                   pdfValue={formatDate(d.pdf_birth_date)}
                   decision={dec?.birth_date ?? null}
-                  onDecide={d.pdf_birth_date && need(d.pdf_birth_date, d.current?.birth_date ?? null) ? (v) => onDecide(d.key, 'birth_date', v) : null}
+                  onDecide={canEdit && d.pdf_birth_date && need(d.pdf_birth_date, d.current?.birth_date ?? null) ? (v) => onDecide(d.key, 'birth_date', v) : null}
                 />
                 <FieldRow
                   label="Mãe"
                   current={d.current?.mother_name ?? '—'}
                   pdfValue={d.pdf_mother_name ?? '—'}
                   decision={dec?.mother ?? null}
-                  onDecide={d.pdf_mother_name && need(d.pdf_mother_name, d.current?.mother_name ?? null) ? (v) => onDecide(d.key, 'mother', v) : null}
+                  onDecide={canEdit && d.pdf_mother_name && need(d.pdf_mother_name, d.current?.mother_name ?? null) ? (v) => onDecide(d.key, 'mother', v) : null}
                 />
                 <FieldRow
                   label="Pai"
                   current={d.current?.father_name ?? '—'}
                   pdfValue={d.pdf_father_name ?? '—'}
                   decision={dec?.father ?? null}
-                  onDecide={d.pdf_father_name && need(d.pdf_father_name, d.current?.father_name ?? null) ? (v) => onDecide(d.key, 'father', v) : null}
+                  onDecide={canEdit && d.pdf_father_name && need(d.pdf_father_name, d.current?.father_name ?? null) ? (v) => onDecide(d.key, 'father', v) : null}
                 />
               </div>
             );

@@ -497,34 +497,64 @@ serve(async (req) => {
     (parsed.subjects ?? []).forEach((s: string) => registerSubject(s));
 
     // Casamento do aluno
-    // Casamento local, nesta ordem: código exato -> nome normalizado exato -> similaridade.
-    const normName = normalize(pdfName);
+    // Mesmas camadas do motor local (src/lib/gradePageLocal/studentMatch.ts):
+    // código (dígitos) único -> nome normalizado exato único -> semelhança >= 0.85 com candidato único.
+    // Dois ou mais candidatos plausíveis => ambiguidade (nunca vincula automaticamente).
+    const digitsOnly = (v: unknown) => {
+      const d = String(v ?? '').replace(/\D+/g, '');
+      if (!d) return '';
+      return d.replace(/^0+/, '') || '0';
+    };
+    const PARTICLES = new Set(['da', 'de', 'do', 'das', 'dos', 'e', 'di', 'del', 'della', 'du']);
+    const tokensOf = (v: unknown) =>
+      normalize(String(v ?? '')).split(' ').filter((t) => t && !PARTICLES.has(t));
+    const tokenSim = (a: unknown, b: unknown) => {
+      const sa = new Set(tokensOf(a));
+      const sb = new Set(tokensOf(b));
+      if (sa.size === 0 || sb.size === 0) return 0;
+      let inter = 0;
+      sa.forEach((t) => { if (sb.has(t)) inter++; });
+      return (2 * inter) / (sa.size + sb.size);
+    };
+    const sameName = (a: unknown, b: unknown) => {
+      const ta = tokensOf(a);
+      const tb = tokensOf(b);
+      if (ta.length === 0 || tb.length === 0) return false;
+      if (normalize(String(a ?? '')) === normalize(String(b ?? ''))) return true;
+      if (ta.length !== tb.length) return false;
+      return [...ta].sort().join(' ') === [...tb].sort().join(' ');
+    };
+
     let matchedStudent: ClassStudent | null = null;
     let matchScore = 0;
+    let ambiguous = false;
+    let status: 'matched' | 'fuzzy' | 'unmatched' = 'unmatched';
 
-    const pdfCode = String(header.student_code ?? '').trim();
-    const codeMatch = pdfCode
-      ? students.find((s) => Boolean(s.school_code) && String(s.school_code).trim() === pdfCode)
-      : undefined;
+    const pdfCode = digitsOnly(header.student_code);
+    const byCode = pdfCode ? students.filter((s) => digitsOnly(s.school_code) === pdfCode) : [];
+    const byName = students.filter((s) => sameName(pdfName, s.full_name));
 
-    if (codeMatch) {
-      matchedStudent = codeMatch;
-      matchScore = 1;
+    if (byCode.length === 1) {
+      matchedStudent = byCode[0]; matchScore = 1; status = 'matched';
+    } else if (byCode.length > 1) {
+      matchScore = 1; ambiguous = true;
+    } else if (byName.length === 1) {
+      matchedStudent = byName[0]; matchScore = 1; status = 'matched';
+    } else if (byName.length > 1) {
+      matchScore = 1; ambiguous = true;
     } else {
-      const exactName = normName ? students.find((s) => normalize(s.full_name) === normName) : undefined;
-      if (exactName) {
-        matchedStudent = exactName;
-        matchScore = 1;
+      const scored = students
+        .map((s) => ({ s, score: tokenSim(pdfName, s.full_name) }))
+        .filter((e) => e.score >= 0.85)
+        .sort((a, b) => b.score - a.score);
+      if (scored.length === 1) {
+        matchedStudent = scored[0].s; matchScore = scored[0].score; status = 'fuzzy';
+      } else if (scored.length > 1) {
+        matchScore = scored[0].score; ambiguous = true;
       } else {
-        for (const s of students) {
-          const score = similarity(normName, normalize(s.full_name));
-          if (score > matchScore) { matchScore = score; matchedStudent = s; }
-        }
+        matchScore = students.reduce((acc, s) => Math.max(acc, tokenSim(pdfName, s.full_name)), 0);
       }
     }
-
-    const status: 'matched' | 'fuzzy' | 'unmatched' =
-      matchScore >= 0.95 ? 'matched' : matchScore >= 0.6 ? 'fuzzy' : 'unmatched';
     const linkedStudent = status === 'unmatched' ? null : matchedStudent;
 
     const rows = (parsed.rows ?? []).flatMap((r: any) => {
@@ -575,7 +605,8 @@ serve(async (req) => {
     });
 
     const conflicts: string[] = [];
-    if (status === 'unmatched') conflicts.push('not_in_class');
+    if (ambiguous) conflicts.push('ambiguous_match');
+    if (status === 'unmatched' && !ambiguous) conflicts.push('not_in_class');
     if (status === 'fuzzy') conflicts.push('name_similar');
     if (linkedStudent) {
       const same = (a?: string | null, b?: string | null) =>

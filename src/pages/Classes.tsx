@@ -1367,6 +1367,7 @@ const Classes = () => {
           open={!!gradesClass}
           onOpenChange={(open) => !open && setGradesClass(null)}
           classItem={gradesClass}
+          onImported={() => { fetchClasses(); fetchStudentCounts(); }}
         />
 
         {/* Attendance Dialog */}

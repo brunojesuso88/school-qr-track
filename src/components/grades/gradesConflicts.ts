@@ -43,6 +43,8 @@ export interface RegistrationDecision {
 
 export const CONFLICT_LABELS: Record<string, string> = {
   not_in_class: 'Aluno do boletim não encontrado na turma',
+  ambiguous_match: 'Mais de um aluno da turma corresponde — escolha manual necessária',
+  other_class: 'Aluno encontrado em outra turma do sistema',
   name_similar: 'Nome semelhante, mas não idêntico',
   duplicate_link: 'Possível duplicidade: dois nomes do PDF para o mesmo aluno',
   multiple_pages: 'Aluno aparece em mais de uma página',
