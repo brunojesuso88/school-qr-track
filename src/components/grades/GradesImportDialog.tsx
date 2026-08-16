@@ -136,6 +136,40 @@ export const sameGradeValue = (a: number | null, b: number | null) => {
   return Math.round(a * 100) === Math.round(b * 100);
 };
 
+/** Classificação canônica de uma coluna do boletim (rótulo tem prioridade sobre o kind recebido). */
+const columnIsPeriod = (label: string, kind?: string | null) => {
+  const byLabel = classifyPeriodLabel(label);
+  if (byLabel) return byLabel.kind === 'period';
+  return isPeriodKind(kind);
+};
+
+/**
+ * Mantém apenas 1º→4º Período. Média Final, Rec. Final, Cons. Class, Pendência e Final
+ * são descartadas da prévia (não são exibidas, não são gravadas e não entram no IRA).
+ */
+const keepOnlyPeriodColumns = (p: PagePreview): PagePreview => {
+  const periods = (p.periods || [])
+    .filter((period) => columnIsPeriod(period.label, period.kind))
+    .sort((a, b) => periodRank(a.label) - periodRank(b.label) || a.sort_order - b.sort_order)
+    .map((period, index) => ({ ...period, kind: 'period', sort_order: index }));
+  const allowed = new Set(periods.map((period) => normalize(period.label)));
+  const rows = (p.rows || []).filter((r) => allowed.has(normalize(r.period)));
+  return {
+    ...p,
+    periods,
+    rows,
+    stats: {
+      ...p.stats,
+      cells_total: rows.length,
+      grades_read: rows.filter((r) => r.value != null).length,
+      empty_cells: rows.filter((r) => r.value == null && !(r.flags || []).includes('invalid_value')).length,
+      explicit_zero_cells: rows.filter((r) => r.value === 0).length,
+      invalid_values: rows.filter((r) => (r.flags || []).includes('invalid_value')).length,
+      periods: periods.length,
+    },
+  };
+};
+
 export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }: GradesImportDialogProps) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [step, setStep] = useState<Step>('select');
