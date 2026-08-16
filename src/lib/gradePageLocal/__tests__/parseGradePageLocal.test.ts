@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { parseGradePageLocal } from '../parseGradePageLocal';
-import { normalizeText } from '../normalize';
+import { isEmptyMarker, normalizeText } from '../normalize';
 import {
   buildFullBooklet, buildPageTokens, contextForPages, DEFAULT_SUBJECTS,
   PAGE_1, PAGE_18, PAGE_24, PAGE_41, PAGE_42, PAGE_45, PageSpec, REGRESSION_PAGES,
@@ -133,7 +133,9 @@ describe('métricas do boletim de 45 páginas', () => {
         const columnIndex = spec.columns.findIndex((c) => normalizeText(c.label) === normalizeText(String(row.period)));
         expect(specRow).toBeDefined();
         expect(columnIndex).toBeGreaterThanOrEqual(0);
-        expect(row.raw_value ?? null).toBe(specRow!.cells[columnIndex]?.nota ?? null);
+        const expectedNota = specRow!.cells[columnIndex]?.nota ?? null;
+        const normalizedExpected = expectedNota && !isEmptyMarker(expectedNota) ? expectedNota : null;
+        expect(row.raw_value ?? null).toBe(normalizedExpected);
       }
     }
     const ratio = confident / booklet.length;

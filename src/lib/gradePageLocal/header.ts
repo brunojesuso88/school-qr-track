@@ -11,7 +11,8 @@ const LABELS: { field: keyof LocalHeader; pattern: RegExp }[] = [
   { field: 'class_code', pattern: /\bturma\b/ },
 ];
 
-const clean = (value: string) => value.replace(/^[\s:.\-–—]+/, '').replace(/[\s:.\-–—]+$/, '').trim();
+const clean = (value: string) =>
+  value.replace(/^[\s:.,;\-–—()[\]]+/, '').replace(/[\s:.,;\-–—()[\]]+$/, '').trim();
 
 /**
  * Varre cada linha, localiza os rótulos e toma como valor o texto até o próximo rótulo.
