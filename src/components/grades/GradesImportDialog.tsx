@@ -1094,8 +1094,8 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
           confirmed_by: userId,
           confirmed_at: new Date().toISOString(),
           confirmation_mode: mode === 'auto'
-            ? (autoEval.appliedExceptions.length > 0
-              ? `auto:${autoEval.appliedExceptions.map((e) => (e.startsWith('Nome') ? 'fuzzy_unique' : 'pdf_registry')).join(',')}`
+            ? (autoEval.appliedExceptionCodes.length > 0
+              ? `auto:${autoEval.appliedExceptionCodes.join(',')}`
               : 'auto')
             : 'manual',
         })
@@ -1455,6 +1455,25 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
                       </p>
                     </div>
                   </div>
+                  <div className="flex items-start gap-2">
+                    <Switch
+                      id="rule-local-reconciliation"
+                      className="mt-0.5"
+                      checked={autoRules.use_local_on_reconciliation}
+                      onCheckedChange={(v) => handleToggleRule('use_local_on_reconciliation', v)}
+                    />
+                    <div>
+                      <Label htmlFor="rule-local-reconciliation" className="text-xs font-medium">
+                        Divergência entre leituras — usar a leitura local do boletim
+                      </Label>
+                      <p className="text-[11px] text-muted-foreground">
+                        Grava exatamente o valor extraído do PDF (leitura local), usando a IA apenas como validação.
+                        Só vale quando a célula é estruturalmente válida: valor entre 0 e 10 ou vazio legítimo, sem
+                        baixa confiança, valor inválido, duplicidade conflitante ou disciplina ausente. Células vistas
+                        somente pela IA nunca são aceitas automaticamente.
+                      </p>
+                    </div>
+                  </div>
                 </div>
               )}
               {autoAccept && autoEval.appliedExceptions.length > 0 && (
@@ -1482,6 +1501,17 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
                 )
               )}
             </div>
+
+            {divergenceDiag.hasDivergence && (
+              <GradesDivergencePanel
+                divergences={divergenceDiag.divergences}
+                ruleActive={autoRules.use_local_on_reconciliation}
+                allLocallyEligible={divergenceDiag.allLocallyEligible}
+                hasOtherBlockers={otherBlockers.length > 0}
+                applying={applyingLocalReading}
+                onUseLocalReading={handleUseLocalReading}
+              />
+            )}
             {sessionSummary}
 
             {classDecision === 'pending' && preview.pdf_class_code && (
