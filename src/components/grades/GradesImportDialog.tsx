@@ -109,6 +109,8 @@ interface PagePreview {
     ai_empty_ignored?: number;
     /** Notas sugeridas apenas pela IA e descartadas por autoridade local. */
     ai_only_numeric_ignored?: number;
+    /** Marca de resolução humana da validação nesta página. */
+    resolved_by?: string;
     /** Disciplinas materializadas pela matriz da turma (sem notas lançadas). */
     anchored_subjects?: string[];
     /** Linhas de disciplina com nome quebrado em duas linhas e fundidas. */
