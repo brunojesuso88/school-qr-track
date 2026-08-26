@@ -1630,8 +1630,9 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
                       </p>
                     </div>
                   </div>
-
+                </div>
               )}
+
               {autoAccept && autoEval.appliedExceptions.length > 0 && (
                 <p className="text-[11px] text-amber-600">
                   Exceções aplicadas nesta página: {autoEval.appliedExceptions.join(' · ')}
