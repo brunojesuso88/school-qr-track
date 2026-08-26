@@ -130,3 +130,54 @@ describe('divergência LOCAL × IA no autoaceite', () => {
     expect(`auto:${r.appliedExceptionCodes.join(',')}`).toBe('auto:local_reconciliation');
   });
 });
+
+describe('nota existente divergente da nota do PDF', () => {
+  const withRule = (on: boolean, extra: Partial<typeof base> = {}) => evaluateAutoAccept({
+    ...base, ...extra, detected: detected(), pageHasExistingGrades: true,
+    rules: { ...DEFAULT_AUTO_ACCEPT_RULES, use_pdf_grade_on_existing_conflict: on },
+  });
+
+  it('sessão antiga sem a chave => regra falsa', () => {
+    expect(parseAutoAcceptRules({ use_pdf_registry: true }).use_pdf_grade_on_existing_conflict).toBe(false);
+    expect(parseAutoAcceptRules({ use_pdf_grade_on_existing_conflict: true }).use_pdf_grade_on_existing_conflict).toBe(true);
+    expect(DEFAULT_AUTO_ACCEPT_RULES.use_pdf_grade_on_existing_conflict).toBe(false);
+  });
+
+  it('nota existente idêntica (sem conflito) continua elegível', () => {
+    expect(evaluateAutoAccept({ ...base, detected: detected(), pageHasExistingGrades: false }).eligible).toBe(true);
+  });
+
+  it('nota divergente com regra desligada bloqueia', () => {
+    const r = withRule(false);
+    expect(r.eligible).toBe(false);
+    expect(r.reasons).toContain('Nota existente diverge da nota do PDF (aluno + disciplina + período)');
+  });
+
+  it('nota divergente com regra ligada não bloqueia e fica registrada como exceção', () => {
+    const r = withRule(true);
+    expect(r.eligible).toBe(true);
+    expect(r.reasons).not.toContain('Nota existente diverge da nota do PDF (aluno + disciplina + período)');
+    expect(r.appliedExceptionCodes).toContain('pdf_grade_over_existing');
+    expect(r.appliedExceptions).toContain('Nota do PDF autorizada para substituir a existente');
+  });
+
+  it('regra ligada não libera outros bloqueadores reais', () => {
+    expect(withRule(true, { rows: [{ ...divRow({ flags: ['invalid_value'] }) }] }).eligible).toBe(false);
+    expect(evaluateAutoAccept({
+      ...base, detected: detected({ status: 'unmatched' }), pageHasExistingGrades: true,
+      rules: { ...DEFAULT_AUTO_ACCEPT_RULES, use_pdf_grade_on_existing_conflict: true },
+    }).eligible).toBe(false);
+    expect(withRule(true, { classDecisionPending: true }).eligible).toBe(false);
+  });
+
+  it('regras antigas continuam independentes da nova', () => {
+    const rules = parseAutoAcceptRules({
+      use_pdf_registry: true, accept_unique_fuzzy: true, use_local_on_reconciliation: true,
+    });
+    expect(rules).toEqual({
+      use_pdf_registry: true, accept_unique_fuzzy: true,
+      use_local_on_reconciliation: true, use_pdf_grade_on_existing_conflict: false,
+    });
+  });
+});
+

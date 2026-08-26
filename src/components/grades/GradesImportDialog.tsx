@@ -1163,10 +1163,13 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
         .filter(Boolean) as (Record<string, unknown> & { conflictKey: string })[];
 
       // Idênticos já existentes: não regravar (idempotente). Divergentes seguem a estratégia escolhida.
+      // Exceção explícita do usuário: nota do PDF autorizada a substituir a existente.
       const withoutIdentical = payload.filter((g) => !identicalKeys.has(g.conflictKey));
-      const filtered = conflictStrategy === 'keep'
-        ? withoutIdentical.filter((g) => !conflictKeys.has(g.conflictKey))
-        : withoutIdentical;
+      const overwriteExisting = conflictStrategy === 'overwrite' || autoRules.use_pdf_grade_on_existing_conflict;
+      const filtered = overwriteExisting
+        ? withoutIdentical
+        : withoutIdentical.filter((g) => !conflictKeys.has(g.conflictKey));
+
       const finalPayload = filtered.map(({ conflictKey, ...rest }) => rest);
 
       if (finalPayload.length > 0) {
@@ -1609,8 +1612,27 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
                       </p>
                     </div>
                   </div>
+                  <div className="flex items-start gap-2">
+                    <Switch
+                      id="rule-pdf-grade-existing"
+                      className="mt-0.5"
+                      checked={autoRules.use_pdf_grade_on_existing_conflict}
+                      onCheckedChange={(v) => handleToggleRule('use_pdf_grade_on_existing_conflict', v)}
+                    />
+                    <div>
+                      <Label htmlFor="rule-pdf-grade-existing" className="text-xs font-medium">
+                        Usar automaticamente a nota do boletim quando divergir da nota já salva
+                      </Label>
+                      <p className="text-[11px] text-muted-foreground">
+                        Quando aluno + disciplina + período coincidirem, a nota do PDF substituirá a nota existente
+                        apenas se esta opção estiver ativada. Vale somente para essa divergência: células inválidas,
+                        fora da escala, aluno ambíguo ou disciplina não resolvida continuam bloqueando.
+                      </p>
+                    </div>
+                  </div>
                 </div>
               )}
+
               {autoAccept && autoEval.appliedExceptions.length > 0 && (
                 <p className="text-[11px] text-amber-600">
                   Exceções aplicadas nesta página: {autoEval.appliedExceptions.join(' · ')}
@@ -1792,16 +1814,23 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
                 <p className="text-[11px] text-muted-foreground">
                   Notas idênticas já gravadas são preservadas automaticamente e não exigem decisão.
                 </p>
-                <RadioGroup value={conflictStrategy} onValueChange={(v) => setConflictStrategy(v as 'keep' | 'overwrite')}>
-                  <div className="flex items-center gap-2">
-                    <RadioGroupItem value="keep" id="page-conflict-keep" />
-                    <Label htmlFor="page-conflict-keep" className="text-sm font-normal">Manter as notas existentes</Label>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <RadioGroupItem value="overwrite" id="page-conflict-overwrite" />
-                    <Label htmlFor="page-conflict-overwrite" className="text-sm font-normal">Substituir pelas notas do PDF</Label>
-                  </div>
-                </RadioGroup>
+                {autoRules.use_pdf_grade_on_existing_conflict ? (
+                  <p className="text-[11px] text-amber-600 font-medium">
+                    Nota do PDF autorizada para substituir a existente (exceção do modo automático ativada).
+                  </p>
+                ) : (
+                  <RadioGroup value={conflictStrategy} onValueChange={(v) => setConflictStrategy(v as 'keep' | 'overwrite')}>
+                    <div className="flex items-center gap-2">
+                      <RadioGroupItem value="keep" id="page-conflict-keep" />
+                      <Label htmlFor="page-conflict-keep" className="text-sm font-normal">Manter as notas existentes</Label>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <RadioGroupItem value="overwrite" id="page-conflict-overwrite" />
+                      <Label htmlFor="page-conflict-overwrite" className="text-sm font-normal">Substituir pelas notas do PDF</Label>
+                    </div>
+                  </RadioGroup>
+                )}
+
               </div>
             )}
 
