@@ -222,7 +222,15 @@ export const evaluateAutoAccept = (input: AutoAcceptInput): AutoAcceptResult => 
   }
 
   // Notas idênticas já gravadas NÃO são pendência; só divergências reais bloqueiam.
-  if (pageHasExistingGrades) reasons.push('Nota existente diverge da nota do PDF (aluno + disciplina + período)');
+  if (pageHasExistingGrades) {
+    if (rules.use_pdf_grade_on_existing_conflict) {
+      applied.push('Nota do PDF autorizada para substituir a existente');
+      appliedCodes.push('pdf_grade_over_existing');
+    } else {
+      reasons.push('Nota existente diverge da nota do PDF (aluno + disciplina + período)');
+    }
+  }
+
 
   const flagged = new Set<string>();
   rows.forEach((r) => (r.flags || []).forEach((f) => { if (BLOCKING_CELL_FLAGS.includes(f)) flagged.add(f); }));
