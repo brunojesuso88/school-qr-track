@@ -22,6 +22,44 @@ export interface ClassCurriculumState {
   plan: ClassCurriculumPlan;
 }
 
+/** Cliente destipado apenas para RPCs recém-criadas (types.ts é gerado). */
+const rpcClient = supabase as unknown as {
+  rpc: (fn: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: { message: string } | null }>;
+};
+
+/**
+ * Quais disciplinas possuem histórico de notas. NUNCA pode truncar: turmas de 3º ano
+ * têm milhares de linhas em `student_grades`. Usa RPC (DISTINCT no banco) e, se ela
+ * não estiver disponível, pagina por range até esgotar os resultados.
+ */
+export async function fetchSubjectIdsWithGrades(subjectIds: string[]): Promise<Set<string>> {
+  if (subjectIds.length === 0) return new Set();
+
+  const { data, error } = await rpcClient.rpc('grade_subject_ids_with_grades', { _subject_ids: subjectIds });
+  if (!error && Array.isArray(data)) {
+    return new Set(
+      (data as (string | { grade_subject_id?: string })[])
+        .map((row) => (typeof row === 'string' ? row : row?.grade_subject_id))
+        .filter((v): v is string => Boolean(v)),
+    );
+  }
+
+  // Fallback paginado — sem truncamento silencioso.
+  const found = new Set<string>();
+  const pageSize = 1000;
+  for (let from = 0; ; from += pageSize) {
+    const { data: rows, error: pageError } = await supabase
+      .from('student_grades')
+      .select('grade_subject_id')
+      .in('grade_subject_id', subjectIds)
+      .range(from, from + pageSize - 1);
+    if (pageError) throw pageError;
+    (rows ?? []).forEach((r) => found.add(r.grade_subject_id));
+    if (!rows || rows.length < pageSize) break;
+  }
+  return found;
+}
+
 async function loadState(classId: string, series: HighSchoolSeries): Promise<ClassCurriculumState> {
   const [matrix, classRow, gradeRes] = await Promise.all([
     fetchCurriculumMatrix(series),
@@ -37,14 +75,10 @@ async function loadState(classId: string, series: HighSchoolSeries): Promise<Cla
   const gradeRows = (gradeRes.data ?? []) as ExistingGradeSubject[];
   let gradeSubjects: ExistingGradeSubject[] = gradeRows;
   if (gradeRows.length > 0) {
-    const { data: usedRows, error } = await supabase
-      .from('student_grades')
-      .select('grade_subject_id')
-      .in('grade_subject_id', gradeRows.map((g) => g.id));
-    if (error) throw error;
-    const used = new Set((usedRows ?? []).map((r) => r.grade_subject_id));
+    const used = await fetchSubjectIdsWithGrades(gradeRows.map((g) => g.id));
     gradeSubjects = gradeRows.map((g) => ({ ...g, hasGrades: used.has(g.id) }));
   }
+
 
   const mappingClassId = (classRow.data?.mapping_class_id as string | null) ?? null;
   let mappingSubjects: ExistingMappingSubject[] = [];
