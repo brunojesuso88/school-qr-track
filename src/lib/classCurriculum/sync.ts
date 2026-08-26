@@ -117,6 +117,60 @@ export interface SyncResult extends ClassCurriculumState {
   applied: ClassCurriculumPlan['counts'];
 }
 
+export interface ConsolidationConflict {
+  student_id: string;
+  grade_period_id: string;
+  source_value: number | null;
+  target_value: number | null;
+}
+
+/** Conflito acadêmico real: valores numéricos diferentes para o mesmo aluno/período. */
+export class CurriculumConsolidationError extends Error {
+  constructor(
+    public readonly sourceName: string,
+    public readonly targetName: string,
+    public readonly conflicts: ConsolidationConflict[],
+  ) {
+    super(
+      `Não foi possível consolidar ${sourceName} com ${targetName}: foram encontradas ` +
+      `${conflicts.length} nota(s) divergente(s). Revise antes de sincronizar.`,
+    );
+    this.name = 'CurriculumConsolidationError';
+  }
+}
+
+/** Mensagens específicas em vez do toast genérico. */
+export function humanizeCurriculumError(e: unknown): string {
+  if (e instanceof CurriculumConsolidationError) return e.message;
+  const err = e as { code?: string; message?: string; details?: string } | null;
+  if (err?.code === '23505') {
+    console.error('[classCurriculum] violação de UNIQUE(class_id, normalized_name)', err);
+    return 'Conflito de nomes: já existe uma disciplina oficial com esse nome nesta turma. ' +
+      'As nomenclaturas equivalentes precisam ser consolidadas antes de renomear. Tente sincronizar novamente.';
+  }
+  if (err?.message) return err.message;
+  return 'Não foi possível sincronizar a matriz curricular.';
+}
+
+/**
+ * Consolida uma nomenclatura equivalente no registro oficial via RPC transacional.
+ * Nunca sobrescreve valores acadêmicos diferentes: lança `CurriculumConsolidationError`.
+ */
+async function consolidateDuplicate(
+  source: { id: string; name: string },
+  target: { id: string; name: string },
+): Promise<void> {
+  const { data, error } = await rpcClient.rpc('consolidate_grade_subject', {
+    _source: source.id,
+    _target: target.id,
+  });
+  if (error) throw error;
+  const result = (data ?? {}) as { status?: string; conflicts?: ConsolidationConflict[] };
+  if (result.status === 'conflict') {
+    throw new CurriculumConsolidationError(source.name, target.name, result.conflicts ?? []);
+  }
+}
+
 /**
  * Aplica a herança curricular na turma. Idempotente: rodar de novo não duplica nada.
  * Quando `persistSeries` é `true`, grava também `classes.series`.
@@ -136,6 +190,15 @@ export async function syncClassCurriculum(
 
   const state = await loadState(classId, parsed);
   const { plan, mappingClassId } = state;
+
+  // 0) Consolidação de nomenclaturas equivalentes ANTES de qualquer renomeação,
+  //    para nunca colidir com UNIQUE(class_id, normalized_name).
+  for (const group of plan.gradeEquivalentDuplicates) {
+    for (const dup of group.duplicates) {
+      await consolidateDuplicate(dup, { id: group.targetId, name: group.targetName });
+    }
+  }
+
 
   // 1) Mapeamento acadêmico (base da carga semanal usada em relatórios).
   if (mappingClassId) {
