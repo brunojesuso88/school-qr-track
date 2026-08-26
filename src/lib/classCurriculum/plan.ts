@@ -107,11 +107,14 @@ export function planClassCurriculumSync(input: {
   const manageMapping = input.manageMapping ?? true;
 
   const plan: ClassCurriculumPlan = {
-    mappingCreate: [], mappingUpdate: [], gradeCreate: [], gradeUpdate: [], gradeLegacy: [],
-    counts: { created: 0, reused: 0, updated: 0, excludedLegacy: 0 },
+    mappingCreate: [], mappingUpdate: [], gradeCreate: [], gradeUpdate: [],
+    gradeEquivalentDuplicates: [], gradeLegacy: [],
+    counts: { created: 0, reused: 0, updated: 0, excludedLegacy: 0, consolidated: 0 },
   };
 
   const usedGradeIds = new Set<string>();
+  // Registros já arquivados (consolidados/legados) não voltam ao plano: idempotência.
+  const isArchived = (g: ExistingGradeSubject) => Boolean(g.legacy_excluded) && g.include_in_ira === false;
 
   matrix.forEach((item, index) => {
     const keys = matrixKeys(item);
@@ -123,16 +126,16 @@ export function planClassCurriculumSync(input: {
       if (mappingMatches.length === 0) {
         plan.mappingCreate.push({ subject_name: item.name, weekly_classes: item.weekly_classes });
       } else {
-        const chosen = pickReuse(mappingMatches.map((m) => ({ ...m, name: m.subject_name })), item.name);
+        const chosen = pickTarget(mappingMatches.map((m) => ({ ...m, name: m.subject_name })), item.name);
         if ((chosen.weekly_classes ?? null) !== item.weekly_classes) {
           plan.mappingUpdate.push({ id: chosen.id, weekly_classes: item.weekly_classes });
         }
       }
     }
 
-    // --- grade_subjects ---
+    // --- grade_subjects (agrupados por identidade canônica) ---
     const gradeMatches = gradeSubjects.filter(
-      (g) => !usedGradeIds.has(g.id) && keys.includes(canonicalSubjectKey(g.name)),
+      (g) => !usedGradeIds.has(g.id) && !isArchived(g) && keys.includes(canonicalSubjectKey(g.name)),
     );
     if (gradeMatches.length === 0) {
       plan.gradeCreate.push({
@@ -146,9 +149,22 @@ export function planClassCurriculumSync(input: {
       plan.counts.created += 1;
       return;
     }
-    const chosen = pickReuse(gradeMatches, item.name);
-    usedGradeIds.add(chosen.id);
+    const chosen = pickTarget(gradeMatches, item.name);
+    gradeMatches.forEach((g) => usedGradeIds.add(g.id));
     plan.counts.reused += 1;
+
+    // Equivalentes históricos: consolidar no destino, nunca tratar como "fora da matriz".
+    const duplicates = gradeMatches.filter((g) => g.id !== chosen.id);
+    if (duplicates.length > 0) {
+      plan.gradeEquivalentDuplicates.push({
+        canonicalName: item.name,
+        targetId: chosen.id,
+        targetName: chosen.name,
+        duplicates: duplicates.map((d) => ({ id: d.id, name: d.name, hasGrades: Boolean(d.hasGrades) })),
+      });
+      plan.counts.consolidated += duplicates.length;
+    }
+
     const target = {
       name: item.name,
       normalized_name: normalizedName,
@@ -169,14 +185,15 @@ export function planClassCurriculumSync(input: {
     }
   });
 
-  // Sobras: disciplinas legadas fora da matriz da série.
+  // Sobras: disciplinas realmente fora da matriz da série.
   gradeSubjects
     .filter((g) => !usedGradeIds.has(g.id))
     .forEach((g) => {
-      if (g.legacy_excluded && g.include_in_ira === false) return; // já excluída — idempotente
+      if (isArchived(g)) return; // já excluída — idempotente
       plan.gradeLegacy.push({ id: g.id, name: g.name, hasGrades: Boolean(g.hasGrades) });
       plan.counts.excludedLegacy += 1;
     });
+
 
   return plan;
 }
