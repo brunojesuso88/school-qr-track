@@ -1610,7 +1610,26 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
                         baixa confiança, valor inválido, duplicidade conflitante ou disciplina ausente. Células vistas
                         somente pela IA nunca são aceitas automaticamente.
                       </p>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <Switch
+                      id="rule-pdf-grade-existing"
+                      className="mt-0.5"
+                      checked={autoRules.use_pdf_grade_on_existing_conflict}
+                      onCheckedChange={(v) => handleToggleRule('use_pdf_grade_on_existing_conflict', v)}
+                    />
+                    <div>
+                      <Label htmlFor="rule-pdf-grade-existing" className="text-xs font-medium">
+                        Usar automaticamente a nota do boletim quando divergir da nota já salva
+                      </Label>
+                      <p className="text-[11px] text-muted-foreground">
+                        Quando aluno + disciplina + período coincidirem, a nota do PDF substituirá a nota existente
+                        apenas se esta opção estiver ativada. Vale somente para essa divergência: células inválidas,
+                        fora da escala, aluno ambíguo ou disciplina não resolvida continuam bloqueando.
+                      </p>
                     </div>
+                  </div>
+
                   </div>
                 </div>
               )}
