@@ -1813,16 +1813,23 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
                 <p className="text-[11px] text-muted-foreground">
                   Notas idênticas já gravadas são preservadas automaticamente e não exigem decisão.
                 </p>
-                <RadioGroup value={conflictStrategy} onValueChange={(v) => setConflictStrategy(v as 'keep' | 'overwrite')}>
-                  <div className="flex items-center gap-2">
-                    <RadioGroupItem value="keep" id="page-conflict-keep" />
-                    <Label htmlFor="page-conflict-keep" className="text-sm font-normal">Manter as notas existentes</Label>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <RadioGroupItem value="overwrite" id="page-conflict-overwrite" />
-                    <Label htmlFor="page-conflict-overwrite" className="text-sm font-normal">Substituir pelas notas do PDF</Label>
-                  </div>
-                </RadioGroup>
+                {autoRules.use_pdf_grade_on_existing_conflict ? (
+                  <p className="text-[11px] text-amber-600 font-medium">
+                    Nota do PDF autorizada para substituir a existente (exceção do modo automático ativada).
+                  </p>
+                ) : (
+                  <RadioGroup value={conflictStrategy} onValueChange={(v) => setConflictStrategy(v as 'keep' | 'overwrite')}>
+                    <div className="flex items-center gap-2">
+                      <RadioGroupItem value="keep" id="page-conflict-keep" />
+                      <Label htmlFor="page-conflict-keep" className="text-sm font-normal">Manter as notas existentes</Label>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <RadioGroupItem value="overwrite" id="page-conflict-overwrite" />
+                      <Label htmlFor="page-conflict-overwrite" className="text-sm font-normal">Substituir pelas notas do PDF</Label>
+                    </div>
+                  </RadioGroup>
+                )}
+
               </div>
             )}
 
