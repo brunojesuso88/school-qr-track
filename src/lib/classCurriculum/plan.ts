@@ -201,6 +201,7 @@ export function planClassCurriculumSync(input: {
 /** `true` quando a turma já está exatamente igual à matriz oficial da série. */
 export const isPlanInSync = (plan: ClassCurriculumPlan) =>
   plan.gradeCreate.length === 0 && plan.gradeUpdate.length === 0 &&
+  plan.gradeEquivalentDuplicates.length === 0 &&
   plan.gradeLegacy.length === 0 && plan.mappingCreate.length === 0 &&
   plan.mappingUpdate.length === 0;
 
@@ -209,9 +210,11 @@ export function describePlan(plan: ClassCurriculumPlan): string {
   const parts: string[] = [];
   if (plan.gradeCreate.length) parts.push(`${plan.gradeCreate.length} disciplina(s) faltando`);
   if (plan.gradeUpdate.length) parts.push(`${plan.gradeUpdate.length} disciplina(s) desatualizada(s)`);
+  if (plan.counts.consolidated) parts.push(`${plan.counts.consolidated} nomenclatura(s) equivalente(s) a consolidar`);
   if (plan.gradeLegacy.length) parts.push(`${plan.gradeLegacy.length} disciplina(s) legada(s)`);
   if (plan.mappingCreate.length || plan.mappingUpdate.length) {
     parts.push(`${plan.mappingCreate.length + plan.mappingUpdate.length} ajuste(s) no mapeamento`);
   }
   return parts.length ? parts.join(' · ') : 'Turma sincronizada com a matriz oficial da série';
 }
+
