@@ -43,7 +43,7 @@ export const ClassCurriculumGate = ({ classId, onReadyChange, onSynced }: Props)
       setState(next);
       onReadyChange(Boolean(next && isPlanInSync(next.plan)));
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Falha ao verificar a matriz curricular da turma.');
+      toast.error(humanizeCurriculumError(e));
       onReadyChange(false);
     } finally {
       setLoading(false);
