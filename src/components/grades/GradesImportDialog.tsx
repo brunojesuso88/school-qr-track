@@ -39,7 +39,7 @@ import { LocalContextStudent, LocalExpectedSubject } from '@/lib/gradePageLocal/
 import { CatalogSubject, buildEffectiveSubjectMatrix } from '@/lib/gradePageLocal/effectiveMatrix';
 import { fetchCurriculumMatrix, matrixToExpectedSubjects } from '@/lib/curriculumMatrix';
 import { parseSeriesValue } from '@/lib/series';
-import { classifyPeriodLabel, isPeriodKind, periodRank } from '@/lib/gradePageLocal/normalize';
+import { canonicalSubjectKey, classifyPeriodLabel, isPeriodKind, periodRank } from '@/lib/gradePageLocal/normalize';
 import { resolveClassNameFromPdf, samePdfClassBaseName } from '@/lib/classNames/salaFora';
 import {
   matchesSecondPass,
