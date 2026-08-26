@@ -1163,10 +1163,13 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
         .filter(Boolean) as (Record<string, unknown> & { conflictKey: string })[];
 
       // Idênticos já existentes: não regravar (idempotente). Divergentes seguem a estratégia escolhida.
+      // Exceção explícita do usuário: nota do PDF autorizada a substituir a existente.
       const withoutIdentical = payload.filter((g) => !identicalKeys.has(g.conflictKey));
-      const filtered = conflictStrategy === 'keep'
-        ? withoutIdentical.filter((g) => !conflictKeys.has(g.conflictKey))
-        : withoutIdentical;
+      const overwriteExisting = conflictStrategy === 'overwrite' || autoRules.use_pdf_grade_on_existing_conflict;
+      const filtered = overwriteExisting
+        ? withoutIdentical
+        : withoutIdentical.filter((g) => !conflictKeys.has(g.conflictKey));
+
       const finalPayload = filtered.map(({ conflictKey, ...rest }) => rest);
 
       if (finalPayload.length > 0) {
