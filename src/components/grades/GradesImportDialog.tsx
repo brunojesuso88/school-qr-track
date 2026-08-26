@@ -1610,6 +1610,7 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
                         baixa confiança, valor inválido, duplicidade conflitante ou disciplina ausente. Células vistas
                         somente pela IA nunca são aceitas automaticamente.
                       </p>
+                    </div>
                   </div>
                   <div className="flex items-start gap-2">
                     <Switch
@@ -1630,8 +1631,6 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
                     </div>
                   </div>
 
-                  </div>
-                </div>
               )}
               {autoAccept && autoEval.appliedExceptions.length > 0 && (
                 <p className="text-[11px] text-amber-600">
