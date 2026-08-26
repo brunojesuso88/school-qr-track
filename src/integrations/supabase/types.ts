@@ -10,7 +10,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.1"
+    PostgrestVersion: "14.17"
   }
   public: {
     Tables: {
@@ -1647,6 +1647,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      consolidate_grade_subject: {
+        Args: { _source: string; _target: string }
+        Returns: Json
+      }
       current_user_has_role: {
         Args: { _role: Database["public"]["Enums"]["app_role"] }
         Returns: boolean
@@ -1662,6 +1666,10 @@ export type Database = {
           status: string
           student_id: string
         }[]
+      }
+      grade_subject_ids_with_grades: {
+        Args: { _subject_ids: string[] }
+        Returns: string[]
       }
       has_role: {
         Args: {

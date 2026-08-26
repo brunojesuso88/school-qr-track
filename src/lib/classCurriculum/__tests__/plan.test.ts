@@ -30,7 +30,7 @@ describe('planClassCurriculumSync', () => {
     expect(plan.gradeLegacy).toHaveLength(0);
   });
 
-  it('mantém a versão com notas e marca a duplicata como legada', () => {
+  it('canônico exato é o destino e o alias vira duplicata equivalente a consolidar', () => {
     const plan = planClassCurriculumSync({
       matrix,
       gradeSubjects: [
@@ -38,9 +38,17 @@ describe('planClassCurriculumSync', () => {
         { id: 'com', name: 'APROFUNDAMENTO IF - CHL - I', weekly_classes: null, include_in_ira: true, hasGrades: true },
       ],
     });
-    expect(plan.gradeUpdate.some((u) => u.id === 'com')).toBe(true);
-    expect(plan.gradeLegacy.map((g) => g.id)).toEqual(['sem']);
+    expect(plan.gradeEquivalentDuplicates).toEqual([
+      {
+        canonicalName: 'APROFUNDAMENTO IF - I',
+        targetId: 'sem',
+        targetName: 'APROFUNDAMENTO IF - I',
+        duplicates: [{ id: 'com', name: 'APROFUNDAMENTO IF - CHL - I', hasGrades: true }],
+      },
+    ]);
+    expect(plan.gradeLegacy).toHaveLength(0);
   });
+
 
   it('marca disciplinas fora da matriz da série como legadas, preservando histórico', () => {
     const plan = planClassCurriculumSync({

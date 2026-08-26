@@ -39,7 +39,7 @@ import { LocalContextStudent, LocalExpectedSubject } from '@/lib/gradePageLocal/
 import { CatalogSubject, buildEffectiveSubjectMatrix } from '@/lib/gradePageLocal/effectiveMatrix';
 import { fetchCurriculumMatrix, matrixToExpectedSubjects } from '@/lib/curriculumMatrix';
 import { parseSeriesValue } from '@/lib/series';
-import { classifyPeriodLabel, isPeriodKind, periodRank } from '@/lib/gradePageLocal/normalize';
+import { canonicalSubjectKey, classifyPeriodLabel, isPeriodKind, periodRank } from '@/lib/gradePageLocal/normalize';
 import { resolveClassNameFromPdf, samePdfClassBaseName } from '@/lib/classNames/salaFora';
 import {
   matchesSecondPass,
@@ -1076,36 +1076,66 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
 
       const { data: existingSubjects } = await supabase
         .from('grade_subjects')
-        .select('id, normalized_name, include_in_ira, custom_ira_weight')
+        .select('id, name, normalized_name, include_in_ira, custom_ira_weight, legacy_excluded')
         .eq('class_id', classItem.id);
+      type ExistingSubjectRow = {
+        id: string; name: string; normalized_name: string;
+        include_in_ira: boolean; custom_ira_weight: number | null; legacy_excluded: boolean | null;
+      };
+      const existingRows = (existingSubjects || []) as ExistingSubjectRow[];
       const existingByNorm = new Map<string, { include_in_ira: boolean; custom_ira_weight: number | null }>();
-      (existingSubjects || []).forEach((s: { normalized_name: string; include_in_ira: boolean; custom_ira_weight: number | null }) =>
+      existingRows.forEach((s) =>
         existingByNorm.set(s.normalized_name, { include_in_ira: s.include_in_ira, custom_ira_weight: s.custom_ira_weight }));
+      // Reuso canônico: CHL/CNS/ETT são apenas aliases; nunca criam novos grade_subjects.
+      const activeByCanonical = new Map<string, ExistingSubjectRow>();
+      existingRows
+        .filter((s) => !s.legacy_excluded)
+        .forEach((s) => {
+          const key = canonicalSubjectKey(s.name);
+          const current = activeByCanonical.get(key);
+          if (!current || normalize(s.name) === key) activeByCanonical.set(key, s);
+        });
 
-      const subjectPayload = preview.subjects.map((s) => {
+      /** normalized_name lido do PDF -> normalized_name efetivamente gravado. */
+      const subjectNormRedirect = new Map<string, string>();
+      const subjectPayload: Record<string, unknown>[] = [];
+      const seenNorms = new Set<string>();
+      preview.subjects.forEach((s) => {
         const expected = s.matched_expected ? expectedSubjects.find((e) => e.name === s.matched_expected) : undefined;
-        const previous = existingByNorm.get(s.normalized_name);
+        const readNorm = s.normalized_name || normalize(s.name);
+        const canonicalMatch = activeByCanonical.get(canonicalSubjectKey(s.name));
+        const name = canonicalMatch?.name ?? s.name;
+        const normalized_name = canonicalMatch?.normalized_name ?? readNorm;
+        subjectNormRedirect.set(readNorm, normalized_name);
+        const previous = existingByNorm.get(normalized_name);
         const weekly = expected?.weekly_classes ?? s.weekly_classes ?? null;
-        return {
+        if (seenNorms.has(normalized_name)) return;
+        seenNorms.add(normalized_name);
+        subjectPayload.push({
           class_id: classItem.id,
-          name: s.name,
-          normalized_name: s.normalized_name || normalize(s.name),
+          name,
+          normalized_name,
           mapping_class_subject_id: expected?.id ?? null,
           weekly_classes: weekly,
           include_in_ira: previous?.include_in_ira ?? (weekly === 1 || weekly === 2 || weekly === 4),
           custom_ira_weight: previous?.custom_ira_weight ?? null,
           sort_order: s.sort_order,
-        };
+        });
       });
       const subjectIdByNorm = new Map<string, string>();
       if (subjectPayload.length > 0) {
         const { data: subjectRows, error: subjectError } = await supabase
           .from('grade_subjects')
-          .upsert(subjectPayload, { onConflict: 'class_id,normalized_name' })
+          .upsert(subjectPayload as never, { onConflict: 'class_id,normalized_name' })
           .select('id, normalized_name');
         if (subjectError) throw subjectError;
         (subjectRows || []).forEach((s: { id: string; normalized_name: string }) => subjectIdByNorm.set(s.normalized_name, s.id));
       }
+      const subjectIdForRow = (subjectName: string) => {
+        const norm = normalize(subjectName);
+        return subjectIdByNorm.get(subjectNormRedirect.get(norm) ?? norm);
+      };
+
 
       // Confirmação manual é SOBERANA: apenas leitura local/edições manuais,
       // sem linhas da IA e sem flags de reconciliação no payload acadêmico.
@@ -1115,7 +1145,7 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
       const payload = academicRows
         .filter((r) => !r.flags.includes('invalid_value'))
         .map((row) => {
-          const subjectId = subjectIdByNorm.get(normalize(row.subject));
+          const subjectId = subjectIdForRow(row.subject);
           const periodId = periodIdByNorm.get(normalize(row.period));
           if (!subjectId || !periodId) return null;
           return {

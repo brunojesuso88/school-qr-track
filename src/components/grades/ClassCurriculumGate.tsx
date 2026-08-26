@@ -10,8 +10,10 @@ import { AlertTriangle, CheckCircle2, Loader2, RefreshCw } from 'lucide-react';
 import { CLASS_SERIES_OPTIONS, HighSchoolSeries, classSeriesLabel, parseSeriesValue } from '@/lib/series';
 import { matrixWeeklyTotal } from '@/lib/curriculumMatrixCore';
 import {
-  ClassCurriculumState, describePlan, inspectClassCurriculum, isPlanInSync, syncClassCurriculum,
+  ClassCurriculumState, describePlan, humanizeCurriculumError, inspectClassCurriculum, isPlanInSync,
+  syncClassCurriculum,
 } from '@/lib/classCurriculum/sync';
+
 
 interface Props {
   classId: string;
@@ -41,7 +43,7 @@ export const ClassCurriculumGate = ({ classId, onReadyChange, onSynced }: Props)
       setState(next);
       onReadyChange(Boolean(next && isPlanInSync(next.plan)));
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Falha ao verificar a matriz curricular da turma.');
+      toast.error(humanizeCurriculumError(e));
       onReadyChange(false);
     } finally {
       setLoading(false);
@@ -74,16 +76,19 @@ export const ClassCurriculumGate = ({ classId, onReadyChange, onSynced }: Props)
       const c = result.applied;
       toast.success(
         `Matriz do ${classSeriesLabel(series)} aplicada: ${c.created} criada(s), ${c.reused} reaproveitada(s), ` +
-        `${c.updated} atualizada(s), ${c.excludedLegacy} legada(s) fora do IRA.`,
+        `${c.updated} atualizada(s), ${c.consolidated} consolidada(s), ${c.excludedLegacy} legada(s) fora do IRA.`,
       );
       onSynced?.();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Não foi possível sincronizar a matriz curricular.');
+      console.error('[ClassCurriculumGate] falha ao sincronizar', e);
+      toast.error(humanizeCurriculumError(e));
       onReadyChange(false);
+      await load();
     } finally {
       setSyncing(false);
     }
   };
+
 
   if (loading) {
     return (
@@ -147,6 +152,19 @@ export const ClassCurriculumGate = ({ classId, onReadyChange, onSynced }: Props)
                   Serão criadas: {state.plan.gradeCreate.map((g) => g.name).join(', ')}.
                 </p>
               )}
+              {state.plan.gradeEquivalentDuplicates.length > 0 && (
+                <div className="text-[11px] text-sky-700 dark:text-sky-400 space-y-0.5">
+                  <p>Disciplinas equivalentes encontradas. As nomenclaturas históricas serão consolidadas sem perda de notas:</p>
+                  {state.plan.gradeEquivalentDuplicates.flatMap((group) =>
+                    group.duplicates.map((d) => (
+                      <p key={d.id} className="pl-2">
+                        {d.name} → {group.canonicalName}
+                        {d.hasGrades ? ' (com notas)' : ''}
+                      </p>
+                    )),
+                  )}
+                </div>
+              )}
               {state.plan.gradeLegacy.length > 0 && (
                 <p className="text-[11px] text-amber-600">
                   Fora da matriz da série (histórico preservado, oculto nas notas e no IRA):{' '}
@@ -155,10 +173,13 @@ export const ClassCurriculumGate = ({ classId, onReadyChange, onSynced }: Props)
               )}
               <Button size="sm" onClick={handleSync} disabled={syncing || !series}>
                 {syncing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />}
-                Aplicar matriz oficial da série
+                {state.plan.gradeEquivalentDuplicates.length > 0
+                  ? 'Consolidar e sincronizar matriz'
+                  : 'Aplicar matriz oficial da série'}
               </Button>
             </div>
           )}
+
         </>
       )}
     </div>
