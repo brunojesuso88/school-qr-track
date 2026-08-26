@@ -10,8 +10,10 @@ import { AlertTriangle, CheckCircle2, Loader2, RefreshCw } from 'lucide-react';
 import { CLASS_SERIES_OPTIONS, HighSchoolSeries, classSeriesLabel, parseSeriesValue } from '@/lib/series';
 import { matrixWeeklyTotal } from '@/lib/curriculumMatrixCore';
 import {
-  ClassCurriculumState, describePlan, inspectClassCurriculum, isPlanInSync, syncClassCurriculum,
+  ClassCurriculumState, describePlan, humanizeCurriculumError, inspectClassCurriculum, isPlanInSync,
+  syncClassCurriculum,
 } from '@/lib/classCurriculum/sync';
+
 
 interface Props {
   classId: string;
