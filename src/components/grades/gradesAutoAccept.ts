@@ -11,12 +11,15 @@ export interface AutoAcceptRules {
   accept_unique_fuzzy: boolean;
   /** Divergência LOCAL × IA deixa de bloquear e adota-se a leitura local do boletim. */
   use_local_on_reconciliation: boolean;
+  /** Nota já salva divergente da nota do PDF deixa de bloquear e o PDF substitui a existente. */
+  use_pdf_grade_on_existing_conflict: boolean;
 }
 
 export const DEFAULT_AUTO_ACCEPT_RULES: AutoAcceptRules = {
   use_pdf_registry: false,
   accept_unique_fuzzy: false,
   use_local_on_reconciliation: false,
+  use_pdf_grade_on_existing_conflict: false,
 };
 
 /** Lê as regras persistidas na sessão de forma tolerante a sessões antigas. */
@@ -26,8 +29,10 @@ export const parseAutoAcceptRules = (value: unknown): AutoAcceptRules => {
     use_pdf_registry: raw.use_pdf_registry === true,
     accept_unique_fuzzy: raw.accept_unique_fuzzy === true,
     use_local_on_reconciliation: raw.use_local_on_reconciliation === true,
+    use_pdf_grade_on_existing_conflict: raw.use_pdf_grade_on_existing_conflict === true,
   };
 };
+
 
 /**
  * Flags de célula que impedem a autoaceitação. Célula vazia NUNCA é erro.
