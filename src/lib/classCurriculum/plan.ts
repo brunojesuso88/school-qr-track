@@ -24,6 +24,14 @@ export interface ExistingGradeSubject {
   hasGrades?: boolean;
 }
 
+export interface EquivalentDuplicateGroup {
+  /** Nome oficial da matriz para o qual o grupo converge. */
+  canonicalName: string;
+  targetId: string;
+  targetName: string;
+  duplicates: { id: string; name: string; hasGrades: boolean }[];
+}
+
 export interface ClassCurriculumPlan {
   mappingCreate: { subject_name: string; weekly_classes: number }[];
   mappingUpdate: { id: string; weekly_classes: number }[];
@@ -44,9 +52,14 @@ export interface ClassCurriculumPlan {
     legacy_excluded: false;
     sort_order: number;
   }[];
+  /**
+   * Nomenclaturas históricas equivalentes (mesma identidade canônica) que devem
+   * ser CONSOLIDADAS no registro oficial, sem perda de notas.
+   */
+  gradeEquivalentDuplicates: EquivalentDuplicateGroup[];
   /** Disciplinas fora da matriz da série: saem da UI/IRA, histórico preservado. */
   gradeLegacy: { id: string; name: string; hasGrades: boolean }[];
-  counts: { created: number; reused: number; updated: number; excludedLegacy: number };
+  counts: { created: number; reused: number; updated: number; excludedLegacy: number; consolidated: number };
 }
 
 /** Todas as chaves canônicas que identificam um componente da matriz. */
@@ -54,20 +67,22 @@ const matrixKeys = (item: { name: string; aliases?: string[] | null }) =>
   [item.name, ...(item.aliases ?? [])].map((k) => canonicalSubjectKey(k)).filter(Boolean);
 
 /**
- * Escolhe, entre candidatos equivalentes (ex.: `APROFUNDAMENTO IF - CHL - I`
- * e `APROFUNDAMENTO IF - I`), a disciplina a REUTILIZAR: prioriza a que já tem
- * histórico de notas e, em seguida, a de nome exatamente igual ao da matriz.
+ * Escolhe o registro DESTINO entre disciplinas equivalentes:
+ * 1) nome exatamente igual ao da matriz (evita renomear alias para um
+ *    `normalized_name` já existente e violar UNIQUE(class_id, normalized_name));
+ * 2) registro com histórico de notas;
+ * 3) primeiro candidato determinístico (ordem estável por id).
  */
-function pickReuse<T extends { name: string; hasGrades?: boolean }>(candidates: T[], canonicalName: string): T {
-  const exact = candidates.filter((c) => normalizeText(c.name) === normalizeText(canonicalName));
-  const withGrades = candidates.filter((c) => c.hasGrades);
-  return (
-    withGrades.find((c) => exact.includes(c)) ??
-    withGrades[0] ??
-    exact[0] ??
-    candidates[0]
-  );
+function pickTarget<T extends { id: string; name: string; hasGrades?: boolean }>(
+  candidates: T[],
+  canonicalName: string,
+): T {
+  const ordered = [...candidates].sort((a, b) => a.id.localeCompare(b.id));
+  const exact = ordered.find((c) => normalizeText(c.name) === normalizeText(canonicalName));
+  if (exact) return exact;
+  return ordered.find((c) => c.hasGrades) ?? ordered[0];
 }
+
 
 /**
  * Plano idempotente de sincronização. Executar duas vezes sobre o mesmo estado
