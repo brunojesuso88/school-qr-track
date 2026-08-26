@@ -74,16 +74,19 @@ export const ClassCurriculumGate = ({ classId, onReadyChange, onSynced }: Props)
       const c = result.applied;
       toast.success(
         `Matriz do ${classSeriesLabel(series)} aplicada: ${c.created} criada(s), ${c.reused} reaproveitada(s), ` +
-        `${c.updated} atualizada(s), ${c.excludedLegacy} legada(s) fora do IRA.`,
+        `${c.updated} atualizada(s), ${c.consolidated} consolidada(s), ${c.excludedLegacy} legada(s) fora do IRA.`,
       );
       onSynced?.();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Não foi possível sincronizar a matriz curricular.');
+      console.error('[ClassCurriculumGate] falha ao sincronizar', e);
+      toast.error(humanizeCurriculumError(e));
       onReadyChange(false);
+      await load();
     } finally {
       setSyncing(false);
     }
   };
+
 
   if (loading) {
     return (
