@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { audienceRolesForEvent, CONFIGURABLE_EVENTS, getEventDefinition, isInappMandatory } from './events';
 import { detectPushPlatform } from './platform';
+import { buildDedupeKey, buildNotificationContent, containsSensitiveValue, DEFAULT_ROUTE, safeRoute } from './payload';
+import { parsePushPayload } from './swPayload';
+import { classifyPushResponse, MAX_DELIVERY_ATTEMPTS, shouldDisableDevice, shouldRetry } from './delivery';
 import { filterItems, formatBadge, markAllItemsRead, markItemRead, unreadCount, type NotificationItem } from './center';
 
 const item = (over: Partial<NotificationItem> = {}): NotificationItem => ({
@@ -72,5 +75,95 @@ describe('central interna', () => {
     expect(formatBadge(0)).toBe('');
     expect(formatBadge(5)).toBe('5');
     expect(formatBadge(150)).toBe('99+');
+  });
+});
+
+describe('payload e privacidade', () => {
+  it('atestado ignora totalmente o contexto sensível recebido', () => {
+    const content = buildNotificationContent('medical_certificate_created', {
+      title: 'Atestado de Maria Silva — CID J11',
+      body: 'CID J11 gripe, 10/03 a 20/03',
+      route: '/students?cid=J11',
+    });
+    expect(content.title).toBe('Novo atestado registrado');
+    expect(content.body).toBe('Um novo atestado foi registrado para um aluno da escola.');
+    expect(content.route).toBe('/students');
+    expect(JSON.stringify(content)).not.toMatch(/maria|j11|10\/03/i);
+  });
+
+  it('detecta vazamento de valores sensíveis no payload final', () => {
+    const payload = { title: 'Novo atestado', body: 'Aviso genérico' };
+    expect(containsSensitiveValue(payload, ['Maria Silva', 'J11'])).toBe(false);
+    expect(containsSensitiveValue({ title: 'Atestado de Maria Silva' }, ['Maria Silva'])).toBe(true);
+    // Termos muito curtos são ignorados para evitar falso positivo.
+    expect(containsSensitiveValue(payload, ['a', null, undefined])).toBe(false);
+  });
+
+  it('gera dedupe_key determinístico', () => {
+    expect(buildDedupeKey('medical_certificate_created', 'abc')).toBe('medical_certificate_created:abc:v1');
+    expect(buildDedupeKey('push_test', null)).toBe('push_test:none:v1');
+    expect(buildDedupeKey('push_test', 'abc', 'v2')).toBe('push_test:abc:v2');
+    expect(buildDedupeKey('x', 'y')).toBe(buildDedupeKey('x', 'y'));
+  });
+
+  it('aceita apenas rotas internas em safeRoute', () => {
+    expect(safeRoute('/students')).toBe('/students');
+    expect(safeRoute('https://evil.com')).toBe(DEFAULT_ROUTE);
+    expect(safeRoute('//evil.com')).toBe(DEFAULT_ROUTE);
+    expect(safeRoute('')).toBe(DEFAULT_ROUTE);
+    expect(safeRoute(null)).toBe(DEFAULT_ROUTE);
+    expect(safeRoute(undefined)).toBe(DEFAULT_ROUTE);
+  });
+
+  it('audiência de atestado cobre os quatro perfis', () => {
+    expect(audienceRolesForEvent('medical_certificate_created')).toEqual([
+      'admin',
+      'direction',
+      'teacher',
+      'staff',
+    ]);
+  });
+});
+
+describe('payload do service worker', () => {
+  it('nunca lança com payload inválido', () => {
+    expect(parsePushPayload(null).title).toBe('EDUNEXUS');
+    expect(parsePushPayload(undefined).body).toBe('Você tem uma nova notificação.');
+    expect(parsePushPayload('texto puro').body).toBe('texto puro');
+    expect(parsePushPayload('{quebrado').body).toBe('{quebrado');
+    expect(parsePushPayload(12345).title).toBe('EDUNEXUS');
+    expect(parsePushPayload({}).url).toBe(DEFAULT_ROUTE);
+  });
+
+  it('normaliza payload válido e bloqueia URL externa', () => {
+    const parsed = parsePushPayload(
+      JSON.stringify({ title: 'Aviso', body: 'Corpo', url: 'https://evil.com', notification_id: 'n1' }),
+    );
+    expect(parsed.title).toBe('Aviso');
+    expect(parsed.url).toBe(DEFAULT_ROUTE);
+    expect(parsed.notification_id).toBe('n1');
+    expect(parsePushPayload({ notification_id: 7 }).notification_id).toBeNull();
+  });
+});
+
+describe('entrega de push', () => {
+  it('classifica respostas HTTP', () => {
+    expect(classifyPushResponse(200)).toBe('sent');
+    expect(classifyPushResponse(201)).toBe('sent');
+    expect(classifyPushResponse(404)).toBe('expired');
+    expect(classifyPushResponse(410)).toBe('expired');
+    expect(classifyPushResponse(500)).toBe('failed');
+    expect(shouldDisableDevice(410)).toBe(true);
+    expect(shouldDisableDevice(500)).toBe(false);
+  });
+
+  it('reprocessa no máximo 3 tentativas e só falhas transitórias', () => {
+    expect(MAX_DELIVERY_ATTEMPTS).toBe(3);
+    expect(shouldRetry(1, 'failed')).toBe(true);
+    expect(shouldRetry(2, 'failed')).toBe(true);
+    expect(shouldRetry(3, 'failed')).toBe(false);
+    expect(shouldRetry(4, 'failed')).toBe(false);
+    expect(shouldRetry(1, 'expired')).toBe(false);
+    expect(shouldRetry(1, 'sent')).toBe(false);
   });
 });
