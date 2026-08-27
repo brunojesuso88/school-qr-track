@@ -336,14 +336,21 @@ const Classes = () => {
 
       if (error) throw error;
 
-      const absentStudents = (data || [])
+      const absentRows = (data || [])
         .filter((a: any) => a.students?.class === className)
-        .map((a: any) => a.students.full_name as string);
+        .map((a: any) => ({ id: a.student_id as string, name: a.students.full_name as string }));
 
-      if (absentStudents.length === 0) {
+      if (absentRows.length === 0) {
         toast.info('Nenhum aluno faltoso nesta turma hoje');
         return;
       }
+
+      // Cobertura de atestados em LOTE (uma única chamada, sem CID/anexo).
+      const coverage = await fetchCoverage(absentRows.map((r) => r.id), [todayStr]);
+      const absentStudents = absentRows.map((r) =>
+        isCovered(coverage, r.id, todayStr) ? `${r.name} — Atestado` : r.name,
+      );
+
 
       // Generate JPEG via canvas
       const lineHeight = 32;
