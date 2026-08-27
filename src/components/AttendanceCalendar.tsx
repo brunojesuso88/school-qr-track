@@ -128,16 +128,20 @@ const AttendanceCalendar = () => {
   <h1>Relatório de Frequência Diária</h1>
   <p class="info">Data: ${dateStr}</p>
   <p class="info">Total de registros: ${dayRecords.length}</p>
+  <p class="info">Ausências com atestado: ${dayRecords.filter(r => r.status === 'absent' && r.covered).length}</p>
 
   ${classes.map(cls => {
     const records = groupedByClass[cls];
     const present = records.filter(r => r.status === 'present').length;
     const absent = records.filter(r => r.status === 'absent').length;
+    const absentCovered = records.filter(r => r.status === 'absent' && r.covered).length;
     return `
       <h2>Turma: ${cls}</h2>
       <div class="summary">
         Presentes: <span class="present">${present}</span> | 
         Ausentes: <span class="absent">${absent}</span> | 
+        Sem atestado: <span class="absent">${absent - absentCovered}</span> | 
+        Com atestado: <span class="certificate">${absentCovered}</span> | 
         Total: ${records.length}
       </div>
       <table>
@@ -146,7 +150,7 @@ const AttendanceCalendar = () => {
           ${records.map(r => `
             <tr>
               <td>${r.student_name}</td>
-              <td class="${r.status}">${r.status === 'present' ? 'Presente' : r.status === 'absent' ? 'Ausente' : 'Justificado'}</td>
+              <td class="${r.status}">${attendanceDisplayLabel(r.status, r.covered)}</td>
             </tr>
           `).join('')}
         </tbody>
@@ -154,7 +158,9 @@ const AttendanceCalendar = () => {
     `;
   }).join('')}
 
+  <p class="info">“Ausente — Atestado” indica ausência coberta por atestado médico válido. O registro de frequência não é alterado.</p>
   <p class="info" style="margin-top: 30px;">Gerado em: ${format(new Date(), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}</p>
+
 </body>
 </html>`;
 
