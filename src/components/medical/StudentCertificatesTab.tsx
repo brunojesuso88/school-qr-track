@@ -136,12 +136,23 @@ export const StudentCertificatesTab = ({ studentId, studentName }: Props) => {
   }
 
   if (!canManage) {
-
+    // Professor pode cadastrar novos atestados, mas nunca editar, cancelar ou ver detalhes.
     return (
       <div className="space-y-3">
-        <p className="text-xs text-muted-foreground">
-          Somente período e situação do atestado são visíveis para o seu perfil.
-        </p>
+        <div className="flex items-start justify-between gap-2">
+          <p className="text-xs text-muted-foreground">
+            Somente período e situação do atestado são visíveis para o seu perfil.
+          </p>
+          <Button
+            size="sm"
+            onClick={() => {
+              setEditing(null);
+              setDialogOpen(true);
+            }}
+          >
+            <Plus className="h-4 w-4 mr-2" /> Novo atestado
+          </Button>
+        </div>
         {basic.length === 0 ? (
           <div className="text-center py-8 text-muted-foreground">
             <FileText className="w-10 h-10 mx-auto mb-2 opacity-50" />
@@ -164,9 +175,21 @@ export const StudentCertificatesTab = ({ studentId, studentName }: Props) => {
             );
           })
         )}
+
+        <StudentMedicalCertificateDialog
+          open={dialogOpen}
+          onClose={() => setDialogOpen(false)}
+          studentId={studentId}
+          studentName={studentName}
+          certificate={null}
+          existing={[]}
+          onSaved={load}
+          restrictedCreate
+        />
       </div>
     );
   }
+
 
   return (
     <div className="space-y-3">

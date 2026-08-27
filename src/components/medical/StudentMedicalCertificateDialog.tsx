@@ -40,6 +40,8 @@ interface Props {
   certificate?: MedicalCertificate | null;
   existing: MedicalCertificate[];
   onSaved: () => void;
+  /** Perfil professor: apenas cadastro, sem SELECT/UPDATE no registro. */
+  restrictedCreate?: boolean;
 }
 
 export const StudentMedicalCertificateDialog = ({
@@ -50,7 +52,9 @@ export const StudentMedicalCertificateDialog = ({
   certificate,
   existing,
   onSaved,
+  restrictedCreate = false,
 }: Props) => {
+
   const [startDate, setStartDate] = useState<Date | undefined>();
   const [endDate, setEndDate] = useState<Date | undefined>();
   const [cidCode, setCidCode] = useState('');
@@ -137,12 +141,60 @@ export const StudentMedicalCertificateDialog = ({
         issuer: issuer.trim() ? issuer.trim().slice(0, 200) : null,
       };
 
+      const fileValid = (f: File) => {
+        if (!ALLOWED_TYPES.includes(f.type)) {
+          toast.error('Anexo deve ser PDF, JPG ou PNG.');
+          return false;
+        }
+        if (f.size > MAX_FILE_SIZE) {
+          toast.error('Anexo maior que 10MB.');
+          return false;
+        }
+        return true;
+      };
+
       let certificateId = certificate?.id;
       if (certificateId) {
         const { error } = await supabase
           .from('student_medical_certificates')
           .update(payload)
           .eq('id', certificateId);
+        if (error) throw error;
+        if (file && fileValid(file)) {
+          const ext = file.name.split('.').pop() ?? 'bin';
+          const path = `${studentId}/${certificateId}/atestado.${ext}`;
+          const { error: upErr } = await supabase.storage
+            .from(BUCKET)
+            .upload(path, file, { upsert: true, contentType: file.type });
+          if (upErr) toast.error('Não foi possível enviar o anexo.');
+          else {
+            await supabase
+              .from('student_medical_certificates')
+              .update({ attachment_path: path })
+              .eq('id', certificateId);
+          }
+        }
+      } else if (restrictedCreate) {
+        // Professor não possui SELECT nem UPDATE: id gerado no cliente, anexo enviado
+        // antes do insert (path único, sem upsert) e gravado no próprio insert.
+        certificateId = crypto.randomUUID();
+        let attachmentPath: string | null = null;
+        if (file && fileValid(file)) {
+          const ext = file.name.split('.').pop() ?? 'bin';
+          const path = `${studentId}/${certificateId}/atestado-${Date.now()}.${ext}`;
+          const { error: upErr } = await supabase.storage
+            .from(BUCKET)
+            .upload(path, file, { upsert: false, contentType: file.type });
+          if (upErr) toast.error('Não foi possível enviar o anexo.');
+          else attachmentPath = path;
+        }
+        const { error } = await supabase.from('student_medical_certificates').insert({
+          ...payload,
+          id: certificateId,
+          attachment_path: attachmentPath,
+          status_manual: 'active',
+          created_by: userData?.user?.id ?? null,
+        });
         if (error) throw error;
       } else {
         const { data, error } = await supabase
@@ -152,22 +204,14 @@ export const StudentMedicalCertificateDialog = ({
           .single();
         if (error) throw error;
         certificateId = data.id;
-      }
-
-      if (file && certificateId) {
-        if (!ALLOWED_TYPES.includes(file.type)) {
-          toast.error('Anexo deve ser PDF, JPG ou PNG.');
-        } else if (file.size > MAX_FILE_SIZE) {
-          toast.error('Anexo maior que 10MB.');
-        } else {
+        if (file && fileValid(file)) {
           const ext = file.name.split('.').pop() ?? 'bin';
           const path = `${studentId}/${certificateId}/atestado.${ext}`;
           const { error: upErr } = await supabase.storage
             .from(BUCKET)
             .upload(path, file, { upsert: true, contentType: file.type });
-          if (upErr) {
-            toast.error('Não foi possível enviar o anexo.');
-          } else {
+          if (upErr) toast.error('Não foi possível enviar o anexo.');
+          else {
             await supabase
               .from('student_medical_certificates')
               .update({ attachment_path: path })
@@ -175,6 +219,8 @@ export const StudentMedicalCertificateDialog = ({
           }
         }
       }
+
+
 
       toast.success(certificate ? 'Atestado atualizado.' : 'Atestado cadastrado.');
       onSaved();
