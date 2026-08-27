@@ -68,7 +68,8 @@ const App = () => (
               <Route path="/school-events" element={<AdminRoute><SchoolEvents /></AdminRoute>} />
               <Route path="/declarations" element={<AdminRoute><Declarations /></AdminRoute>} />
               <Route path="/teacher-notifications" element={<AdminRoute><TeacherNotifications /></AdminRoute>} />
-              <Route path="/notifications" element={<AdminRoute><Notifications /></AdminRoute>} />
+              {/* Central de notificações: todos os perfis autenticados (inclui staff) */}
+              <Route path="/notifications" element={<ProtectedRoute><Notifications /></ProtectedRoute>} />
               <Route path="/settings" element={<AdminRoute><Settings /></AdminRoute>} />
               
               {/* Compatibilidade: módulos removidos (Mapeamento Escolar / Criação do Horário) */}
