@@ -598,6 +598,13 @@ const Students = () => {
     filteredStudents.map((s) => ({ id: s.id, class: s.class })),
   );
 
+  // Alunos com atestado médico ativo hoje (badge em lote, sem CID)
+  const { studentIds: activeCertificateStudents } = useActiveCertificateStudents(
+    format(new Date(), 'yyyy-MM-dd'),
+  );
+
+
+
   // Aplica ordenação por IRA após o carregamento dos valores (assíncrono)
   const displayStudents = sortBy === 'ira-desc' || sortBy === 'ira-asc'
     ? [...filteredStudents].sort((a, b) => {
