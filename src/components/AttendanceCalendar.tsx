@@ -7,8 +7,14 @@ import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { format, startOfMonth, endOfMonth } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { CalendarIcon, FileDown, UserCheck, UserX } from 'lucide-react';
+import { CalendarIcon, FileDown, UserCheck, UserX, Stethoscope } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { fetchCoverage } from '@/hooks/useCertificateCoverage';
+import {
+  attendanceDisplayLabel,
+  isCovered,
+  type CoverageMap,
+} from '@/lib/medicalCertificates/status';
 
 interface CalendarAttendance {
   date: string;
@@ -16,6 +22,7 @@ interface CalendarAttendance {
   status: string;
   student_name: string;
   student_class: string;
+  covered: boolean;
 }
 
 const AttendanceCalendar = () => {
@@ -24,6 +31,7 @@ const AttendanceCalendar = () => {
   const [datesWithAttendance, setDatesWithAttendance] = useState<Set<string>>(new Set());
   const [dayRecords, setDayRecords] = useState<CalendarAttendance[]>([]);
   const [loadingDay, setLoadingDay] = useState(false);
+
 
   useEffect(() => {
     fetchMonthDates();
