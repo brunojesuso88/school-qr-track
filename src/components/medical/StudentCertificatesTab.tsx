@@ -119,11 +119,24 @@ export const StudentCertificatesTab = ({ studentId, studentName }: Props) => {
     void load();
   };
 
+  if (!canViewPeriods) {
+    return (
+      <div className="text-center py-10 text-muted-foreground">
+        <Lock className="w-10 h-10 mx-auto mb-2 opacity-50" />
+        <p className="text-sm font-medium">Sem acesso aos detalhes de atestados</p>
+        <p className="text-xs mt-1">
+          Seu perfil não permite visualizar períodos, códigos CID ou anexos.
+        </p>
+      </div>
+    );
+  }
+
   if (loading) {
     return <div className="h-32 bg-muted animate-pulse rounded-lg" />;
   }
 
   if (!canManage) {
+
     return (
       <div className="space-y-3">
         <p className="text-xs text-muted-foreground">
