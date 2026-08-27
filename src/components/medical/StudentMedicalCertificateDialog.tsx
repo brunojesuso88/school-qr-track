@@ -40,6 +40,8 @@ interface Props {
   certificate?: MedicalCertificate | null;
   existing: MedicalCertificate[];
   onSaved: () => void;
+  /** Perfil professor: apenas cadastro, sem SELECT/UPDATE no registro. */
+  restrictedCreate?: boolean;
 }
 
 export const StudentMedicalCertificateDialog = ({
@@ -50,7 +52,9 @@ export const StudentMedicalCertificateDialog = ({
   certificate,
   existing,
   onSaved,
+  restrictedCreate = false,
 }: Props) => {
+
   const [startDate, setStartDate] = useState<Date | undefined>();
   const [endDate, setEndDate] = useState<Date | undefined>();
   const [cidCode, setCidCode] = useState('');
