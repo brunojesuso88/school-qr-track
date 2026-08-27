@@ -7,6 +7,7 @@ import { ThemeProvider } from "@/components/ThemeProvider";
 import { AuthProvider } from "./contexts/AuthContext";
 import AdminRoute from "./components/AdminRoute";
 import StaffRoute from "./components/StaffRoute";
+import ProtectedRoute from "./components/ProtectedRoute";
 import UpdatePrompt from "./components/UpdatePrompt";
 import SplashScreen from "./pages/SplashScreen";
 import Dashboard from "./pages/Dashboard";
