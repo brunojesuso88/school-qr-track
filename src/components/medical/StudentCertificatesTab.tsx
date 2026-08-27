@@ -6,7 +6,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { FileText, Plus, Ban, Pencil, Paperclip, Eye, EyeOff, AlertTriangle } from 'lucide-react';
+import { FileText, Plus, Ban, Pencil, Paperclip, Eye, EyeOff, AlertTriangle, Lock } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';

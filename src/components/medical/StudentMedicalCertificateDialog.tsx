@@ -180,8 +180,20 @@ export const StudentMedicalCertificateDialog = ({
       onSaved();
       onClose();
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Erro ao salvar atestado';
-      toast.error(message.includes('atestado ativo') ? OVERLAP_MESSAGE : message);
+      // PostgrestError não é `instanceof Error`: extrai `message` do objeto.
+      const raw =
+        err instanceof Error
+          ? err.message
+          : typeof err === 'object' && err !== null && typeof (err as { message?: unknown }).message === 'string'
+            ? (err as { message: string }).message
+            : typeof err === 'string'
+              ? err
+              : '';
+      const code =
+        typeof err === 'object' && err !== null ? String((err as { code?: unknown }).code ?? '') : '';
+      const isOverlap = code === '23505' || /atestado ativo/i.test(raw);
+      toast.error(isOverlap ? OVERLAP_MESSAGE : raw || 'Erro ao salvar atestado');
+
     } finally {
       setSaving(false);
     }
