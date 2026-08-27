@@ -1,63 +1,101 @@
-# Auditoria: 16 células "somente a IA identificou" na reconciliação do boletim
+# Atestados Médicos do Aluno + integração com Frequência
 
-## Diagnóstico
+Proposta técnica/UX baseada na auditoria read-only do projeto atual. Nenhuma alteração feita.
 
-A causa raiz não é a IA inventando linhas nem falha geométrica do `subjectColumnEnd`. É uma regra explícita do parser local: uma linha de disciplina só é aceita se tiver ao menos um token dentro da grade. As quatro disciplinas relatadas (APROFUNDAMENTO IF - CNS - I, FILOSOFIA, HISTORIA, IDENTIDADE E PROTAGONISMO) aparecem no boletim com os 4 períodos totalmente vazios, então a linha é descartada localmente e nenhuma célula local existe. A IA lista as mesmas 4 disciplinas × 4 períodos com valor `—`. Na reconciliação essas 16 células caem no ramo "célula que só a IA viu", recebem `reconciliation_divergence` + `ai_only` e bloqueiam sempre — mesmo sem nenhuma nota em disputa.
+## O que existe hoje (auditado)
 
-Evidência no banco: a turma `26RMM-CNS-300` tem 12 registros em `grade_subjects` contra 16 disciplinas no mapeamento — faltam exatamente Filosofia, História, Identidade e Protagonismo e o Aprofundamento I. O padrão "linha vazia = disciplina inexistente" já se repete nessa turma.
+- Card/detalhe do aluno: `src/components/StudentReportModal.tsx` já usa `Tabs` com 4 abas (Frequência, Notas, Ocorrências, Laudo médico — esta última só habilitada quando `students.has_medical_report`).
+- Cadastro/listagem de alunos e diálogo de ocorrências: `src/pages/Students.tsx`. Já existe o tipo de ocorrência `medical_certificate` com data inicial (`date`) e final (`end_date`), gravado em `occurrences`.
+- Relatório de ocorrências do dia: `src/components/OccurrencesReportDialog.tsx` (jsPDF, agrupado por turma).
+- Frequência: `src/pages/Attendance.tsx` (filtros, relatório geral e detalhado em HTML/print), `src/components/AttendanceCalendar.tsx` (relatório diário por turma), `src/components/ClassAttendanceDialog.tsx` e exportação de faltosos em `src/pages/Classes.tsx`.
+- Banco: `attendance(status: present|absent|justified)`, `occurrences(type, date, end_date, teacher_name)`, campos AEE sensíveis já no `students` (`aee_cid_code`, `aee_cid_description`, `aee_laudo_attachment_url`) com anexo em bucket privado (`aee-documents`).
+- RLS atual: `students`/`occurrences`/`attendance` são legíveis por `admin`, `direction`, `teacher` (staff só vê frequência do dia). Ou seja, hoje **professor vê CID do AEE** — a nova estrutura deve ser mais restritiva.
 
-## Evidências no código
+Conclusão da auditoria: o atestado hoje é modelado como "ocorrência", sem status, sem validação de sobreposição, sem CID e sem qualquer efeito no relatório de faltas. Precisa de entidade própria.
 
-1. `expectedSubjects` (`GradesImportDialog.tsx:333-343`) vem somente de `mapping_class_subjects` filtrado por `classes.mapping_class_id`. Sem `mapping_class_id`, a lista esperada é vazia. `grade_subjects` só é lido para conflito de notas (`:410`) e escrito na gravação (`:995-1020`); nunca serve de âncora de leitura.
-2. Nomenclatura divergente: no mapeamento dessa turma os nomes são `Aprfl`, `Aprfll`, `Português`, `Inglês`; no PDF e em `grade_subjects` são `APROFUNDAMENTO IF - CNS - II`, `LINGUA PORTUGUESA`, `LINGUA INGLESA`. A `similarity()` por tokens (`normalize.ts`) não casa esses pares, a cobertura cai, `validate.ts` acusa "Disciplinas lidas abaixo do esperado" e a página escala para IA — o gatilho da reconciliação.
-3. Linha descartada: `layout.ts:201-207` exige `insideGrid` (token dentro de `columns`/`absenceColumns`/`ignoredColumns`). Linha só com o nome da disciplina → `continue`, sem `subjects.push` e sem células.
-4. Filtro adicional: `isSubjectLabel` + `SUBJECT_STOPWORDS` (`layout.ts:155-173`). `HISTORIA` e `FILOSOFIA` passam, mas nomes longos como `APROFUNDAMENTO IF - CNS - I` dependem de estar inteiros na mesma linha e à esquerda de `subjectColumnEnd`; se quebrarem em duas linhas, geram duas "meias-linhas" sem tokens na grade.
-5. `classes.series` existe, mas hoje só é usada no filtro do PDF de ranking do IRA — não influencia disciplina alguma.
-6. Reconciliação: `reconcile.ts:61-69` empurra toda célula vista só pela IA para `rows` com `source: 'ai'`; `gradesAutoAccept.ts` marca `ai_only` e bloqueia sempre, inclusive quando o valor da IA é vazio (`—`).
+## Modelo de dados recomendado
 
-## Como distinguir "IA inventou" de "linha existe e o local não viu"
+Nova tabela `public.student_medical_certificates`:
 
-Critério determinístico, sem IA: procurar na página uma linha cujo trecho à esquerda de `subjectColumnEnd` case com a disciplina (nome exato, alias, abreviação ou similaridade alta com candidato único). Se essa linha existe, a disciplina é real e o parser local deve materializá-la com 4 células `null`. Se não há token algum na coluna de disciplinas correspondente, a linha foi alucinada e deve ser descartada, não bloqueada.
+- `student_id` (FK students, not null)
+- `start_date`, `end_date` (date, not null, `end_date >= start_date`)
+- `days_count` (gerado/calculado na leitura, não armazenado)
+- `cid_code` (text, opcional, normalizado maiúsculo sem ponto — ex. `J11`, `M545`)
+- `cid_description` (text, opcional — preenchido por catálogo/IA, nunca digitado livre como diagnóstico)
+- `cid_source` (`catalog` | `ai` | `manual` | null)
+- `notes` (text, opcional, limite 500)
+- `issuer` (text, opcional: médico/unidade)
+- `attachment_path` (text, opcional — bucket privado)
+- `status_manual` (`active` | `cancelled`, default `active`) — cancelamento lógico, sem delete
+- `cancelled_reason`, `cancelled_by`, `cancelled_at`
+- `created_by`, `created_at`, `updated_at` (+ trigger `update_updated_at_column`)
 
-## Arquitetura recomendada
+Índices: `(student_id, start_date desc)`, índice GiST em `daterange(start_date, end_date, '[]')` para sobreposição, e índice parcial em `status_manual = 'active'`.
 
-Não criar tabelas novas. Falta apenas uma entidade canônica para "matriz por série" e um catálogo de aliases:
+Status derivado na aplicação (não persistido): `cancelado` → `futuro` (start > hoje) → `ativo` (hoje entre datas) → `vencido`.
 
-- `mapping_global_subjects` passa a ser o catálogo canônico (já tem `name`, `abbreviation`, `default_weekly_classes`), acrescido de `series` (1/2/3, nulo = todas) e `aliases text[]` com os nomes como aparecem no boletim (`LINGUA PORTUGUESA`, `APROFUNDAMENTO IF - CNS - I`).
-- `classes.series` (já existe) passa a ser obrigatória ao vincular mapeamento e seleciona a matriz padrão.
-- `mapping_class_subjects` continua a matriz da turma (herda da série, permite extras e edição).
-- `grade_subjects` continua sendo o que o boletim realmente trouxe — nunca semeado sem PDF.
+### Regras de datas e sobreposição
+- `end_date >= start_date` (CHECK); limite máximo configurável de dias (aviso, não bloqueio).
+- Sobreposição com outro atestado **ativo** do mesmo aluno: bloquear salvamento com mensagem clara e link para o atestado existente (permitir editar/estender em vez de duplicar). Atestados cancelados não contam.
+- Sem restrição a fim de semana (atestado pode abranger período contínuo); a cobertura de falta só é avaliada em dias com registro de frequência.
 
-Fluxo: matriz por série no catálogo global → herança para `mapping_class_subjects` ao vincular série+mapeamento → `GradesImportDialog` monta `expectedSubjects` de `mapping_class_subjects` ∪ `grade_subjects` da turma ∪ aliases do catálogo → parser local usa essa lista como âncora.
+## UX no card do aluno
 
-## Algoritmo local para linha totalmente vazia (sem nota falsa)
+Nova aba `Atestados` em `StudentReportModal.tsx` (5ª aba, sempre visível para perfis autorizados; a aba `Laudo` do AEE permanece separada):
 
-1. Montar por sessão um índice de âncoras: `normalizeText(nome)` + aliases + abreviação de cada disciplina esperada.
-2. Em `buildCells`, quando `insideGrid` for falso, tentar âncora com o texto à esquerda de `subjectColumnEnd`: igualdade normalizada, prefixo, ou `similarity >= 0.82` com candidato único.
-3. Fusão de linhas: se não casar, concatenar com a linha adjacente quando ambas só têm tokens na coluna de disciplinas e o `y` é contíguo (nome quebrado em duas linhas).
-4. Casando, criar uma célula por período com `raw_value: null`, `value: null`, `invalid: false`, `confidence: 1`, flag `empty_cell` e marca `anchored_subject_row`. Vazio continua `null`.
-5. Sem âncora, mantém o comportamento atual (linha ignorada).
-6. `validate.ts`: contar linhas ancoradas na cobertura e registrar motivo informativo "disciplina reconhecida por âncora, sem notas" (não bloqueante).
+- Lista ordenada por período (mais recente primeiro), cada item mostrando: período `dd/MM` a `dd/MM`, quantidade de dias, badge de status (Ativo verde / Futuro azul / Vencido cinza / Cancelado riscado), quem cadastrou e ícone de anexo.
+- CID exibido **oculto por padrão** ("CID registrado — mostrar"), com revelação sob clique e apenas para perfis autorizados. Perfis sem permissão veem só "possui CID registrado".
+- Botão `Novo atestado` abre diálogo com: calendário de data inicial e final (mesmo padrão de `Students.tsx`), campo CID opcional com botão `Pesquisar CID com IA`, observações, anexo opcional.
+- Ações por item: editar (datas/observação/anexo), cancelar (com motivo), baixar anexo. Nenhum delete físico.
+- Indicador no card da listagem de alunos: badge discreto "Atestado ativo" quando houver cobertura na data atual.
 
-## Reconciliação de linhas IA-only vazias
+## Comportamento no relatório de faltas
 
-- IA-only com valor vazio e disciplina presente localmente (agora ancorada) → não é divergência: casa com a célula local `null` (`reconciled_match`).
-- IA-only vazia e disciplina sem âncora nem token na página → descartar com nota `ai_only_empty_discarded`; não bloqueia.
-- IA-only com valor numérico → continua divergência bloqueante, como hoje.
+Princípio: **não alterar o registro bruto de `attendance`**. A cobertura é uma camada derivada.
 
-## Riscos
+- Novo hook `src/hooks/useCertificateCoverage.ts`: dado um conjunto de `student_id` + intervalo de datas, retorna um mapa `student_id|date → coberto`, consultando apenas `student_id, start_date, end_date, status_manual` (sem CID).
+- Relatório diário (`AttendanceCalendar.tsx`) e relatório detalhado/geral (`Attendance.tsx`): faltas cobertas ganham marca visual e no PDF/HTML a coluna Status passa a exibir `Ausente (atestado)`, com legenda no rodapé. Sem CID, sem observações médicas no relatório geral.
+- Resumo do dia por turma: contador extra "Ausências com atestado", e a taxa de frequência ganha uma linha adicional "frequência considerando atestados" sem substituir a taxa bruta.
+- Exportação de faltosos (`Classes.tsx`) e `ClassAttendanceDialog.tsx`: marcar com asterisco os alunos com atestado válido, para não cobrar justificativa indevidamente.
+- Opção futura (fase 4, opcional): botão "Aplicar atestado à frequência" que converte `absent` → `justified` no período, sempre com registro em `audit_logs` e nunca automático.
 
-- Alias mal cadastrado pode ancorar disciplina errada: mitigado por candidato único e limiar alto.
-- Fusão de linhas pode juntar legenda/rodapé: mitigado pelos `HARD_STOPWORDS` existentes e pela exigência de âncora.
-- Herança por série não deve sobrescrever turma já ajustada: aplicar só em turma sem disciplinas ou via ação explícita.
-- Descartar IA-only vazia remove um bloqueio: aceitável porque não há nota em jogo (vazio = `null` nos dois lados).
+## Recurso `Pesquisar CID com IA`
 
-## Plano de implementação em etapas
+Estratégia em três camadas, determinística primeiro:
 
-1. Catálogo: migration com `series` e `aliases` em `mapping_global_subjects`; UI em Mapeamento > Disciplinas para editar ambos, semeando aliases a partir dos nomes já vistos em `grade_subjects`.
-2. Herança: `classes.series` obrigatória no vínculo e ação "aplicar matriz da série" que popula `mapping_class_subjects` preservando extras.
-3. Contexto de leitura: `GradesImportDialog` monta `expectedSubjects` de `mapping_class_subjects` ∪ `grade_subjects` ∪ aliases, com campo `aliases` por disciplina.
-4. Parser local: âncoras, fusão de linhas e linhas totalmente vazias em `layout.ts`/`parseGradePageLocal.ts`; ajuste de cobertura em `validate.ts`.
-5. Reconciliação: novo tratamento de IA-only vazia em `reconcile.ts` e `gradesAutoAccept.ts`; `GradesDivergencePanel` distingue "vazio confirmado" de "divergência real".
-6. Testes vitest: 4 períodos vazios ancorados; nome quebrado em duas linhas; alias `Aprfl` → `APROFUNDAMENTO IF - CNS - I`; IA-only vazia com âncora (match) e sem âncora (descartada); IA-only com número (bloqueia); nenhuma nota falsa criada.
-7. Verificação em dados reais na turma `26RMM-CNS-300`: as 4 disciplinas passam a aparecer com os 4 períodos vazios e sem pendência.
+1. **Catálogo local** (`src/lib/cid/cid10.ts` ou tabela `cid_catalog` somente-leitura com os capítulos/subcategorias mais usados): validação de formato (`^[A-Z]\d{2}(\.?\d)?$`) e busca exata/prefixo. Se o código existe no catálogo, a descrição oficial é retornada sem chamar IA.
+2. **Edge Function `cid-lookup`** (Lovable AI Gateway, padrão do projeto): recebe **apenas o código informado**, com prompt restrito a "explicar em linguagem simples a descrição oficial deste código CID-10; se não reconhecer com segurança, responder desconhecido". Proibido inferir diagnóstico, gravidade, tratamento ou dados do aluno. Nenhum dado do aluno é enviado.
+3. **Cache/auditoria**: resultado gravado em `cid_lookup_cache(code, description, simple_explanation, source, created_at)` para reuso e para evitar respostas divergentes; cada consulta registra `code`, usuário e origem em `audit_logs` — sem vincular ao aluno na tabela de cache.
+
+UX: descrição retornada aparece como sugestão que o usuário **confirma** antes de gravar; sempre com aviso "descrição informativa, não é diagnóstico". Nunca preenche `cid_description` automaticamente sem confirmação.
+
+## Permissões, RLS e LGPD
+
+- Perfis: `admin` e `direction` → criar, editar, cancelar, ver CID e anexo. `teacher` → ver existência/período do atestado e a marca no relatório, **sem CID e sem anexo**. `staff` → nenhum acesso.
+- Implementação: RLS na tabela restringindo INSERT/UPDATE a `admin`/`direction`; SELECT liberado a `admin`/`direction`/`teacher`, e os campos sensíveis (`cid_code`, `cid_description`, `attachment_path`, `notes`) expostos ao professor via **view/RPC** `student_certificates_basic` que só retorna período e status — o front do professor consome a view, nunca a tabela. GRANTs explícitos para `authenticated` e `service_role`.
+- Minimização: nenhum relatório coletivo carrega CID; logs de auditoria registram acesso a CID (`log_audit_event` na tabela).
+- Anexos: **opcionais**. Bucket privado `medical-certificates` (mesmo padrão de `aee-documents`), path `{student_id}/{certificate_id}/{arquivo}`, políticas de storage restritas a `admin`/`direction`, acesso só por URL assinada de curta duração.
+
+## Impacto e indicadores
+
+- Dashboard: novo indicador "Ausências cobertas por atestado (mês)" e "Alunos com atestado ativo".
+- Nenhum impacto em notas, IRA ou importação de boletim.
+- Ocorrências do tipo `medical_certificate` existentes permanecem intactas; oferecer, na aba Atestados, um aviso quando existir ocorrência antiga desse tipo, com ação manual de migração (sem migração automática de dados).
+
+## Fases de implementação
+
+1. **Dados**: migração da tabela, índices, RLS, GRANTs, view do professor, trigger de updated_at e auditoria.
+2. **Card do aluno**: aba `Atestados` + diálogo de cadastro/edição/cancelamento com validação de datas e sobreposição.
+3. **CID**: catálogo local, validação de formato, Edge Function `cid-lookup` com cache e confirmação do usuário.
+4. **Frequência**: hook de cobertura e marcação nos relatórios diário/detalhado/geral e exportação de faltosos.
+5. **Anexos e indicadores**: bucket privado, URLs assinadas, métricas no dashboard.
+
+## Testes principais
+
+- Datas: `end_date < start_date` rejeitado; atestado de 1 dia; período atravessando meses.
+- Sobreposição: bloqueio com atestado ativo; permitido quando o anterior está cancelado.
+- Status derivado: futuro/ativo/vencido/cancelado em torno de "hoje".
+- Cobertura: falta em dia coberto marcada; falta fora do período não marcada; presença em dia coberto não alterada.
+- Relatórios: PDF/HTML nunca contêm CID; legenda presente quando há cobertura.
+- Permissões: professor não obtém CID nem anexo; staff sem acesso.
+- CID: formato inválido rejeitado sem chamar IA; código do catálogo não chama IA; cache reutilizado; resposta "desconhecido" não grava descrição.
