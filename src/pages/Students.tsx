@@ -599,7 +599,7 @@ const Students = () => {
   );
 
   // Alunos com atestado médico ativo hoje (badge em lote, sem CID)
-  const { studentIds: activeCertificateStudents } = useActiveCertificateStudents(
+  const activeCertificateStudents = useActiveCertificateStudents(
     format(new Date(), 'yyyy-MM-dd'),
   );
 
