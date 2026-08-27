@@ -20,6 +20,8 @@ import ClassAttendanceDialog from '@/components/ClassAttendanceDialog';
 import ClassSummaryDialog from '@/components/ClassSummaryDialog';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { fetchCoverage } from '@/hooks/useCertificateCoverage';
+import { isCovered } from '@/lib/medicalCertificates/status';
 
 
 interface ClassItem {
