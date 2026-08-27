@@ -82,7 +82,7 @@ export const StudentCertificatesTab = ({ studentId, studentName }: Props) => {
       setBasic(((data as MedicalCertificateBasic[]) ?? []).sort((a, b) => b.start_date.localeCompare(a.start_date)));
     }
     setLoading(false);
-  }, [studentId, canManage]);
+  }, [studentId, canManage, canViewPeriods]);
 
   useEffect(() => {
     void load();
