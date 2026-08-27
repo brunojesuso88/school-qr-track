@@ -6,12 +6,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
-import { Calendar, FileText, AlertCircle, CheckCircle, XCircle, Clock, Eye, GraduationCap } from 'lucide-react';
+import { Calendar, FileText, AlertCircle, CheckCircle, XCircle, Clock, Eye, GraduationCap, Stethoscope } from 'lucide-react';
 import { format, parse, startOfMonth, endOfMonth, startOfYear, endOfYear, differenceInYears } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { StudentPhoto } from '@/components/StudentPhoto';
 import { StudentGradesTab } from '@/components/grades/StudentGradesTab';
+import { StudentCertificatesTab } from '@/components/medical/StudentCertificatesTab';
 
 interface Student {
   id: string;
