@@ -872,7 +872,14 @@ const Attendance = () => {
         {/* Detailed Individual Records */}
         <Card>
           <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-            <CardTitle className="text-lg">Registros Individuais</CardTitle>
+            <div className="flex items-center gap-2 flex-wrap">
+              <CardTitle className="text-lg">Registros Individuais</CardTitle>
+              {absentCoveredCount > 0 && (
+                <Badge variant="outline" className="border-blue-500/40 text-blue-600">
+                  {absentCoveredCount} ausência(s) com atestado
+                </Badge>
+              )}
+            </div>
             <Button variant="outline" size="sm" onClick={generateDetailedPDF} disabled={detailedRecords.length === 0}>
               <FileDown className="w-4 h-4 mr-2" />
               Exportar Detalhado
