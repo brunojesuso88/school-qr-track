@@ -37,6 +37,8 @@ interface Props {
 export const StudentCertificatesTab = ({ studentId, studentName }: Props) => {
   const { userRole } = useAuth();
   const canManage = userRole === 'admin' || userRole === 'direction';
+  // Professor vê apenas período/situação. Funcionário (staff) não vê nenhum detalhe.
+  const canViewPeriods = canManage || userRole === 'teacher';
 
   const [full, setFull] = useState<MedicalCertificate[]>([]);
   const [basic, setBasic] = useState<MedicalCertificateBasic[]>([]);
@@ -49,8 +51,13 @@ export const StudentCertificatesTab = ({ studentId, studentName }: Props) => {
   const [legacyCount, setLegacyCount] = useState(0);
 
   const load = useCallback(async () => {
+    if (!canViewPeriods) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     if (canManage) {
+
       const [{ data }, { count }] = await Promise.all([
         supabase
           .from('student_medical_certificates')
