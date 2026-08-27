@@ -27,6 +27,7 @@ import { CameraPhotoCapture } from '@/components/CameraPhotoCapture';
 import { OccurrencesReportDialog } from '@/components/OccurrencesReportDialog';
 import { useStudentsIra } from '@/hooks/useStudentsIra';
 import { formatIra } from '@/lib/ira';
+import { useActiveCertificateStudents } from '@/hooks/useCertificateCoverage';
 
 interface Student {
   id: string;
@@ -598,6 +599,13 @@ const Students = () => {
     filteredStudents.map((s) => ({ id: s.id, class: s.class })),
   );
 
+  // Alunos com atestado médico ativo hoje (badge em lote, sem CID)
+  const activeCertificateStudents = useActiveCertificateStudents(
+    format(new Date(), 'yyyy-MM-dd'),
+  );
+
+
+
   // Aplica ordenação por IRA após o carregamento dos valores (assíncrono)
   const displayStudents = sortBy === 'ira-desc' || sortBy === 'ira-asc'
     ? [...filteredStudents].sort((a, b) => {
@@ -1004,6 +1012,11 @@ const Students = () => {
                       {student.has_medical_report && (
                         <span className="text-xs px-2 py-1 rounded-full font-medium bg-amber-500/10 text-amber-600">
                           Laudo
+                        </span>
+                      )}
+                      {activeCertificateStudents.has(student.id) && (
+                        <span className="text-xs px-2 py-1 rounded-full font-medium bg-blue-500/10 text-blue-600">
+                          Atestado ativo
                         </span>
                       )}
                       {(sortBy === 'absences-desc' || sortBy === 'absences-asc') && (

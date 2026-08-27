@@ -6,12 +6,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
-import { Calendar, FileText, AlertCircle, CheckCircle, XCircle, Clock, Eye, GraduationCap } from 'lucide-react';
+import { Calendar, FileText, AlertCircle, CheckCircle, XCircle, Clock, Eye, GraduationCap, Stethoscope } from 'lucide-react';
 import { format, parse, startOfMonth, endOfMonth, startOfYear, endOfYear, differenceInYears } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { StudentPhoto } from '@/components/StudentPhoto';
 import { StudentGradesTab } from '@/components/grades/StudentGradesTab';
+import { StudentCertificatesTab } from '@/components/medical/StudentCertificatesTab';
 
 interface Student {
   id: string;
@@ -217,7 +218,7 @@ export const StudentReportModal = ({ student, onClose }: StudentReportModalProps
         </DialogHeader>
 
         <Tabs defaultValue="attendance" className="mt-4">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="attendance">
               <Calendar className="w-4 h-4 mr-2" />
               <span className="hidden sm:inline">Frequência</span>
@@ -230,11 +231,20 @@ export const StudentReportModal = ({ student, onClose }: StudentReportModalProps
               <FileText className="w-4 h-4 mr-2" />
               <span className="hidden sm:inline">Ocorrências ({occurrences.length})</span>
             </TabsTrigger>
+            <TabsTrigger value="certificates">
+              <Stethoscope className="w-4 h-4 mr-2" />
+              <span className="hidden sm:inline">Atestados</span>
+            </TabsTrigger>
             <TabsTrigger value="medical" disabled={!student.has_medical_report}>
               <AlertCircle className="w-4 h-4 mr-2" />
               <span className="hidden sm:inline">Laudo</span>
             </TabsTrigger>
           </TabsList>
+
+          <TabsContent value="certificates" className="mt-4">
+            <StudentCertificatesTab studentId={student.id} studentName={student.full_name} />
+          </TabsContent>
+
 
           <TabsContent value="grades" className="mt-4">
             <StudentGradesTab studentId={student.id} className={student.class} />

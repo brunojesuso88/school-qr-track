@@ -7,8 +7,14 @@ import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { format, startOfMonth, endOfMonth } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { CalendarIcon, FileDown, UserCheck, UserX } from 'lucide-react';
+import { CalendarIcon, FileDown, UserCheck, UserX, Stethoscope } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { fetchCoverage } from '@/hooks/useCertificateCoverage';
+import {
+  attendanceDisplayLabel,
+  isCovered,
+  type CoverageMap,
+} from '@/lib/medicalCertificates/status';
 
 interface CalendarAttendance {
   date: string;
@@ -16,6 +22,7 @@ interface CalendarAttendance {
   status: string;
   student_name: string;
   student_class: string;
+  covered: boolean;
 }
 
 const AttendanceCalendar = () => {
@@ -24,6 +31,7 @@ const AttendanceCalendar = () => {
   const [datesWithAttendance, setDatesWithAttendance] = useState<Set<string>>(new Set());
   const [dayRecords, setDayRecords] = useState<CalendarAttendance[]>([]);
   const [loadingDay, setLoadingDay] = useState(false);
+
 
   useEffect(() => {
     fetchMonthDates();
@@ -59,16 +67,29 @@ const AttendanceCalendar = () => {
       .eq('date', dateStr)
       .order('status');
 
-    const records: CalendarAttendance[] = (data || []).map((r: any) => ({
-      date: r.date,
-      student_id: r.student_id,
-      status: r.status,
-      student_name: r.students.full_name,
-      student_class: r.students.class,
+    const raw = (data || []).map((r: any) => ({
+      date: r.date as string,
+      student_id: r.student_id as string,
+      status: r.status as string,
+      student_name: r.students.full_name as string,
+      student_class: r.students.class as string,
+    }));
+
+    // Cobertura de atestados em LOTE (uma única chamada, sem CID).
+    let coverage: CoverageMap = new Set();
+    const ids = Array.from(new Set(raw.map(r => r.student_id)));
+    if (ids.length > 0) {
+      coverage = await fetchCoverage(ids, [dateStr]);
+    }
+
+    const records: CalendarAttendance[] = raw.map(r => ({
+      ...r,
+      covered: isCovered(coverage, r.student_id, r.date),
     }));
 
     setDayRecords(records);
     setLoadingDay(false);
+
   };
 
   const groupedByClass = dayRecords.reduce<Record<string, CalendarAttendance[]>>((acc, r) => {
@@ -99,6 +120,7 @@ const AttendanceCalendar = () => {
     .present { color: #16a34a; font-weight: bold; }
     .absent { color: #dc2626; font-weight: bold; }
     .justified { color: #6b7280; font-weight: bold; }
+    .certificate { color: #2563eb; font-weight: bold; }
     .summary { background: #f0fdf4; padding: 10px; border-radius: 6px; margin-bottom: 15px; }
     @media print { body { padding: 0; } }
   </style>
@@ -107,16 +129,20 @@ const AttendanceCalendar = () => {
   <h1>Relatório de Frequência Diária</h1>
   <p class="info">Data: ${dateStr}</p>
   <p class="info">Total de registros: ${dayRecords.length}</p>
+  <p class="info">Ausências com atestado: ${dayRecords.filter(r => r.status === 'absent' && r.covered).length}</p>
 
   ${classes.map(cls => {
     const records = groupedByClass[cls];
     const present = records.filter(r => r.status === 'present').length;
     const absent = records.filter(r => r.status === 'absent').length;
+    const absentCovered = records.filter(r => r.status === 'absent' && r.covered).length;
     return `
       <h2>Turma: ${cls}</h2>
       <div class="summary">
         Presentes: <span class="present">${present}</span> | 
         Ausentes: <span class="absent">${absent}</span> | 
+        Sem atestado: <span class="absent">${absent - absentCovered}</span> | 
+        Com atestado: <span class="certificate">${absentCovered}</span> | 
         Total: ${records.length}
       </div>
       <table>
@@ -125,7 +151,7 @@ const AttendanceCalendar = () => {
           ${records.map(r => `
             <tr>
               <td>${r.student_name}</td>
-              <td class="${r.status}">${r.status === 'present' ? 'Presente' : r.status === 'absent' ? 'Ausente' : 'Justificado'}</td>
+              <td class="${r.status}">${attendanceDisplayLabel(r.status, r.covered)}</td>
             </tr>
           `).join('')}
         </tbody>
@@ -133,7 +159,9 @@ const AttendanceCalendar = () => {
     `;
   }).join('')}
 
+  <p class="info">“Ausente — Atestado” indica ausência coberta por atestado médico válido. O registro de frequência não é alterado.</p>
   <p class="info" style="margin-top: 30px;">Gerado em: ${format(new Date(), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}</p>
+
 </body>
 </html>`;
 
@@ -209,9 +237,10 @@ const AttendanceCalendar = () => {
                       const records = groupedByClass[cls];
                       const present = records.filter(r => r.status === 'present').length;
                       const absent = records.filter(r => r.status === 'absent').length;
+                      const absentCovered = records.filter(r => r.status === 'absent' && r.covered).length;
                       return (
                         <div key={cls}>
-                          <div className="flex items-center gap-2 mb-2">
+                          <div className="flex items-center gap-2 mb-2 flex-wrap">
                             <h4 className="font-medium text-sm">Turma {cls}</h4>
                             <Badge variant="outline" className="text-xs gap-1">
                               <UserCheck className="w-3 h-3 text-green-600" /> {present}
@@ -219,6 +248,11 @@ const AttendanceCalendar = () => {
                             <Badge variant="outline" className="text-xs gap-1">
                               <UserX className="w-3 h-3 text-red-600" /> {absent}
                             </Badge>
+                            {absentCovered > 0 && (
+                              <Badge variant="outline" className="text-xs gap-1 border-blue-500/40 text-blue-600">
+                                <Stethoscope className="w-3 h-3" /> {absentCovered} com atestado
+                              </Badge>
+                            )}
                           </div>
                           <div className="overflow-x-auto">
                             <Table>
@@ -237,7 +271,7 @@ const AttendanceCalendar = () => {
                                         variant={r.status === 'present' ? 'default' : r.status === 'absent' ? 'destructive' : 'secondary'}
                                         className={r.status === 'present' ? 'bg-green-500' : ''}
                                       >
-                                        {r.status === 'present' ? 'Presente' : r.status === 'absent' ? 'Ausente' : 'Justificado'}
+                                        {attendanceDisplayLabel(r.status, r.covered)}
                                       </Badge>
                                     </TableCell>
                                   </TableRow>
@@ -245,6 +279,7 @@ const AttendanceCalendar = () => {
                               </TableBody>
                             </Table>
                           </div>
+
                         </div>
                       );
                     })}

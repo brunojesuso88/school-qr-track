@@ -85,6 +85,36 @@ export type Database = {
         }
         Relationships: []
       }
+      cid_lookup_cache: {
+        Row: {
+          code: string
+          created_at: string
+          description: string | null
+          id: string
+          simple_explanation: string | null
+          source: string
+          updated_at: string
+        }
+        Insert: {
+          code: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          simple_explanation?: string | null
+          source?: string
+          updated_at?: string
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          simple_explanation?: string | null
+          source?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       classes: {
         Row: {
           created_at: string | null
@@ -1125,6 +1155,74 @@ export type Database = {
           },
         ]
       }
+      student_medical_certificates: {
+        Row: {
+          attachment_path: string | null
+          cancelled_at: string | null
+          cancelled_by: string | null
+          cancelled_reason: string | null
+          cid_code: string | null
+          cid_description: string | null
+          cid_source: string | null
+          created_at: string
+          created_by: string | null
+          end_date: string
+          id: string
+          issuer: string | null
+          notes: string | null
+          start_date: string
+          status_manual: string
+          student_id: string
+          updated_at: string
+        }
+        Insert: {
+          attachment_path?: string | null
+          cancelled_at?: string | null
+          cancelled_by?: string | null
+          cancelled_reason?: string | null
+          cid_code?: string | null
+          cid_description?: string | null
+          cid_source?: string | null
+          created_at?: string
+          created_by?: string | null
+          end_date: string
+          id?: string
+          issuer?: string | null
+          notes?: string | null
+          start_date: string
+          status_manual?: string
+          student_id: string
+          updated_at?: string
+        }
+        Update: {
+          attachment_path?: string | null
+          cancelled_at?: string | null
+          cancelled_by?: string | null
+          cancelled_reason?: string | null
+          cid_code?: string | null
+          cid_description?: string | null
+          cid_source?: string | null
+          created_at?: string
+          created_by?: string | null
+          end_date?: string
+          id?: string
+          issuer?: string | null
+          notes?: string | null
+          start_date?: string
+          status_manual?: string
+          student_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "student_medical_certificates_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       student_paee: {
         Row: {
           aee_teacher_signature: string | null
@@ -1654,6 +1752,23 @@ export type Database = {
       current_user_has_role: {
         Args: { _role: Database["public"]["Enums"]["app_role"] }
         Returns: boolean
+      }
+      get_active_certificate_students: {
+        Args: { _on_date: string }
+        Returns: {
+          end_date: string
+          start_date: string
+          student_id: string
+        }[]
+      }
+      get_certificate_coverage: {
+        Args: { _end_date: string; _start_date: string; _student_ids: string[] }
+        Returns: {
+          end_date: string
+          start_date: string
+          status: string
+          student_id: string
+        }[]
       }
       get_student_basic_by_qr: {
         Args: { _qr_code: string }

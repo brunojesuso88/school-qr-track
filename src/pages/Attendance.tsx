@@ -15,6 +15,8 @@ import { Badge } from '@/components/ui/badge';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { useToast } from '@/hooks/use-toast';
+import { useCertificateCoverage } from '@/hooks/useCertificateCoverage';
+import { isCovered } from '@/lib/medicalCertificates/status';
 
 interface Student {
   id: string;
@@ -499,10 +501,10 @@ const Attendance = () => {
     }).filter(r => r.student.id !== '');
   };
 
-  const getStatusLabel = (status: string) => {
+  const getStatusLabel = (status: string, covered = false) => {
     switch (status) {
       case 'present': return 'Presente';
-      case 'absent': return 'Ausente';
+      case 'absent': return covered ? 'Ausente — Atestado' : 'Ausente';
       case 'justified': return 'Justificado';
       default: return status;
     }
@@ -564,7 +566,7 @@ const Attendance = () => {
           <td>${record.student.full_name}</td>
           <td>${record.student.class}</td>
           <td>${getShiftLabel(record.student.shift)}</td>
-          <td class="${record.status}">${getStatusLabel(record.status)}</td>
+          <td class="${record.status}">${getStatusLabel(record.status, isCovered(coverage, record.student.id, record.date))}</td>
         </tr>
       `).join('')}
     </tbody>
@@ -587,6 +589,14 @@ const Attendance = () => {
 
   const stats = getTotalStats();
   const detailedRecords = getDetailedRecords();
+  // Cobertura por atestado: camada derivada, não altera o registro bruto de frequência.
+  const { coverage } = useCertificateCoverage(
+    Array.from(new Set(detailedRecords.filter(r => r.status === 'absent').map(r => r.student.id))).sort(),
+    Array.from(new Set(detailedRecords.filter(r => r.status === 'absent').map(r => r.date))).sort()
+  );
+  const absentCoveredCount = detailedRecords.filter(
+    r => r.status === 'absent' && isCovered(coverage, r.student.id, r.date)
+  ).length;
 
   return (
     <DashboardLayout>
@@ -862,7 +872,14 @@ const Attendance = () => {
         {/* Detailed Individual Records */}
         <Card>
           <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-            <CardTitle className="text-lg">Registros Individuais</CardTitle>
+            <div className="flex items-center gap-2 flex-wrap">
+              <CardTitle className="text-lg">Registros Individuais</CardTitle>
+              {absentCoveredCount > 0 && (
+                <Badge variant="outline" className="border-blue-500/40 text-blue-600">
+                  {absentCoveredCount} ausência(s) com atestado
+                </Badge>
+              )}
+            </div>
             <Button variant="outline" size="sm" onClick={generateDetailedPDF} disabled={detailedRecords.length === 0}>
               <FileDown className="w-4 h-4 mr-2" />
               Exportar Detalhado
@@ -905,7 +922,7 @@ const Attendance = () => {
                             variant={getStatusBadgeVariant(record.status) as 'default' | 'destructive' | 'secondary' | 'outline'}
                             className={record.status === 'present' ? 'bg-green-500' : ''}
                           >
-                            {getStatusLabel(record.status)}
+                            {getStatusLabel(record.status, isCovered(coverage, record.student.id, record.date))}
                           </Badge>
                         </TableCell>
                         <TableCell className="text-center">
