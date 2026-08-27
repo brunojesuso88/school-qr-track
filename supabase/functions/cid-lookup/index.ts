@@ -25,8 +25,8 @@ serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
 
   try {
-    // Somente admin/direção podem consultar códigos CID.
-    const auth = await requireAuth(req, corsHeaders, ['admin', 'direction']);
+    // Admin, direção e professores podem consultar códigos CID (apenas o código é enviado).
+    const auth = await requireAuth(req, corsHeaders, ['admin', 'direction', 'teacher']);
     if (auth instanceof Response) return auth;
 
     const body = await req.json().catch(() => ({}));
