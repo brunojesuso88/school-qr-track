@@ -1,101 +1,114 @@
-# Atestados Médicos do Aluno + integração com Frequência
+# Notificações Push para todos os usuários — Auditoria e Plano
 
-Proposta técnica/UX baseada na auditoria read-only do projeto atual. Nenhuma alteração feita.
+## 1. O que existe hoje (verificado no código)
 
-## O que existe hoje (auditado)
+Autenticação e perfis
+- `src/contexts/AuthContext.tsx`: sessão do Lovable Cloud (Supabase Auth), papel único lido de `user_roles` via `.single()`. Papéis: `admin`, `direction`, `teacher`, `staff`. Flags derivadas (`canAccessSettings`, `canManageUsers`, etc.).
+- Identidade = `auth.users.id`; perfil em `profiles`; papéis em `user_roles` com `has_role`/`user_has_any_role` (SECURITY DEFINER).
 
-- Card/detalhe do aluno: `src/components/StudentReportModal.tsx` já usa `Tabs` com 4 abas (Frequência, Notas, Ocorrências, Laudo médico — esta última só habilitada quando `students.has_medical_report`).
-- Cadastro/listagem de alunos e diálogo de ocorrências: `src/pages/Students.tsx`. Já existe o tipo de ocorrência `medical_certificate` com data inicial (`date`) e final (`end_date`), gravado em `occurrences`.
-- Relatório de ocorrências do dia: `src/components/OccurrencesReportDialog.tsx` (jsPDF, agrupado por turma).
-- Frequência: `src/pages/Attendance.tsx` (filtros, relatório geral e detalhado em HTML/print), `src/components/AttendanceCalendar.tsx` (relatório diário por turma), `src/components/ClassAttendanceDialog.tsx` e exportação de faltosos em `src/pages/Classes.tsx`.
-- Banco: `attendance(status: present|absent|justified)`, `occurrences(type, date, end_date, teacher_name)`, campos AEE sensíveis já no `students` (`aee_cid_code`, `aee_cid_description`, `aee_laudo_attachment_url`) com anexo em bucket privado (`aee-documents`).
-- RLS atual: `students`/`occurrences`/`attendance` são legíveis por `admin`, `direction`, `teacher` (staff só vê frequência do dia). Ou seja, hoje **professor vê CID do AEE** — a nova estrutura deve ser mais restritiva.
+PWA
+- Já é PWA: `vite.config.ts` usa `vite-plugin-pwa` com `registerType: 'autoUpdate'`, manifest inline (Edunexus, standalone, tema `#0078a8`), ícones `public/pwa-192x192.png` / `pwa-512x512.png`, runtime caching NetworkFirst para o backend.
+- `index.html` tem meta tags Apple/`theme-color`; `src/components/UpdatePrompt.tsx` controla atualização do SW.
 
-Conclusão da auditoria: o atestado hoje é modelado como "ocorrência", sem status, sem validação de sobreposição, sem CID e sem qualquer efeito no relatório de faltas. Precisa de entidade própria.
+Push (parcial e hoje NÃO funcional de ponta a ponta)
+- Tabela `push_subscriptions` já existe (`user_id`, `endpoint`, `p256dh`, `auth`).
+- `src/hooks/usePushNotifications.ts`: permissão, `pushManager.subscribe`, upsert por `user_id,endpoint`, unsubscribe. Usa `VITE_VAPID_PUBLIC_KEY`.
+- `src/components/PushNotificationToggle.tsx`, exibido em `settings/NotificationSettings.tsx` **apenas para admin**.
+- Secrets já cadastrados: `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VITE_VAPID_PUBLIC_KEY`.
+- Edge Function `notify-new-user` monta JWT VAPID manualmente.
 
-## Modelo de dados recomendado
+Três lacunas bloqueantes encontradas
+1. `public/sw-push.js` (handlers de `push` / `notificationclick`) **não é referenciado em lugar algum** — o service worker gerado pelo `vite-plugin-pwa` (generateSW) não faz `importScripts` dele. Logo, mesmo com subscription válida, nada é exibido.
+2. `notify-new-user` envia o payload **sem criptografia aes128gcm** (o próprio comentário admite isso) e assina em ES256 com formato de assinatura possivelmente DER-vs-raw. Serviços de push (FCM/Mozilla/Apple) rejeitam ou entregam vazio. Precisa de biblioteca de webpush real.
+3. Não existe modelo de notificação interna: `notification_logs` é de WhatsApp para responsáveis (`student_id`, `guardian_phone`), não serve. Não há tabela de notificações/leitura/preferências, nem disparo por evento (nenhum trigger/función para atestados, ocorrências, etc.).
 
-Nova tabela `public.student_medical_certificates`:
+Riscos de integração
+- Trocar o SW: com `generateSW` é preciso `importScripts` de um arquivo próprio (via `workbox.importScripts`) ou migrar para `injectManifest`. Mudança de SW afeta usuários já instalados (é preciso um ciclo de atualização; `UpdatePrompt` ajuda).
+- `AuthContext` usa `.single()` para papel: usuário com 2 papéis quebra. Audiência por papel deve ser calculada no servidor sobre `user_roles`, não sobre o papel do cliente.
+- Cache NetworkFirst do backend pode servir contagem de não lidas defasada — a central deve usar Realtime/refetch explícito.
+- Privacidade: `student_medical_certificates` é sensível; nenhum dado clínico pode entrar no payload push (payload fica no dispositivo e no serviço de push).
 
-- `student_id` (FK students, not null)
-- `start_date`, `end_date` (date, not null, `end_date >= start_date`)
-- `days_count` (gerado/calculado na leitura, não armazenado)
-- `cid_code` (text, opcional, normalizado maiúsculo sem ponto — ex. `J11`, `M545`)
-- `cid_description` (text, opcional — preenchido por catálogo/IA, nunca digitado livre como diagnóstico)
-- `cid_source` (`catalog` | `ai` | `manual` | null)
-- `notes` (text, opcional, limite 500)
-- `issuer` (text, opcional: médico/unidade)
-- `attachment_path` (text, opcional — bucket privado)
-- `status_manual` (`active` | `cancelled`, default `active`) — cancelamento lógico, sem delete
-- `cancelled_reason`, `cancelled_by`, `cancelled_at`
-- `created_by`, `created_at`, `updated_at` (+ trigger `update_updated_at_column`)
+## 2. Escolha da tecnologia
 
-Índices: `(student_id, start_date desc)`, índice GiST em `daterange(start_date, end_date, '[]')` para sobreposição, e índice parcial em `status_manual = 'active'`.
+| Opção | Prós | Contras |
+| --- | --- | --- |
+| Web Push nativo (VAPID) | Sem SDK/terceiros, sem custo, funciona em Chrome/Edge/Firefox/Android e Safari 16.4+ (iOS instalado); chaves já existem; roda em Edge Function | Criptografia precisa de lib correta; gerenciar retry/limpeza de endpoints por conta própria |
+| Firebase Cloud Messaging | SDK maduro, tópicos, painel | Projeto Firebase + SW dedicado (`firebase-messaging-sw.js`), dados no Google, no iOS Web ainda depende do mesmo Web Push |
+| OneSignal | Painel, segmentação, agendamento pronto | Terceiro com dados de usuários, script externo, custo ao escalar, menos controle de RLS/auditoria |
 
-Status derivado na aplicação (não persistido): `cancelado` → `futuro` (start > hoje) → `ativo` (hoje entre datas) → `vencido`.
+**Recomendação: Web Push nativo (VAPID).** Chaves e tabela já existem, não adiciona dependência externa nem envia dados de alunos para terceiros, e no iOS nenhuma alternativa contorna a exigência de PWA instalado. Implementar o envio com `npm:web-push` (Deno) em vez do JWT manual atual.
 
-### Regras de datas e sobreposição
-- `end_date >= start_date` (CHECK); limite máximo configurável de dias (aviso, não bloqueio).
-- Sobreposição com outro atestado **ativo** do mesmo aluno: bloquear salvamento com mensagem clara e link para o atestado existente (permitir editar/estender em vez de duplicar). Atestados cancelados não contam.
-- Sem restrição a fim de semana (atestado pode abranger período contínuo); a cobertura de falta só é avaliada em dias com registro de frequência.
+## 3. Plataformas e limites
+- **Android (Chrome/Edge/Samsung)**: suporte pleno, funciona no navegador e instalado.
+- **Desktop (Windows/macOS/Linux, Chrome/Edge/Firefox)**: suporte pleno; macOS Safari 16+ requer app adicionado ao Dock.
+- **iPhone/iPad**: só a partir do iOS/iPadOS 16.4 **e somente com o app adicionado à Tela de Início** (Compartilhar → Adicionar à Tela de Início). Sem instalação, `PushManager` não existe. Permissão só pode ser pedida a partir de um gesto do usuário; sem badge de contagem confiável e sem `actions`. Consequência prática: manter a página `/install-pwa` (já existe) com passo a passo iOS e detectar "iOS não instalado" na UI para orientar em vez de falhar.
 
-## UX no card do aluno
+## 4. Esquema de banco proposto (nada aplicado agora)
+- `push_devices` (evolução de `push_subscriptions`): `user_id`, `endpoint` (único), `p256dh`, `auth`, `user_agent`, `platform`, `last_seen_at`, `failure_count`, `disabled_at`, `school_id`.
+- `notifications`: `id`, `school_id`, `event_type`, `title`, `body` (já genérico/sanitizado), `route` (deep link), `entity_table`, `entity_id`, `severity`, `created_by`, `dedupe_key` (único), `created_at`.
+- `notification_recipients`: `notification_id`, `user_id`, `read_at`, `seen_at` — base da central e do badge (único por par).
+- `notification_deliveries`: `notification_id`, `user_id`, `device_id`, `status` (`queued|sent|failed|expired`), `attempts`, `last_error`, `http_status`, `sent_at`.
+- `notification_preferences`: `user_id`, `event_type`, `push_enabled`, `inapp_enabled`, `quiet_hours_start/end` — padrão opt-in por papel quando não houver linha.
+- `notification_audience` (para eventos segmentados): `notification_id`, `scope` (`school|role|class|user`), `role`, `class_id`, `user_id`.
+- RLS: `notification_recipients` e `notification_preferences` apenas do próprio `auth.uid()`; `notifications` legíveis via join com recipients (função SECURITY DEFINER ou policy com `EXISTS`); `push_devices` só do dono; escrita de `notifications`/`deliveries` só por `service_role` (Edge Function). GRANTs explícitos para `authenticated` e `service_role` em toda tabela nova.
 
-Nova aba `Atestados` em `StudentReportModal.tsx` (5ª aba, sempre visível para perfis autorizados; a aba `Laudo` do AEE permanece separada):
+## 5. Fluxo ponta a ponta
+```text
+Ação no app (ex.: gestor salva atestado)
+  -> trigger/RPC ou chamada de Edge Function "notify-event" com {event_type, entity_id, school_id}
+  -> função resolve audiência (papéis autorizados do evento, mesma escola)  [service role]
+  -> insere notifications + notification_recipients (dedupe_key evita duplicidade)
+  -> filtra por notification_preferences e devices ativos
+  -> envia Web Push (payload genérico + url) por device, grava notification_deliveries
+  -> service worker: evento "push" -> showNotification(title, body, data.url)
+  -> "notificationclick" -> foca aba existente ou abre a rota (ex.: /students?student=<id>&tab=certificates)
+  -> app na rota: valida permissão real por RLS e marca read_at do recipient
+```
+Regras de conteúdo por privacidade: para atestado, título "Novo atestado registrado" e corpo "Um novo atestado foi registrado para um aluno da sua escola." Nunca CID, diagnóstico, descrição, emissor ou nome do aluno no payload. Detalhes só dentro do app, respeitando as restrições atuais (professor vê apenas período/status; staff sem detalhes).
 
-- Lista ordenada por período (mais recente primeiro), cada item mostrando: período `dd/MM` a `dd/MM`, quantidade de dias, badge de status (Ativo verde / Futuro azul / Vencido cinza / Cancelado riscado), quem cadastrou e ícone de anexo.
-- CID exibido **oculto por padrão** ("CID registrado — mostrar"), com revelação sob clique e apenas para perfis autorizados. Perfis sem permissão veem só "possui CID registrado".
-- Botão `Novo atestado` abre diálogo com: calendário de data inicial e final (mesmo padrão de `Students.tsx`), campo CID opcional com botão `Pesquisar CID com IA`, observações, anexo opcional.
-- Ações por item: editar (datas/observação/anexo), cancelar (com motivo), baixar anexo. Nenhum delete físico.
-- Indicador no card da listagem de alunos: badge discreto "Atestado ativo" quando houver cobertura na data atual.
+## 6. Multi-escola
+- `school_id` (nullable no início, preenchido com a escola padrão) em `notifications`, `push_devices`, `notification_audience`.
+- Audiência sempre `school_id + papel` (+ turma/usuário quando aplicável), resolvida no servidor a partir de `user_roles`.
+- RLS filtra por vínculo do usuário à escola; nenhuma notificação cruza escolas.
 
-## Comportamento no relatório de faltas
+## 7. Eventos iniciais e matriz de audiência
+| Evento | admin | direction | teacher | staff |
+| --- | --- | --- | --- | --- |
+| `medical_certificate_created` | sim | sim | sim (genérico) | não |
+| `management_announcement` | sim | sim | sim | sim |
+| `occurrence_created` | sim | sim | autor/turma | não |
+| `attendance_critical` (faltas acima do limite) | sim | sim | turma | não |
+| `planning_deadline` (prazo/notificação docente) | sim | sim | docente alvo | não |
+| `aee_validation` (GAEM/PAC/PEI/PAEE) | sim | sim | responsável | não |
+| `grades_import_finished` | sim | sim | autor | não |
+| `school_event_published` | sim | sim | sim | sim |
+| `new_user_signup` (já existente) | sim | não | não | não |
 
-Princípio: **não alterar o registro bruto de `attendance`**. A cobertura é uma camada derivada.
+## 8. Confiabilidade e observabilidade
+- **Idempotência**: `dedupe_key` único (`event_type:entity_id:versão`); reenvio não duplica.
+- **Retry**: até 3 tentativas com backoff (nova invocação/cron), `attempts` e `last_error` em `notification_deliveries`.
+- **Expiração**: HTTP 404/410 → marca `disabled_at` no device e remove endpoint; `failure_count` alto → desativa.
+- **Rate limit**: no máximo N notificações por usuário/hora por `event_type`; agrupamento ("3 novos atestados") quando estourar.
+- **Fila**: processamento em lotes na Edge Function (chunks de ~100 devices) para não bater no limite de 150s (mesma lição do importador de boletim); cron para `queued`/retry.
+- **Observabilidade**: logs da Edge Function + painel simples em Configurações (enviadas, falhas, devices ativos) para admin.
 
-- Novo hook `src/hooks/useCertificateCoverage.ts`: dado um conjunto de `student_id` + intervalo de datas, retorna um mapa `student_id|date → coberto`, consultando apenas `student_id, start_date, end_date, status_manual` (sem CID).
-- Relatório diário (`AttendanceCalendar.tsx`) e relatório detalhado/geral (`Attendance.tsx`): faltas cobertas ganham marca visual e no PDF/HTML a coluna Status passa a exibir `Ausente (atestado)`, com legenda no rodapé. Sem CID, sem observações médicas no relatório geral.
-- Resumo do dia por turma: contador extra "Ausências com atestado", e a taxa de frequência ganha uma linha adicional "frequência considerando atestados" sem substituir a taxa bruta.
-- Exportação de faltosos (`Classes.tsx`) e `ClassAttendanceDialog.tsx`: marcar com asterisco os alunos com atestado válido, para não cobrar justificativa indevidamente.
-- Opção futura (fase 4, opcional): botão "Aplicar atestado à frequência" que converte `absent` → `justified` no período, sempre com registro em `audit_logs` e nunca automático.
+## 9. Fases, testes e critérios de aceite
+**Fase 1 — Base do push funcionar de verdade**
+- SW próprio com handlers `push`/`notificationclick` integrado ao `vite-plugin-pwa` (importScripts ou `injectManifest`), reaproveitando `public/sw-push.js`.
+- Reescrever o envio com `npm:web-push` (aes128gcm correto) em uma função `send-web-push` compartilhada; `notify-new-user` passa a usá-la.
+- Liberar `PushNotificationToggle` para todos os papéis, com aviso específico para iOS não instalado.
+- Aceite: um push de teste chega em Android instalado, Chrome desktop e iPhone instalado; clique abre a rota certa.
 
-## Recurso `Pesquisar CID com IA`
+**Fase 2 — Modelo de notificações e central no app**
+- Tabelas, RLS e GRANTs da seção 4; Edge Function `notify-event`; sino no `DashboardLayout` com badge de não lidas, lista, marcar como lida/todas, Realtime.
+- Aceite: notificação aparece na central mesmo com push negado; badge zera ao ler.
 
-Estratégia em três camadas, determinística primeiro:
+**Fase 3 — Evento atestado + preferências**
+- Disparo no salvamento de atestado (mensagem genérica), tela de preferências por evento.
+- Aceite: gestor cadastra atestado, admin/direção/professores da escola recebem push genérico; payload auditado sem CID; staff não recebe.
 
-1. **Catálogo local** (`src/lib/cid/cid10.ts` ou tabela `cid_catalog` somente-leitura com os capítulos/subcategorias mais usados): validação de formato (`^[A-Z]\d{2}(\.?\d)?$`) e busca exata/prefixo. Se o código existe no catálogo, a descrição oficial é retornada sem chamar IA.
-2. **Edge Function `cid-lookup`** (Lovable AI Gateway, padrão do projeto): recebe **apenas o código informado**, com prompt restrito a "explicar em linguagem simples a descrição oficial deste código CID-10; se não reconhecer com segurança, responder desconhecido". Proibido inferir diagnóstico, gravidade, tratamento ou dados do aluno. Nenhum dado do aluno é enviado.
-3. **Cache/auditoria**: resultado gravado em `cid_lookup_cache(code, description, simple_explanation, source, created_at)` para reuso e para evitar respostas divergentes; cada consulta registra `code`, usuário e origem em `audit_logs` — sem vincular ao aluno na tabela de cache.
+**Fase 4 — Demais eventos, retry/limpeza e rollout**
+- Eventos da seção 7, cron de retry/limpeza, painel de observabilidade.
+- Rollout: habilitar por papel (admin → direção → professores → staff), monitorando taxa de falha por device.
 
-UX: descrição retornada aparece como sugestão que o usuário **confirma** antes de gravar; sempre com aviso "descrição informativa, não é diagnóstico". Nunca preenche `cid_description` automaticamente sem confirmação.
-
-## Permissões, RLS e LGPD
-
-- Perfis: `admin` e `direction` → criar, editar, cancelar, ver CID e anexo. `teacher` → ver existência/período do atestado e a marca no relatório, **sem CID e sem anexo**. `staff` → nenhum acesso.
-- Implementação: RLS na tabela restringindo INSERT/UPDATE a `admin`/`direction`; SELECT liberado a `admin`/`direction`/`teacher`, e os campos sensíveis (`cid_code`, `cid_description`, `attachment_path`, `notes`) expostos ao professor via **view/RPC** `student_certificates_basic` que só retorna período e status — o front do professor consome a view, nunca a tabela. GRANTs explícitos para `authenticated` e `service_role`.
-- Minimização: nenhum relatório coletivo carrega CID; logs de auditoria registram acesso a CID (`log_audit_event` na tabela).
-- Anexos: **opcionais**. Bucket privado `medical-certificates` (mesmo padrão de `aee-documents`), path `{student_id}/{certificate_id}/{arquivo}`, políticas de storage restritas a `admin`/`direction`, acesso só por URL assinada de curta duração.
-
-## Impacto e indicadores
-
-- Dashboard: novo indicador "Ausências cobertas por atestado (mês)" e "Alunos com atestado ativo".
-- Nenhum impacto em notas, IRA ou importação de boletim.
-- Ocorrências do tipo `medical_certificate` existentes permanecem intactas; oferecer, na aba Atestados, um aviso quando existir ocorrência antiga desse tipo, com ação manual de migração (sem migração automática de dados).
-
-## Fases de implementação
-
-1. **Dados**: migração da tabela, índices, RLS, GRANTs, view do professor, trigger de updated_at e auditoria.
-2. **Card do aluno**: aba `Atestados` + diálogo de cadastro/edição/cancelamento com validação de datas e sobreposição.
-3. **CID**: catálogo local, validação de formato, Edge Function `cid-lookup` com cache e confirmação do usuário.
-4. **Frequência**: hook de cobertura e marcação nos relatórios diário/detalhado/geral e exportação de faltosos.
-5. **Anexos e indicadores**: bucket privado, URLs assinadas, métricas no dashboard.
-
-## Testes principais
-
-- Datas: `end_date < start_date` rejeitado; atestado de 1 dia; período atravessando meses.
-- Sobreposição: bloqueio com atestado ativo; permitido quando o anterior está cancelado.
-- Status derivado: futuro/ativo/vencido/cancelado em torno de "hoje".
-- Cobertura: falta em dia coberto marcada; falta fora do período não marcada; presença em dia coberto não alterada.
-- Relatórios: PDF/HTML nunca contêm CID; legenda presente quando há cobertura.
-- Permissões: professor não obtém CID nem anexo; staff sem acesso.
-- CID: formato inválido rejeitado sem chamar IA; código do catálogo não chama IA; cache reutilizado; resposta "desconhecido" não grava descrição.
+Testes: unitários para resolução de audiência, dedupe e sanitização de payload (garantir ausência de `cid_code`/descrição); testes de permissão em RLS; verificação manual multiplataforma.
