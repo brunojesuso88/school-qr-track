@@ -587,6 +587,14 @@ const Attendance = () => {
 
   const stats = getTotalStats();
   const detailedRecords = getDetailedRecords();
+  // Cobertura por atestado: camada derivada, não altera o registro bruto de frequência.
+  const { coverage } = useCertificateCoverage(
+    Array.from(new Set(detailedRecords.filter(r => r.status === 'absent').map(r => r.student.id))).sort(),
+    Array.from(new Set(detailedRecords.filter(r => r.status === 'absent').map(r => r.date))).sort()
+  );
+  const absentCoveredCount = detailedRecords.filter(
+    r => r.status === 'absent' && isCovered(coverage, r.student.id, r.date)
+  ).length;
 
   return (
     <DashboardLayout>
