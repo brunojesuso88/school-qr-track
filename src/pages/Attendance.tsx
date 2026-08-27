@@ -499,10 +499,10 @@ const Attendance = () => {
     }).filter(r => r.student.id !== '');
   };
 
-  const getStatusLabel = (status: string) => {
+  const getStatusLabel = (status: string, covered = false) => {
     switch (status) {
       case 'present': return 'Presente';
-      case 'absent': return 'Ausente';
+      case 'absent': return covered ? 'Ausente — Atestado' : 'Ausente';
       case 'justified': return 'Justificado';
       default: return status;
     }
