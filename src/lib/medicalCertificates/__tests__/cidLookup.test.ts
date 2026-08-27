@@ -19,7 +19,8 @@ describe('validação de formato', () => {
     expect(isValidCid('AA9')).toBe(false);
     expect(isValidCid('123')).toBe(false);
     expect(isValidCid('A0')).toBe(false);
-    expect(CID_REGEX.test('A099')).toBe(false);
+    expect(CID_REGEX.test('A09.9')).toBe(true);
+    expect(CID_REGEX.test('A0999')).toBe(false);
   });
 });
 
