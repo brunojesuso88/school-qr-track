@@ -144,6 +144,18 @@ export const StudentMedicalCertificateDialog = ({
           .update(payload)
           .eq('id', certificateId);
         if (error) throw error;
+      } else if (restrictedCreate) {
+        // Professor não possui SELECT nem UPDATE: id gerado no cliente e insert sem retorno.
+        certificateId = crypto.randomUUID();
+        const { error } = await supabase
+          .from('student_medical_certificates')
+          .insert({
+            ...payload,
+            id: certificateId,
+            status_manual: 'active',
+            created_by: userData?.user?.id ?? null,
+          });
+        if (error) throw error;
       } else {
         const { data, error } = await supabase
           .from('student_medical_certificates')
@@ -161,13 +173,16 @@ export const StudentMedicalCertificateDialog = ({
           toast.error('Anexo maior que 10MB.');
         } else {
           const ext = file.name.split('.').pop() ?? 'bin';
-          const path = `${studentId}/${certificateId}/atestado.${ext}`;
+          const path = restrictedCreate
+            ? `${studentId}/${certificateId}/atestado-${Date.now()}.${ext}`
+            : `${studentId}/${certificateId}/atestado.${ext}`;
           const { error: upErr } = await supabase.storage
             .from(BUCKET)
-            .upload(path, file, { upsert: true, contentType: file.type });
+            // Professor não tem UPDATE de storage: upload sem upsert em path único.
+            .upload(path, file, { upsert: !restrictedCreate, contentType: file.type });
           if (upErr) {
             toast.error('Não foi possível enviar o anexo.');
-          } else {
+          } else if (!restrictedCreate) {
             await supabase
               .from('student_medical_certificates')
               .update({ attachment_path: path })
@@ -175,6 +190,7 @@ export const StudentMedicalCertificateDialog = ({
           }
         }
       }
+
 
       toast.success(certificate ? 'Atestado atualizado.' : 'Atestado cadastrado.');
       onSaved();
