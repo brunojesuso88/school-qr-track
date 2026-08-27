@@ -67,16 +67,29 @@ const AttendanceCalendar = () => {
       .eq('date', dateStr)
       .order('status');
 
-    const records: CalendarAttendance[] = (data || []).map((r: any) => ({
-      date: r.date,
-      student_id: r.student_id,
-      status: r.status,
-      student_name: r.students.full_name,
-      student_class: r.students.class,
+    const raw = (data || []).map((r: any) => ({
+      date: r.date as string,
+      student_id: r.student_id as string,
+      status: r.status as string,
+      student_name: r.students.full_name as string,
+      student_class: r.students.class as string,
+    }));
+
+    // Cobertura de atestados em LOTE (uma única chamada, sem CID).
+    let coverage: CoverageMap = new Set();
+    const ids = Array.from(new Set(raw.map(r => r.student_id)));
+    if (ids.length > 0) {
+      coverage = await fetchCoverage(ids, [dateStr]);
+    }
+
+    const records: CalendarAttendance[] = raw.map(r => ({
+      ...r,
+      covered: isCovered(coverage, r.student_id, r.date),
     }));
 
     setDayRecords(records);
     setLoadingDay(false);
+
   };
 
   const groupedByClass = dayRecords.reduce<Record<string, CalendarAttendance[]>>((acc, r) => {
