@@ -564,7 +564,7 @@ const Attendance = () => {
           <td>${record.student.full_name}</td>
           <td>${record.student.class}</td>
           <td>${getShiftLabel(record.student.shift)}</td>
-          <td class="${record.status}">${getStatusLabel(record.status)}</td>
+          <td class="${record.status}">${getStatusLabel(record.status, isCovered(coverage, record.student.id, record.date))}</td>
         </tr>
       `).join('')}
     </tbody>
