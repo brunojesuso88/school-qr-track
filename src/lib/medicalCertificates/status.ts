@@ -107,6 +107,27 @@ export function buildCoverageMap(rows: CoverageRow[], dates: string[]): Coverage
   return map;
 }
 
+/** Linha mínima da RPC `get_certificate_coverage_flags`: sem período, sem CID. */
+export interface CoverageFlagRow {
+  student_id: string;
+  date: string;
+  covered: boolean;
+}
+
+/**
+ * Constrói o Set de cobertura a partir de flags booleanas.
+ * Usado nos relatórios para os quatro perfis — nunca expõe start/end/CID.
+ */
+export function buildCoverageMapFromFlags(rows: CoverageFlagRow[]): CoverageMap {
+  const map: CoverageMap = new Set();
+  for (const row of rows) {
+    if (!row.covered) continue;
+    map.add(coverageKey(row.student_id, row.date));
+  }
+  return map;
+}
+
+
 export function isCovered(map: CoverageMap, studentId: string, date: string): boolean {
   return map.has(coverageKey(studentId, date));
 }
