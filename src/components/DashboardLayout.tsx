@@ -15,6 +15,8 @@ import { Separator } from '@/components/ui/separator';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import AboutSystemDialog from '@/components/AboutSystemDialog';
+import NotificationBell from '@/components/notifications/NotificationBell';
+
 import {
   DropdownMenu,
   DropdownMenuContent,
