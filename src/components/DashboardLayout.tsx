@@ -15,6 +15,8 @@ import { Separator } from '@/components/ui/separator';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import AboutSystemDialog from '@/components/AboutSystemDialog';
+import NotificationBell from '@/components/notifications/NotificationBell';
+
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -286,15 +288,9 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
             {/* Right side actions */}
             <div className="flex items-center gap-2">
               <ThemeToggle />
-              <Button
-                variant="ghost"
-                size="icon"
-                className="relative"
-                onClick={() => navigate('/notifications')}
-              >
-                <Bell className="w-5 h-5" />
-              </Button>
+              <NotificationBell />
             </div>
+
           </div>
         </header>
 
