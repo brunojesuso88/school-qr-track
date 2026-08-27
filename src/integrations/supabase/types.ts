@@ -789,6 +789,63 @@ export type Database = {
         }
         Relationships: []
       }
+      notification_deliveries: {
+        Row: {
+          attempts: number
+          created_at: string
+          device_id: string | null
+          http_status: number | null
+          id: string
+          last_error: string | null
+          notification_id: string
+          sent_at: string | null
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          attempts?: number
+          created_at?: string
+          device_id?: string | null
+          http_status?: number | null
+          id?: string
+          last_error?: string | null
+          notification_id: string
+          sent_at?: string | null
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          attempts?: number
+          created_at?: string
+          device_id?: string | null
+          http_status?: number | null
+          id?: string
+          last_error?: string | null
+          notification_id?: string
+          sent_at?: string | null
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notification_deliveries_device_id_fkey"
+            columns: ["device_id"]
+            isOneToOne: false
+            referencedRelation: "push_subscriptions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notification_deliveries_notification_id_fkey"
+            columns: ["notification_id"]
+            isOneToOne: false
+            referencedRelation: "notifications"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       notification_logs: {
         Row: {
           created_at: string | null
@@ -826,6 +883,122 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      notification_preferences: {
+        Row: {
+          created_at: string
+          event_type: string
+          id: string
+          inapp_enabled: boolean
+          push_enabled: boolean
+          quiet_hours_end: string | null
+          quiet_hours_start: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          event_type: string
+          id?: string
+          inapp_enabled?: boolean
+          push_enabled?: boolean
+          quiet_hours_end?: string | null
+          quiet_hours_start?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          event_type?: string
+          id?: string
+          inapp_enabled?: boolean
+          push_enabled?: boolean
+          quiet_hours_end?: string | null
+          quiet_hours_start?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      notification_recipients: {
+        Row: {
+          created_at: string
+          id: string
+          notification_id: string
+          read_at: string | null
+          seen_at: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          notification_id: string
+          read_at?: string | null
+          seen_at?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          notification_id?: string
+          read_at?: string | null
+          seen_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notification_recipients_notification_id_fkey"
+            columns: ["notification_id"]
+            isOneToOne: false
+            referencedRelation: "notifications"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      notifications: {
+        Row: {
+          body: string
+          created_at: string
+          created_by: string | null
+          dedupe_key: string
+          entity_id: string | null
+          entity_type: string | null
+          event_type: string
+          id: string
+          route: string | null
+          school_id: string | null
+          severity: string
+          title: string
+        }
+        Insert: {
+          body: string
+          created_at?: string
+          created_by?: string | null
+          dedupe_key: string
+          entity_id?: string | null
+          entity_type?: string | null
+          event_type: string
+          id?: string
+          route?: string | null
+          school_id?: string | null
+          severity?: string
+          title: string
+        }
+        Update: {
+          body?: string
+          created_at?: string
+          created_by?: string | null
+          dedupe_key?: string
+          entity_id?: string | null
+          entity_type?: string | null
+          event_type?: string
+          id?: string
+          route?: string | null
+          school_id?: string | null
+          severity?: string
+          title?: string
+        }
+        Relationships: []
       }
       occurrences: {
         Row: {
@@ -899,25 +1072,46 @@ export type Database = {
         Row: {
           auth: string
           created_at: string | null
+          disabled_at: string | null
           endpoint: string
+          failure_count: number
           id: string
+          last_seen_at: string
           p256dh: string
+          platform: string | null
+          school_id: string | null
+          updated_at: string
+          user_agent: string | null
           user_id: string
         }
         Insert: {
           auth: string
           created_at?: string | null
+          disabled_at?: string | null
           endpoint: string
+          failure_count?: number
           id?: string
+          last_seen_at?: string
           p256dh: string
+          platform?: string | null
+          school_id?: string | null
+          updated_at?: string
+          user_agent?: string | null
           user_id: string
         }
         Update: {
           auth?: string
           created_at?: string | null
+          disabled_at?: string | null
           endpoint?: string
+          failure_count?: number
           id?: string
+          last_seen_at?: string
           p256dh?: string
+          platform?: string | null
+          school_id?: string | null
+          updated_at?: string
+          user_agent?: string | null
           user_id?: string
         }
         Relationships: []
@@ -1799,11 +1993,13 @@ export type Database = {
         }
         Returns: boolean
       }
+      mark_all_notifications_read: { Args: never; Returns: number }
       next_teacher_notification_number: {
         Args: { _year: number }
         Returns: number
       }
       normalize_subject_key: { Args: { _name: string }; Returns: string }
+      unread_notifications_count: { Args: never; Returns: number }
       update_student_photo: {
         Args: { _photo_url: string; _student_id: string }
         Returns: undefined
