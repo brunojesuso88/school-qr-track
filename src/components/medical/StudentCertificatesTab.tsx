@@ -6,7 +6,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { FileText, Plus, Ban, Pencil, Paperclip, Eye, EyeOff, AlertTriangle, Lock } from 'lucide-react';
+import { FileText, Plus, Ban, Pencil, Paperclip, Eye, EyeOff, AlertTriangle, Lock as LockIcon } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
@@ -122,7 +122,7 @@ export const StudentCertificatesTab = ({ studentId, studentName }: Props) => {
   if (!canViewPeriods) {
     return (
       <div className="text-center py-10 text-muted-foreground">
-        <Lock className="w-10 h-10 mx-auto mb-2 opacity-50" />
+        <LockIcon className="w-10 h-10 mx-auto mb-2 opacity-50" />
         <p className="text-sm font-medium">Sem acesso aos detalhes de atestados</p>
         <p className="text-xs mt-1">
           Seu perfil não permite visualizar períodos, códigos CID ou anexos.
