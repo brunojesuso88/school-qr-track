@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { audienceRolesForEvent, CONFIGURABLE_EVENTS, getEventDefinition } from './events';
+import { audienceRolesForEvent, CONFIGURABLE_EVENTS, getEventDefinition, isInappMandatory } from './events';
 import { detectPushPlatform } from './platform';
 import { filterItems, formatBadge, markAllItemsRead, markItemRead, unreadCount, type NotificationItem } from './center';
 
@@ -21,6 +21,11 @@ describe('eventos de notificação', () => {
   it('resolve audiência por evento', () => {
     expect(audienceRolesForEvent('new_user_signup')).toEqual(['admin']);
     expect(audienceRolesForEvent('inexistente')).toEqual([]);
+  });
+
+  it('mantém a central interna obrigatória para atestados', () => {
+    expect(isInappMandatory('medical_certificate_created')).toBe(true);
+    expect(isInappMandatory('management_announcement')).toBe(false);
   });
 
   it('não expõe o teste de push nas preferências', () => {
