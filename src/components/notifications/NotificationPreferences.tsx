@@ -6,7 +6,7 @@ import { Loader2, SlidersHorizontal } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
-import { CONFIGURABLE_EVENTS } from '@/lib/notifications/events';
+import { CONFIGURABLE_EVENTS, isInappMandatory } from '@/lib/notifications/events';
 
 interface PreferenceRow {
   event_type: string;
@@ -82,6 +82,7 @@ const NotificationPreferences = () => {
           <div className="space-y-5">
             {visibleEvents.map((event) => {
               const pref = prefs[event.type] ?? { push_enabled: true, inapp_enabled: true };
+              const inappLocked = isInappMandatory(event.type);
               return (
                 <div key={event.type} className="space-y-2 pb-4 border-b border-border last:border-0 last:pb-0">
                   <div>
@@ -100,10 +101,16 @@ const NotificationPreferences = () => {
                     <div className="flex items-center gap-2">
                       <Switch
                         id={`inapp-${event.type}`}
-                        checked={pref.inapp_enabled}
-                        onCheckedChange={(v) => update(event.type, 'inapp_enabled', v)}
+                        checked={inappLocked ? true : pref.inapp_enabled}
+                        disabled={inappLocked}
+                        onCheckedChange={(v) => {
+                          if (inappLocked) return;
+                          update(event.type, 'inapp_enabled', v);
+                        }}
                       />
-                      <Label htmlFor={`inapp-${event.type}`} className="text-sm">Central interna</Label>
+                      <Label htmlFor={`inapp-${event.type}`} className="text-sm">
+                        {inappLocked ? 'Central interna — obrigatória' : 'Central interna'}
+                      </Label>
                     </div>
                   </div>
                 </div>

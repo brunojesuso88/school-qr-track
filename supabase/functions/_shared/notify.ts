@@ -12,6 +12,11 @@ export const EVENT_AUDIENCE: Record<string, AppRole[]> = {
   new_user_signup: ["admin"],
 };
 
+/** Eventos em que a central interna não pode ser desligada pelo usuário. */
+export const MANDATORY_INAPP_EVENTS = new Set<string>([
+  "medical_certificate_created",
+]);
+
 export interface NotificationContent {
   title: string;
   body: string;
@@ -224,7 +229,11 @@ export async function dispatchNotification(opts: {
     prefMap.set(row.user_id, { push_enabled: row.push_enabled, inapp_enabled: row.inapp_enabled });
   }
 
-  const inappUsers = userIds.filter((id) => prefMap.get(id)?.inapp_enabled !== false);
+  // Central interna OBRIGATÓRIA para eventos críticos de compliance:
+  // novo atestado sempre chega a toda a audiência, independente da preferência.
+  const inappUsers = MANDATORY_INAPP_EVENTS.has(eventType)
+    ? [...userIds]
+    : userIds.filter((id) => prefMap.get(id)?.inapp_enabled !== false);
   const pushUsers = userIds.filter((id) => prefMap.get(id)?.push_enabled !== false);
 
   if (inappUsers.length) {
