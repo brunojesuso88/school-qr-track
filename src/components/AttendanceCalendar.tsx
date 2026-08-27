@@ -237,9 +237,10 @@ const AttendanceCalendar = () => {
                       const records = groupedByClass[cls];
                       const present = records.filter(r => r.status === 'present').length;
                       const absent = records.filter(r => r.status === 'absent').length;
+                      const absentCovered = records.filter(r => r.status === 'absent' && r.covered).length;
                       return (
                         <div key={cls}>
-                          <div className="flex items-center gap-2 mb-2">
+                          <div className="flex items-center gap-2 mb-2 flex-wrap">
                             <h4 className="font-medium text-sm">Turma {cls}</h4>
                             <Badge variant="outline" className="text-xs gap-1">
                               <UserCheck className="w-3 h-3 text-green-600" /> {present}
@@ -247,6 +248,11 @@ const AttendanceCalendar = () => {
                             <Badge variant="outline" className="text-xs gap-1">
                               <UserX className="w-3 h-3 text-red-600" /> {absent}
                             </Badge>
+                            {absentCovered > 0 && (
+                              <Badge variant="outline" className="text-xs gap-1 border-blue-500/40 text-blue-600">
+                                <Stethoscope className="w-3 h-3" /> {absentCovered} com atestado
+                              </Badge>
+                            )}
                           </div>
                           <div className="overflow-x-auto">
                             <Table>
@@ -265,7 +271,7 @@ const AttendanceCalendar = () => {
                                         variant={r.status === 'present' ? 'default' : r.status === 'absent' ? 'destructive' : 'secondary'}
                                         className={r.status === 'present' ? 'bg-green-500' : ''}
                                       >
-                                        {r.status === 'present' ? 'Presente' : r.status === 'absent' ? 'Ausente' : 'Justificado'}
+                                        {attendanceDisplayLabel(r.status, r.covered)}
                                       </Badge>
                                     </TableCell>
                                   </TableRow>
@@ -273,6 +279,7 @@ const AttendanceCalendar = () => {
                               </TableBody>
                             </Table>
                           </div>
+
                         </div>
                       );
                     })}
