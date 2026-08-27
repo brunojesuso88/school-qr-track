@@ -27,6 +27,7 @@ import { CameraPhotoCapture } from '@/components/CameraPhotoCapture';
 import { OccurrencesReportDialog } from '@/components/OccurrencesReportDialog';
 import { useStudentsIra } from '@/hooks/useStudentsIra';
 import { formatIra } from '@/lib/ira';
+import { useActiveCertificateStudents } from '@/hooks/useCertificateCoverage';
 
 interface Student {
   id: string;
