@@ -220,9 +220,19 @@ export const StudentMedicalCertificateDialog = ({
         }
       }
 
-
+      // Notificação genérica (sem CID, sem nome do aluno) apenas em novos atestados.
+      if (!certificate && certificateId) {
+        void supabase.functions.invoke('notify-event', {
+          body: {
+            event_type: 'medical_certificate_created',
+            entity_id: certificateId,
+            entity_type: 'medical_certificate',
+          },
+        }).catch(() => { /* falha de notificação nunca bloqueia o cadastro */ });
+      }
 
       toast.success(certificate ? 'Atestado atualizado.' : 'Atestado cadastrado.');
+
       onSaved();
       onClose();
     } catch (err) {
