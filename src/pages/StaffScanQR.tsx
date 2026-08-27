@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 import { QrCode, Camera, CheckCircle2, XCircle, Loader2, LogOut, Users, UserCheck, Clock } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import NotificationBell from '@/components/notifications/NotificationBell';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import logoEscola from "@/assets/logo-escola.jpg";
 
@@ -259,6 +260,7 @@ const StaffScanQR = () => {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <NotificationBell />
             <ThemeToggle />
             <Button variant="ghost" size="icon" onClick={handleLogout}>
               <LogOut className="w-4 h-4" />

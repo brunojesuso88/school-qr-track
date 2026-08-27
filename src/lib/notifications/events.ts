@@ -71,6 +71,15 @@ export const NOTIFICATION_EVENTS: NotificationEventDefinition[] = [
   },
 ];
 
+/** Eventos cuja entrega na central interna é obrigatória (switch travado). */
+export const MANDATORY_INAPP_EVENTS: NotificationEventType[] = [
+  'medical_certificate_created',
+];
+
+export function isInappMandatory(type: string): boolean {
+  return MANDATORY_INAPP_EVENTS.includes(type as NotificationEventType);
+}
+
 export const CONFIGURABLE_EVENTS = NOTIFICATION_EVENTS.filter((e) => e.configurable);
 
 export function getEventDefinition(
