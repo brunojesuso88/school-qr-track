@@ -1,24 +1,26 @@
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { buildCoverageMap, CoverageMap, CoverageRow } from '@/lib/medicalCertificates/status';
+import { buildCoverageMapFromFlags, CoverageFlagRow, CoverageMap } from '@/lib/medicalCertificates/status';
 
 /**
  * Busca em LOTE a cobertura de atestados para um conjunto de alunos e datas.
- * Usa a RPC segura `get_certificate_coverage`, que não retorna CID nem anexo.
+ * Usa a RPC mínima `get_certificate_coverage_flags`, que retorna somente
+ * student_id + date + covered — sem período, sem status, sem CID e sem anexo.
+ * Funciona para os quatro perfis (admin, direção, professor e funcionário).
  */
 export async function fetchCoverage(
   studentIds: string[],
   dates: string[],
 ): Promise<CoverageMap> {
   if (studentIds.length === 0 || dates.length === 0) return new Set();
-  const sorted = [...dates].sort();
-  const { data, error } = await supabase.rpc('get_certificate_coverage', {
-    _student_ids: studentIds,
-    _start_date: sorted[0],
-    _end_date: sorted[sorted.length - 1],
+  const uniqueIds = Array.from(new Set(studentIds));
+  const uniqueDates = Array.from(new Set(dates));
+  const { data, error } = await supabase.rpc('get_certificate_coverage_flags', {
+    _student_ids: uniqueIds,
+    _dates: uniqueDates,
   });
   if (error || !data) return new Set();
-  return buildCoverageMap(data as CoverageRow[], sorted);
+  return buildCoverageMapFromFlags(data as CoverageFlagRow[]);
 }
 
 /** Alunos com atestado ativo em uma data (padrão: hoje). Consulta única, em lote. */
@@ -29,6 +31,7 @@ export async function fetchActiveCertificateStudents(onDate: string): Promise<Se
   if (error || !data) return new Set();
   return new Set((data as { student_id: string }[]).map((r) => r.student_id));
 }
+
 
 export function useCertificateCoverage(studentIds: string[], dates: string[]) {
   const [coverage, setCoverage] = useState<CoverageMap>(new Set());

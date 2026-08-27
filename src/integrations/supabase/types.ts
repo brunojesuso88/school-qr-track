@@ -1756,8 +1756,6 @@ export type Database = {
       get_active_certificate_students: {
         Args: { _on_date: string }
         Returns: {
-          end_date: string
-          start_date: string
           student_id: string
         }[]
       }
@@ -1767,6 +1765,14 @@ export type Database = {
           end_date: string
           start_date: string
           status: string
+          student_id: string
+        }[]
+      }
+      get_certificate_coverage_flags: {
+        Args: { _dates: string[]; _student_ids: string[] }
+        Returns: {
+          covered: boolean
+          date: string
           student_id: string
         }[]
       }

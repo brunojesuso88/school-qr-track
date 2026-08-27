@@ -6,7 +6,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { FileText, Plus, Ban, Pencil, Paperclip, Eye, EyeOff, AlertTriangle } from 'lucide-react';
+import { FileText, Plus, Ban, Pencil, Paperclip, Eye, EyeOff, AlertTriangle, Lock as LockIcon } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
@@ -37,6 +37,8 @@ interface Props {
 export const StudentCertificatesTab = ({ studentId, studentName }: Props) => {
   const { userRole } = useAuth();
   const canManage = userRole === 'admin' || userRole === 'direction';
+  // Professor vê apenas período/situação. Funcionário (staff) não vê nenhum detalhe.
+  const canViewPeriods = canManage || userRole === 'teacher';
 
   const [full, setFull] = useState<MedicalCertificate[]>([]);
   const [basic, setBasic] = useState<MedicalCertificateBasic[]>([]);
@@ -49,8 +51,13 @@ export const StudentCertificatesTab = ({ studentId, studentName }: Props) => {
   const [legacyCount, setLegacyCount] = useState(0);
 
   const load = useCallback(async () => {
+    if (!canViewPeriods) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     if (canManage) {
+
       const [{ data }, { count }] = await Promise.all([
         supabase
           .from('student_medical_certificates')
@@ -75,7 +82,7 @@ export const StudentCertificatesTab = ({ studentId, studentName }: Props) => {
       setBasic(((data as MedicalCertificateBasic[]) ?? []).sort((a, b) => b.start_date.localeCompare(a.start_date)));
     }
     setLoading(false);
-  }, [studentId, canManage]);
+  }, [studentId, canManage, canViewPeriods]);
 
   useEffect(() => {
     void load();
@@ -112,11 +119,24 @@ export const StudentCertificatesTab = ({ studentId, studentName }: Props) => {
     void load();
   };
 
+  if (!canViewPeriods) {
+    return (
+      <div className="text-center py-10 text-muted-foreground">
+        <LockIcon className="w-10 h-10 mx-auto mb-2 opacity-50" />
+        <p className="text-sm font-medium">Sem acesso aos detalhes de atestados</p>
+        <p className="text-xs mt-1">
+          Seu perfil não permite visualizar períodos, códigos CID ou anexos.
+        </p>
+      </div>
+    );
+  }
+
   if (loading) {
     return <div className="h-32 bg-muted animate-pulse rounded-lg" />;
   }
 
   if (!canManage) {
+
     return (
       <div className="space-y-3">
         <p className="text-xs text-muted-foreground">
