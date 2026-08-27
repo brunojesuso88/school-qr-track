@@ -120,6 +120,7 @@ const AttendanceCalendar = () => {
     .present { color: #16a34a; font-weight: bold; }
     .absent { color: #dc2626; font-weight: bold; }
     .justified { color: #6b7280; font-weight: bold; }
+    .certificate { color: #2563eb; font-weight: bold; }
     .summary { background: #f0fdf4; padding: 10px; border-radius: 6px; margin-bottom: 15px; }
     @media print { body { padding: 0; } }
   </style>
