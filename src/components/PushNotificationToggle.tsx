@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Bell, BellOff, AlertCircle } from 'lucide-react';
+import { Bell, BellOff, AlertCircle, Smartphone, Send } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
@@ -7,40 +7,42 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { toast } from 'sonner';
 import { usePushNotifications } from '@/hooks/usePushNotifications';
+import { useAuth } from '@/contexts/AuthContext';
 
 export const PushNotificationToggle = () => {
-  const { 
-    isSupported, 
-    isSubscribed, 
-    isLoading, 
-    permission, 
-    subscribe, 
+  const {
+    isSupported,
+    isSubscribed,
+    isLoading,
+    permission,
+    platform,
+    subscribe,
     unsubscribe,
-    isConfigured 
+    sendTestNotification,
+    isConfigured,
   } = usePushNotifications();
+  const { userRole } = useAuth();
+  const canSendTest = userRole === 'admin' || userRole === 'direction';
   const [isUpdating, setIsUpdating] = useState(false);
+  const [isTesting, setIsTesting] = useState(false);
 
   const handleToggle = async () => {
     setIsUpdating(true);
-    
     try {
       if (isSubscribed) {
         const result = await unsubscribe();
-        if (result.success) {
-          toast.success('Notificações desativadas');
-        } else {
-          toast.error(result.error || 'Erro ao desativar notificações');
-        }
+        if (result.success) toast.success('Notificações desativadas');
+        else toast.error(result.error || 'Erro ao desativar notificações');
       } else {
         const result = await subscribe();
         if (result.success) {
-          toast.success('Notificações ativadas! Você receberá alertas de novos usuários.');
+          toast.success('Notificações ativadas neste dispositivo.');
+        } else if (result.error === 'ios_requires_install') {
+          toast.error('No iPhone/iPad é necessário instalar o app na Tela de Início antes de ativar.');
+        } else if (result.error === 'Permission denied') {
+          toast.error('Permissão negada. Habilite notificações nas configurações do navegador.');
         } else {
-          if (result.error === 'Permission denied') {
-            toast.error('Permissão negada. Habilite notificações nas configurações do navegador.');
-          } else {
-            toast.error(result.error || 'Erro ao ativar notificações');
-          }
+          toast.error(result.error || 'Erro ao ativar notificações');
         }
       }
     } finally {
@@ -48,23 +50,57 @@ export const PushNotificationToggle = () => {
     }
   };
 
+  const handleTest = async () => {
+    setIsTesting(true);
+    try {
+      const result = await sendTestNotification();
+      if (result.success) toast.success('Notificação de teste enviada para este dispositivo.');
+      else toast.error(result.error || 'Não foi possível enviar o teste');
+    } finally {
+      setIsTesting(false);
+    }
+  };
+
+  const header = (
+    <CardHeader>
+      <CardTitle className="flex items-center gap-2">
+        {isSubscribed ? <Bell className="w-5 h-5 text-primary" /> : <BellOff className="w-5 h-5 text-muted-foreground" />}
+        Notificações no dispositivo
+      </CardTitle>
+      <CardDescription>
+        Receba avisos do EDUNEXUS no celular ou no computador, mesmo com o app fechado.
+      </CardDescription>
+    </CardHeader>
+  );
+
+  if (platform.requiresInstall) {
+    return (
+      <Card>
+        {header}
+        <CardContent>
+          <Alert>
+            <Smartphone className="h-4 w-4" />
+            <AlertDescription className="space-y-1">
+              <p className="font-medium">Instale o app para receber notificações no iPhone/iPad</p>
+              <p className="text-sm">
+                Compartilhar → Adicionar à Tela de Início → abrir pelo ícone → Ativar notificações.
+              </p>
+            </AlertDescription>
+          </Alert>
+        </CardContent>
+      </Card>
+    );
+  }
+
   if (!isSupported) {
     return (
       <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Bell className="w-5 h-5" />
-            Notificações Push
-          </CardTitle>
-          <CardDescription>
-            Receba alertas quando novos usuários se cadastrarem
-          </CardDescription>
-        </CardHeader>
+        {header}
         <CardContent>
           <Alert variant="destructive">
             <AlertCircle className="h-4 w-4" />
             <AlertDescription>
-              Seu navegador não suporta notificações push. Tente usar um navegador mais recente.
+              Este navegador não suporta notificações push. A central de notificações dentro do sistema continua funcionando.
             </AlertDescription>
           </Alert>
         </CardContent>
@@ -75,20 +111,12 @@ export const PushNotificationToggle = () => {
   if (!isConfigured) {
     return (
       <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Bell className="w-5 h-5" />
-            Notificações Push
-          </CardTitle>
-          <CardDescription>
-            Receba alertas quando novos usuários se cadastrarem
-          </CardDescription>
-        </CardHeader>
+        {header}
         <CardContent>
           <Alert>
             <AlertCircle className="h-4 w-4" />
             <AlertDescription>
-              Notificações push não estão configuradas. Configure as VAPID keys para habilitar.
+              Notificações push não estão configuradas neste ambiente.
             </AlertDescription>
           </Alert>
         </CardContent>
@@ -98,19 +126,7 @@ export const PushNotificationToggle = () => {
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          {isSubscribed ? (
-            <Bell className="w-5 h-5 text-green-500" />
-          ) : (
-            <BellOff className="w-5 h-5 text-muted-foreground" />
-          )}
-          Notificações Push
-        </CardTitle>
-        <CardDescription>
-          Receba alertas quando novos usuários se cadastrarem no sistema
-        </CardDescription>
-      </CardHeader>
+      {header}
       <CardContent className="space-y-4">
         {permission === 'denied' && (
           <Alert variant="destructive">
@@ -120,17 +136,14 @@ export const PushNotificationToggle = () => {
             </AlertDescription>
           </Alert>
         )}
-        
-        <div className="flex items-center justify-between">
+
+        <div className="flex items-center justify-between gap-4">
           <div className="space-y-0.5">
-            <Label htmlFor="push-toggle" className="text-base">
-              Notificações de novos usuários
-            </Label>
+            <Label htmlFor="push-toggle" className="text-base">Ativar notificações push</Label>
             <p className="text-sm text-muted-foreground">
-              {isSubscribed 
-                ? 'Você receberá notificações quando novos usuários se cadastrarem'
-                : 'Ative para receber alertas de novos cadastros'
-              }
+              {isSubscribed
+                ? `Ativas neste dispositivo (${platform.platformLabel})`
+                : 'Toque para permitir notificações neste dispositivo'}
             </p>
           </div>
           <Switch
@@ -141,13 +154,11 @@ export const PushNotificationToggle = () => {
           />
         </div>
 
-        {isSubscribed && (
-          <div className="p-3 bg-green-500/10 border border-green-500/30 rounded-lg">
-            <p className="text-sm text-green-600 dark:text-green-400 flex items-center gap-2">
-              <Bell className="w-4 h-4" />
-              Notificações ativas
-            </p>
-          </div>
+        {isSubscribed && canSendTest && (
+          <Button variant="outline" onClick={handleTest} disabled={isTesting} className="w-full">
+            <Send className="w-4 h-4 mr-2" />
+            {isTesting ? 'Enviando...' : 'Enviar notificação de teste para este dispositivo'}
+          </Button>
         )}
       </CardContent>
     </Card>
