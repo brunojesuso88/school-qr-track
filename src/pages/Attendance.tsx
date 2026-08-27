@@ -915,7 +915,7 @@ const Attendance = () => {
                             variant={getStatusBadgeVariant(record.status) as 'default' | 'destructive' | 'secondary' | 'outline'}
                             className={record.status === 'present' ? 'bg-green-500' : ''}
                           >
-                            {getStatusLabel(record.status)}
+                            {getStatusLabel(record.status, isCovered(coverage, record.student.id, record.date))}
                           </Badge>
                         </TableCell>
                         <TableCell className="text-center">
