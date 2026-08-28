@@ -3,7 +3,23 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { detectPushPlatform, readStandaloneFlag, type PushPlatformInfo } from '@/lib/notifications/platform';
 
-const VAPID_PUBLIC_KEY = import.meta.env.VITE_VAPID_PUBLIC_KEY || '';
+const ENV_VAPID_PUBLIC_KEY = (import.meta.env.VITE_VAPID_PUBLIC_KEY as string | undefined) || '';
+
+let cachedVapidKey: string | null = ENV_VAPID_PUBLIC_KEY || null;
+
+/** Busca a chave VAPID pública no servidor (a privada nunca é exposta). */
+async function fetchVapidPublicKey(): Promise<string> {
+  if (cachedVapidKey !== null) return cachedVapidKey;
+  try {
+    const { data, error } = await supabase.functions.invoke('push-public-key');
+    if (error) throw error;
+    cachedVapidKey = (data?.public_key as string | undefined) || '';
+  } catch (err) {
+    console.error('Erro ao obter chave VAPID pública:', err);
+    cachedVapidKey = '';
+  }
+  return cachedVapidKey;
+}
 
 function urlBase64ToUint8Array(base64String: string): Uint8Array {
   const padding = '='.repeat((4 - base64String.length % 4) % 4);
