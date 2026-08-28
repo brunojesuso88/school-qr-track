@@ -29,3 +29,6 @@ verify_jwt = false
 
 [functions.event-share]
 verify_jwt = false
+
+[functions.push-public-key]
+verify_jwt = false
