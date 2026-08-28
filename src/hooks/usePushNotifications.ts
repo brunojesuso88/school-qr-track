@@ -101,7 +101,8 @@ export const usePushNotifications = () => {
     if (platform.requiresInstall) {
       return { success: false, error: 'ios_requires_install' };
     }
-    if (!isSupported || !user || !VAPID_PUBLIC_KEY) {
+    const publicKey = vapidKey || await fetchVapidPublicKey();
+    if (!isSupported || !user || !publicKey) {
       return { success: false, error: 'Push notifications not available' };
     }
 
@@ -113,7 +114,7 @@ export const usePushNotifications = () => {
       }
 
       const registration = await navigator.serviceWorker.ready;
-      const applicationServerKey = urlBase64ToUint8Array(VAPID_PUBLIC_KEY);
+      const applicationServerKey = urlBase64ToUint8Array(publicKey);
       const existing = await registration.pushManager.getSubscription();
       const subscription = existing ?? await registration.pushManager.subscribe({
         userVisibleOnly: true,
@@ -150,7 +151,7 @@ export const usePushNotifications = () => {
       console.error('Error subscribing to push:', error);
       return { success: false, error: error.message };
     }
-  }, [isSupported, user, platform]);
+  }, [isSupported, user, platform, vapidKey]);
 
   const unsubscribe = useCallback(async () => {
     if (!user) return { success: false, error: 'Not authenticated' };
@@ -197,6 +198,6 @@ export const usePushNotifications = () => {
     subscribe,
     unsubscribe,
     sendTestNotification,
-    isConfigured: !!VAPID_PUBLIC_KEY,
+    isConfigured: !!vapidKey,
   };
 };
