@@ -54,8 +54,9 @@ export const useNotificationCenter = () => {
   // Realtime: novas notificações atualizam o badge imediatamente.
   useEffect(() => {
     if (!user) return;
+    // Nome único por instância: evita reuso do mesmo canal por dois componentes.
     const channel = supabase
-      .channel(`notification-recipients-${user.id}`)
+      .channel(`notification-recipients-${user.id}-${Math.random().toString(36).slice(2)}`)
       .on(
         'postgres_changes',
         {
