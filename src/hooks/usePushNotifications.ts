@@ -3,7 +3,23 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { detectPushPlatform, readStandaloneFlag, type PushPlatformInfo } from '@/lib/notifications/platform';
 
-const VAPID_PUBLIC_KEY = import.meta.env.VITE_VAPID_PUBLIC_KEY || '';
+const ENV_VAPID_PUBLIC_KEY = (import.meta.env.VITE_VAPID_PUBLIC_KEY as string | undefined) || '';
+
+let cachedVapidKey: string | null = ENV_VAPID_PUBLIC_KEY || null;
+
+/** Busca a chave VAPID pública no servidor (a privada nunca é exposta). */
+async function fetchVapidPublicKey(): Promise<string> {
+  if (cachedVapidKey !== null) return cachedVapidKey;
+  try {
+    const { data, error } = await supabase.functions.invoke('push-public-key');
+    if (error) throw error;
+    cachedVapidKey = (data?.public_key as string | undefined) || '';
+  } catch (err) {
+    console.error('Erro ao obter chave VAPID pública:', err);
+    cachedVapidKey = '';
+  }
+  return cachedVapidKey;
+}
 
 function urlBase64ToUint8Array(base64String: string): Uint8Array {
   const padding = '='.repeat((4 - base64String.length % 4) % 4);
@@ -26,6 +42,14 @@ export const usePushNotifications = () => {
   const [platform, setPlatform] = useState<PushPlatformInfo>(() =>
     detectPushPlatform(typeof navigator !== 'undefined' ? navigator.userAgent : '', false),
   );
+  const [vapidKey, setVapidKey] = useState<string>(cachedVapidKey ?? '');
+
+  useEffect(() => {
+    let active = true;
+    fetchVapidPublicKey().then((key) => { if (active) setVapidKey(key); });
+    return () => { active = false; };
+  }, []);
+
 
   useEffect(() => {
     const supported =
@@ -77,7 +101,8 @@ export const usePushNotifications = () => {
     if (platform.requiresInstall) {
       return { success: false, error: 'ios_requires_install' };
     }
-    if (!isSupported || !user || !VAPID_PUBLIC_KEY) {
+    const publicKey = vapidKey || await fetchVapidPublicKey();
+    if (!isSupported || !user || !publicKey) {
       return { success: false, error: 'Push notifications not available' };
     }
 
@@ -89,7 +114,7 @@ export const usePushNotifications = () => {
       }
 
       const registration = await navigator.serviceWorker.ready;
-      const applicationServerKey = urlBase64ToUint8Array(VAPID_PUBLIC_KEY);
+      const applicationServerKey = urlBase64ToUint8Array(publicKey);
       const existing = await registration.pushManager.getSubscription();
       const subscription = existing ?? await registration.pushManager.subscribe({
         userVisibleOnly: true,
@@ -126,7 +151,7 @@ export const usePushNotifications = () => {
       console.error('Error subscribing to push:', error);
       return { success: false, error: error.message };
     }
-  }, [isSupported, user, platform]);
+  }, [isSupported, user, platform, vapidKey]);
 
   const unsubscribe = useCallback(async () => {
     if (!user) return { success: false, error: 'Not authenticated' };
@@ -173,6 +198,6 @@ export const usePushNotifications = () => {
     subscribe,
     unsubscribe,
     sendTestNotification,
-    isConfigured: !!VAPID_PUBLIC_KEY,
+    isConfigured: !!vapidKey,
   };
 };

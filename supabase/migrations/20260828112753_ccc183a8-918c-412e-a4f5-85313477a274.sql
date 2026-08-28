@@ -1,0 +1,1 @@
+GRANT INSERT ON public.audit_logs TO authenticated;
