@@ -1479,14 +1479,15 @@ const Students = () => {
 
         {/* Add Occurrence Dialog */}
         <Dialog open={isOccurrenceDialogOpen} onOpenChange={setIsOccurrenceDialogOpen}>
-          <DialogContent className="max-w-md">
-            <DialogHeader>
-              <DialogTitle>Nova Ocorrência</DialogTitle>
+          <DialogContent className="max-w-md flex flex-col max-h-[90vh] p-0 gap-0 overflow-hidden">
+            <DialogHeader className="shrink-0 px-6 pt-6 pb-3 border-b">
+              <DialogTitle className="pr-8">Nova Ocorrência</DialogTitle>
               <DialogDescription>
                 Registrar nova ocorrência para {occurrencesStudent?.full_name}
               </DialogDescription>
             </DialogHeader>
-            <form onSubmit={handleAddOccurrence} className="space-y-4 mt-4">
+            <form onSubmit={handleAddOccurrence} className="flex flex-col flex-1 min-h-0">
+              <div className="flex-1 min-h-0 overflow-y-auto px-6 py-4 space-y-4">
               {/* Teacher Name Display */}
               {currentUserName && (
                 <div className="flex items-center gap-2 p-3 rounded-md bg-muted/50">
