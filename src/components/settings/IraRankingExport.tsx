@@ -335,7 +335,18 @@ const [rankingStale, setRankingStale] = useState(false);
 
             {result && (
               <div className="space-y-3">
+                {rankingStale && (
+                  <Alert>
+                    <AlertTriangle className="h-4 w-4" />
+                    <AlertTitle>IRA possivelmente desatualizado</AlertTitle>
+                    <AlertDescription>
+                      Alguma turma selecionada teve notas alteradas após o último cálculo salvo.
+                      Atualize o IRA na aba Alunos para garantir a classificação correta.
+                    </AlertDescription>
+                  </Alert>
+                )}
                 <div className="flex flex-wrap gap-2 text-xs">
+
                   <Badge variant="secondary">{result.eligibleCount} aluno(s) elegível(is)</Badge>
                   <Badge variant="outline">Top {RANKING_LIMIT} · exportando {result.top.length}</Badge>
                   {outOfTop > 0 && <Badge variant="outline">{outOfTop} fora do Top {RANKING_LIMIT}</Badge>}
