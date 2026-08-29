@@ -117,9 +117,12 @@ const Students = () => {
   const [zoomPhotoStudent, setZoomPhotoStudent] = useState<Student | null>(null);
   const [reportStudent, setReportStudent] = useState<Student | null>(null);
   const [filterOccurrences, setFilterOccurrences] = useState(false);
+  const [filterCouncil, setFilterCouncil] = useState(false);
   const [filterMedals, setFilterMedals] = useState(false);
 
+  // occurrenceMap: SOMENTE ocorrências gerais (class_council é contabilizado à parte)
   const [occurrenceMap, setOccurrenceMap] = useState<Map<string, string>>(new Map());
+  const [councilMap, setCouncilMap] = useState<Map<string, string>>(new Map());
   const [absenceCountMap, setAbsenceCountMap] = useState<Map<string, number>>(new Map());
   const [sortBy, setSortBy] = useState<'none' | 'absences-desc' | 'absences-asc' | 'ira-desc' | 'ira-asc'>('none');
   const [recomputingIra, setRecomputingIra] = useState(false);
@@ -150,7 +153,11 @@ const Students = () => {
     description: '',
     date: new Date(),
     endDate: null as Date | null,
+    councilItems: [] as string[],
   });
+  // Edição / duplicidade de registro de Conselho de Classe
+  const [editingCouncilId, setEditingCouncilId] = useState<string | null>(null);
+  const [councilDuplicate, setCouncilDuplicate] = useState<Occurrence | null>(null);
   const [currentUserName, setCurrentUserName] = useState<string | null>(null);
 
   useEffect(() => {
