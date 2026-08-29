@@ -953,6 +953,27 @@ const Students = () => {
           </div>
         </div>
 
+        {/* Estado do IRA persistido */}
+        {(iraDisplayState === 'never' || iraStale) && (
+          <div className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+            <div>
+              <p className="font-medium">
+                {iraDisplayState === 'never' ? 'IRA ainda não calculado' : 'IRA desatualizado'}
+              </p>
+              <p className="text-muted-foreground">
+                {iraDisplayState === 'never'
+                  ? 'Nenhum cálculo salvo para as turmas filtradas.'
+                  : 'Houve alterações de notas após o último cálculo. Os valores exibidos são do último cálculo salvo.'}
+                {canRecomputeIra
+                  ? ' Clique em "Atualizar IRA" para recalcular.'
+                  : ' Solicite à gestão o uso do botão "Atualizar IRA".'}
+              </p>
+            </div>
+          </div>
+        )}
+
+
         {/* Filters */}
         <Card>
           <CardContent className="p-4">
