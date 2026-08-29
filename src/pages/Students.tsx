@@ -609,10 +609,10 @@ const Students = () => {
   } = useIraSnapshots(baseFilteredStudents.map((s) => ({ id: s.id, class: s.class })));
 
   const iraByStudent = snapshotByStudent;
-  const medalsByStudent: Record<string, ReturnType<typeof Object.values> extends never ? never : import('@/lib/medals/compute').StudentMedal[]> =
-    Object.fromEntries(
-      Object.entries(snapshotByStudent).map(([id, entry]) => [id, entry.medals]),
-    );
+  const medalsByStudent: Record<string, StudentMedal[]> = Object.fromEntries(
+    Object.entries(snapshotByStudent).map(([id, entry]) => [id, entry.medals]),
+  );
+
 
   // Filtro final de exibição (depende das medalhas persistidas)
   const filteredStudents = filterMedals
