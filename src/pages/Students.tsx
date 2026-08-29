@@ -1608,21 +1608,26 @@ const Students = () => {
                 </div>
               )}
 
-              <Button
-                type="submit"
-                className="w-full"
-                disabled={
-                  !occurrenceForm.type ||
-                  (occurrenceForm.type === 'medical_certificate' && !occurrenceForm.endDate) ||
-                  (occurrenceForm.type === CLASS_COUNCIL_TYPE &&
-                    occurrenceForm.councilItems.length === 0 &&
-                    !occurrenceForm.description.trim())
-                }
-              >
-                {occurrenceForm.type === CLASS_COUNCIL_TYPE
-                  ? (editingCouncilId ? 'Salvar alterações do conselho' : 'Registrar Conselho de Classe')
-                  : 'Registrar Ocorrência'}
-              </Button>
+              </div>
+
+              {/* Rodapé fixo com botão de salvar (fora da área rolável) */}
+              <div className="shrink-0 px-6 py-4 border-t bg-background">
+                <Button
+                  type="submit"
+                  className="w-full"
+                  disabled={
+                    !occurrenceForm.type ||
+                    (occurrenceForm.type === 'medical_certificate' && !occurrenceForm.endDate) ||
+                    (occurrenceForm.type === CLASS_COUNCIL_TYPE &&
+                      occurrenceForm.councilItems.length === 0 &&
+                      !occurrenceForm.description.trim())
+                  }
+                >
+                  {occurrenceForm.type === CLASS_COUNCIL_TYPE
+                    ? (editingCouncilId ? 'Salvar alterações do conselho' : 'Registrar Conselho de Classe')
+                    : 'Registrar Ocorrência'}
+                </Button>
+              </div>
             </form>
           </DialogContent>
         </Dialog>
