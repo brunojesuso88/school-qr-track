@@ -2,9 +2,13 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { detectPushPlatform, readStandaloneFlag, type PushPlatformInfo } from '@/lib/notifications/platform';
+import {
+  isValidVapidPublicKey,
+  subscriptionMatchesKey,
+  urlBase64ToUint8Array,
+} from '@/lib/notifications/vapid';
 
 let cachedVapidKey: string | null = null;
-
 
 /** Busca a chave VAPID pública no servidor (a privada nunca é exposta). */
 async function fetchVapidPublicKey(): Promise<string> {
@@ -12,7 +16,8 @@ async function fetchVapidPublicKey(): Promise<string> {
   try {
     const { data, error } = await supabase.functions.invoke('push-public-key');
     if (error) throw error;
-    cachedVapidKey = (data?.public_key as string | undefined) || '';
+    const key = (data?.public_key as string | undefined)?.trim() || '';
+    cachedVapidKey = isValidVapidPublicKey(key) ? key : '';
   } catch (err) {
     console.error('Erro ao obter chave VAPID pública:', err);
     cachedVapidKey = '';
@@ -20,16 +25,6 @@ async function fetchVapidPublicKey(): Promise<string> {
   return cachedVapidKey;
 }
 
-function urlBase64ToUint8Array(base64String: string): Uint8Array {
-  const padding = '='.repeat((4 - base64String.length % 4) % 4);
-  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
-  const rawData = atob(base64);
-  const outputArray = new Uint8Array(rawData.length);
-  for (let i = 0; i < rawData.length; ++i) {
-    outputArray[i] = rawData.charCodeAt(i);
-  }
-  return outputArray;
-}
 
 export const usePushNotifications = () => {
   const { user } = useAuth();
