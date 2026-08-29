@@ -25,10 +25,11 @@ import { StudentPhoto } from '@/components/StudentPhoto';
 import { useSignedPhotoUrl, clearPhotoUrlCache } from '@/hooks/useSignedPhotoUrl';
 import { CameraPhotoCapture } from '@/components/CameraPhotoCapture';
 import { OccurrencesReportDialog } from '@/components/OccurrencesReportDialog';
-import { useStudentsIra } from '@/hooks/useStudentsIra';
-import { useStudentMedals } from '@/hooks/useStudentMedals';
+import { useIraSnapshots } from '@/hooks/useIraSnapshots';
+import { recomputeIraScope } from '@/lib/iraSnapshot/recompute';
 import { StudentMedalsStrip } from '@/components/students/AcademicMedal';
 import { classOptionsForShift, hasMedals, isClassValidForShift } from '@/lib/students/filters';
+
 
 
 import { formatIra } from '@/lib/ira';
