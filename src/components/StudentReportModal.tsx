@@ -190,6 +190,9 @@ export const StudentReportModal = ({ student, onClose }: StudentReportModalProps
 
   if (!student) return null;
 
+  // Separação: Conselho de Classe x ocorrências gerais (compatível com registros antigos)
+  const { general: generalOccurrences, council: councilOccurrences } = splitOccurrences(occurrences);
+
   return (
     <Dialog open={!!student} onOpenChange={() => onClose()}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
