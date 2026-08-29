@@ -26,6 +26,9 @@ import { useSignedPhotoUrl, clearPhotoUrlCache } from '@/hooks/useSignedPhotoUrl
 import { CameraPhotoCapture } from '@/components/CameraPhotoCapture';
 import { OccurrencesReportDialog } from '@/components/OccurrencesReportDialog';
 import { useStudentsIra } from '@/hooks/useStudentsIra';
+import { useStudentMedals } from '@/hooks/useStudentMedals';
+import { StudentMedalsStrip } from '@/components/students/AcademicMedal';
+
 import { formatIra } from '@/lib/ira';
 import { useActiveCertificateStudents } from '@/hooks/useCertificateCoverage';
 
@@ -599,10 +602,16 @@ const Students = () => {
     filteredStudents.map((s) => ({ id: s.id, class: s.class })),
   );
 
+  // Medalhas acadêmicas por série (derivadas dinamicamente das notas/IRA)
+  const { medalsByStudent } = useStudentMedals(
+    filteredStudents.map((s) => ({ id: s.id, class: s.class })),
+  );
+
   // Alunos com atestado médico ativo hoje (badge em lote, sem CID)
   const activeCertificateStudents = useActiveCertificateStudents(
     format(new Date(), 'yyyy-MM-dd'),
   );
+
 
 
 
@@ -1048,6 +1057,10 @@ const Students = () => {
                       <p><span className="font-medium text-foreground">Nascimento:</span> {format(parse(student.birth_date, 'yyyy-MM-dd', new Date()), 'dd/MM/yyyy')}</p>
                     )}
                   </div>
+
+                  <StudentMedalsStrip medals={medalsByStudent[student.id]} />
+
+
 
                   <div className="flex gap-2 flex-wrap" onClick={(e) => e.stopPropagation()}>
                     <Button
