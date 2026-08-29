@@ -1359,68 +1359,120 @@ const Students = () => {
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 mt-4">
-              <Button onClick={() => setIsOccurrenceDialogOpen(true)} className="w-full">
-                <Plus className="w-4 h-4 mr-2" />
-                Nova Ocorrência
-              </Button>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <Button
+                  onClick={() => {
+                    resetOccurrenceForm();
+                    setIsOccurrenceDialogOpen(true);
+                  }}
+                  className="w-full"
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  Nova Ocorrência
+                </Button>
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => {
+                    resetOccurrenceForm();
+                    setOccurrenceForm({
+                      type: CLASS_COUNCIL_TYPE,
+                      description: '',
+                      date: new Date(),
+                      endDate: null,
+                      councilItems: [],
+                    });
+                    setIsOccurrenceDialogOpen(true);
+                  }}
+                >
+                  <Users className="w-4 h-4 mr-2" />
+                  Conselho de Classe
+                </Button>
+              </div>
 
-              {occurrences.length > 0 ? (
-                <div className="space-y-3">
-                  {occurrences.map((occurrence) => (
-                    <Card key={occurrence.id} className={cn(
-                      occurrence.type === 'medical_certificate' && "border-purple-500/50 bg-purple-500/5"
-                    )}>
-                      <CardContent className="p-4">
-                        <div className="flex items-start justify-between">
-                          <div className="space-y-1">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <span className={cn(
-                                "text-xs px-2 py-1 rounded-full font-medium",
-                                occurrence.type === 'medical_certificate' 
-                                  ? "bg-purple-500/20 text-purple-600" 
-                                  : "bg-primary/10 text-primary"
-                              )}>
-                                {getOccurrenceTypeLabel(occurrence.type)}
-                              </span>
-                              <span className={cn(
-                                "text-xs",
-                                occurrence.type === 'medical_certificate' 
-                                  ? "text-purple-600 font-medium" 
-                                  : "text-muted-foreground"
-                              )}>
-                                {format(parse(occurrence.date, 'yyyy-MM-dd', new Date()), 'dd/MM/yyyy')}
-                                {occurrence.end_date && (
-                                  <> a {format(parse(occurrence.end_date, 'yyyy-MM-dd', new Date()), 'dd/MM/yyyy')}</>
-                                )}
-                              </span>
+              {/* Conselho de Classe — separado das ocorrências gerais */}
+              <div className="space-y-2">
+                <h4 className="text-sm font-semibold flex items-center gap-2">
+                  <Users className="w-4 h-4 text-amber-600" />
+                  Conselho de Classe ({splitOccurrences(occurrences).council.length})
+                </h4>
+                {splitOccurrences(occurrences).council.length > 0 ? (
+                  <div className="space-y-3">
+                    {splitOccurrences(occurrences).council.map((occurrence) => (
+                      <CouncilOccurrenceCard
+                        key={occurrence.id}
+                        occurrence={occurrence}
+                        onEdit={handleEditCouncil}
+                        onDelete={handleDeleteOccurrence}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">Nenhum registro de conselho de classe</p>
+                )}
+              </div>
+
+              {/* Ocorrências gerais */}
+              <div className="space-y-2 pt-2 border-t">
+                <h4 className="text-sm font-semibold flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-primary" />
+                  Ocorrências gerais ({splitOccurrences(occurrences).general.length})
+                </h4>
+                {splitOccurrences(occurrences).general.length > 0 ? (
+                  <div className="space-y-3">
+                    {splitOccurrences(occurrences).general.map((occurrence) => (
+                      <Card key={occurrence.id} className={cn(
+                        occurrence.type === 'medical_certificate' && "border-purple-500/50 bg-purple-500/5"
+                      )}>
+                        <CardContent className="p-4">
+                          <div className="flex items-start justify-between">
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className={cn(
+                                  "text-xs px-2 py-1 rounded-full font-medium",
+                                  occurrence.type === 'medical_certificate'
+                                    ? "bg-purple-500/20 text-purple-600"
+                                    : "bg-primary/10 text-primary"
+                                )}>
+                                  {getOccurrenceTypeLabel(occurrence.type)}
+                                </span>
+                                <span className={cn(
+                                  "text-xs",
+                                  occurrence.type === 'medical_certificate'
+                                    ? "text-purple-600 font-medium"
+                                    : "text-muted-foreground"
+                                )}>
+                                  {format(parse(occurrence.date, 'yyyy-MM-dd', new Date()), 'dd/MM/yyyy')}
+                                  {occurrence.end_date && (
+                                    <> a {format(parse(occurrence.end_date, 'yyyy-MM-dd', new Date()), 'dd/MM/yyyy')}</>
+                                  )}
+                                </span>
+                              </div>
+                              {occurrence.description && (
+                                <p className="text-sm text-muted-foreground">{occurrence.description}</p>
+                              )}
+                              {occurrence.teacher_name && (
+                                <p className="text-xs text-muted-foreground/70">
+                                  Por: {occurrence.teacher_name}
+                                </p>
+                              )}
                             </div>
-                            {occurrence.description && (
-                              <p className="text-sm text-muted-foreground">{occurrence.description}</p>
-                            )}
-                            {occurrence.teacher_name && (
-                              <p className="text-xs text-muted-foreground/70">
-                                Por: {occurrence.teacher_name}
-                              </p>
-                            )}
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleDeleteOccurrence(occurrence.id)}
+                            >
+                              <Trash2 className="w-3 h-3 text-destructive" />
+                            </Button>
                           </div>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleDeleteOccurrence(occurrence.id)}
-                          >
-                            <Trash2 className="w-3 h-3 text-destructive" />
-                          </Button>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-center py-8 text-muted-foreground">
-                  <FileText className="w-12 h-12 mx-auto mb-2 opacity-50" />
-                  <p>Nenhuma ocorrência registrada</p>
-                </div>
-              )}
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">Nenhuma ocorrência geral registrada</p>
+                )}
+              </div>
             </div>
           </DialogContent>
         </Dialog>
