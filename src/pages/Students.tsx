@@ -1283,6 +1283,7 @@ const Students = () => {
                     <Button
                       variant="outline"
                       size="sm"
+                      aria-label={`Ocorrências de ${student.full_name}`}
                       onClick={() => handleViewOccurrences(student)}
                     >
                       <FileText className="w-3 h-3" />
@@ -1479,14 +1480,15 @@ const Students = () => {
 
         {/* Add Occurrence Dialog */}
         <Dialog open={isOccurrenceDialogOpen} onOpenChange={setIsOccurrenceDialogOpen}>
-          <DialogContent className="max-w-md">
-            <DialogHeader>
-              <DialogTitle>Nova Ocorrência</DialogTitle>
+          <DialogContent className="max-w-md flex flex-col max-h-[90vh] p-0 gap-0 overflow-hidden">
+            <DialogHeader className="shrink-0 px-6 pt-6 pb-3 border-b">
+              <DialogTitle className="pr-8">Nova Ocorrência</DialogTitle>
               <DialogDescription>
                 Registrar nova ocorrência para {occurrencesStudent?.full_name}
               </DialogDescription>
             </DialogHeader>
-            <form onSubmit={handleAddOccurrence} className="space-y-4 mt-4">
+            <form onSubmit={handleAddOccurrence} className="flex flex-col flex-1 min-h-0">
+              <div className="flex-1 min-h-0 overflow-y-auto px-6 py-4 space-y-4">
               {/* Teacher Name Display */}
               {currentUserName && (
                 <div className="flex items-center gap-2 p-3 rounded-md bg-muted/50">
@@ -1607,21 +1609,26 @@ const Students = () => {
                 </div>
               )}
 
-              <Button
-                type="submit"
-                className="w-full"
-                disabled={
-                  !occurrenceForm.type ||
-                  (occurrenceForm.type === 'medical_certificate' && !occurrenceForm.endDate) ||
-                  (occurrenceForm.type === CLASS_COUNCIL_TYPE &&
-                    occurrenceForm.councilItems.length === 0 &&
-                    !occurrenceForm.description.trim())
-                }
-              >
-                {occurrenceForm.type === CLASS_COUNCIL_TYPE
-                  ? (editingCouncilId ? 'Salvar alterações do conselho' : 'Registrar Conselho de Classe')
-                  : 'Registrar Ocorrência'}
-              </Button>
+              </div>
+
+              {/* Rodapé fixo com botão de salvar (fora da área rolável) */}
+              <div className="shrink-0 px-6 py-4 border-t bg-background">
+                <Button
+                  type="submit"
+                  className="w-full"
+                  disabled={
+                    !occurrenceForm.type ||
+                    (occurrenceForm.type === 'medical_certificate' && !occurrenceForm.endDate) ||
+                    (occurrenceForm.type === CLASS_COUNCIL_TYPE &&
+                      occurrenceForm.councilItems.length === 0 &&
+                      !occurrenceForm.description.trim())
+                  }
+                >
+                  {occurrenceForm.type === CLASS_COUNCIL_TYPE
+                    ? (editingCouncilId ? 'Salvar alterações do conselho' : 'Registrar Conselho de Classe')
+                    : 'Registrar Ocorrência'}
+                </Button>
+              </div>
             </form>
           </DialogContent>
         </Dialog>
