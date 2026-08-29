@@ -603,20 +603,22 @@ const Students = () => {
     return dateB.localeCompare(dateA);
   });
 
-  // IRA dos alunos visíveis, carregado em lote (poucas queries)
-  const { iraByStudent } = useStudentsIra(
-    baseFilteredStudents.map((s) => ({ id: s.id, class: s.class })),
-  );
+  // IRA e medalhas: SOMENTE leitura do snapshot persistido (nenhum recálculo aqui)
+  const {
+    snapshotByStudent, stale: iraStale, displayState: iraDisplayState, reload: reloadIraSnapshots,
+  } = useIraSnapshots(baseFilteredStudents.map((s) => ({ id: s.id, class: s.class })));
 
-  // Medalhas acadêmicas por série (disputa sempre por série completa)
-  const { medalsByStudent } = useStudentMedals(
-    baseFilteredStudents.map((s) => ({ id: s.id, class: s.class })),
-  );
+  const iraByStudent = snapshotByStudent;
+  const medalsByStudent: Record<string, ReturnType<typeof Object.values> extends never ? never : import('@/lib/medals/compute').StudentMedal[]> =
+    Object.fromEntries(
+      Object.entries(snapshotByStudent).map(([id, entry]) => [id, entry.medals]),
+    );
 
-  // Filtro final de exibição (depende das medalhas já calculadas)
+  // Filtro final de exibição (depende das medalhas persistidas)
   const filteredStudents = filterMedals
     ? baseFilteredStudents.filter((s) => hasMedals(medalsByStudent, s.id))
     : baseFilteredStudents;
+
 
   // Alunos com atestado médico ativo hoje (badge em lote, sem CID)
   const activeCertificateStudents = useActiveCertificateStudents(
