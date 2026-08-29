@@ -218,7 +218,7 @@ export const StudentReportModal = ({ student, onClose }: StudentReportModalProps
         </DialogHeader>
 
         <Tabs defaultValue="attendance" className="mt-4">
-          <TabsList className="grid w-full grid-cols-5">
+          <TabsList className="grid w-full grid-cols-6">
             <TabsTrigger value="attendance">
               <Calendar className="w-4 h-4 mr-2" />
               <span className="hidden sm:inline">Frequência</span>
@@ -229,7 +229,11 @@ export const StudentReportModal = ({ student, onClose }: StudentReportModalProps
             </TabsTrigger>
             <TabsTrigger value="occurrences">
               <FileText className="w-4 h-4 mr-2" />
-              <span className="hidden sm:inline">Ocorrências ({occurrences.length})</span>
+              <span className="hidden sm:inline">Ocorrências ({generalOccurrences.length})</span>
+            </TabsTrigger>
+            <TabsTrigger value="council">
+              <Users className="w-4 h-4 mr-2" />
+              <span className="hidden sm:inline">Conselho ({councilOccurrences.length})</span>
             </TabsTrigger>
             <TabsTrigger value="certificates">
               <Stethoscope className="w-4 h-4 mr-2" />
@@ -240,6 +244,28 @@ export const StudentReportModal = ({ student, onClose }: StudentReportModalProps
               <span className="hidden sm:inline">Laudo</span>
             </TabsTrigger>
           </TabsList>
+
+          <TabsContent value="council" className="mt-4">
+            {loading ? (
+              <div className="space-y-3">
+                {[1, 2, 3].map(i => (
+                  <div key={i} className="h-20 bg-muted animate-pulse rounded-lg" />
+                ))}
+              </div>
+            ) : councilOccurrences.length > 0 ? (
+              <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2">
+                {councilOccurrences.map((occurrence) => (
+                  <CouncilOccurrenceCard key={occurrence.id} occurrence={occurrence} longDate />
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-12">
+                <Users className="w-12 h-12 mx-auto text-muted-foreground/50 mb-3" />
+                <p className="text-muted-foreground">Nenhum registro de Conselho de Classe</p>
+              </div>
+            )}
+          </TabsContent>
+
 
           <TabsContent value="certificates" className="mt-4">
             <StudentCertificatesTab studentId={student.id} studentName={student.full_name} />
