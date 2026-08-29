@@ -50,7 +50,7 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
   const [deleteConfirmation, setDeleteConfirmation] = useState("");
 
   // Filter navigation based on user role
-  const navigation = allNavigation.filter(item => 
+  const navigation = sidebarNavigation.filter(item =>
     item.roles.includes(userRole || 'user')
   );
 
@@ -76,7 +76,7 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
 
   const getCurrentPageName = () => {
     const currentNav = allNavigation.find(item => item.href === location.pathname);
-    return currentNav?.name || 'Dashboard';
+    return currentNav?.name || 'Painel Inicial';
   };
 
   const handleForceUpdate = async () => {
