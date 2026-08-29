@@ -38,6 +38,7 @@ import {
 import { LocalContextStudent, LocalExpectedSubject } from '@/lib/gradePageLocal/types';
 import { CatalogSubject, buildEffectiveSubjectMatrix } from '@/lib/gradePageLocal/effectiveMatrix';
 import { fetchCurriculumMatrix, matrixToExpectedSubjects } from '@/lib/curriculumMatrix';
+import { markIraStale } from '@/lib/iraSnapshot/recompute';
 import { parseSeriesValue } from '@/lib/series';
 import { canonicalSubjectKey, classifyPeriodLabel, isPeriodKind, periodRank } from '@/lib/gradePageLocal/normalize';
 import { resolveClassNameFromPdf, samePdfClassBaseName } from '@/lib/classNames/salaFora';
@@ -1245,7 +1246,20 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
           ? `Página ${preview.page} aprovada automaticamente: ${finalPayload.length} nota(s) gravada(s).`
           : `Página ${preview.page}: ${finalPayload.length} nota(s) gravada(s).`,
       );
+      // Não recalcula IRA aqui: apenas marca o escopo como desatualizado.
+      if (finalPayload.length > 0) {
+        try {
+          await markIraStale(classItem.id, 'Boletim importado');
+          toast.warning(
+            'Boletim importado. O IRA e as medalhas estão desatualizados. Acesse Alunos e clique em Atualizar IRA.',
+            { duration: 8000 },
+          );
+        } catch (staleErr) {
+          console.error('Falha ao marcar IRA como desatualizado:', staleErr);
+        }
+      }
       await advance(updated);
+
     } catch (e) {
       console.error(e);
       setError(e instanceof Error ? e.message : 'Erro ao gravar a página.');

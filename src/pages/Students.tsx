@@ -12,7 +12,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { toast } from 'sonner';
-import { Plus, Search, QrCode, Edit2, Trash2, Download, User, CalendarIcon, FileText, Upload, Camera, X } from 'lucide-react';
+import { Plus, Search, QrCode, Edit2, Trash2, Download, User, CalendarIcon, FileText, Upload, Camera, X, Loader2, RefreshCw, AlertTriangle } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { QRCodeSVG } from 'qrcode.react';
 import { format, parse } from 'date-fns';
@@ -25,10 +25,13 @@ import { StudentPhoto } from '@/components/StudentPhoto';
 import { useSignedPhotoUrl, clearPhotoUrlCache } from '@/hooks/useSignedPhotoUrl';
 import { CameraPhotoCapture } from '@/components/CameraPhotoCapture';
 import { OccurrencesReportDialog } from '@/components/OccurrencesReportDialog';
-import { useStudentsIra } from '@/hooks/useStudentsIra';
-import { useStudentMedals } from '@/hooks/useStudentMedals';
+import { useIraSnapshots } from '@/hooks/useIraSnapshots';
+import { recomputeIraScope } from '@/lib/iraSnapshot/recompute';
 import { StudentMedalsStrip } from '@/components/students/AcademicMedal';
+import type { StudentMedal } from '@/lib/medals/compute';
+
 import { classOptionsForShift, hasMedals, isClassValidForShift } from '@/lib/students/filters';
+
 
 
 import { formatIra } from '@/lib/ira';
@@ -83,7 +86,7 @@ const OCCURRENCE_TYPES = [
 const Students = () => {
   const [searchParams] = useSearchParams();
   const classFromUrl = searchParams.get('class');
-  const { userRole } = useAuth();
+  const { userRole, user } = useAuth();
   const canViewGuardianPhone = userRole === 'admin' || userRole === 'direction';
   // Professor não pode excluir alunos (também bloqueado por RLS no backend)
   const canDeleteStudents = userRole === 'admin' || userRole === 'direction';
@@ -109,6 +112,8 @@ const Students = () => {
   const [occurrenceMap, setOccurrenceMap] = useState<Map<string, string>>(new Map());
   const [absenceCountMap, setAbsenceCountMap] = useState<Map<string, number>>(new Map());
   const [sortBy, setSortBy] = useState<'none' | 'absences-desc' | 'absences-asc' | 'ira-desc' | 'ira-asc'>('none');
+  const [recomputingIra, setRecomputingIra] = useState(false);
+
 
   const [formData, setFormData] = useState({
     full_name: '',
@@ -602,20 +607,50 @@ const Students = () => {
     return dateB.localeCompare(dateA);
   });
 
-  // IRA dos alunos visíveis, carregado em lote (poucas queries)
-  const { iraByStudent } = useStudentsIra(
-    baseFilteredStudents.map((s) => ({ id: s.id, class: s.class })),
+  // IRA e medalhas: SOMENTE leitura do snapshot persistido (nenhum recálculo aqui)
+  const {
+    snapshotByStudent, stale: iraStale, displayState: iraDisplayState, reload: reloadIraSnapshots,
+  } = useIraSnapshots(baseFilteredStudents.map((s) => ({ id: s.id, class: s.class })));
+
+  const iraByStudent = snapshotByStudent;
+  const medalsByStudent: Record<string, StudentMedal[]> = Object.fromEntries(
+    Object.entries(snapshotByStudent).map(([id, entry]) => [id, entry.medals]),
   );
 
-  // Medalhas acadêmicas por série (disputa sempre por série completa)
-  const { medalsByStudent } = useStudentMedals(
-    baseFilteredStudents.map((s) => ({ id: s.id, class: s.class })),
-  );
+  // Recálculo EXPLÍCITO (botão): calcula IRA + medalhas da série e persiste.
+  const canRecomputeIra = userRole === 'admin' || userRole === 'direction';
+  const handleRecomputeIra = async () => {
+    if (recomputingIra) return; // evita clique duplo concorrente
+    const scope = [...new Set(baseFilteredStudents.map((s) => s.class).filter(Boolean))];
+    if (scope.length === 0) {
+      toast.info('Nenhuma turma no filtro atual para atualizar.');
+      return;
+    }
+    setRecomputingIra(true);
+    const toastId = toast.loading('Atualizando IRA e condecorações...');
+    try {
+      const result = await recomputeIraScope(scope, user?.id ?? null);
+      await reloadIraSnapshots();
+      toast.success(
+        `IRA atualizado: ${result.eligible} aluno(s) ativos, ${result.medals} condecoração(ões).`
+        + (result.dropouts > 0 ? ` ${result.dropouts} desistente(s) fora do cálculo.` : ''),
+        { id: toastId },
+      );
+    } catch (e) {
+      console.error(e);
+      toast.error('Não foi possível atualizar o IRA.', { id: toastId });
+    } finally {
+      setRecomputingIra(false);
+    }
+  };
 
-  // Filtro final de exibição (depende das medalhas já calculadas)
+
+
+  // Filtro final de exibição (depende das medalhas persistidas)
   const filteredStudents = filterMedals
     ? baseFilteredStudents.filter((s) => hasMedals(medalsByStudent, s.id))
     : baseFilteredStudents;
+
 
   // Alunos com atestado médico ativo hoje (badge em lote, sem CID)
   const activeCertificateStudents = useActiveCertificateStudents(
@@ -656,10 +691,19 @@ const Students = () => {
             <p className="text-muted-foreground">Gerenciar registros de alunos e QR codes</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+          {canRecomputeIra && (
+            <Button variant="outline" onClick={handleRecomputeIra} disabled={recomputingIra}>
+              {recomputingIra
+                ? <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                : <RefreshCw className="w-4 h-4 mr-2" />}
+              {recomputingIra ? 'Atualizando IRA...' : 'Atualizar IRA'}
+            </Button>
+          )}
           <Button variant="outline" onClick={() => setIsOccurrencesReportOpen(true)}>
             <FileText className="w-4 h-4 mr-2" />
             Relatório de Ocorrências
           </Button>
+
           <Dialog open={isDialogOpen} onOpenChange={(open) => {
             setIsDialogOpen(open);
             if (!open) {
@@ -908,6 +952,27 @@ const Students = () => {
           </Dialog>
           </div>
         </div>
+
+        {/* Estado do IRA persistido */}
+        {(iraDisplayState === 'never' || iraStale) && (
+          <div className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+            <div>
+              <p className="font-medium">
+                {iraDisplayState === 'never' ? 'IRA ainda não calculado' : 'IRA desatualizado'}
+              </p>
+              <p className="text-muted-foreground">
+                {iraDisplayState === 'never'
+                  ? 'Nenhum cálculo salvo para as turmas filtradas.'
+                  : 'Houve alterações de notas após o último cálculo. Os valores exibidos são do último cálculo salvo.'}
+                {canRecomputeIra
+                  ? ' Clique em "Atualizar IRA" para recalcular.'
+                  : ' Solicite à gestão o uso do botão "Atualizar IRA".'}
+              </p>
+            </div>
+          </div>
+        )}
+
 
         {/* Filters */}
         <Card>

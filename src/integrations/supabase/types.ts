@@ -600,6 +600,113 @@ export type Database = {
           },
         ]
       }
+      ira_snapshots: {
+        Row: {
+          class_id: string | null
+          class_name: string | null
+          computed_at: string
+          computed_by: string | null
+          created_at: string
+          eligible: boolean
+          id: string
+          ira_reason: string | null
+          ira_status: string
+          ira_value: number | null
+          medals: Json
+          series: string | null
+          student_id: string
+          updated_at: string
+        }
+        Insert: {
+          class_id?: string | null
+          class_name?: string | null
+          computed_at?: string
+          computed_by?: string | null
+          created_at?: string
+          eligible?: boolean
+          id?: string
+          ira_reason?: string | null
+          ira_status?: string
+          ira_value?: number | null
+          medals?: Json
+          series?: string | null
+          student_id: string
+          updated_at?: string
+        }
+        Update: {
+          class_id?: string | null
+          class_name?: string | null
+          computed_at?: string
+          computed_by?: string | null
+          created_at?: string
+          eligible?: boolean
+          id?: string
+          ira_reason?: string | null
+          ira_status?: string
+          ira_value?: number | null
+          medals?: Json
+          series?: string | null
+          student_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ira_snapshots_class_id_fkey"
+            columns: ["class_id"]
+            isOneToOne: false
+            referencedRelation: "classes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ira_snapshots_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: true
+            referencedRelation: "students"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ira_staleness: {
+        Row: {
+          class_id: string
+          created_at: string
+          id: string
+          last_computed_at: string | null
+          marked_at: string
+          reason: string | null
+          stale: boolean
+          updated_at: string
+        }
+        Insert: {
+          class_id: string
+          created_at?: string
+          id?: string
+          last_computed_at?: string | null
+          marked_at?: string
+          reason?: string | null
+          stale?: boolean
+          updated_at?: string
+        }
+        Update: {
+          class_id?: string
+          created_at?: string
+          id?: string
+          last_computed_at?: string | null
+          marked_at?: string
+          reason?: string | null
+          stale?: boolean
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ira_staleness_class_id_fkey"
+            columns: ["class_id"]
+            isOneToOne: true
+            referencedRelation: "classes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       management_signatures: {
         Row: {
           created_at: string

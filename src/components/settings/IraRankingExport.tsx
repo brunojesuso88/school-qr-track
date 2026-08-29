@@ -18,6 +18,7 @@ import {
   DEFAULT_RANKING_PDF_COLUMNS, RANKING_PDF_COLUMN_OPTIONS, RankingPdfColumn, buildIraRankingPdf,
   orderRankingColumns,
 } from '@/lib/iraRanking';
+import { supabase } from '@/integrations/supabase/client';
 import logoAsset from '@/assets/logo-cepans.png.asset.json';
 
 interface ClassOption {
@@ -42,6 +43,7 @@ const IraRankingExport = ({ classes, classesWithGrades }: Props) => {
   const [loading, setLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [result, setResult] = useState<RankingResult | null>(null);
+const [rankingStale, setRankingStale] = useState(false);
   const [columns, setColumns] = useState<RankingPdfColumn[]>(DEFAULT_RANKING_PDF_COLUMNS);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
@@ -129,9 +131,16 @@ const IraRankingExport = ({ classes, classesWithGrades }: Props) => {
     try {
       const data = await buildIraRanking(selected);
       setResult(data);
+      const { data: stRows } = await supabase
+        .from('ira_staleness')
+        .select('class_id, stale')
+        .in('class_id', selected);
+      const rows = (stRows || []) as { stale: boolean }[];
+      setRankingStale(rows.some((r) => r.stale) || rows.length < selected.length);
       if (data.eligibleCount === 0) {
         toast.error('Nenhum aluno elegível encontrado nas turmas selecionadas.');
       }
+
     } catch (e) {
       console.error(e);
       toast.error('Não foi possível calcular a classificação.');
@@ -326,7 +335,18 @@ const IraRankingExport = ({ classes, classesWithGrades }: Props) => {
 
             {result && (
               <div className="space-y-3">
+                {rankingStale && (
+                  <Alert>
+                    <AlertTriangle className="h-4 w-4" />
+                    <AlertTitle>IRA possivelmente desatualizado</AlertTitle>
+                    <AlertDescription>
+                      Alguma turma selecionada teve notas alteradas após o último cálculo salvo.
+                      Atualize o IRA na aba Alunos para garantir a classificação correta.
+                    </AlertDescription>
+                  </Alert>
+                )}
                 <div className="flex flex-wrap gap-2 text-xs">
+
                   <Badge variant="secondary">{result.eligibleCount} aluno(s) elegível(is)</Badge>
                   <Badge variant="outline">Top {RANKING_LIMIT} · exportando {result.top.length}</Badge>
                   {outOfTop > 0 && <Badge variant="outline">{outOfTop} fora do Top {RANKING_LIMIT}</Badge>}
