@@ -28,6 +28,8 @@ import { OccurrencesReportDialog } from '@/components/OccurrencesReportDialog';
 import { useStudentsIra } from '@/hooks/useStudentsIra';
 import { useStudentMedals } from '@/hooks/useStudentMedals';
 import { StudentMedalsStrip } from '@/components/students/AcademicMedal';
+import { classOptionsForShift, hasMedals, isClassValidForShift } from '@/lib/students/filters';
+
 
 import { formatIra } from '@/lib/ira';
 import { useActiveCertificateStudents } from '@/hooks/useCertificateCoverage';
@@ -102,6 +104,8 @@ const Students = () => {
   const [zoomPhotoStudent, setZoomPhotoStudent] = useState<Student | null>(null);
   const [reportStudent, setReportStudent] = useState<Student | null>(null);
   const [filterOccurrences, setFilterOccurrences] = useState(false);
+  const [filterMedals, setFilterMedals] = useState(false);
+
   const [occurrenceMap, setOccurrenceMap] = useState<Map<string, string>>(new Map());
   const [absenceCountMap, setAbsenceCountMap] = useState<Map<string, number>>(new Map());
   const [sortBy, setSortBy] = useState<'none' | 'absences-desc' | 'absences-asc' | 'ira-desc' | 'ira-asc'>('none');
@@ -624,7 +628,7 @@ const Students = () => {
         const va = iraByStudent[a.id]?.value ?? null;
         const vb = iraByStudent[b.id]?.value ?? null;
         // Alunos sem IRA ficam por último em ambos os modos
-        if (va === null && vb === null) return 1;
+        if (va === null && vb === null) return 0;
         if (va === null) return 1;
         if (vb === null) return -1;
         return sortBy === 'ira-desc' ? vb - va : va - vb;
