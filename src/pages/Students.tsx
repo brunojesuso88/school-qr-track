@@ -933,7 +933,15 @@ const Students = () => {
                   ))}
                 </SelectContent>
               </Select>
-              <Select value={filterShift} onValueChange={setFilterShift}>
+              <Select
+                value={filterShift}
+                onValueChange={(v) => {
+                  setFilterShift(v);
+                  if (!isClassValidForShift(classes, students, v, filterClass)) {
+                    setFilterClass('all');
+                  }
+                }}
+              >
                 <SelectTrigger className="w-full sm:w-36">
                   <SelectValue placeholder="Todos os Turnos" />
                 </SelectTrigger>
@@ -966,6 +974,17 @@ const Students = () => {
                   Alunos com ocorrência
                 </Label>
               </div>
+              <div className="flex items-center gap-2 mt-3 sm:mt-0">
+                <Checkbox
+                  id="filterMedals"
+                  checked={filterMedals}
+                  onCheckedChange={(checked) => setFilterMedals(!!checked)}
+                />
+                <Label htmlFor="filterMedals" className="text-sm cursor-pointer whitespace-nowrap">
+                  Alunos com medalhas
+                </Label>
+              </div>
+
             </div>
           </CardContent>
         </Card>
