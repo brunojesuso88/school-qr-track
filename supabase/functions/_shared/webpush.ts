@@ -28,19 +28,58 @@ export interface PushSendResult {
 
 let configured = false;
 
+function decodeBase64Url(value: string): Uint8Array {
+  const padded = value + "=".repeat((4 - (value.length % 4)) % 4);
+  const bin = atob(padded.replace(/-/g, "+").replace(/_/g, "/"));
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i += 1) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+/** Valida sem nunca revelar/logar os valores. */
+export function validateVapidKeys(
+  publicKey: string | undefined,
+  privateKey: string | undefined,
+): { ok: boolean; error?: string } {
+  const pub = (publicKey ?? "").trim();
+  const priv = (privateKey ?? "").trim();
+  if (!pub || !priv) return { ok: false, error: "VAPID keys not configured" };
+  try {
+    if (!/^[A-Za-z0-9_-]+$/.test(pub) || !pub.startsWith("B") || decodeBase64Url(pub).length !== 65) {
+      return { ok: false, error: "VAPID public key has invalid format" };
+    }
+    if (!/^[A-Za-z0-9_-]+$/.test(priv) || decodeBase64Url(priv).length !== 32) {
+      return { ok: false, error: "VAPID private key has invalid format" };
+    }
+  } catch {
+    return { ok: false, error: "VAPID keys are not valid base64url" };
+  }
+  return { ok: true };
+}
+
 /** Configura as chaves VAPID (nunca expostas ao cliente). */
 export function configureWebPush(): boolean {
-  const publicKey = Deno.env.get("VAPID_PUBLIC_KEY");
-  const privateKey = Deno.env.get("VAPID_PRIVATE_KEY");
-  if (!publicKey || !privateKey) return false;
+  const publicKey = Deno.env.get("VAPID_PUBLIC_KEY")?.trim();
+  const privateKey = Deno.env.get("VAPID_PRIVATE_KEY")?.trim();
+  const validation = validateVapidKeys(publicKey, privateKey);
+  if (!validation.ok) {
+    console.error(`[webpush] ${validation.error}`);
+    return false;
+  }
   if (!configured) {
     const subject = Deno.env.get("VAPID_SUBJECT") ??
       "mailto:admin@edunexusbruno.tech";
-    webpush.setVapidDetails(subject, publicKey, privateKey);
+    try {
+      webpush.setVapidDetails(subject, publicKey!, privateKey!);
+    } catch (_err) {
+      console.error("[webpush] setVapidDetails rejeitou as chaves configuradas");
+      return false;
+    }
     configured = true;
   }
   return true;
 }
+
 
 /**
  * Envio Web Push criptografado (aes128gcm) usando a biblioteca web-push.
