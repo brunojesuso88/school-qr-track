@@ -6,13 +6,15 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
-import { Calendar, FileText, AlertCircle, CheckCircle, XCircle, Clock, Eye, GraduationCap, Stethoscope } from 'lucide-react';
+import { Calendar, FileText, AlertCircle, CheckCircle, XCircle, Clock, Eye, GraduationCap, Stethoscope, Users } from 'lucide-react';
 import { format, parse, startOfMonth, endOfMonth, startOfYear, endOfYear, differenceInYears } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { StudentPhoto } from '@/components/StudentPhoto';
 import { StudentGradesTab } from '@/components/grades/StudentGradesTab';
 import { StudentCertificatesTab } from '@/components/medical/StudentCertificatesTab';
+import { CouncilOccurrenceCard } from '@/components/students/CouncilOccurrenceCard';
+import { splitOccurrences } from '@/lib/occurrences/councilPresets';
 
 interface Student {
   id: string;
@@ -46,6 +48,7 @@ interface Occurrence {
   date: string;
   end_date: string | null;
   teacher_name: string | null;
+  council_items: string[] | null;
   created_at: string;
 }
 
@@ -68,6 +71,7 @@ const OCCURRENCE_TYPES = [
   { value: 'medical_certificate', label: 'Atestado Médico' },
   { value: 'late_arrival', label: 'Atraso' },
   { value: 'discipline', label: 'Ocorrência Disciplinar' },
+  { value: 'class_council', label: 'Conselho de Classe' },
   { value: 'other', label: 'Outros' },
 ];
 
@@ -403,9 +407,9 @@ export const StudentReportModal = ({ student, onClose }: StudentReportModalProps
                   <div key={i} className="h-20 bg-muted animate-pulse rounded-lg" />
                 ))}
               </div>
-            ) : occurrences.length > 0 ? (
+            ) : generalOccurrences.length > 0 ? (
               <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2">
-                {occurrences.map((occurrence) => (
+                {generalOccurrences.map((occurrence) => (
                   <Card key={occurrence.id} className={cn(
                     occurrence.type === 'medical_certificate' && "border-purple-500/50 bg-purple-500/5"
                   )}>
