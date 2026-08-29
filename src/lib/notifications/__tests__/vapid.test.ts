@@ -39,9 +39,14 @@ describe('chave VAPID pública', () => {
     expect(uint8ArrayToUrlBase64(bytes)).toBe(VALID_KEY);
   });
 
-  it('não depende de nenhuma variável de build VITE_VAPID_PUBLIC_KEY', () => {
-    expect(import.meta.env.VITE_VAPID_PUBLIC_KEY).toBeUndefined();
+  it('não depende de nenhuma variável de build VITE_VAPID_PUBLIC_KEY', async () => {
+    const { readFileSync } = await import('node:fs');
+    const hook = readFileSync('src/hooks/usePushNotifications.ts', 'utf8');
+    expect(hook).not.toContain('VITE_VAPID');
+    expect(readFileSync('src/lib/notifications/vapid.ts', 'utf8')).not.toContain('VITE_VAPID');
+    expect(hook).toContain("supabase.functions.invoke('push-public-key')");
   });
+
 
   it('compara applicationServerKey da subscription com a chave atual', () => {
     const buf = urlBase64ToUint8Array(VALID_KEY).buffer as ArrayBuffer;
