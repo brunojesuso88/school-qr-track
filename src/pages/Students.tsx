@@ -699,8 +699,10 @@ const Students = () => {
       student.student_id.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesClass = filterClass === 'all' || student.class === filterClass;
     const matchesShift = filterShift === 'all' || student.shift === filterShift;
+    // "Alunos com ocorrência" ignora class_council (contabilizado no filtro próprio)
     const matchesOccurrence = !filterOccurrences || occurrenceMap.has(student.id);
-    return matchesSearch && matchesClass && matchesShift && matchesOccurrence;
+    const matchesCouncil = !filterCouncil || councilMap.has(student.id);
+    return matchesSearch && matchesClass && matchesShift && matchesOccurrence && matchesCouncil;
   }).sort((a, b) => {
     if (sortBy === 'absences-desc' || sortBy === 'absences-asc') {
       const ca = absenceCountMap.get(a.id) || 0;
