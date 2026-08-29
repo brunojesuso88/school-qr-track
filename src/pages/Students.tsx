@@ -28,6 +28,8 @@ import { OccurrencesReportDialog } from '@/components/OccurrencesReportDialog';
 import { useIraSnapshots } from '@/hooks/useIraSnapshots';
 import { recomputeIraScope } from '@/lib/iraSnapshot/recompute';
 import { StudentMedalsStrip } from '@/components/students/AcademicMedal';
+import type { StudentMedal } from '@/lib/medals/compute';
+
 import { classOptionsForShift, hasMedals, isClassValidForShift } from '@/lib/students/filters';
 
 
