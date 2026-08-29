@@ -3,9 +3,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { detectPushPlatform, readStandaloneFlag, type PushPlatformInfo } from '@/lib/notifications/platform';
 
-const ENV_VAPID_PUBLIC_KEY = (import.meta.env.VITE_VAPID_PUBLIC_KEY as string | undefined) || '';
+let cachedVapidKey: string | null = null;
 
-let cachedVapidKey: string | null = ENV_VAPID_PUBLIC_KEY || null;
 
 /** Busca a chave VAPID pública no servidor (a privada nunca é exposta). */
 async function fetchVapidPublicKey(): Promise<string> {
