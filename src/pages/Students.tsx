@@ -588,6 +588,7 @@ const Students = () => {
       if (occurrencesStudent) {
         fetchOccurrences(occurrencesStudent.id);
       }
+      fetchOccurrenceMap();
     } catch (error) {
       console.error('Error deleting occurrence:', error);
       toast.error('Falha ao excluir ocorrência');
