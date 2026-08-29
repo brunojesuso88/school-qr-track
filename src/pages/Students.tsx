@@ -615,6 +615,34 @@ const Students = () => {
     Object.entries(snapshotByStudent).map(([id, entry]) => [id, entry.medals]),
   );
 
+  // Recálculo EXPLÍCITO (botão): calcula IRA + medalhas da série e persiste.
+  const canRecomputeIra = userRole === 'admin' || userRole === 'direction';
+  const handleRecomputeIra = async () => {
+    if (recomputingIra) return; // evita clique duplo concorrente
+    const scope = [...new Set(baseFilteredStudents.map((s) => s.class).filter(Boolean))];
+    if (scope.length === 0) {
+      toast.info('Nenhuma turma no filtro atual para atualizar.');
+      return;
+    }
+    setRecomputingIra(true);
+    const toastId = toast.loading('Atualizando IRA e condecorações...');
+    try {
+      const result = await recomputeIraScope(scope, user?.id ?? null);
+      await reloadIraSnapshots();
+      toast.success(
+        `IRA atualizado: ${result.eligible} aluno(s) ativos, ${result.medals} condecoração(ões).`
+        + (result.dropouts > 0 ? ` ${result.dropouts} desistente(s) fora do cálculo.` : ''),
+        { id: toastId },
+      );
+    } catch (e) {
+      console.error(e);
+      toast.error('Não foi possível atualizar o IRA.', { id: toastId });
+    } finally {
+      setRecomputingIra(false);
+    }
+  };
+
+
 
   // Filtro final de exibição (depende das medalhas persistidas)
   const filteredStudents = filterMedals
