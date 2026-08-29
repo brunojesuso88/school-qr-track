@@ -1058,6 +1058,10 @@ const Students = () => {
                     )}
                   </div>
 
+                  <StudentMedalsStrip medals={medalsByStudent[student.id]} />
+
+
+
                   <div className="flex gap-2 flex-wrap" onClick={(e) => e.stopPropagation()}>
                     <Button
                       variant="outline"
