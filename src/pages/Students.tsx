@@ -689,10 +689,19 @@ const Students = () => {
             <p className="text-muted-foreground">Gerenciar registros de alunos e QR codes</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+          {canRecomputeIra && (
+            <Button variant="outline" onClick={handleRecomputeIra} disabled={recomputingIra}>
+              {recomputingIra
+                ? <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                : <RefreshCw className="w-4 h-4 mr-2" />}
+              {recomputingIra ? 'Atualizando IRA...' : 'Atualizar IRA'}
+            </Button>
+          )}
           <Button variant="outline" onClick={() => setIsOccurrencesReportOpen(true)}>
             <FileText className="w-4 h-4 mr-2" />
             Relatório de Ocorrências
           </Button>
+
           <Dialog open={isDialogOpen} onOpenChange={(open) => {
             setIsDialogOpen(open);
             if (!open) {
