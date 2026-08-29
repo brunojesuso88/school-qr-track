@@ -4,9 +4,9 @@ import { useAuth } from '@/contexts/AuthContext';
 import { detectPushPlatform, readStandaloneFlag, type PushPlatformInfo } from '@/lib/notifications/platform';
 import {
   isValidVapidPublicKey,
-  subscriptionMatchesKey,
-  urlBase64ToUint8Array,
 } from '@/lib/notifications/vapid';
+import { ensurePushSubscription, type MinimalPushManager } from '@/lib/notifications/pushSubscribe';
+
 
 let cachedVapidKey: string | null = null;
 
