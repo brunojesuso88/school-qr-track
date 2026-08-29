@@ -1565,17 +1565,62 @@ const Students = () => {
                   </Popover>
                 </div>
               )}
+
+              {/* Formulário rápido do Conselho de Classe */}
+              {occurrenceForm.type === CLASS_COUNCIL_TYPE && (
+                <div className="space-y-2">
+                  <Label>Apontamentos do conselho</Label>
+                  <CouncilPresetPicker
+                    selected={occurrenceForm.councilItems}
+                    onChange={(items) => setOccurrenceForm({ ...occurrenceForm, councilItems: items })}
+                  />
+                </div>
+              )}
+
               <div className="space-y-2">
-                <Label>Descrição (opcional)</Label>
+                <Label>
+                  {occurrenceForm.type === CLASS_COUNCIL_TYPE ? 'Observação do conselho (opcional)' : 'Descrição (opcional)'}
+                </Label>
                 <Textarea
                   value={occurrenceForm.description}
                   onChange={(e) => setOccurrenceForm({ ...occurrenceForm, description: e.target.value })}
-                  placeholder="Detalhes da ocorrência..."
+                  placeholder={occurrenceForm.type === CLASS_COUNCIL_TYPE ? 'Observação livre da reunião...' : 'Detalhes da ocorrência...'}
                   rows={3}
                 />
               </div>
-              <Button type="submit" className="w-full" disabled={!occurrenceForm.type || (occurrenceForm.type === 'medical_certificate' && !occurrenceForm.endDate)}>
-                Registrar Ocorrência
+
+              {/* Aviso de duplicidade (mesmo aluno + mesma data) */}
+              {councilDuplicate && (
+                <div className="rounded-md border border-amber-500/50 bg-amber-500/10 p-3 space-y-2">
+                  <p className="text-sm">
+                    Já existe um registro de conselho para este aluno em{' '}
+                    <strong>{format(parse(councilDuplicate.date, 'yyyy-MM-dd', new Date()), 'dd/MM/yyyy')}</strong>.
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <Button type="button" size="sm" variant="outline" onClick={() => handleEditCouncil(councilDuplicate)}>
+                      Editar registro existente
+                    </Button>
+                    <Button type="button" size="sm" onClick={() => saveCouncilOccurrence({ forceCreate: true })}>
+                      Criar outro registro
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              <Button
+                type="submit"
+                className="w-full"
+                disabled={
+                  !occurrenceForm.type ||
+                  (occurrenceForm.type === 'medical_certificate' && !occurrenceForm.endDate) ||
+                  (occurrenceForm.type === CLASS_COUNCIL_TYPE &&
+                    occurrenceForm.councilItems.length === 0 &&
+                    !occurrenceForm.description.trim())
+                }
+              >
+                {occurrenceForm.type === CLASS_COUNCIL_TYPE
+                  ? (editingCouncilId ? 'Salvar alterações do conselho' : 'Registrar Conselho de Classe')
+                  : 'Registrar Ocorrência'}
               </Button>
             </form>
           </DialogContent>
