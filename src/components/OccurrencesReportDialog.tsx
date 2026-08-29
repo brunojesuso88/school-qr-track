@@ -12,6 +12,14 @@ import { toast } from 'sonner';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { useSchoolName } from '@/hooks/useSchoolName';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import {
+  CLASS_COUNCIL_TYPE,
+  councilPresetLabel,
+  normalizeCouncilItems,
+} from '@/lib/occurrences/councilPresets';
+
+type ReportScope = 'general' | 'council' | 'all';
 
 const OCCURRENCE_LABELS: Record<string, string> = {
   early_leave: 'Saída Antecipada',
@@ -36,6 +44,7 @@ interface OccurrenceRow {
   date: string;
   end_date: string | null;
   teacher_name: string | null;
+  council_items: string[] | null;
   students: {
     full_name: string;
     student_id: string;
@@ -49,11 +58,24 @@ interface Props {
   onOpenChange: (open: boolean) => void;
 }
 
+const SCOPE_TITLES: Record<ReportScope, string> = {
+  general: 'Relatório de Ocorrências Gerais',
+  council: 'Relatório de Conselho de Classe',
+  all: 'Relatório de Ocorrências',
+};
+
+const SCOPE_FILES: Record<ReportScope, string> = {
+  general: 'ocorrencias_gerais',
+  council: 'conselho_de_classe',
+  all: 'ocorrencias',
+};
+
 const fmt = (d: string) => format(parse(d, 'yyyy-MM-dd', new Date()), 'dd/MM/yyyy');
 
 export const OccurrencesReportDialog = ({ open, onOpenChange }: Props) => {
   const [date, setDate] = useState<Date | undefined>(new Date());
   const [generating, setGenerating] = useState(false);
+  const [scope, setScope] = useState<ReportScope>('all');
   const { schoolName } = useSchoolName();
 
   const handleGenerate = async () => {
@@ -67,16 +89,21 @@ export const OccurrencesReportDialog = ({ open, onOpenChange }: Props) => {
 
       const { data, error } = await supabase
         .from('occurrences')
-        .select('id, type, description, date, end_date, teacher_name, students(full_name, student_id, class, shift)')
+        .select('id, type, description, date, end_date, teacher_name, council_items, students(full_name, student_id, class, shift)')
         .or(`date.eq.${target},and(date.lte.${target},end_date.gte.${target})`)
         .order('date');
 
       if (error) throw error;
 
-      const rows = (data || []) as unknown as OccurrenceRow[];
+      const all = (data || []) as unknown as OccurrenceRow[];
+      const rows = all.filter((r) => {
+        if (scope === 'council') return r.type === CLASS_COUNCIL_TYPE;
+        if (scope === 'general') return r.type !== CLASS_COUNCIL_TYPE;
+        return true;
+      });
 
       if (rows.length === 0) {
-        toast.error(`Nenhuma ocorrência registrada em ${format(date, 'dd/MM/yyyy')}`);
+        toast.error(`Nenhum registro encontrado em ${format(date, 'dd/MM/yyyy')}`);
         return;
       }
 
@@ -96,10 +123,10 @@ export const OccurrencesReportDialog = ({ open, onOpenChange }: Props) => {
       doc.setFontSize(12);
       doc.text(schoolName || 'Escola', pageWidth / 2, 14, { align: 'center' });
       doc.setFontSize(14);
-      doc.text('Relatório de Ocorrências', pageWidth / 2, 21, { align: 'center' });
+      doc.text(SCOPE_TITLES[scope], pageWidth / 2, 21, { align: 'center' });
       doc.setFontSize(10);
       doc.text(
-        `Data: ${format(date, "dd/MM/yyyy (EEEE)", { locale: ptBR })}  •  Total: ${rows.length} ocorrência(s)`,
+        `Data: ${format(date, "dd/MM/yyyy (EEEE)", { locale: ptBR })}  •  Total: ${rows.length} registro(s)`,
         pageWidth / 2,
         28,
         { align: 'center' }
@@ -120,9 +147,13 @@ export const OccurrencesReportDialog = ({ open, onOpenChange }: Props) => {
         );
         cursorY += 2;
 
+        const councilOnly = scope === 'council';
+
         autoTable(doc, {
           startY: cursorY + 2,
-          head: [['Aluno', 'Matrícula', 'Tipo', 'Registrado por', 'Descrição']],
+          head: councilOnly
+            ? [['Aluno', 'Matrícula', 'Apontamentos do conselho', 'Registrado por', 'Observação']]
+            : [['Aluno', 'Matrícula', 'Tipo', 'Registrado por', 'Descrição']],
           body: items
             .sort((a, b) => (a.students?.full_name || '').localeCompare(b.students?.full_name || '', 'pt-BR'))
             .map((o) => {
@@ -131,10 +162,13 @@ export const OccurrencesReportDialog = ({ open, onOpenChange }: Props) => {
                 o.type === 'medical_certificate' && o.end_date
                   ? ` (${fmt(o.date)} a ${fmt(o.end_date)})`
                   : '';
+              const presets = normalizeCouncilItems(o.council_items)
+                .map((k) => councilPresetLabel(k))
+                .join('; ');
               return [
                 o.students?.full_name || 'Aluno não encontrado',
                 o.students?.student_id || '-',
-                `${typeLabel}${period}`,
+                councilOnly ? (presets || '-') : `${typeLabel}${period}`,
                 o.teacher_name || '-',
                 o.description || '-',
               ];
@@ -174,7 +208,7 @@ export const OccurrencesReportDialog = ({ open, onOpenChange }: Props) => {
         );
       }
 
-      doc.save(`ocorrencias_${target}.pdf`);
+      doc.save(`${SCOPE_FILES[scope]}_${target}.pdf`);
       toast.success('Relatório gerado com sucesso!');
       onOpenChange(false);
     } catch (error) {
@@ -194,6 +228,20 @@ export const OccurrencesReportDialog = ({ open, onOpenChange }: Props) => {
             Escolha uma data para gerar o PDF das ocorrências do dia, organizado por turma.
           </DialogDescription>
         </DialogHeader>
+
+        <div className="space-y-2">
+          <Label>Escopo do relatório</Label>
+          <Select value={scope} onValueChange={(v) => setScope(v as ReportScope)}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="general">Ocorrências gerais</SelectItem>
+              <SelectItem value="council">Conselho de Classe</SelectItem>
+              <SelectItem value="all">Todas</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
 
         <div className="space-y-2">
           <Label>Data do relatório</Label>

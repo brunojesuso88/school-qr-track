@@ -12,7 +12,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { toast } from 'sonner';
-import { Plus, Search, QrCode, Edit2, Trash2, Download, User, CalendarIcon, FileText, Upload, Camera, X, Loader2, RefreshCw, AlertTriangle } from 'lucide-react';
+import { Plus, Search, QrCode, Edit2, Trash2, Download, User, Users, CalendarIcon, FileText, Upload, Camera, X, Loader2, RefreshCw, AlertTriangle } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { QRCodeSVG } from 'qrcode.react';
 import { format, parse } from 'date-fns';
@@ -31,6 +31,15 @@ import { StudentMedalsStrip } from '@/components/students/AcademicMedal';
 import type { StudentMedal } from '@/lib/medals/compute';
 
 import { classOptionsForShift, hasMedals, isClassValidForShift } from '@/lib/students/filters';
+import {
+  CLASS_COUNCIL_TYPE,
+  validateCouncilDraft,
+  findCouncilDuplicate,
+  splitOccurrences,
+  normalizeCouncilItems,
+} from '@/lib/occurrences/councilPresets';
+import { CouncilPresetPicker } from '@/components/students/CouncilPresetPicker';
+import { CouncilOccurrenceCard } from '@/components/students/CouncilOccurrenceCard';
 
 
 
@@ -70,6 +79,7 @@ interface Occurrence {
   date: string;
   end_date: string | null;
   teacher_name: string | null;
+  council_items: string[] | null;
   created_at: string;
 }
 
@@ -107,9 +117,12 @@ const Students = () => {
   const [zoomPhotoStudent, setZoomPhotoStudent] = useState<Student | null>(null);
   const [reportStudent, setReportStudent] = useState<Student | null>(null);
   const [filterOccurrences, setFilterOccurrences] = useState(false);
+  const [filterCouncil, setFilterCouncil] = useState(false);
   const [filterMedals, setFilterMedals] = useState(false);
 
+  // occurrenceMap: SOMENTE ocorrências gerais (class_council é contabilizado à parte)
   const [occurrenceMap, setOccurrenceMap] = useState<Map<string, string>>(new Map());
+  const [councilMap, setCouncilMap] = useState<Map<string, string>>(new Map());
   const [absenceCountMap, setAbsenceCountMap] = useState<Map<string, number>>(new Map());
   const [sortBy, setSortBy] = useState<'none' | 'absences-desc' | 'absences-asc' | 'ira-desc' | 'ira-asc'>('none');
   const [recomputingIra, setRecomputingIra] = useState(false);
@@ -140,7 +153,11 @@ const Students = () => {
     description: '',
     date: new Date(),
     endDate: null as Date | null,
+    councilItems: [] as string[],
   });
+  // Edição / duplicidade de registro de Conselho de Classe
+  const [editingCouncilId, setEditingCouncilId] = useState<string | null>(null);
+  const [councilDuplicate, setCouncilDuplicate] = useState<Occurrence | null>(null);
   const [currentUserName, setCurrentUserName] = useState<string | null>(null);
 
   useEffect(() => {
@@ -155,14 +172,17 @@ const Students = () => {
     try {
       const { data, error } = await supabase
         .from('occurrences')
-        .select('student_id, date')
+        .select('student_id, date, type')
         .order('date', { ascending: false });
       if (error) throw error;
-      const map = new Map<string, string>();
+      const general = new Map<string, string>();
+      const council = new Map<string, string>();
       data?.forEach(o => {
-        if (!map.has(o.student_id)) map.set(o.student_id, o.date);
+        const target = o.type === CLASS_COUNCIL_TYPE ? council : general;
+        if (!target.has(o.student_id)) target.set(o.student_id, o.date);
       });
-      setOccurrenceMap(map);
+      setOccurrenceMap(general);
+      setCouncilMap(council);
     } catch (error) {
       console.error('Error fetching occurrences map:', error);
     }
@@ -417,10 +437,94 @@ const Students = () => {
     }
   };
 
+  const resetOccurrenceForm = () => {
+    setOccurrenceForm({ type: '', description: '', date: new Date(), endDate: null, councilItems: [] });
+    setEditingCouncilId(null);
+    setCouncilDuplicate(null);
+  };
+
+  /** Abre o formulário rápido já preenchido com um registro de conselho existente. */
+  const handleEditCouncil = (occurrence: { id: string; date: string; description: string | null; council_items?: string[] | null }) => {
+    setCouncilDuplicate(null);
+    setEditingCouncilId(occurrence.id);
+    setOccurrenceForm({
+      type: CLASS_COUNCIL_TYPE,
+      description: occurrence.description || '',
+      date: parse(occurrence.date, 'yyyy-MM-dd', new Date()),
+      endDate: null,
+      councilItems: normalizeCouncilItems(occurrence.council_items),
+    });
+    setIsOccurrenceDialogOpen(true);
+  };
+
+  /** Persiste (insert ou update) um registro de Conselho de Classe. */
+  const saveCouncilOccurrence = async (opts?: { forceCreate?: boolean }) => {
+    if (!occurrencesStudent) return;
+
+    const validation = validateCouncilDraft({
+      items: occurrenceForm.councilItems,
+      note: occurrenceForm.description,
+    });
+    if (!validation.ok) {
+      toast.error(validation.error || 'Registro inválido');
+      return;
+    }
+
+    const dateStr = format(occurrenceForm.date, 'yyyy-MM-dd');
+
+    // Duplicidade: mesmo aluno + mesma data (aviso, não bloqueio)
+    if (!editingCouncilId && !opts?.forceCreate) {
+      const duplicate = findCouncilDuplicate(occurrences, dateStr);
+      if (duplicate) {
+        setCouncilDuplicate(duplicate);
+        return;
+      }
+    }
+
+    const payload = {
+      type: CLASS_COUNCIL_TYPE,
+      description: validation.note,
+      date: dateStr,
+      council_items: validation.items,
+    };
+
+    try {
+      if (editingCouncilId) {
+        const { error } = await supabase
+          .from('occurrences')
+          .update(payload)
+          .eq('id', editingCouncilId);
+        if (error) throw error;
+        toast.success('Registro do conselho atualizado');
+      } else {
+        const { error } = await supabase.from('occurrences').insert({
+          ...payload,
+          student_id: occurrencesStudent.id,
+          teacher_name: currentUserName,
+        });
+        if (error) throw error;
+        toast.success('Registro do conselho salvo');
+      }
+      setIsOccurrenceDialogOpen(false);
+      resetOccurrenceForm();
+      fetchOccurrences(occurrencesStudent.id);
+      fetchOccurrenceMap();
+    } catch (error) {
+      console.error('Error saving council occurrence:', error);
+      toast.error('Falha ao salvar o registro do conselho');
+    }
+  };
+
   const handleAddOccurrence = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!occurrencesStudent) return;
+
+    // Conselho de Classe usa o fluxo rápido (presets + observação opcional)
+    if (occurrenceForm.type === CLASS_COUNCIL_TYPE) {
+      await saveCouncilOccurrence();
+      return;
+    }
 
     // Validate occurrence form data
     const occurrenceData = {
@@ -465,8 +569,9 @@ const Students = () => {
       if (error) throw error;
       toast.success('Ocorrência registrada com sucesso');
       setIsOccurrenceDialogOpen(false);
-      setOccurrenceForm({ type: '', description: '', date: new Date(), endDate: null });
+      resetOccurrenceForm();
       fetchOccurrences(occurrencesStudent.id);
+      fetchOccurrenceMap();
     } catch (error) {
       console.error('Error adding occurrence:', error);
       toast.error('Falha ao registrar ocorrência');
@@ -483,6 +588,7 @@ const Students = () => {
       if (occurrencesStudent) {
         fetchOccurrences(occurrencesStudent.id);
       }
+      fetchOccurrenceMap();
     } catch (error) {
       console.error('Error deleting occurrence:', error);
       toast.error('Falha ao excluir ocorrência');
@@ -593,8 +699,10 @@ const Students = () => {
       student.student_id.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesClass = filterClass === 'all' || student.class === filterClass;
     const matchesShift = filterShift === 'all' || student.shift === filterShift;
+    // "Alunos com ocorrência" ignora class_council (contabilizado no filtro próprio)
     const matchesOccurrence = !filterOccurrences || occurrenceMap.has(student.id);
-    return matchesSearch && matchesClass && matchesShift && matchesOccurrence;
+    const matchesCouncil = !filterCouncil || councilMap.has(student.id);
+    return matchesSearch && matchesClass && matchesShift && matchesOccurrence && matchesCouncil;
   }).sort((a, b) => {
     if (sortBy === 'absences-desc' || sortBy === 'absences-asc') {
       const ca = absenceCountMap.get(a.id) || 0;
@@ -1041,6 +1149,16 @@ const Students = () => {
               </div>
               <div className="flex items-center gap-2 mt-3 sm:mt-0">
                 <Checkbox
+                  id="filterCouncil"
+                  checked={filterCouncil}
+                  onCheckedChange={(checked) => setFilterCouncil(!!checked)}
+                />
+                <Label htmlFor="filterCouncil" className="text-sm cursor-pointer whitespace-nowrap">
+                  Com registro de Conselho
+                </Label>
+              </div>
+              <div className="flex items-center gap-2 mt-3 sm:mt-0">
+                <Checkbox
                   id="filterMedals"
                   checked={filterMedals}
                   onCheckedChange={(checked) => setFilterMedals(!!checked)}
@@ -1241,68 +1359,120 @@ const Students = () => {
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 mt-4">
-              <Button onClick={() => setIsOccurrenceDialogOpen(true)} className="w-full">
-                <Plus className="w-4 h-4 mr-2" />
-                Nova Ocorrência
-              </Button>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <Button
+                  onClick={() => {
+                    resetOccurrenceForm();
+                    setIsOccurrenceDialogOpen(true);
+                  }}
+                  className="w-full"
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  Nova Ocorrência
+                </Button>
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => {
+                    resetOccurrenceForm();
+                    setOccurrenceForm({
+                      type: CLASS_COUNCIL_TYPE,
+                      description: '',
+                      date: new Date(),
+                      endDate: null,
+                      councilItems: [],
+                    });
+                    setIsOccurrenceDialogOpen(true);
+                  }}
+                >
+                  <Users className="w-4 h-4 mr-2" />
+                  Conselho de Classe
+                </Button>
+              </div>
 
-              {occurrences.length > 0 ? (
-                <div className="space-y-3">
-                  {occurrences.map((occurrence) => (
-                    <Card key={occurrence.id} className={cn(
-                      occurrence.type === 'medical_certificate' && "border-purple-500/50 bg-purple-500/5"
-                    )}>
-                      <CardContent className="p-4">
-                        <div className="flex items-start justify-between">
-                          <div className="space-y-1">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <span className={cn(
-                                "text-xs px-2 py-1 rounded-full font-medium",
-                                occurrence.type === 'medical_certificate' 
-                                  ? "bg-purple-500/20 text-purple-600" 
-                                  : "bg-primary/10 text-primary"
-                              )}>
-                                {getOccurrenceTypeLabel(occurrence.type)}
-                              </span>
-                              <span className={cn(
-                                "text-xs",
-                                occurrence.type === 'medical_certificate' 
-                                  ? "text-purple-600 font-medium" 
-                                  : "text-muted-foreground"
-                              )}>
-                                {format(parse(occurrence.date, 'yyyy-MM-dd', new Date()), 'dd/MM/yyyy')}
-                                {occurrence.end_date && (
-                                  <> a {format(parse(occurrence.end_date, 'yyyy-MM-dd', new Date()), 'dd/MM/yyyy')}</>
-                                )}
-                              </span>
+              {/* Conselho de Classe — separado das ocorrências gerais */}
+              <div className="space-y-2">
+                <h4 className="text-sm font-semibold flex items-center gap-2">
+                  <Users className="w-4 h-4 text-amber-600" />
+                  Conselho de Classe ({splitOccurrences(occurrences).council.length})
+                </h4>
+                {splitOccurrences(occurrences).council.length > 0 ? (
+                  <div className="space-y-3">
+                    {splitOccurrences(occurrences).council.map((occurrence) => (
+                      <CouncilOccurrenceCard
+                        key={occurrence.id}
+                        occurrence={occurrence}
+                        onEdit={handleEditCouncil}
+                        onDelete={handleDeleteOccurrence}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">Nenhum registro de conselho de classe</p>
+                )}
+              </div>
+
+              {/* Ocorrências gerais */}
+              <div className="space-y-2 pt-2 border-t">
+                <h4 className="text-sm font-semibold flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-primary" />
+                  Ocorrências gerais ({splitOccurrences(occurrences).general.length})
+                </h4>
+                {splitOccurrences(occurrences).general.length > 0 ? (
+                  <div className="space-y-3">
+                    {splitOccurrences(occurrences).general.map((occurrence) => (
+                      <Card key={occurrence.id} className={cn(
+                        occurrence.type === 'medical_certificate' && "border-purple-500/50 bg-purple-500/5"
+                      )}>
+                        <CardContent className="p-4">
+                          <div className="flex items-start justify-between">
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className={cn(
+                                  "text-xs px-2 py-1 rounded-full font-medium",
+                                  occurrence.type === 'medical_certificate'
+                                    ? "bg-purple-500/20 text-purple-600"
+                                    : "bg-primary/10 text-primary"
+                                )}>
+                                  {getOccurrenceTypeLabel(occurrence.type)}
+                                </span>
+                                <span className={cn(
+                                  "text-xs",
+                                  occurrence.type === 'medical_certificate'
+                                    ? "text-purple-600 font-medium"
+                                    : "text-muted-foreground"
+                                )}>
+                                  {format(parse(occurrence.date, 'yyyy-MM-dd', new Date()), 'dd/MM/yyyy')}
+                                  {occurrence.end_date && (
+                                    <> a {format(parse(occurrence.end_date, 'yyyy-MM-dd', new Date()), 'dd/MM/yyyy')}</>
+                                  )}
+                                </span>
+                              </div>
+                              {occurrence.description && (
+                                <p className="text-sm text-muted-foreground">{occurrence.description}</p>
+                              )}
+                              {occurrence.teacher_name && (
+                                <p className="text-xs text-muted-foreground/70">
+                                  Por: {occurrence.teacher_name}
+                                </p>
+                              )}
                             </div>
-                            {occurrence.description && (
-                              <p className="text-sm text-muted-foreground">{occurrence.description}</p>
-                            )}
-                            {occurrence.teacher_name && (
-                              <p className="text-xs text-muted-foreground/70">
-                                Por: {occurrence.teacher_name}
-                              </p>
-                            )}
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleDeleteOccurrence(occurrence.id)}
+                            >
+                              <Trash2 className="w-3 h-3 text-destructive" />
+                            </Button>
                           </div>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleDeleteOccurrence(occurrence.id)}
-                          >
-                            <Trash2 className="w-3 h-3 text-destructive" />
-                          </Button>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-center py-8 text-muted-foreground">
-                  <FileText className="w-12 h-12 mx-auto mb-2 opacity-50" />
-                  <p>Nenhuma ocorrência registrada</p>
-                </div>
-              )}
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">Nenhuma ocorrência geral registrada</p>
+                )}
+              </div>
             </div>
           </DialogContent>
         </Dialog>
@@ -1395,17 +1565,62 @@ const Students = () => {
                   </Popover>
                 </div>
               )}
+
+              {/* Formulário rápido do Conselho de Classe */}
+              {occurrenceForm.type === CLASS_COUNCIL_TYPE && (
+                <div className="space-y-2">
+                  <Label>Apontamentos do conselho</Label>
+                  <CouncilPresetPicker
+                    selected={occurrenceForm.councilItems}
+                    onChange={(items) => setOccurrenceForm({ ...occurrenceForm, councilItems: items })}
+                  />
+                </div>
+              )}
+
               <div className="space-y-2">
-                <Label>Descrição (opcional)</Label>
+                <Label>
+                  {occurrenceForm.type === CLASS_COUNCIL_TYPE ? 'Observação do conselho (opcional)' : 'Descrição (opcional)'}
+                </Label>
                 <Textarea
                   value={occurrenceForm.description}
                   onChange={(e) => setOccurrenceForm({ ...occurrenceForm, description: e.target.value })}
-                  placeholder="Detalhes da ocorrência..."
+                  placeholder={occurrenceForm.type === CLASS_COUNCIL_TYPE ? 'Observação livre da reunião...' : 'Detalhes da ocorrência...'}
                   rows={3}
                 />
               </div>
-              <Button type="submit" className="w-full" disabled={!occurrenceForm.type || (occurrenceForm.type === 'medical_certificate' && !occurrenceForm.endDate)}>
-                Registrar Ocorrência
+
+              {/* Aviso de duplicidade (mesmo aluno + mesma data) */}
+              {councilDuplicate && (
+                <div className="rounded-md border border-amber-500/50 bg-amber-500/10 p-3 space-y-2">
+                  <p className="text-sm">
+                    Já existe um registro de conselho para este aluno em{' '}
+                    <strong>{format(parse(councilDuplicate.date, 'yyyy-MM-dd', new Date()), 'dd/MM/yyyy')}</strong>.
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <Button type="button" size="sm" variant="outline" onClick={() => handleEditCouncil(councilDuplicate)}>
+                      Editar registro existente
+                    </Button>
+                    <Button type="button" size="sm" onClick={() => saveCouncilOccurrence({ forceCreate: true })}>
+                      Criar outro registro
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              <Button
+                type="submit"
+                className="w-full"
+                disabled={
+                  !occurrenceForm.type ||
+                  (occurrenceForm.type === 'medical_certificate' && !occurrenceForm.endDate) ||
+                  (occurrenceForm.type === CLASS_COUNCIL_TYPE &&
+                    occurrenceForm.councilItems.length === 0 &&
+                    !occurrenceForm.description.trim())
+                }
+              >
+                {occurrenceForm.type === CLASS_COUNCIL_TYPE
+                  ? (editingCouncilId ? 'Salvar alterações do conselho' : 'Registrar Conselho de Classe')
+                  : 'Registrar Ocorrência'}
               </Button>
             </form>
           </DialogContent>

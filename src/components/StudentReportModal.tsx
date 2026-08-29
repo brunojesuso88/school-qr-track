@@ -6,13 +6,15 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
-import { Calendar, FileText, AlertCircle, CheckCircle, XCircle, Clock, Eye, GraduationCap, Stethoscope } from 'lucide-react';
+import { Calendar, FileText, AlertCircle, CheckCircle, XCircle, Clock, Eye, GraduationCap, Stethoscope, Users } from 'lucide-react';
 import { format, parse, startOfMonth, endOfMonth, startOfYear, endOfYear, differenceInYears } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { StudentPhoto } from '@/components/StudentPhoto';
 import { StudentGradesTab } from '@/components/grades/StudentGradesTab';
 import { StudentCertificatesTab } from '@/components/medical/StudentCertificatesTab';
+import { CouncilOccurrenceCard } from '@/components/students/CouncilOccurrenceCard';
+import { splitOccurrences } from '@/lib/occurrences/councilPresets';
 
 interface Student {
   id: string;
@@ -46,6 +48,7 @@ interface Occurrence {
   date: string;
   end_date: string | null;
   teacher_name: string | null;
+  council_items: string[] | null;
   created_at: string;
 }
 
@@ -68,6 +71,7 @@ const OCCURRENCE_TYPES = [
   { value: 'medical_certificate', label: 'Atestado Médico' },
   { value: 'late_arrival', label: 'Atraso' },
   { value: 'discipline', label: 'Ocorrência Disciplinar' },
+  { value: 'class_council', label: 'Conselho de Classe' },
   { value: 'other', label: 'Outros' },
 ];
 
@@ -190,6 +194,9 @@ export const StudentReportModal = ({ student, onClose }: StudentReportModalProps
 
   if (!student) return null;
 
+  // Separação: Conselho de Classe x ocorrências gerais (compatível com registros antigos)
+  const { general: generalOccurrences, council: councilOccurrences } = splitOccurrences(occurrences);
+
   return (
     <Dialog open={!!student} onOpenChange={() => onClose()}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
@@ -218,7 +225,7 @@ export const StudentReportModal = ({ student, onClose }: StudentReportModalProps
         </DialogHeader>
 
         <Tabs defaultValue="attendance" className="mt-4">
-          <TabsList className="grid w-full grid-cols-5">
+          <TabsList className="grid w-full grid-cols-6">
             <TabsTrigger value="attendance">
               <Calendar className="w-4 h-4 mr-2" />
               <span className="hidden sm:inline">Frequência</span>
@@ -229,7 +236,11 @@ export const StudentReportModal = ({ student, onClose }: StudentReportModalProps
             </TabsTrigger>
             <TabsTrigger value="occurrences">
               <FileText className="w-4 h-4 mr-2" />
-              <span className="hidden sm:inline">Ocorrências ({occurrences.length})</span>
+              <span className="hidden sm:inline">Ocorrências ({generalOccurrences.length})</span>
+            </TabsTrigger>
+            <TabsTrigger value="council">
+              <Users className="w-4 h-4 mr-2" />
+              <span className="hidden sm:inline">Conselho ({councilOccurrences.length})</span>
             </TabsTrigger>
             <TabsTrigger value="certificates">
               <Stethoscope className="w-4 h-4 mr-2" />
@@ -240,6 +251,28 @@ export const StudentReportModal = ({ student, onClose }: StudentReportModalProps
               <span className="hidden sm:inline">Laudo</span>
             </TabsTrigger>
           </TabsList>
+
+          <TabsContent value="council" className="mt-4">
+            {loading ? (
+              <div className="space-y-3">
+                {[1, 2, 3].map(i => (
+                  <div key={i} className="h-20 bg-muted animate-pulse rounded-lg" />
+                ))}
+              </div>
+            ) : councilOccurrences.length > 0 ? (
+              <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2">
+                {councilOccurrences.map((occurrence) => (
+                  <CouncilOccurrenceCard key={occurrence.id} occurrence={occurrence} longDate />
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-12">
+                <Users className="w-12 h-12 mx-auto text-muted-foreground/50 mb-3" />
+                <p className="text-muted-foreground">Nenhum registro de Conselho de Classe</p>
+              </div>
+            )}
+          </TabsContent>
+
 
           <TabsContent value="certificates" className="mt-4">
             <StudentCertificatesTab studentId={student.id} studentName={student.full_name} />
@@ -374,9 +407,9 @@ export const StudentReportModal = ({ student, onClose }: StudentReportModalProps
                   <div key={i} className="h-20 bg-muted animate-pulse rounded-lg" />
                 ))}
               </div>
-            ) : occurrences.length > 0 ? (
+            ) : generalOccurrences.length > 0 ? (
               <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2">
-                {occurrences.map((occurrence) => (
+                {generalOccurrences.map((occurrence) => (
                   <Card key={occurrence.id} className={cn(
                     occurrence.type === 'medical_certificate' && "border-purple-500/50 bg-purple-500/5"
                   )}>

@@ -1109,6 +1109,7 @@ export type Database = {
       }
       occurrences: {
         Row: {
+          council_items: string[]
           created_at: string | null
           created_by: string | null
           date: string
@@ -1118,8 +1119,10 @@ export type Database = {
           student_id: string
           teacher_name: string | null
           type: string
+          updated_at: string
         }
         Insert: {
+          council_items?: string[]
           created_at?: string | null
           created_by?: string | null
           date?: string
@@ -1129,8 +1132,10 @@ export type Database = {
           student_id: string
           teacher_name?: string | null
           type: string
+          updated_at?: string
         }
         Update: {
+          council_items?: string[]
           created_at?: string | null
           created_by?: string | null
           date?: string
@@ -1140,6 +1145,7 @@ export type Database = {
           student_id?: string
           teacher_name?: string | null
           type?: string
+          updated_at?: string
         }
         Relationships: [
           {
