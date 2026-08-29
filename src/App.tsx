@@ -28,6 +28,7 @@ import Declarations from "./pages/Declarations";
 import Teachers from "./pages/Teachers";
 import Subjects from "./pages/Subjects";
 import TeacherNotifications from "./pages/TeacherNotifications";
+import IRA from "./pages/IRA";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -63,6 +64,8 @@ const App = () => (
               <Route path="/classes" element={<AdminRoute><Classes /></AdminRoute>} />
               <Route path="/teachers" element={<AdminRoute><Teachers /></AdminRoute>} />
               <Route path="/subjects" element={<AdminRoute><Subjects /></AdminRoute>} />
+              <Route path="/ira" element={<AdminRoute><IRA /></AdminRoute>} />
+              <Route path="/settings/ira" element={<Navigate to="/ira" replace />} />
               <Route path="/scan" element={<AdminRoute><QRCodes /></AdminRoute>} />
               <Route path="/attendance" element={<AdminRoute><Attendance /></AdminRoute>} />
               <Route path="/events" element={<AdminRoute><Events /></AdminRoute>} />

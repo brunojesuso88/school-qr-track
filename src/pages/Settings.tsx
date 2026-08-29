@@ -1,19 +1,17 @@
 import DashboardLayout from '@/components/DashboardLayout';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Settings as SettingsIcon, Clock, MessageSquare, Users, Building2, Download, Calculator } from 'lucide-react';
+import { Settings as SettingsIcon, Clock, MessageSquare, Users, Building2, Download } from 'lucide-react';
 import GeneralSettings from '@/components/settings/GeneralSettings';
 import NotificationSettings from '@/components/settings/NotificationSettings';
 import UserManagement from '@/components/settings/UserManagement';
 import SchoolSettings from '@/components/settings/SchoolSettings';
 import DataExport from '@/components/settings/DataExport';
-import IRASettings from '@/components/settings/IRASettings';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent } from '@/components/ui/card';
 import { Shield } from 'lucide-react';
 
 const Settings = () => {
-  const { userRole, canAccessSettings, canManageUsers } = useAuth();
-  const canManageIra = userRole === 'admin' || userRole === 'direction';
+  const { canAccessSettings, canManageUsers } = useAuth();
 
   // Block access for teacher and staff
   if (!canAccessSettings) {
@@ -48,7 +46,7 @@ const Settings = () => {
         </div>
 
         <Tabs defaultValue="general" className="w-full">
-          <TabsList className={`grid w-full h-auto gap-2 ${canManageUsers ? 'grid-cols-2 lg:grid-cols-6' : 'grid-cols-2 lg:grid-cols-5'}`}>
+          <TabsList className={`grid w-full h-auto gap-2 ${canManageUsers ? 'grid-cols-2 lg:grid-cols-5' : 'grid-cols-2 lg:grid-cols-4'}`}>
             <TabsTrigger value="general" className="flex items-center gap-2 py-2">
               <Clock className="h-4 w-4" />
               <span className="hidden sm:inline">Geral</span>
@@ -72,12 +70,6 @@ const Settings = () => {
               <Download className="h-4 w-4" />
               <span className="hidden sm:inline">Dados</span>
             </TabsTrigger>
-            {canManageIra && (
-              <TabsTrigger value="ira" className="flex items-center gap-2 py-2">
-                <Calculator className="h-4 w-4" />
-                <span className="hidden sm:inline">IRA</span>
-              </TabsTrigger>
-            )}
           </TabsList>
 
           <div className="mt-6">
@@ -103,11 +95,6 @@ const Settings = () => {
               <DataExport />
             </TabsContent>
 
-            {canManageIra && (
-              <TabsContent value="ira">
-                <IRASettings />
-              </TabsContent>
-            )}
           </div>
         </Tabs>
       </div>

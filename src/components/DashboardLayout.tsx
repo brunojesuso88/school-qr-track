@@ -1,6 +1,6 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
-import { LayoutDashboard, Users, Calendar, Bell, Settings, Menu, X, BookOpen, LogOut, ChevronRight, Heart, FileText, Lock, RefreshCw, Download, Info, Trash2, Sun, Moon, Monitor, ClipboardList, CalendarDays, FileWarning, GraduationCap, Library } from 'lucide-react';
+import { Settings, Menu, X, LogOut, ChevronRight, Lock, RefreshCw, Download, Info, Trash2, Sun, Moon, Monitor } from 'lucide-react';
 import { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/components/ThemeProvider';
@@ -26,22 +26,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-const allNavigation = [
-  { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, roles: ['admin', 'direction', 'teacher'], group: 'Visão Geral' },
-  { name: 'Alunos', href: '/students', icon: Users, roles: ['admin', 'direction', 'teacher'], group: 'Secretaria' },
-  { name: 'Sistema AEE', href: '/aee', icon: Heart, roles: ['admin', 'direction', 'teacher'], group: 'Secretaria' },
-  { name: 'Turmas', href: '/classes', icon: BookOpen, roles: ['admin', 'direction', 'teacher'], group: 'Secretaria' },
-  { name: 'Professores', href: '/teachers', icon: GraduationCap, roles: ['admin', 'direction'], group: 'Secretaria' },
-  { name: 'Disciplinas', href: '/subjects', icon: Library, roles: ['admin', 'direction'], group: 'Secretaria' },
-  { name: 'Frequência', href: '/attendance', icon: Calendar, roles: ['admin', 'direction', 'teacher'], group: 'Secretaria' },
-  { name: 'Projetos', href: '/events', icon: ClipboardList, roles: ['admin', 'direction', 'teacher'], group: 'Projetos e Eventos' },
-  { name: 'Eventos', href: '/school-events', icon: CalendarDays, roles: ['admin', 'direction', 'teacher'], group: 'Projetos e Eventos' },
-  { name: 'Declarações', href: '/declarations', icon: FileText, roles: ['admin', 'direction'], group: 'Documentos' },
-  { name: 'Notificação Docente', href: '/teacher-notifications', icon: FileWarning, roles: ['admin', 'direction'], group: 'Documentos' },
-  { name: 'Configurações', href: '/settings', icon: Settings, roles: ['admin', 'direction'], group: 'Sistema' },
-];
+import { allNavigation, sidebarNavigation, NAV_GROUPS } from '@/lib/navigation';
 
-const NAV_GROUPS = ['Visão Geral', 'Secretaria', 'Projetos e Eventos', 'Documentos', 'Sistema'];
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -64,7 +50,7 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
   const [deleteConfirmation, setDeleteConfirmation] = useState("");
 
   // Filter navigation based on user role
-  const navigation = allNavigation.filter(item => 
+  const navigation = sidebarNavigation.filter(item =>
     item.roles.includes(userRole || 'user')
   );
 
@@ -90,7 +76,7 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
 
   const getCurrentPageName = () => {
     const currentNav = allNavigation.find(item => item.href === location.pathname);
-    return currentNav?.name || 'Dashboard';
+    return currentNav?.name || 'Painel Inicial';
   };
 
   const handleForceUpdate = async () => {
