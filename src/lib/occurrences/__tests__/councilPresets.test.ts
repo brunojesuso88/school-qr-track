@@ -58,7 +58,7 @@ describe('validação do registro de conselho', () => {
   it('rejeita registro vazio', () => {
     const r = validateCouncilDraft({ items: [], note: '   ' });
     expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.error).toMatch(/pelo menos um item/i);
+    expect(r.error).toMatch(/pelo menos um item/i);
   });
 
   it('rejeita observação acima de 1000 caracteres (limite do banco)', () => {

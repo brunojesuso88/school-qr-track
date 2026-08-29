@@ -466,7 +466,7 @@ const Students = () => {
       note: occurrenceForm.description,
     });
     if (!validation.ok) {
-      toast.error(validation.error);
+      toast.error(validation.error || 'Registro inválido');
       return;
     }
 

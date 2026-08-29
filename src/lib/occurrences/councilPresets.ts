@@ -55,9 +55,12 @@ export interface CouncilDraft {
   note: string;
 }
 
-export type CouncilValidation =
-  | { ok: true; items: string[]; note: string | null }
-  | { ok: false; error: string };
+export interface CouncilValidation {
+  ok: boolean;
+  items: string[];
+  note: string | null;
+  error?: string;
+}
 
 /**
  * Regra V1: é válido salvar com pelo menos 1 preset OU com observação livre.
@@ -70,11 +73,18 @@ export const validateCouncilDraft = (draft: CouncilDraft): CouncilValidation => 
   if (items.length === 0 && note.length === 0) {
     return {
       ok: false,
+      items,
+      note: null,
       error: 'Selecione pelo menos um item do conselho ou escreva uma observação.',
     };
   }
   if (note.length > 1000) {
-    return { ok: false, error: 'Observação muito longa (máximo 1000 caracteres).' };
+    return {
+      ok: false,
+      items,
+      note: null,
+      error: 'Observação muito longa (máximo 1000 caracteres).',
+    };
   }
   return { ok: true, items, note: note.length > 0 ? note : null };
 };
