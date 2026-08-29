@@ -129,9 +129,16 @@ const IraRankingExport = ({ classes, classesWithGrades }: Props) => {
     try {
       const data = await buildIraRanking(selected);
       setResult(data);
+      const { data: stRows } = await supabase
+        .from('ira_staleness')
+        .select('class_id, stale')
+        .in('class_id', selected);
+      const rows = (stRows || []) as { stale: boolean }[];
+      setRankingStale(rows.some((r) => r.stale) || rows.length < selected.length);
       if (data.eligibleCount === 0) {
         toast.error('Nenhum aluno elegível encontrado nas turmas selecionadas.');
       }
+
     } catch (e) {
       console.error(e);
       toast.error('Não foi possível calcular a classificação.');
