@@ -18,6 +18,7 @@ import {
   DEFAULT_RANKING_PDF_COLUMNS, RANKING_PDF_COLUMN_OPTIONS, RankingPdfColumn, buildIraRankingPdf,
   orderRankingColumns,
 } from '@/lib/iraRanking';
+import { supabase } from '@/integrations/supabase/client';
 import logoAsset from '@/assets/logo-cepans.png.asset.json';
 
 interface ClassOption {
@@ -42,6 +43,7 @@ const IraRankingExport = ({ classes, classesWithGrades }: Props) => {
   const [loading, setLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [result, setResult] = useState<RankingResult | null>(null);
+const [rankingStale, setRankingStale] = useState(false);
   const [columns, setColumns] = useState<RankingPdfColumn[]>(DEFAULT_RANKING_PDF_COLUMNS);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
