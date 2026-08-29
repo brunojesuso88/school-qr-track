@@ -172,14 +172,17 @@ const Students = () => {
     try {
       const { data, error } = await supabase
         .from('occurrences')
-        .select('student_id, date')
+        .select('student_id, date, type')
         .order('date', { ascending: false });
       if (error) throw error;
-      const map = new Map<string, string>();
+      const general = new Map<string, string>();
+      const council = new Map<string, string>();
       data?.forEach(o => {
-        if (!map.has(o.student_id)) map.set(o.student_id, o.date);
+        const target = o.type === CLASS_COUNCIL_TYPE ? council : general;
+        if (!target.has(o.student_id)) target.set(o.student_id, o.date);
       });
-      setOccurrenceMap(map);
+      setOccurrenceMap(general);
+      setCouncilMap(council);
     } catch (error) {
       console.error('Error fetching occurrences map:', error);
     }
