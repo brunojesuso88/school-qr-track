@@ -1121,11 +1121,16 @@ const Students = () => {
           <Card>
             <CardContent className="p-12 text-center">
               <User className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
-              <h3 className="font-medium mb-1">Nenhum aluno encontrado</h3>
+              <h3 className="font-medium mb-1">
+                {filterMedals ? 'Nenhum aluno com medalhas' : 'Nenhum aluno encontrado'}
+              </h3>
               <p className="text-sm text-muted-foreground">
-                {searchTerm || filterClass !== 'all'
+                {filterMedals
+                  ? 'Nenhum aluno condecorado nos filtros atuais'
+                  : searchTerm || filterClass !== 'all' || filterShift !== 'all'
                   ? 'Tente ajustar os filtros'
                   : 'Adicione seu primeiro aluno para começar'}
+
               </p>
             </CardContent>
           </Card>
