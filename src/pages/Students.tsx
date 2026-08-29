@@ -84,7 +84,7 @@ const OCCURRENCE_TYPES = [
 const Students = () => {
   const [searchParams] = useSearchParams();
   const classFromUrl = searchParams.get('class');
-  const { userRole } = useAuth();
+  const { userRole, user } = useAuth();
   const canViewGuardianPhone = userRole === 'admin' || userRole === 'direction';
   // Professor não pode excluir alunos (também bloqueado por RLS no backend)
   const canDeleteStudents = userRole === 'admin' || userRole === 'direction';
