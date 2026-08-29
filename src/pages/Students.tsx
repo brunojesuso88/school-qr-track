@@ -31,6 +31,15 @@ import { StudentMedalsStrip } from '@/components/students/AcademicMedal';
 import type { StudentMedal } from '@/lib/medals/compute';
 
 import { classOptionsForShift, hasMedals, isClassValidForShift } from '@/lib/students/filters';
+import {
+  CLASS_COUNCIL_TYPE,
+  validateCouncilDraft,
+  findCouncilDuplicate,
+  splitOccurrences,
+  normalizeCouncilItems,
+} from '@/lib/occurrences/councilPresets';
+import { CouncilPresetPicker } from '@/components/students/CouncilPresetPicker';
+import { CouncilOccurrenceCard } from '@/components/students/CouncilOccurrenceCard';
 
 
 
@@ -70,6 +79,7 @@ interface Occurrence {
   date: string;
   end_date: string | null;
   teacher_name: string | null;
+  council_items: string[] | null;
   created_at: string;
 }
 
