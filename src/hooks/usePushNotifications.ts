@@ -108,12 +108,18 @@ export const usePushNotifications = () => {
       }
 
       const registration = await navigator.serviceWorker.ready;
-      const applicationServerKey = urlBase64ToUint8Array(publicKey);
-      const existing = await registration.pushManager.getSubscription();
-      const subscription = existing ?? await registration.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: applicationServerKey.buffer as ArrayBuffer,
-      });
+      const { subscription } = await ensurePushSubscription(
+        registration.pushManager as unknown as MinimalPushManager,
+        publicKey,
+        async (staleEndpoint) => {
+          await supabase
+            .from('push_subscriptions')
+            .delete()
+            .eq('user_id', user.id)
+            .eq('endpoint', staleEndpoint);
+        },
+      );
+
 
       const p256dhKey = subscription.getKey('p256dh');
       const authKey = subscription.getKey('auth');
