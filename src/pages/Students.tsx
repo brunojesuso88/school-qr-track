@@ -1149,6 +1149,16 @@ const Students = () => {
               </div>
               <div className="flex items-center gap-2 mt-3 sm:mt-0">
                 <Checkbox
+                  id="filterCouncil"
+                  checked={filterCouncil}
+                  onCheckedChange={(checked) => setFilterCouncil(!!checked)}
+                />
+                <Label htmlFor="filterCouncil" className="text-sm cursor-pointer whitespace-nowrap">
+                  Com registro de Conselho
+                </Label>
+              </div>
+              <div className="flex items-center gap-2 mt-3 sm:mt-0">
+                <Checkbox
                   id="filterMedals"
                   checked={filterMedals}
                   onCheckedChange={(checked) => setFilterMedals(!!checked)}
