@@ -110,6 +110,8 @@ const Students = () => {
   const [occurrenceMap, setOccurrenceMap] = useState<Map<string, string>>(new Map());
   const [absenceCountMap, setAbsenceCountMap] = useState<Map<string, number>>(new Map());
   const [sortBy, setSortBy] = useState<'none' | 'absences-desc' | 'absences-asc' | 'ira-desc' | 'ira-asc'>('none');
+  const [recomputingIra, setRecomputingIra] = useState(false);
+
 
   const [formData, setFormData] = useState({
     full_name: '',
