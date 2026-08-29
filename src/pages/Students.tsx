@@ -437,10 +437,94 @@ const Students = () => {
     }
   };
 
+  const resetOccurrenceForm = () => {
+    setOccurrenceForm({ type: '', description: '', date: new Date(), endDate: null, councilItems: [] });
+    setEditingCouncilId(null);
+    setCouncilDuplicate(null);
+  };
+
+  /** Abre o formulário rápido já preenchido com um registro de conselho existente. */
+  const handleEditCouncil = (occurrence: { id: string; date: string; description: string | null; council_items?: string[] | null }) => {
+    setCouncilDuplicate(null);
+    setEditingCouncilId(occurrence.id);
+    setOccurrenceForm({
+      type: CLASS_COUNCIL_TYPE,
+      description: occurrence.description || '',
+      date: parse(occurrence.date, 'yyyy-MM-dd', new Date()),
+      endDate: null,
+      councilItems: normalizeCouncilItems(occurrence.council_items),
+    });
+    setIsOccurrenceDialogOpen(true);
+  };
+
+  /** Persiste (insert ou update) um registro de Conselho de Classe. */
+  const saveCouncilOccurrence = async (opts?: { forceCreate?: boolean }) => {
+    if (!occurrencesStudent) return;
+
+    const validation = validateCouncilDraft({
+      items: occurrenceForm.councilItems,
+      note: occurrenceForm.description,
+    });
+    if (!validation.ok) {
+      toast.error(validation.error);
+      return;
+    }
+
+    const dateStr = format(occurrenceForm.date, 'yyyy-MM-dd');
+
+    // Duplicidade: mesmo aluno + mesma data (aviso, não bloqueio)
+    if (!editingCouncilId && !opts?.forceCreate) {
+      const duplicate = findCouncilDuplicate(occurrences, dateStr);
+      if (duplicate) {
+        setCouncilDuplicate(duplicate);
+        return;
+      }
+    }
+
+    const payload = {
+      type: CLASS_COUNCIL_TYPE,
+      description: validation.note,
+      date: dateStr,
+      council_items: validation.items,
+    };
+
+    try {
+      if (editingCouncilId) {
+        const { error } = await supabase
+          .from('occurrences')
+          .update(payload)
+          .eq('id', editingCouncilId);
+        if (error) throw error;
+        toast.success('Registro do conselho atualizado');
+      } else {
+        const { error } = await supabase.from('occurrences').insert({
+          ...payload,
+          student_id: occurrencesStudent.id,
+          teacher_name: currentUserName,
+        });
+        if (error) throw error;
+        toast.success('Registro do conselho salvo');
+      }
+      setIsOccurrenceDialogOpen(false);
+      resetOccurrenceForm();
+      fetchOccurrences(occurrencesStudent.id);
+      fetchOccurrenceMap();
+    } catch (error) {
+      console.error('Error saving council occurrence:', error);
+      toast.error('Falha ao salvar o registro do conselho');
+    }
+  };
+
   const handleAddOccurrence = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!occurrencesStudent) return;
+
+    // Conselho de Classe usa o fluxo rápido (presets + observação opcional)
+    if (occurrenceForm.type === CLASS_COUNCIL_TYPE) {
+      await saveCouncilOccurrence();
+      return;
+    }
 
     // Validate occurrence form data
     const occurrenceData = {
@@ -485,8 +569,9 @@ const Students = () => {
       if (error) throw error;
       toast.success('Ocorrência registrada com sucesso');
       setIsOccurrenceDialogOpen(false);
-      setOccurrenceForm({ type: '', description: '', date: new Date(), endDate: null });
+      resetOccurrenceForm();
       fetchOccurrences(occurrencesStudent.id);
+      fetchOccurrenceMap();
     } catch (error) {
       console.error('Error adding occurrence:', error);
       toast.error('Falha ao registrar ocorrência');
