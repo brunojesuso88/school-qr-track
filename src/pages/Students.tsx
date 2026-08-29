@@ -1283,6 +1283,7 @@ const Students = () => {
                     <Button
                       variant="outline"
                       size="sm"
+                      aria-label={`Ocorrências de ${student.full_name}`}
                       onClick={() => handleViewOccurrences(student)}
                     >
                       <FileText className="w-3 h-3" />
