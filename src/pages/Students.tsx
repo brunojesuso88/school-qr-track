@@ -28,6 +28,8 @@ import { OccurrencesReportDialog } from '@/components/OccurrencesReportDialog';
 import { useStudentsIra } from '@/hooks/useStudentsIra';
 import { useStudentMedals } from '@/hooks/useStudentMedals';
 import { StudentMedalsStrip } from '@/components/students/AcademicMedal';
+import { classOptionsForShift, hasMedals, isClassValidForShift } from '@/lib/students/filters';
+
 
 import { formatIra } from '@/lib/ira';
 import { useActiveCertificateStudents } from '@/hooks/useCertificateCoverage';
@@ -102,6 +104,8 @@ const Students = () => {
   const [zoomPhotoStudent, setZoomPhotoStudent] = useState<Student | null>(null);
   const [reportStudent, setReportStudent] = useState<Student | null>(null);
   const [filterOccurrences, setFilterOccurrences] = useState(false);
+  const [filterMedals, setFilterMedals] = useState(false);
+
   const [occurrenceMap, setOccurrenceMap] = useState<Map<string, string>>(new Map());
   const [absenceCountMap, setAbsenceCountMap] = useState<Map<string, number>>(new Map());
   const [sortBy, setSortBy] = useState<'none' | 'absences-desc' | 'absences-asc' | 'ira-desc' | 'ira-asc'>('none');
@@ -577,7 +581,8 @@ const Students = () => {
     img.src = 'data:image/svg+xml;base64,' + btoa(svgData);
   };
 
-  const filteredStudents = students.filter((student) => {
+  // Filtros-base (sem medalha): definem o universo enviado aos hooks de IRA/medalhas
+  const baseFilteredStudents = students.filter((student) => {
     const matchesSearch =
       student.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       student.student_id.toLowerCase().includes(searchTerm.toLowerCase());
@@ -599,21 +604,23 @@ const Students = () => {
 
   // IRA dos alunos visíveis, carregado em lote (poucas queries)
   const { iraByStudent } = useStudentsIra(
-    filteredStudents.map((s) => ({ id: s.id, class: s.class })),
+    baseFilteredStudents.map((s) => ({ id: s.id, class: s.class })),
   );
 
-  // Medalhas acadêmicas por série (derivadas dinamicamente das notas/IRA)
+  // Medalhas acadêmicas por série (disputa sempre por série completa)
   const { medalsByStudent } = useStudentMedals(
-    filteredStudents.map((s) => ({ id: s.id, class: s.class })),
+    baseFilteredStudents.map((s) => ({ id: s.id, class: s.class })),
   );
+
+  // Filtro final de exibição (depende das medalhas já calculadas)
+  const filteredStudents = filterMedals
+    ? baseFilteredStudents.filter((s) => hasMedals(medalsByStudent, s.id))
+    : baseFilteredStudents;
 
   // Alunos com atestado médico ativo hoje (badge em lote, sem CID)
   const activeCertificateStudents = useActiveCertificateStudents(
     format(new Date(), 'yyyy-MM-dd'),
   );
-
-
-
 
   // Aplica ordenação por IRA após o carregamento dos valores (assíncrono)
   const displayStudents = sortBy === 'ira-desc' || sortBy === 'ira-asc'
@@ -628,10 +635,9 @@ const Students = () => {
       })
     : filteredStudents;
 
-  // Turmas em ordem alfabética
-  const uniqueClasses = [...new Set(students.map((s) => s.class))]
-    .filter((c) => c && c.trim() !== '')
-    .sort((a, b) => a.localeCompare(b, 'pt-BR', { sensitivity: 'base' }));
+  // Turmas disponíveis conforme o turno selecionado (fonte canônica: classes)
+  const uniqueClasses = classOptionsForShift(classes, students, filterShift);
+
 
   const getOccurrenceTypeLabel = (type: string) => {
     return OCCURRENCE_TYPES.find(t => t.value === type)?.label || type;
@@ -927,7 +933,15 @@ const Students = () => {
                   ))}
                 </SelectContent>
               </Select>
-              <Select value={filterShift} onValueChange={setFilterShift}>
+              <Select
+                value={filterShift}
+                onValueChange={(v) => {
+                  setFilterShift(v);
+                  if (!isClassValidForShift(classes, students, v, filterClass)) {
+                    setFilterClass('all');
+                  }
+                }}
+              >
                 <SelectTrigger className="w-full sm:w-36">
                   <SelectValue placeholder="Todos os Turnos" />
                 </SelectTrigger>
@@ -960,6 +974,17 @@ const Students = () => {
                   Alunos com ocorrência
                 </Label>
               </div>
+              <div className="flex items-center gap-2 mt-3 sm:mt-0">
+                <Checkbox
+                  id="filterMedals"
+                  checked={filterMedals}
+                  onCheckedChange={(checked) => setFilterMedals(!!checked)}
+                />
+                <Label htmlFor="filterMedals" className="text-sm cursor-pointer whitespace-nowrap">
+                  Alunos com medalhas
+                </Label>
+              </div>
+
             </div>
           </CardContent>
         </Card>
@@ -1096,11 +1121,16 @@ const Students = () => {
           <Card>
             <CardContent className="p-12 text-center">
               <User className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
-              <h3 className="font-medium mb-1">Nenhum aluno encontrado</h3>
+              <h3 className="font-medium mb-1">
+                {filterMedals ? 'Nenhum aluno com medalhas' : 'Nenhum aluno encontrado'}
+              </h3>
               <p className="text-sm text-muted-foreground">
-                {searchTerm || filterClass !== 'all'
+                {filterMedals
+                  ? 'Nenhum aluno condecorado nos filtros atuais'
+                  : searchTerm || filterClass !== 'all' || filterShift !== 'all'
                   ? 'Tente ajustar os filtros'
                   : 'Adicione seu primeiro aluno para começar'}
+
               </p>
             </CardContent>
           </Card>
