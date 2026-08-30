@@ -203,6 +203,45 @@ export type Database = {
           },
         ]
       }
+      daily_attendance_closures: {
+        Row: {
+          absent_count: number
+          class_name: string
+          closed_by: string | null
+          created_at: string
+          date: string
+          id: string
+          present_count: number
+          shift: string | null
+          student_count: number
+          updated_at: string
+        }
+        Insert: {
+          absent_count?: number
+          class_name: string
+          closed_by?: string | null
+          created_at?: string
+          date: string
+          id?: string
+          present_count?: number
+          shift?: string | null
+          student_count?: number
+          updated_at?: string
+        }
+        Update: {
+          absent_count?: number
+          class_name?: string
+          closed_by?: string | null
+          created_at?: string
+          date?: string
+          id?: string
+          present_count?: number
+          shift?: string | null
+          student_count?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       grade_import_jobs: {
         Row: {
           class_id: string
