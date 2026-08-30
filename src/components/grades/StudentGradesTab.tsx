@@ -10,6 +10,7 @@ import { useClassIdByName } from '@/hooks/useClassId';
 import { describePeriods, formatGrade, formatIra } from '@/lib/ira';
 import { IRABreakdown } from './IRABreakdown';
 import { cn } from '@/lib/utils';
+import { canonicalSubjectKey } from '@/lib/gradePageLocal/normalize';
 
 interface StudentGradesTabProps {
   studentId: string;
