@@ -67,8 +67,10 @@ const HIGHLIGHTS: HighlightCard[] = [
 ];
 
 const Dashboard = () => {
-  const { userRole, user } = useAuth();
+  const { userRole } = useAuth();
   const role = userRole || 'user';
+  const { fullName, loading: nameLoading } = useUserFullName();
+  const { schoolName, heroUrl, loading: schoolLoading } = useSchoolProfile();
 
   // Permissões: reaproveita exatamente a mesma matriz de rotas/menu.
   const allowedHrefs = new Set(
@@ -76,23 +78,77 @@ const Dashboard = () => {
   );
   const cards = HIGHLIGHTS.filter((card) => allowedHrefs.has(card.href));
 
-  const firstName = user?.email?.split('@')[0];
+  const infoLoading = nameLoading || schoolLoading;
+  const greeting = (() => {
+    if (fullName && schoolName) {
+      return `Bem-vindo, ${fullName}, ao sistema de secretaria digital do ${schoolName}.`;
+    }
+    if (fullName) return `Bem-vindo, ${fullName}!`;
+    if (schoolName) return `Bem-vindo ao sistema de secretaria digital do ${schoolName}.`;
+    return 'Bem-vindo ao EDUNEXUS!';
+  })();
+
+  const hasHero = !!heroUrl;
 
   return (
     <DashboardLayout>
       <div className="space-y-8">
-        <header className="relative overflow-hidden rounded-2xl border border-border bg-gradient-to-br from-primary/10 via-background to-accent/40 p-6 sm:p-10">
-          <span className="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-background/70 px-3 py-1 text-xs font-medium text-primary">
-            <Sparkles className="h-3.5 w-3.5" />
-            EDUNEXUS
-          </span>
-          <h1 className="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl">
-            {firstName ? `Bem-vindo, ${firstName}!` : 'Bem-vindo ao EDUNEXUS!'}
-          </h1>
-          <p className="mt-2 max-w-xl text-sm text-muted-foreground sm:text-base">
-            Escolha uma área abaixo para começar a gestão pedagógica da escola.
-          </p>
+        <header
+          className={cn(
+            'relative overflow-hidden rounded-2xl border border-border p-6 sm:p-10',
+            !hasHero && 'bg-gradient-to-br from-primary/10 via-background to-accent/40',
+          )}
+        >
+          {hasHero && (
+            <>
+              <img
+                src={heroUrl!}
+                alt={schoolName ? `Foto de destaque do ${schoolName}` : 'Foto de destaque da escola'}
+                className="absolute inset-0 h-full w-full object-cover object-center"
+              />
+              <span
+                aria-hidden
+                className="absolute inset-0 bg-gradient-to-r from-black/85 via-black/70 to-black/50"
+              />
+            </>
+          )}
+
+          <div className={cn('relative', hasHero && 'text-white')}>
+            <span
+              className={cn(
+                'inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-medium',
+                hasHero
+                  ? 'border border-white/40 bg-white/15 text-white backdrop-blur-sm'
+                  : 'border border-primary/30 bg-background/70 text-primary',
+              )}
+            >
+              <Sparkles className="h-3.5 w-3.5" />
+              EDUNEXUS
+            </span>
+
+            {infoLoading ? (
+              <>
+                <span className="mt-4 block h-8 w-4/5 max-w-xl animate-pulse rounded-md bg-current opacity-15 sm:h-10" />
+                <span className="mt-3 block h-4 w-3/5 max-w-md animate-pulse rounded-md bg-current opacity-10" />
+              </>
+            ) : (
+              <>
+                <h1 className="mt-4 max-w-3xl text-balance break-words text-2xl font-semibold leading-tight tracking-tight sm:text-3xl lg:text-4xl">
+                  {greeting}
+                </h1>
+                <p
+                  className={cn(
+                    'mt-2 max-w-xl text-sm sm:text-base',
+                    hasHero ? 'text-white/85' : 'text-muted-foreground',
+                  )}
+                >
+                  Escolha uma área abaixo para começar a gestão pedagógica da escola.
+                </p>
+              </>
+            )}
+          </div>
         </header>
+
 
         <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {cards.map((card) => (
