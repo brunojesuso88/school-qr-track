@@ -9,7 +9,7 @@ import { CalendarCheck, Clock, Users, AlertCircle, CheckCircle2, ChevronRight, R
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import DailyClassAttendanceDialog from './DailyClassAttendanceDialog';
-import { buildDailyClassRows, summarizeDaily, localDateKey, isWeekend, type DailyClassRow } from '@/lib/attendance/dailyStatus';
+import { buildDailyClassRows, summarizeDaily, localDateKey, type DailyClassRow } from '@/lib/attendance/dailyStatus';
 
 const shiftLabel = (shift?: string | null) => {
   switch (shift) {
@@ -33,7 +33,6 @@ const DailyAttendancePanel = () => {
 
   const today = new Date();
   const todayKey = localDateKey(today);
-  const weekend = isWeekend(today);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -100,13 +99,6 @@ const DailyAttendancePanel = () => {
         </CardContent>
       </Card>
 
-      {weekend && (
-        <p className="flex items-center gap-2 text-sm text-muted-foreground">
-          <AlertCircle className="w-4 h-4" />
-          Finais de semana não permitem registro de frequência.
-        </p>
-      )}
-
       {loading ? (
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {Array.from({ length: 6 }).map((_, i) => (
@@ -170,7 +162,7 @@ const DailyAttendancePanel = () => {
                   <Button
                     className="w-full"
                     variant={done ? 'outline' : 'default'}
-                    disabled={weekend || row.activeStudents === 0}
+                    disabled={row.activeStudents === 0}
                     onClick={() => setSelected(row)}
                   >
                     {done ? 'Revisar/Atualizar frequência' : 'Fazer frequência'}

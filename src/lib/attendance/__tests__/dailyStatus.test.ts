@@ -1,11 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import {
-  localDateKey,
-  isWeekend,
-  countActiveStudents,
-  buildDailyClassRows,
-  summarizeDaily,
-} from '../dailyStatus';
+import { localDateKey, countActiveStudents, buildDailyClassRows, summarizeDaily } from '../dailyStatus';
 
 const classes = [
   { id: 'c1', name: '26RMM101', shift: 'morning' },
