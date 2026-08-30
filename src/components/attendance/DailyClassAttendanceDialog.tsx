@@ -7,7 +7,7 @@ import { toast } from 'sonner';
 import { Loader2, CheckCircle2, XCircle, ClipboardList } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { localDateKey, isWeekend } from '@/lib/attendance/dailyStatus';
+import { localDateKey } from '@/lib/attendance/dailyStatus';
 
 interface StudentRow {
   id: string;
@@ -86,10 +86,6 @@ const DailyClassAttendanceDialog = ({ open, onOpenChange, className, shift, onSa
   const absentCount = students.length - presentCount;
 
   const handleSave = async () => {
-    if (isWeekend(new Date())) {
-      toast.error('Não é possível registrar frequência nos finais de semana.');
-      return;
-    }
     setSaving(true);
     try {
       const time = format(new Date(), 'HH:mm:ss');
