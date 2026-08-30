@@ -17,12 +17,16 @@ async function fetchVapidPublicKey(): Promise<string> {
     const { data, error } = await supabase.functions.invoke('push-public-key');
     if (error) throw error;
     const key = (data?.public_key as string | undefined)?.trim() || '';
-    cachedVapidKey = isValidVapidPublicKey(key) ? key : '';
+    // Só cacheia sucesso: falha de rede/servidor não pode travar o app
+    // em "não configurado" até um reload completo.
+    if (isValidVapidPublicKey(key)) {
+      cachedVapidKey = key;
+      return key;
+    }
   } catch (err) {
     console.error('Erro ao obter chave VAPID pública:', err);
-    cachedVapidKey = '';
   }
-  return cachedVapidKey;
+  return '';
 }
 
 
