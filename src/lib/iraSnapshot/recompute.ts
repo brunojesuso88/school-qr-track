@@ -104,6 +104,10 @@ export async function recomputeIraScope(
     });
   }
 
+  const matrixWeeklyByKey = await fetchMatrixWeeklyByKey(
+    scopeClasses.map((c) => parseSeriesValue(c.series)),
+  );
+
   const dataByClass = new Map<string, ClassGradesData>();
   classIds.forEach((classId) => {
     const classSubjectIds = new Set(subjects.filter((s) => s.class_id === classId).map((s) => s.id));
@@ -113,6 +117,7 @@ export async function recomputeIraScope(
       grades: grades.filter((g) => classSubjectIds.has(g.grade_subject_id)),
       settings: settings.find((s) => s.class_id === classId) ?? null,
       currentWeeklyClasses,
+      matrixWeeklyByKey,
     });
   });
 
