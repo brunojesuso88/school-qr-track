@@ -1,9 +1,11 @@
 import { Link } from 'react-router-dom';
 import DashboardLayout from '@/components/DashboardLayout';
 import { useAuth } from '@/contexts/AuthContext';
+import { useSchoolProfile } from '@/hooks/useSchoolProfile';
+import { useUserFullName } from '@/hooks/useUserFullName';
 import { allNavigation } from '@/lib/navigation';
 import { cn } from '@/lib/utils';
-import { ArrowRight, Users, Heart, BookOpen, ClipboardList, CalendarDays, Sparkles } from 'lucide-react';
+import { ArrowRight, Users, Heart, BookOpen, ClipboardList, CalendarDays, Calendar, Sparkles } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
 interface HighlightCard {
