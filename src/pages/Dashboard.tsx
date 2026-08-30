@@ -43,6 +43,13 @@ const HIGHLIGHTS: HighlightCard[] = [
     accent: 'bg-secondary text-secondary-foreground',
   },
   {
+    name: 'Frequências',
+    href: '/attendance',
+    icon: Calendar,
+    description: 'Realize a frequência diária, acompanhe turmas pendentes e consulte registros e relatórios.',
+    accent: 'bg-primary/10 text-primary',
+  },
+  {
     name: 'Projetos',
     href: '/events',
     icon: ClipboardList,
