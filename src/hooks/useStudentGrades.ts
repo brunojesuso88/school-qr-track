@@ -175,10 +175,11 @@ export async function fetchGradesPaged(
 }
 
 async function fetchClassGrades(classId: string, studentIds?: string[]): Promise<ClassGradesData> {
-  const [subjectsRes, periodsRes, settingsRes] = await Promise.all([
+  const [subjectsRes, periodsRes, settingsRes, classRes] = await Promise.all([
     supabase.from('grade_subjects').select('*').eq('class_id', classId).eq('legacy_excluded', false).order('sort_order'),
     supabase.from('grade_periods').select('*').eq('class_id', classId).order('sort_order'),
     supabase.from('ira_settings').select('*').eq('class_id', classId).maybeSingle(),
+    supabase.from('classes').select('series').eq('id', classId).maybeSingle(),
   ]);
 
   const subjects = (subjectsRes.data || []) as unknown as GradeSubjectRow[];
