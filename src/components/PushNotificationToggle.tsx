@@ -20,6 +20,7 @@ export const PushNotificationToggle = () => {
     unsubscribe,
     sendTestNotification,
     isConfigured,
+    keyLoaded,
   } = usePushNotifications();
   const { userRole } = useAuth();
   const canSendTest = userRole === 'admin' || userRole === 'direction';
@@ -113,12 +114,16 @@ export const PushNotificationToggle = () => {
       <Card>
         {header}
         <CardContent>
-          <Alert>
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>
-              Notificações push não estão configuradas neste ambiente.
-            </AlertDescription>
-          </Alert>
+          {keyLoaded ? (
+            <Alert>
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                Notificações push não estão configuradas neste ambiente.
+              </AlertDescription>
+            </Alert>
+          ) : (
+            <p className="text-sm text-muted-foreground">Verificando configuração de notificações...</p>
+          )}
         </CardContent>
       </Card>
     );
