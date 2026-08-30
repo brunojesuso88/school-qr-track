@@ -129,7 +129,6 @@ export const StudentGradesTab = ({ studentId, className }: StudentGradesTabProps
               </thead>
               <tbody>
                 {data.subjects.map((subject) => {
-                {data.subjects.map((subject) => {
                   const mapped = subject.mapping_class_subject_id
                     ? data.currentWeeklyClasses[subject.mapping_class_subject_id]
                     : undefined;
