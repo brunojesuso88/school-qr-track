@@ -104,7 +104,8 @@ export function buildIraInputs(
     const current = subject.mapping_class_subject_id
       ? data.currentWeeklyClasses[subject.mapping_class_subject_id]
       : undefined;
-    const weekly = current ?? subject.weekly_classes ?? null;
+    const fromMatrix = data.matrixWeeklyByKey?.[canonicalSubjectKey(subject.name)];
+    const weekly = current ?? subject.weekly_classes ?? fromMatrix ?? null;
     const valuesByPeriod: Record<string, number | null> = {};
     periodIds.forEach((periodId) => {
       const grade = gradesForStudent.find(
