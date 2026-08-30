@@ -28,7 +28,17 @@ export function computeAreaIra(
   studentId: string,
   areaId: MedalAreaId,
 ): AreaIra {
-  const areaSubjects = data.subjects.filter((s) => subjectBelongsToArea(s.name, areaId));
+  // Matching determinístico por identidade canônica + deduplicação de
+  // aliases/duplicatas históricas (a mesma disciplina nunca pesa duas vezes).
+  const seen = new Set<string>();
+  const areaSubjects = data.subjects
+    .filter((s) => subjectBelongsToArea(s.name, areaId))
+    .filter((s) => {
+      const key = canonicalSubjectKey(s.name);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
   const scoped: ClassGradesData = { ...data, subjects: areaSubjects };
   const periods = resolveIraPeriods(data);
   const result = calculateIraMultiPeriod(
