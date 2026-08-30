@@ -208,5 +208,6 @@ export const usePushNotifications = () => {
     unsubscribe,
     sendTestNotification,
     isConfigured: !!vapidKey,
+    keyLoaded,
   };
 };
