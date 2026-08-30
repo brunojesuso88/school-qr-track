@@ -41,10 +41,15 @@ export const usePushNotifications = () => {
     detectPushPlatform(typeof navigator !== 'undefined' ? navigator.userAgent : '', false),
   );
   const [vapidKey, setVapidKey] = useState<string>(cachedVapidKey ?? '');
+  const [keyLoaded, setKeyLoaded] = useState(cachedVapidKey !== null);
 
   useEffect(() => {
     let active = true;
-    fetchVapidPublicKey().then((key) => { if (active) setVapidKey(key); });
+    fetchVapidPublicKey().then((key) => {
+      if (!active) return;
+      setVapidKey(key);
+      setKeyLoaded(true);
+    });
     return () => { active = false; };
   }, []);
 
