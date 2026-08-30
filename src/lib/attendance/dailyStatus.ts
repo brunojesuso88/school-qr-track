@@ -52,9 +52,6 @@ export function localDateKey(date: Date = new Date()): string {
   return `${y}-${m}-${d}`;
 }
 
-export function isWeekend(date: Date = new Date()): boolean {
-  return [0, 6].includes(date.getDay());
-}
 
 /** Somente alunos ativos entram na contagem/chamada. */
 export function countActiveStudents(students: StudentLike[], className: string): number {

@@ -86,10 +86,6 @@ const DailyClassAttendanceDialog = ({ open, onOpenChange, className, shift, onSa
   const absentCount = students.length - presentCount;
 
   const handleSave = async () => {
-    if (isWeekend(new Date())) {
-      toast.error('Não é possível registrar frequência nos finais de semana.');
-      return;
-    }
     setSaving(true);
     try {
       const time = format(new Date(), 'HH:mm:ss');

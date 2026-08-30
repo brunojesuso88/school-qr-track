@@ -32,13 +32,6 @@ describe('localDateKey', () => {
   });
 });
 
-describe('isWeekend', () => {
-  it('detecta sábado e domingo', () => {
-    expect(isWeekend(new Date(2026, 7, 29))).toBe(true); // sábado
-    expect(isWeekend(new Date(2026, 7, 30))).toBe(true); // domingo
-    expect(isWeekend(new Date(2026, 7, 31))).toBe(false); // segunda
-  });
-});
 
 describe('countActiveStudents', () => {
   it('conta apenas alunos ativos (default = active)', () => {
