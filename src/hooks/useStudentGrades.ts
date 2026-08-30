@@ -51,6 +51,13 @@ export interface ClassGradesData {
   grades: StudentGradeRow[];
   settings: IraSettingsRow | null;
   currentWeeklyClasses: Record<string, number>;
+  /**
+   * Carga semanal OFICIAL da matriz curricular da série, por identidade canônica
+   * da disciplina. Fallback usado quando a turma não tem vínculo de mapeamento
+   * (`mapping_class_subject_id` nulo) e `grade_subjects.weekly_classes` está nulo —
+   * sem isso a disciplina ficava sem peso e desaparecia silenciosamente do IRA.
+   */
+  matrixWeeklyByKey?: Record<string, number>;
 }
 
 const emptyData: ClassGradesData = {
@@ -59,6 +66,7 @@ const emptyData: ClassGradesData = {
   grades: [],
   settings: null,
   currentWeeklyClasses: {},
+  matrixWeeklyByKey: {},
 };
 
 /**
