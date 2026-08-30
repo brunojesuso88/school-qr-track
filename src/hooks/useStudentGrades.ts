@@ -205,12 +205,17 @@ async function fetchClassGrades(classId: string, studentIds?: string[]): Promise
     });
   }
 
+  // Fonte de verdade da carga semanal quando não há vínculo de mapeamento.
+  const series = parseSeriesValue((classRes.data as { series: string | null } | null)?.series ?? null);
+  const matrixWeeklyByKey = await fetchMatrixWeeklyByKey([series]);
+
   return {
     subjects,
     periods,
     grades,
     settings: (settingsRes.data as unknown as IraSettingsRow) ?? null,
     currentWeeklyClasses,
+    matrixWeeklyByKey,
   };
 }
 
