@@ -10,7 +10,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Building2, Loader2, Check, Upload } from 'lucide-react';
+import { Building2, Loader2, Check } from 'lucide-react';
+import SchoolHeroImage from './SchoolHeroImage';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
