@@ -11,6 +11,7 @@ import {
   resolveIraPeriods,
   toPeriodRefs,
 } from '@/hooks/useStudentGrades';
+import { canonicalSubjectKey } from '@/lib/gradePageLocal/normalize';
 import { MEDAL_AREAS, MedalAreaId, subjectBelongsToArea } from './areas';
 import { parseSeriesValue, HighSchoolSeries, classSeriesLabel } from '@/lib/series';
 
