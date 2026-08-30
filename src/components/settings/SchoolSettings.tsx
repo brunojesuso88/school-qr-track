@@ -160,6 +160,8 @@ const SchoolSettings = () => {
           </Button>
         </CardContent>
       </Card>
+
+      <SchoolHeroImage />
     </div>
   );
 };
