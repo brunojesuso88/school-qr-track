@@ -143,6 +143,6 @@ describe('carga semanal oficial da matriz como fonte de verdade', () => {
       { studentId: 'ana', series: '1', data: rival },
     ]);
     expect(medals['ana']?.some((m) => m.areaId === 'linguagens')).toBe(true);
-    expect(medals['joao']?.some((m) => m.areaId === 'linguagens')).toBe(false);
+    expect(medals['joao']?.some((m) => m.areaId === 'linguagens') ?? false).toBe(false);
   });
 });
