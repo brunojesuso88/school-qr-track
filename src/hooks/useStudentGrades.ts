@@ -3,6 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { calculateIraMultiPeriod, IraPeriodRef, IraResult, IraSubjectInput } from '@/lib/ira';
 import { canonicalSubjectKey, isPeriodKind, periodRank } from '@/lib/gradePageLocal/normalize';
 import { fetchMatrixWeeklyByKey } from '@/lib/curriculumMatrixWeekly';
+import { parseSeriesValue } from '@/lib/series';
 
 export interface GradeSubjectRow {
   id: string;
