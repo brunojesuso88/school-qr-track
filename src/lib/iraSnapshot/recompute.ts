@@ -13,6 +13,7 @@ import {
 import { computeMedals, MedalStudentInput } from '@/lib/medals/compute';
 import { parseSeriesValue } from '@/lib/series';
 import { isPeriodKind, periodRank } from '@/lib/gradePageLocal/normalize';
+import { fetchMatrixWeeklyByKey } from '@/lib/curriculumMatrixWeekly';
 import { IraSnapshotRow, SnapshotBuildInput, buildSnapshotRows, isDropout } from './core';
 
 const norm = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
