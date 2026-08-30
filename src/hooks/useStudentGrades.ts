@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { calculateIraMultiPeriod, IraPeriodRef, IraResult, IraSubjectInput } from '@/lib/ira';
-import { isPeriodKind, periodRank } from '@/lib/gradePageLocal/normalize';
+import { canonicalSubjectKey, isPeriodKind, periodRank } from '@/lib/gradePageLocal/normalize';
+import { fetchMatrixWeeklyByKey } from '@/lib/curriculumMatrixWeekly';
 
 export interface GradeSubjectRow {
   id: string;
