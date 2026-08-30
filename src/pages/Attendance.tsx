@@ -17,6 +17,9 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { useToast } from '@/hooks/use-toast';
 import { useCertificateCoverage } from '@/hooks/useCertificateCoverage';
 import { isCovered } from '@/lib/medicalCertificates/status';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import DailyAttendancePanel from '@/components/attendance/DailyAttendancePanel';
+
 
 interface Student {
   id: string;
