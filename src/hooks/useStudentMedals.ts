@@ -95,6 +95,8 @@ export function useStudentMedals(visible: { id: string; class: string }[]) {
           });
         }
 
+        const matrixWeeklyByKey = await fetchMatrixWeeklyByKey([...seriesInScope]);
+
         const dataByClass = new Map<string, ClassGradesData>();
         classIds.forEach((classId) => {
           const classSubjectIds = new Set(subjects.filter((s) => s.class_id === classId).map((s) => s.id));
@@ -104,6 +106,7 @@ export function useStudentMedals(visible: { id: string; class: string }[]) {
             grades: grades.filter((g) => classSubjectIds.has(g.grade_subject_id)),
             settings: settings.find((s) => s.class_id === classId) ?? null,
             currentWeeklyClasses,
+            matrixWeeklyByKey,
           });
         });
 
