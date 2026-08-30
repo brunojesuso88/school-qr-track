@@ -1,5 +1,5 @@
+import { Check } from 'lucide-react';
 import { Label } from '@/components/ui/label';
-import { Checkbox } from '@/components/ui/checkbox';
 import { cn } from '@/lib/utils';
 import { COUNCIL_PRESETS } from '@/lib/occurrences/councilPresets';
 
@@ -33,7 +33,15 @@ export const CouncilPresetPicker = ({ selected, onChange }: Props) => {
                   : 'border-border hover:bg-muted/50',
               )}
             >
-              <Checkbox checked={checked} className="pointer-events-none" tabIndex={-1} />
+              <span
+                aria-hidden="true"
+                className={cn(
+                  'flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border',
+                  checked ? 'border-primary bg-primary text-primary-foreground' : 'border-primary',
+                )}
+              >
+                {checked && <Check className="h-3 w-3" />}
+              </span>
               <span>{preset.label}</span>
             </button>
           );
