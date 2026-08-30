@@ -1488,7 +1488,7 @@ const Students = () => {
               </DialogDescription>
             </DialogHeader>
             <form onSubmit={handleAddOccurrence} className="flex flex-col flex-1 min-h-0">
-              <div className="flex-1 min-h-0 overflow-y-auto px-6 py-4 space-y-4">
+              <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-6 py-4 space-y-4">
               {/* Teacher Name Display */}
               {currentUserName && (
                 <div className="flex items-center gap-2 p-3 rounded-md bg-muted/50">
