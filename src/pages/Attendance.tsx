@@ -989,9 +989,10 @@ const Attendance = () => {
             )}
           </CardContent>
         </Card>
-
-        {/* Calendar was moved to top */}
+          </TabsContent>
+        </Tabs>
       </div>
+
     </DashboardLayout>
   );
 };
