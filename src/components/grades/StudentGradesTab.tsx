@@ -129,9 +129,14 @@ export const StudentGradesTab = ({ studentId, className }: StudentGradesTabProps
               </thead>
               <tbody>
                 {data.subjects.map((subject) => {
-                  const weekly = subject.mapping_class_subject_id
-                    ? data.currentWeeklyClasses[subject.mapping_class_subject_id] ?? subject.weekly_classes
-                    : subject.weekly_classes;
+                {data.subjects.map((subject) => {
+                  const mapped = subject.mapping_class_subject_id
+                    ? data.currentWeeklyClasses[subject.mapping_class_subject_id]
+                    : undefined;
+                  const weekly = mapped
+                    ?? subject.weekly_classes
+                    ?? data.matrixWeeklyByKey?.[canonicalSubjectKey(subject.name)]
+                    ?? null;
                   return (
                     <tr key={subject.id} className="border-b last:border-0">
                       <td className="py-2 pr-3 font-medium">
