@@ -610,8 +610,20 @@ const Attendance = () => {
           <ManualAttendanceModal onSuccess={() => { fetchData(); fetchTrendData(); }} />
         </div>
 
+        <Tabs defaultValue="daily" className="space-y-6">
+          <TabsList>
+            <TabsTrigger value="daily">Frequência diária</TabsTrigger>
+            <TabsTrigger value="reports">Relatórios e registros</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="daily" className="space-y-6">
+            <DailyAttendancePanel />
+          </TabsContent>
+
+          <TabsContent value="reports" className="space-y-6">
         {/* Attendance Calendar - moved to top */}
         <AttendanceCalendar />
+
 
         {/* Active Filters Banner */}
         {isFilteredByUrl && (
