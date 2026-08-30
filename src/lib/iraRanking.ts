@@ -14,7 +14,8 @@ import {
   computeIraForStudent, fetchGradesPaged, resolveIraPeriods,
 } from '@/hooks/useStudentGrades';
 import { formatIra } from '@/lib/ira';
-import { HighSchoolSeries } from '@/lib/series';
+import { HighSchoolSeries, parseSeriesValue } from '@/lib/series';
+import { fetchMatrixWeeklyByKey } from '@/lib/curriculumMatrixWeekly';
 import mascotAsset from '@/assets/ira-ranking-mascote.jpg';
 
 export const RANKING_LIMIT = 15;
@@ -121,10 +122,10 @@ export async function buildIraRanking(classIds: string[]): Promise<RankingResult
 
   const { data: classRows, error: classErr } = await supabase
     .from('classes')
-    .select('id, name')
+    .select('id, name, series')
     .in('id', classIds);
   if (classErr) throw classErr;
-  const classes = (classRows || []) as { id: string; name: string }[];
+  const classes = (classRows || []) as { id: string; name: string; series: string | null }[];
   const classNames = classes.map((c) => c.name);
 
   const [studentsRes, subjRes, perRes, settingsRes] = await Promise.all([
@@ -163,6 +164,8 @@ export async function buildIraRanking(classIds: string[]): Promise<RankingResult
   });
   const classNameById = new Map(classes.map((c) => [c.id, c.name]));
 
+  const matrixWeeklyByKey = await fetchMatrixWeeklyByKey(classes.map((c) => parseSeriesValue(c.series)));
+
   const dataByClass = new Map<string, ClassGradesData>();
   classIds.forEach((classId) => {
     const ids = new Set(subjects.filter((s) => s.class_id === classId).map((s) => s.id));
@@ -172,6 +175,7 @@ export async function buildIraRanking(classIds: string[]): Promise<RankingResult
       grades: grades.filter((g) => ids.has(g.grade_subject_id)),
       settings: settings.find((s) => s.class_id === classId) ?? null,
       currentWeeklyClasses,
+      matrixWeeklyByKey,
     });
   });
 

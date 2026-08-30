@@ -5,6 +5,8 @@ import {
   ClassGradesData, GradePeriodRow, GradeSubjectRow, IraSettingsRow, StudentGradeRow,
   computeIraForStudent, fetchGradesPaged,
 } from './useStudentGrades';
+import { fetchMatrixWeeklyByKey } from '@/lib/curriculumMatrixWeekly';
+import { parseSeriesValue } from '@/lib/series';
 
 /**
  * Calcula o IRA de vários alunos em lote (poucas queries, independente da
@@ -43,9 +45,9 @@ export function useStudentsIra(students: { id: string; class: string }[]) {
         // ou turma inexistente) em vez de silenciar.
         const { data: classRows, error: classErr } = await supabase
           .from('classes')
-          .select('id, name');
+          .select('id, name, series');
         if (classErr) throw classErr;
-        const all = (classRows || []) as { id: string; name: string }[];
+        const all = (classRows || []) as { id: string; name: string; series: string | null }[];
         const norm = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
         const byExact = new Map<string, string[]>();
         const byNorm = new Map<string, string[]>();
@@ -104,6 +106,10 @@ export function useStudentsIra(students: { id: string; class: string }[]) {
           });
         }
 
+        const matrixWeeklyByKey = await fetchMatrixWeeklyByKey(
+          all.filter((c) => classIds.includes(c.id)).map((c) => parseSeriesValue(c.series)),
+        );
+
         // Uma estrutura por turma (calculada uma única vez) e o IRA mapeado por aluno.
         const dataByClass = new Map<string, ClassGradesData>();
         classIds.forEach((classId) => {
@@ -114,6 +120,7 @@ export function useStudentsIra(students: { id: string; class: string }[]) {
             grades: grades.filter((g) => classSubjectIds.has(g.grade_subject_id)),
             settings: settings.find((s) => s.class_id === classId) ?? null,
             currentWeeklyClasses,
+            matrixWeeklyByKey,
           });
         });
 

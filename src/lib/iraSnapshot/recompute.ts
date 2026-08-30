@@ -13,6 +13,7 @@ import {
 import { computeMedals, MedalStudentInput } from '@/lib/medals/compute';
 import { parseSeriesValue } from '@/lib/series';
 import { isPeriodKind, periodRank } from '@/lib/gradePageLocal/normalize';
+import { fetchMatrixWeeklyByKey } from '@/lib/curriculumMatrixWeekly';
 import { IraSnapshotRow, SnapshotBuildInput, buildSnapshotRows, isDropout } from './core';
 
 const norm = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
@@ -104,6 +105,10 @@ export async function recomputeIraScope(
     });
   }
 
+  const matrixWeeklyByKey = await fetchMatrixWeeklyByKey(
+    scopeClasses.map((c) => parseSeriesValue(c.series)),
+  );
+
   const dataByClass = new Map<string, ClassGradesData>();
   classIds.forEach((classId) => {
     const classSubjectIds = new Set(subjects.filter((s) => s.class_id === classId).map((s) => s.id));
@@ -113,6 +118,7 @@ export async function recomputeIraScope(
       grades: grades.filter((g) => classSubjectIds.has(g.grade_subject_id)),
       settings: settings.find((s) => s.class_id === classId) ?? null,
       currentWeeklyClasses,
+      matrixWeeklyByKey,
     });
   });
 

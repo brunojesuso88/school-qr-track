@@ -11,6 +11,7 @@ import {
   resolveIraPeriods,
   toPeriodRefs,
 } from '@/hooks/useStudentGrades';
+import { canonicalSubjectKey } from '@/lib/gradePageLocal/normalize';
 import { MEDAL_AREAS, MedalAreaId, subjectBelongsToArea } from './areas';
 import { parseSeriesValue, HighSchoolSeries, classSeriesLabel } from '@/lib/series';
 
@@ -28,7 +29,17 @@ export function computeAreaIra(
   studentId: string,
   areaId: MedalAreaId,
 ): AreaIra {
-  const areaSubjects = data.subjects.filter((s) => subjectBelongsToArea(s.name, areaId));
+  // Matching determinístico por identidade canônica + deduplicação de
+  // aliases/duplicatas históricas (a mesma disciplina nunca pesa duas vezes).
+  const seen = new Set<string>();
+  const areaSubjects = data.subjects
+    .filter((s) => subjectBelongsToArea(s.name, areaId))
+    .filter((s) => {
+      const key = canonicalSubjectKey(s.name);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
   const scoped: ClassGradesData = { ...data, subjects: areaSubjects };
   const periods = resolveIraPeriods(data);
   const result = calculateIraMultiPeriod(
@@ -38,7 +49,10 @@ export function computeAreaIra(
   const hasData =
     result.status === 'ok' &&
     result.lines.some((l) => l.eligible && l.periodValues.some((v) => !v.missing));
-  return { result, subjects: areaSubjects.map((s) => s.name), hasData };
+  // Só reportamos as disciplinas que realmente entraram no cálculo (com peso válido),
+  // evitando exibir na medalha componentes que foram descartados.
+  const counted = result.lines.filter((l) => l.eligible && l.weight != null).map((l) => l.name);
+  return { result, subjects: counted, hasData };
 }
 
 export interface MedalStudentInput {

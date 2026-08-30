@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { calculateIraMultiPeriod, IraPeriodRef, IraResult, IraSubjectInput } from '@/lib/ira';
-import { isPeriodKind, periodRank } from '@/lib/gradePageLocal/normalize';
+import { canonicalSubjectKey, isPeriodKind, periodRank } from '@/lib/gradePageLocal/normalize';
+import { fetchMatrixWeeklyByKey } from '@/lib/curriculumMatrixWeekly';
+import { parseSeriesValue } from '@/lib/series';
 
 export interface GradeSubjectRow {
   id: string;
@@ -51,6 +53,13 @@ export interface ClassGradesData {
   grades: StudentGradeRow[];
   settings: IraSettingsRow | null;
   currentWeeklyClasses: Record<string, number>;
+  /**
+   * Carga semanal OFICIAL da matriz curricular da série, por identidade canônica
+   * da disciplina. Fallback usado quando a turma não tem vínculo de mapeamento
+   * (`mapping_class_subject_id` nulo) e `grade_subjects.weekly_classes` está nulo —
+   * sem isso a disciplina ficava sem peso e desaparecia silenciosamente do IRA.
+   */
+  matrixWeeklyByKey?: Record<string, number>;
 }
 
 const emptyData: ClassGradesData = {
@@ -59,6 +68,7 @@ const emptyData: ClassGradesData = {
   grades: [],
   settings: null,
   currentWeeklyClasses: {},
+  matrixWeeklyByKey: {},
 };
 
 /**
@@ -96,7 +106,8 @@ export function buildIraInputs(
     const current = subject.mapping_class_subject_id
       ? data.currentWeeklyClasses[subject.mapping_class_subject_id]
       : undefined;
-    const weekly = current ?? subject.weekly_classes ?? null;
+    const fromMatrix = data.matrixWeeklyByKey?.[canonicalSubjectKey(subject.name)];
+    const weekly = current ?? subject.weekly_classes ?? fromMatrix ?? null;
     const valuesByPeriod: Record<string, number | null> = {};
     periodIds.forEach((periodId) => {
       const grade = gradesForStudent.find(
@@ -165,10 +176,11 @@ export async function fetchGradesPaged(
 }
 
 async function fetchClassGrades(classId: string, studentIds?: string[]): Promise<ClassGradesData> {
-  const [subjectsRes, periodsRes, settingsRes] = await Promise.all([
+  const [subjectsRes, periodsRes, settingsRes, classRes] = await Promise.all([
     supabase.from('grade_subjects').select('*').eq('class_id', classId).eq('legacy_excluded', false).order('sort_order'),
     supabase.from('grade_periods').select('*').eq('class_id', classId).order('sort_order'),
     supabase.from('ira_settings').select('*').eq('class_id', classId).maybeSingle(),
+    supabase.from('classes').select('series').eq('id', classId).maybeSingle(),
   ]);
 
   const subjects = (subjectsRes.data || []) as unknown as GradeSubjectRow[];
@@ -194,12 +206,17 @@ async function fetchClassGrades(classId: string, studentIds?: string[]): Promise
     });
   }
 
+  // Fonte de verdade da carga semanal quando não há vínculo de mapeamento.
+  const series = parseSeriesValue((classRes.data as { series: string | null } | null)?.series ?? null);
+  const matrixWeeklyByKey = await fetchMatrixWeeklyByKey([series]);
+
   return {
     subjects,
     periods,
     grades,
     settings: (settingsRes.data as unknown as IraSettingsRow) ?? null,
     currentWeeklyClasses,
+    matrixWeeklyByKey,
   };
 }
 

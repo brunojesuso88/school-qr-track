@@ -7,6 +7,7 @@ import {
 import { computeMedals, MedalStudentInput, StudentMedal } from '@/lib/medals/compute';
 import { parseSeriesValue } from '@/lib/series';
 import { isPeriodKind, periodRank } from '@/lib/gradePageLocal/normalize';
+import { fetchMatrixWeeklyByKey } from '@/lib/curriculumMatrixWeekly';
 
 const norm = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
 
@@ -95,6 +96,8 @@ export function useStudentMedals(visible: { id: string; class: string }[]) {
           });
         }
 
+        const matrixWeeklyByKey = await fetchMatrixWeeklyByKey([...seriesInScope]);
+
         const dataByClass = new Map<string, ClassGradesData>();
         classIds.forEach((classId) => {
           const classSubjectIds = new Set(subjects.filter((s) => s.class_id === classId).map((s) => s.id));
@@ -104,6 +107,7 @@ export function useStudentMedals(visible: { id: string; class: string }[]) {
             grades: grades.filter((g) => classSubjectIds.has(g.grade_subject_id)),
             settings: settings.find((s) => s.class_id === classId) ?? null,
             currentWeeklyClasses,
+            matrixWeeklyByKey,
           });
         });
 
