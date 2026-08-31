@@ -145,10 +145,20 @@ const DailyAttendancePanel = () => {
                         </span>
                       </p>
                     </div>
-                    <Badge variant={done ? 'default' : 'outline'} className="shrink-0 gap-1">
-                      {done ? <CheckCircle2 className="w-3 h-3" /> : <AlertCircle className="w-3 h-3" />}
-                      {done ? 'Realizada' : 'Pendente'}
-                    </Badge>
+                  </div>
+
+                  <div>
+                    {done ? (
+                      <Badge className="bg-emerald-600 hover:bg-emerald-700 text-white border-0 text-xs">
+                        <CheckCircle2 className="w-3 h-3 mr-1" />
+                        Frequência realizada
+                      </Badge>
+                    ) : (
+                      <Badge variant="destructive" className="text-xs">
+                        <AlertCircle className="w-3 h-3 mr-1" />
+                        Frequência pendente
+                      </Badge>
+                    )}
                   </div>
 
                   {done && (
@@ -160,15 +170,33 @@ const DailyAttendancePanel = () => {
                   )}
 
                   <Button
-                    className="w-full"
-                    variant={done ? 'outline' : 'default'}
+                    className={
+                      done
+                        ? 'w-full bg-emerald-600 hover:bg-emerald-700 text-white'
+                        : 'w-full bg-destructive hover:bg-destructive/90 text-destructive-foreground'
+                    }
+                    size="sm"
                     disabled={row.activeStudents === 0}
                     onClick={() => setSelected(row)}
                   >
+                    <CalendarCheck className="w-3 h-3 mr-2" />
                     {done ? 'Revisar/Atualizar frequência' : 'Fazer frequência'}
                     <ChevronRight className="w-4 h-4 ml-1" />
                   </Button>
+
+                  {done && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full text-destructive border-destructive/30 hover:bg-destructive/10"
+                      onClick={() => handleDownloadAbsentStudents(row.name)}
+                    >
+                      <Download className="w-3 h-3 mr-2" />
+                      Alunos Faltosos
+                    </Button>
+                  )}
                 </CardContent>
+
               </Card>
             );
           })}
