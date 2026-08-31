@@ -25,7 +25,7 @@ interface Props {
 const DailyClassAttendanceDialog = ({ open, onOpenChange, className, shift, onSaved }: Props) => {
   const { user } = useAuth();
   const [students, setStudents] = useState<StudentRow[]>([]);
-  const [attendance, setAttendance] = useState<Record<string, 'present' | 'absent'>>({});
+  const [attendance, setAttendance] = useState<Record<string, 'present' | 'absent' | 'justified'>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -42,25 +42,33 @@ const DailyClassAttendanceDialog = ({ open, onOpenChange, className, shift, onSa
       setLoading(true);
       setError(null);
       try {
-        const [studentsRes, attendanceRes] = await Promise.all([
-          supabase
-            .from('students')
-            .select('id, full_name')
-            .eq('class', className)
-            .eq('status', 'active')
-            .order('full_name'),
-          supabase.from('attendance').select('student_id, status').eq('date', todayKey),
-        ]);
+        const studentsRes = await supabase
+          .from('students')
+          .select('id, full_name')
+          .eq('class', className)
+          .eq('status', 'active')
+          .order('full_name');
         if (studentsRes.error) throw studentsRes.error;
         if (cancelled) return;
 
         const list = studentsRes.data || [];
         const existing = new Map<string, string>();
-        (attendanceRes.data || []).forEach((a) => existing.set(a.student_id, a.status));
+        if (list.length > 0) {
+          const attendanceRes = await supabase
+            .from('attendance')
+            .select('student_id, status')
+            .eq('date', todayKey)
+            .in('student_id', list.map((s) => s.id));
+          if (attendanceRes.error) throw attendanceRes.error;
+          (attendanceRes.data || []).forEach((a) => existing.set(a.student_id, a.status));
+        }
+        if (cancelled) return;
 
-        const map: Record<string, 'present' | 'absent'> = {};
+        const map: Record<string, 'present' | 'absent' | 'justified'> = {};
         list.forEach((s) => {
-          map[s.id] = existing.get(s.id) === 'absent' ? 'absent' : 'present';
+          const current = existing.get(s.id);
+          map[s.id] =
+            current === 'absent' ? 'absent' : current === 'justified' ? 'justified' : 'present';
         });
 
         setStudents(list);
@@ -78,12 +86,13 @@ const DailyClassAttendanceDialog = ({ open, onOpenChange, className, shift, onSa
     };
   }, [open, className, todayKey]);
 
-  const setStatus = (studentId: string, status: 'present' | 'absent') => {
+  const setStatus = (studentId: string, status: 'present' | 'absent' | 'justified') => {
     setAttendance((prev) => ({ ...prev, [studentId]: status }));
   };
 
   const presentCount = students.filter((s) => (attendance[s.id] ?? 'present') === 'present').length;
-  const absentCount = students.length - presentCount;
+  const justifiedCount = students.filter((s) => attendance[s.id] === 'justified').length;
+  const absentCount = students.filter((s) => attendance[s.id] === 'absent').length;
 
   const handleSave = async () => {
     setSaving(true);
