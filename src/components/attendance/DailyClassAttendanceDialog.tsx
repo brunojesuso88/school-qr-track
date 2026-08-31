@@ -4,7 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
-import { Loader2, CheckCircle2, XCircle, ClipboardList } from 'lucide-react';
+import { Loader2, CheckCircle2, XCircle, ClipboardList, FileCheck } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { localDateKey } from '@/lib/attendance/dailyStatus';
@@ -25,7 +25,7 @@ interface Props {
 const DailyClassAttendanceDialog = ({ open, onOpenChange, className, shift, onSaved }: Props) => {
   const { user } = useAuth();
   const [students, setStudents] = useState<StudentRow[]>([]);
-  const [attendance, setAttendance] = useState<Record<string, 'present' | 'absent'>>({});
+  const [attendance, setAttendance] = useState<Record<string, 'present' | 'absent' | 'justified'>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -42,25 +42,33 @@ const DailyClassAttendanceDialog = ({ open, onOpenChange, className, shift, onSa
       setLoading(true);
       setError(null);
       try {
-        const [studentsRes, attendanceRes] = await Promise.all([
-          supabase
-            .from('students')
-            .select('id, full_name')
-            .eq('class', className)
-            .eq('status', 'active')
-            .order('full_name'),
-          supabase.from('attendance').select('student_id, status').eq('date', todayKey),
-        ]);
+        const studentsRes = await supabase
+          .from('students')
+          .select('id, full_name')
+          .eq('class', className)
+          .eq('status', 'active')
+          .order('full_name');
         if (studentsRes.error) throw studentsRes.error;
         if (cancelled) return;
 
         const list = studentsRes.data || [];
         const existing = new Map<string, string>();
-        (attendanceRes.data || []).forEach((a) => existing.set(a.student_id, a.status));
+        if (list.length > 0) {
+          const attendanceRes = await supabase
+            .from('attendance')
+            .select('student_id, status')
+            .eq('date', todayKey)
+            .in('student_id', list.map((s) => s.id));
+          if (attendanceRes.error) throw attendanceRes.error;
+          (attendanceRes.data || []).forEach((a) => existing.set(a.student_id, a.status));
+        }
+        if (cancelled) return;
 
-        const map: Record<string, 'present' | 'absent'> = {};
+        const map: Record<string, 'present' | 'absent' | 'justified'> = {};
         list.forEach((s) => {
-          map[s.id] = existing.get(s.id) === 'absent' ? 'absent' : 'present';
+          const current = existing.get(s.id);
+          map[s.id] =
+            current === 'absent' ? 'absent' : current === 'justified' ? 'justified' : 'present';
         });
 
         setStudents(list);
@@ -78,12 +86,13 @@ const DailyClassAttendanceDialog = ({ open, onOpenChange, className, shift, onSa
     };
   }, [open, className, todayKey]);
 
-  const setStatus = (studentId: string, status: 'present' | 'absent') => {
+  const setStatus = (studentId: string, status: 'present' | 'absent' | 'justified') => {
     setAttendance((prev) => ({ ...prev, [studentId]: status }));
   };
 
   const presentCount = students.filter((s) => (attendance[s.id] ?? 'present') === 'present').length;
-  const absentCount = students.length - presentCount;
+  const justifiedCount = students.filter((s) => attendance[s.id] === 'justified').length;
+  const absentCount = students.filter((s) => attendance[s.id] === 'absent').length;
 
   const handleSave = async () => {
     setSaving(true);
@@ -111,7 +120,7 @@ const DailyClassAttendanceDialog = ({ open, onOpenChange, className, shift, onSa
           shift: shift ?? null,
           student_count: students.length,
           present_count: presentCount,
-          absent_count: absentCount,
+          absent_count: absentCount + justifiedCount,
           closed_by: user?.id ?? null,
           updated_at: new Date().toISOString(),
         },
@@ -119,7 +128,9 @@ const DailyClassAttendanceDialog = ({ open, onOpenChange, className, shift, onSa
       );
       if (closeErr) throw closeErr;
 
-      toast.success(`Frequência de ${className} registrada (${presentCount}P / ${absentCount}A)`);
+      toast.success(
+        `Frequência de ${className} registrada (${presentCount}P / ${absentCount}A / ${justifiedCount}J)`,
+      );
       onSaved?.();
       onOpenChange(false);
     } catch (e: any) {
@@ -146,6 +157,9 @@ const DailyClassAttendanceDialog = ({ open, onOpenChange, className, shift, onSa
           </span>
           <span className="flex items-center gap-1 text-destructive">
             <XCircle className="w-4 h-4" /> {absentCount} ausentes
+          </span>
+          <span className="flex items-center gap-1 text-amber-600">
+            <FileCheck className="w-4 h-4" /> {justifiedCount} justificados
           </span>
         </div>
 
@@ -185,6 +199,16 @@ const DailyClassAttendanceDialog = ({ open, onOpenChange, className, shift, onSa
                       onClick={() => setStatus(student.id, 'absent')}
                     >
                       <XCircle className="w-3.5 h-3.5 mr-1" />A
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={status === 'justified' ? 'secondary' : 'outline'}
+                      aria-pressed={status === 'justified'}
+                      title="Justificado"
+                      onClick={() => setStatus(student.id, 'justified')}
+                    >
+                      <FileCheck className="w-3.5 h-3.5 mr-1" />J
                     </Button>
                   </div>
                 </div>
