@@ -14,9 +14,13 @@ import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import {
   areDatesValid,
+  durationFromDates,
   durationInDays,
+  endDateFromDuration,
   findActiveOverlap,
+  isValidDuration,
   OVERLAP_MESSAGE,
+  parseDateKey,
   toDateKey,
 } from '@/lib/medicalCertificates/status';
 import {
