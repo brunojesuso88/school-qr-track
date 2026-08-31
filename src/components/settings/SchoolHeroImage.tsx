@@ -4,13 +4,13 @@ import { Button } from '@/components/ui/button';
 import { Image as ImageIcon, Loader2, Trash2, Upload } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { useSchoolProfile } from '@/hooks/useSchoolProfile';
 import {
-  SCHOOL_HERO_BUCKET,
+  SCHOOL_BRANDING_BUCKET as SCHOOL_HERO_BUCKET,
   SCHOOL_HERO_SETTING_KEY,
-  useSchoolProfile,
-} from '@/hooks/useSchoolProfile';
-
-const MAX_SIZE = 5 * 1024 * 1024;
+  buildBrandingPath,
+  validateBrandingImage,
+} from '@/lib/school/branding';
 
 const SchoolHeroImage = () => {
   const { heroUrl, heroPath, loading, refetch } = useSchoolProfile();
@@ -18,19 +18,15 @@ const SchoolHeroImage = () => {
   const inputRef = useRef<HTMLInputElement>(null);
 
   const handleFile = async (file: File) => {
-    if (!file.type.startsWith('image/')) {
-      toast.error('Selecione um arquivo de imagem válido');
-      return;
-    }
-    if (file.size > MAX_SIZE) {
-      toast.error('A imagem deve ter no máximo 5MB');
+    const check = validateBrandingImage(file);
+    if (!check.ok) {
+      toast.error(check.error);
       return;
     }
 
     setBusy(true);
     try {
-      const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
-      const path = `branding/hero-${Date.now()}.${ext}`;
+      const path = buildBrandingPath('hero', file.name);
 
       const { error: uploadError } = await supabase.storage
         .from(SCHOOL_HERO_BUCKET)

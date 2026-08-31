@@ -10,12 +10,9 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
 import { PushNotificationToggle } from '@/components/PushNotificationToggle';
-import { useAuth } from '@/contexts/AuthContext';
 import NotificationPreferences from '@/components/notifications/NotificationPreferences';
 
 const NotificationSettings = () => {
-  const { userRole } = useAuth();
-  const isAdmin = userRole === 'admin';
   
   const [settings, setSettings] = useState({
     whatsappEnabled: false,
