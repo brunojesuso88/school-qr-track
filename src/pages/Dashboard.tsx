@@ -133,12 +133,12 @@ const Dashboard = () => {
               </>
             ) : (
               <>
-                <h1 className="mt-4 max-w-3xl text-balance break-words text-2xl font-semibold leading-tight tracking-tight sm:text-3xl lg:text-4xl">
+                <h1 className="mt-3 max-w-2xl text-balance break-words text-xl font-semibold leading-snug tracking-tight sm:text-2xl lg:text-3xl">
                   {greeting}
                 </h1>
                 <p
                   className={cn(
-                    'mt-2 max-w-xl text-sm sm:text-base',
+                    'mt-1.5 max-w-xl text-xs sm:text-sm',
                     hasHero ? 'text-white/85' : 'text-muted-foreground',
                   )}
                 >

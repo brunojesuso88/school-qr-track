@@ -53,7 +53,7 @@ const Settings = () => {
             </TabsTrigger>
             <TabsTrigger value="notifications" className="flex items-center gap-2 py-2">
               <MessageSquare className="h-4 w-4" />
-              <span className="hidden sm:inline">Notificações</span>
+              <span className="hidden sm:inline">Central de notificações</span>
             </TabsTrigger>
             {/* Only show Users tab for admin */}
             {canManageUsers && (
