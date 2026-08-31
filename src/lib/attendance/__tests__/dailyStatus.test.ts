@@ -92,3 +92,58 @@ describe('summarizeDaily', () => {
     expect(summarizeDaily(rows)).toEqual({ total: 3, done: 1, pending: 2 });
   });
 });
+
+import {
+  mergeExistingStatuses,
+  countMarks,
+  buildAttendanceRecords,
+  buildClosureRow,
+  type AttendanceMark,
+} from '../dailyStatus';
+
+describe('persistência canônica compartilhada (Turmas e Frequência diária)', () => {
+  const list = [{ id: 's1' }, { id: 's2' }, { id: 's3' }];
+
+  it('inicia todos como presentes preservando registros existentes', () => {
+    const marks = mergeExistingStatuses(list, [
+      { student_id: 's2', status: 'justified' },
+      { student_id: 's3', status: 'absent' },
+    ]);
+    expect(marks).toEqual({ s1: 'present', s2: 'justified', s3: 'absent' });
+  });
+
+  it('conta presentes/ausentes/justificados', () => {
+    const marks: Record<string, AttendanceMark> = { s2: 'justified', s3: 'absent' };
+    expect(countMarks(list, marks)).toEqual({ present: 1, absent: 1, justified: 1, total: 3 });
+  });
+
+  it('gera uma única linha por aluno+data com data local e responsável', () => {
+    const recs = buildAttendanceRecords(list, { s3: 'absent' }, '2026-08-31', '07:10:00', 'u1');
+    expect(recs).toHaveLength(3);
+    expect(new Set(recs.map((r) => `${r.student_id}|${r.date}`)).size).toBe(3);
+    expect(recs.every((r) => r.date === '2026-08-31' && r.recorded_by === 'u1')).toBe(true);
+    expect(recs.find((r) => r.student_id === 's3')!.status).toBe('absent');
+  });
+
+  it('gera fechamento turma+data (usado pelos dois pontos de entrada)', () => {
+    const counts = countMarks(list, { s2: 'justified', s3: 'absent' });
+    const row = buildClosureRow('26RMM101', '2026-08-31', 'morning', counts, 'u1', 'ts');
+    expect(row).toEqual({
+      class_name: '26RMM101',
+      date: '2026-08-31',
+      shift: 'morning',
+      student_count: 3,
+      present_count: 1,
+      absent_count: 2,
+      closed_by: 'u1',
+      updated_at: 'ts',
+    });
+  });
+
+  it('salvar por Turmas marca a turma como Realizada no status diário', () => {
+    const counts = countMarks(list, {});
+    const closure = buildClosureRow('26RMM101', '2026-08-31', 'morning', counts, 'u1', 'ts');
+    const rows = buildDailyClassRows(classes, students, [closure], '2026-08-31');
+    expect(rows.find((r) => r.name === '26RMM101')!.status).toBe('done');
+  });
+});

@@ -7,7 +7,14 @@ import { toast } from 'sonner';
 import { Loader2, CheckCircle2, XCircle, ClipboardList, FileCheck } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { localDateKey } from '@/lib/attendance/dailyStatus';
+import {
+  localDateKey,
+  mergeExistingStatuses,
+  countMarks,
+  buildAttendanceRecords,
+  buildClosureRow,
+  type AttendanceMark,
+} from '@/lib/attendance/dailyStatus';
 
 interface StudentRow {
   id: string;
@@ -20,12 +27,14 @@ interface Props {
   className: string;
   shift?: string | null;
   onSaved?: () => void;
+  /** Rótulo do cabeçalho (a mesma chamada é acessada por Turmas e por Frequência). */
+  title?: string;
 }
 
-const DailyClassAttendanceDialog = ({ open, onOpenChange, className, shift, onSaved }: Props) => {
+const DailyClassAttendanceDialog = ({ open, onOpenChange, className, shift, onSaved, title }: Props) => {
   const { user } = useAuth();
   const [students, setStudents] = useState<StudentRow[]>([]);
-  const [attendance, setAttendance] = useState<Record<string, 'present' | 'absent' | 'justified'>>({});
+  const [attendance, setAttendance] = useState<Record<string, AttendanceMark>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -52,7 +61,7 @@ const DailyClassAttendanceDialog = ({ open, onOpenChange, className, shift, onSa
         if (cancelled) return;
 
         const list = studentsRes.data || [];
-        const existing = new Map<string, string>();
+        let existing: { student_id: string; status: string }[] = [];
         if (list.length > 0) {
           const attendanceRes = await supabase
             .from('attendance')
@@ -60,19 +69,12 @@ const DailyClassAttendanceDialog = ({ open, onOpenChange, className, shift, onSa
             .eq('date', todayKey)
             .in('student_id', list.map((s) => s.id));
           if (attendanceRes.error) throw attendanceRes.error;
-          (attendanceRes.data || []).forEach((a) => existing.set(a.student_id, a.status));
+          existing = attendanceRes.data || [];
         }
         if (cancelled) return;
 
-        const map: Record<string, 'present' | 'absent' | 'justified'> = {};
-        list.forEach((s) => {
-          const current = existing.get(s.id);
-          map[s.id] =
-            current === 'absent' ? 'absent' : current === 'justified' ? 'justified' : 'present';
-        });
-
         setStudents(list);
-        setAttendance(map);
+        setAttendance(mergeExistingStatuses(list, existing));
       } catch (e) {
         if (!cancelled) setError('Não foi possível carregar os alunos desta turma.');
       } finally {
@@ -86,25 +88,20 @@ const DailyClassAttendanceDialog = ({ open, onOpenChange, className, shift, onSa
     };
   }, [open, className, todayKey]);
 
-  const setStatus = (studentId: string, status: 'present' | 'absent' | 'justified') => {
+  const setStatus = (studentId: string, status: AttendanceMark) => {
     setAttendance((prev) => ({ ...prev, [studentId]: status }));
   };
 
-  const presentCount = students.filter((s) => (attendance[s.id] ?? 'present') === 'present').length;
-  const justifiedCount = students.filter((s) => attendance[s.id] === 'justified').length;
-  const absentCount = students.filter((s) => attendance[s.id] === 'absent').length;
+  const counts = countMarks(students, attendance);
+  const presentCount = counts.present;
+  const justifiedCount = counts.justified;
+  const absentCount = counts.absent;
 
   const handleSave = async () => {
     setSaving(true);
     try {
       const time = format(new Date(), 'HH:mm:ss');
-      const records = students.map((s) => ({
-        student_id: s.id,
-        date: todayKey,
-        status: attendance[s.id] ?? 'present',
-        time,
-        recorded_by: user?.id ?? null,
-      }));
+      const records = buildAttendanceRecords(students, attendance, todayKey, time, user?.id ?? null);
 
       if (records.length > 0) {
         const { error: attErr } = await supabase
@@ -114,16 +111,7 @@ const DailyClassAttendanceDialog = ({ open, onOpenChange, className, shift, onSa
       }
 
       const { error: closeErr } = await supabase.from('daily_attendance_closures').upsert(
-        {
-          class_name: className,
-          date: todayKey,
-          shift: shift ?? null,
-          student_count: students.length,
-          present_count: presentCount,
-          absent_count: absentCount + justifiedCount,
-          closed_by: user?.id ?? null,
-          updated_at: new Date().toISOString(),
-        },
+        buildClosureRow(className, todayKey, shift ?? null, counts, user?.id ?? null, new Date().toISOString()),
         { onConflict: 'class_name,date' },
       );
       if (closeErr) throw closeErr;
@@ -146,7 +134,7 @@ const DailyClassAttendanceDialog = ({ open, onOpenChange, className, shift, onSa
         <DialogHeader className="shrink-0">
           <DialogTitle className="flex items-center gap-2">
             <ClipboardList className="w-5 h-5 text-primary" />
-            Frequência diária — {className}
+            {title ?? 'Frequência diária'} — {className}
           </DialogTitle>
           <DialogDescription>{todayLabel}</DialogDescription>
         </DialogHeader>

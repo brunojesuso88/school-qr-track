@@ -100,3 +100,78 @@ export function summarizeDaily(rows: DailyClassRow[]): DailySummary {
   const done = rows.filter((r) => r.status === 'done').length;
   return { total: rows.length, done, pending: rows.length - done };
 }
+
+/* ------------------------------------------------------------------ *
+ * Persistência canônica da chamada de turma (usada em Turmas e em
+ * Frequência > Frequência diária — mesma fonte de verdade).
+ * ------------------------------------------------------------------ */
+
+export type AttendanceMark = 'present' | 'absent' | 'justified';
+
+/**
+ * Estado inicial da chamada: todos presentes por padrão, preservando
+ * registros já existentes (inclusive "justified").
+ */
+export function mergeExistingStatuses(
+  students: { id: string }[],
+  existing: { student_id: string; status: string }[],
+): Record<string, AttendanceMark> {
+  const map = new Map(existing.map((e) => [e.student_id, e.status]));
+  const out: Record<string, AttendanceMark> = {};
+  for (const s of students) {
+    const current = map.get(s.id);
+    out[s.id] = current === 'absent' ? 'absent' : current === 'justified' ? 'justified' : 'present';
+  }
+  return out;
+}
+
+export function countMarks(students: { id: string }[], marks: Record<string, AttendanceMark>) {
+  let present = 0;
+  let absent = 0;
+  let justified = 0;
+  for (const s of students) {
+    const m = marks[s.id] ?? 'present';
+    if (m === 'absent') absent++;
+    else if (m === 'justified') justified++;
+    else present++;
+  }
+  return { present, absent, justified, total: students.length };
+}
+
+/** Linhas de `attendance` (unicidade lógica student_id + date). */
+export function buildAttendanceRecords(
+  students: { id: string }[],
+  marks: Record<string, AttendanceMark>,
+  dateKey: string,
+  time: string,
+  recordedBy: string | null,
+) {
+  return students.map((s) => ({
+    student_id: s.id,
+    date: dateKey,
+    status: marks[s.id] ?? 'present',
+    time,
+    recorded_by: recordedBy,
+  }));
+}
+
+/** Fechamento diário (unicidade lógica class_name + date). */
+export function buildClosureRow(
+  className: string,
+  dateKey: string,
+  shift: string | null,
+  counts: { present: number; absent: number; justified: number; total: number },
+  closedBy: string | null,
+  updatedAt: string,
+) {
+  return {
+    class_name: className,
+    date: dateKey,
+    shift: shift ?? null,
+    student_count: counts.total,
+    present_count: counts.present,
+    absent_count: counts.absent + counts.justified,
+    closed_by: closedBy,
+    updated_at: updatedAt,
+  };
+}
