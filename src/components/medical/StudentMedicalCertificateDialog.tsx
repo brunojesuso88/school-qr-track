@@ -61,6 +61,7 @@ export const StudentMedicalCertificateDialog = ({
 
   const [startDate, setStartDate] = useState<Date | undefined>();
   const [endDate, setEndDate] = useState<Date | undefined>();
+  const [durationInput, setDurationInput] = useState<string>('1');
   const [cidCode, setCidCode] = useState('');
   const [cidDescription, setCidDescription] = useState('');
   const [cidSource, setCidSource] = useState<CidSource | null>(null);
@@ -73,8 +74,17 @@ export const StudentMedicalCertificateDialog = ({
 
   useEffect(() => {
     if (!open) return;
-    setStartDate(certificate ? new Date(`${certificate.start_date}T12:00:00`) : new Date());
-    setEndDate(certificate ? new Date(`${certificate.end_date}T12:00:00`) : undefined);
+    if (certificate) {
+      setStartDate(parseDateKey(certificate.start_date) ?? new Date());
+      setEndDate(parseDateKey(certificate.end_date) ?? undefined);
+      // Duração derivada de start/end inclusivos — sem nova coluna no banco.
+      setDurationInput(String(durationFromDates(certificate.start_date, certificate.end_date) ?? 1));
+    } else {
+      const today = new Date();
+      setStartDate(today);
+      setEndDate(today);
+      setDurationInput('1');
+    }
     setCidCode(certificate?.cid_code ?? '');
     setCidDescription(certificate?.cid_description ?? '');
     setCidSource((certificate?.cid_source as CidSource) ?? null);
@@ -83,6 +93,25 @@ export const StudentMedicalCertificateDialog = ({
     setSuggestion(null);
     setFile(null);
   }, [open, certificate]);
+
+  /** Recalcula a Data final de forma inclusiva a partir de início + duração. */
+  const applyDuration = (start: Date | undefined, rawDuration: string) => {
+    const duration = Number(rawDuration);
+    if (!start || !isValidDuration(duration)) return;
+    const end = endDateFromDuration(toDateKey(start), duration);
+    if (end) setEndDate(parseDateKey(end) ?? undefined);
+  };
+
+  const handleStartDateChange = (d: Date) => {
+    setStartDate(d);
+    applyDuration(d, durationInput);
+  };
+
+  const handleDurationChange = (value: string) => {
+    const clean = value.replace(/\D/g, '');
+    setDurationInput(clean);
+    applyDuration(startDate, clean);
+  };
 
   const handleSearchCid = async () => {
     const code = normalizeCid(cidCode);
@@ -112,6 +141,10 @@ export const StudentMedicalCertificateDialog = ({
   const handleSubmit = async () => {
     if (!startDate || !endDate) {
       toast.error('Informe a data inicial e a data final.');
+      return;
+    }
+    if (!isValidDuration(Number(durationInput))) {
+      toast.error('A duração deve ser um número inteiro de pelo menos 1 dia.');
       return;
     }
     const start = toDateKey(startDate);
@@ -284,7 +317,7 @@ export const StudentMedicalCertificateDialog = ({
                   <Calendar
                     mode="single"
                     selected={startDate}
-                    onSelect={(d) => d && setStartDate(d)}
+                    onSelect={(d) => d && handleStartDateChange(d)}
                     locale={ptBR}
                     initialFocus
                     className={cn('p-3 pointer-events-auto')}
@@ -293,26 +326,25 @@ export const StudentMedicalCertificateDialog = ({
               </Popover>
             </div>
             <div className="space-y-2">
-              <Label>Data final</Label>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button variant="outline" className="w-full justify-start text-left font-normal">
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {endDate ? format(endDate, 'dd/MM/yyyy', { locale: ptBR }) : <span className="text-muted-foreground">Selecione</span>}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar
-                    mode="single"
-                    selected={endDate}
-                    onSelect={(d) => d && setEndDate(d)}
-                    locale={ptBR}
-                    initialFocus
-                    disabled={(date) => (startDate ? date < startDate : false)}
-                    className={cn('p-3 pointer-events-auto')}
-                  />
-                </PopoverContent>
-              </Popover>
+              <Label htmlFor="certificate-duration">Duração (dias)</Label>
+              <Input
+                id="certificate-duration"
+                type="number"
+                min={1}
+                step={1}
+                inputMode="numeric"
+                value={durationInput}
+                onChange={(e) => handleDurationChange(e.target.value)}
+                placeholder="Ex.: 3"
+              />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Data final (calculada)</Label>
+            <div className="flex h-10 items-center rounded-md border border-input bg-muted/40 px-3 text-sm">
+              <CalendarIcon className="mr-2 h-4 w-4 text-muted-foreground" />
+              {endDate ? format(endDate, 'dd/MM/yyyy', { locale: ptBR }) : <span className="text-muted-foreground">Informe início e duração</span>}
             </div>
           </div>
 
