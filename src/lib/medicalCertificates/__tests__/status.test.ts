@@ -8,6 +8,11 @@ import {
   coverageKey,
   derivedStatus,
   durationInDays,
+  durationFromDates,
+  endDateFromDuration,
+  isValidDuration,
+  addDaysToDateKey,
+  parseDateKey,
   findActiveOverlap,
   isCovered,
   isDateInRange,
@@ -125,5 +130,48 @@ describe('rótulos e estatísticas', () => {
       coverage,
     );
     expect(result).toEqual({ totalAbsent: 2, withCertificate: 1, withoutCertificate: 1 });
+  });
+});
+
+describe('duração inclusiva <-> data final', () => {
+  it('duração 1 mantém a data inicial', () => {
+    expect(endDateFromDuration('2026-08-31', 1)).toBe('2026-08-31');
+  });
+
+  it('3 dias iniciando em 2026-08-31 termina em 2026-09-02 (virada de mês)', () => {
+    expect(endDateFromDuration('2026-08-31', 3)).toBe('2026-09-02');
+  });
+
+  it('múltiplos dias', () => {
+    expect(endDateFromDuration('2026-03-01', 5)).toBe('2026-03-05');
+  });
+
+  it('virada de ano', () => {
+    expect(endDateFromDuration('2026-12-30', 4)).toBe('2027-01-02');
+  });
+
+  it('ano bissexto', () => {
+    expect(endDateFromDuration('2028-02-28', 3)).toBe('2028-03-01');
+    expect(endDateFromDuration('2027-02-28', 3)).toBe('2027-03-02');
+  });
+
+  it('rejeita duração inválida', () => {
+    expect(endDateFromDuration('2026-03-01', 0)).toBeNull();
+    expect(endDateFromDuration('2026-03-01', -2)).toBeNull();
+    expect(endDateFromDuration('2026-03-01', 1.5)).toBeNull();
+    expect(isValidDuration(1)).toBe(true);
+    expect(isValidDuration(0)).toBe(false);
+  });
+
+  it('deriva duração de registros existentes', () => {
+    expect(durationFromDates('2026-08-31', '2026-09-02')).toBe(3);
+    expect(durationFromDates('2026-08-31', '2026-08-31')).toBe(1);
+    expect(durationFromDates('2026-09-02', '2026-08-31')).toBeNull();
+  });
+
+  it('addDays e parseDateKey são seguros', () => {
+    expect(addDaysToDateKey('2026-01-31', 1)).toBe('2026-02-01');
+    expect(addDaysToDateKey('invalida', 1)).toBeNull();
+    expect(parseDateKey('2026-02-10')?.getDate()).toBe(10);
   });
 });
