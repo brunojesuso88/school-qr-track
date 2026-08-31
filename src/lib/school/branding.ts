@@ -11,7 +11,7 @@ export const unwrapSettingValue = (value: unknown): string => {
   return String(value);
 };
 
-export type BrandingValidation = { ok: true } | { ok: false; error: string };
+export type BrandingValidation = { ok: boolean; error?: string };
 
 export const validateBrandingImage = (file: { type: string; size: number }): BrandingValidation => {
   if (!file.type.startsWith('image/')) {
