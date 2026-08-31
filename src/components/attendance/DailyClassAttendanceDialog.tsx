@@ -4,7 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
-import { Loader2, CheckCircle2, XCircle, ClipboardList } from 'lucide-react';
+import { Loader2, CheckCircle2, XCircle, ClipboardList, FileCheck } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { localDateKey } from '@/lib/attendance/dailyStatus';
@@ -120,7 +120,7 @@ const DailyClassAttendanceDialog = ({ open, onOpenChange, className, shift, onSa
           shift: shift ?? null,
           student_count: students.length,
           present_count: presentCount,
-          absent_count: absentCount,
+          absent_count: absentCount + justifiedCount,
           closed_by: user?.id ?? null,
           updated_at: new Date().toISOString(),
         },
@@ -128,7 +128,9 @@ const DailyClassAttendanceDialog = ({ open, onOpenChange, className, shift, onSa
       );
       if (closeErr) throw closeErr;
 
-      toast.success(`Frequência de ${className} registrada (${presentCount}P / ${absentCount}A)`);
+      toast.success(
+        `Frequência de ${className} registrada (${presentCount}P / ${absentCount}A / ${justifiedCount}J)`,
+      );
       onSaved?.();
       onOpenChange(false);
     } catch (e: any) {
@@ -155,6 +157,9 @@ const DailyClassAttendanceDialog = ({ open, onOpenChange, className, shift, onSa
           </span>
           <span className="flex items-center gap-1 text-destructive">
             <XCircle className="w-4 h-4" /> {absentCount} ausentes
+          </span>
+          <span className="flex items-center gap-1 text-amber-600">
+            <FileCheck className="w-4 h-4" /> {justifiedCount} justificados
           </span>
         </div>
 
@@ -194,6 +199,16 @@ const DailyClassAttendanceDialog = ({ open, onOpenChange, className, shift, onSa
                       onClick={() => setStatus(student.id, 'absent')}
                     >
                       <XCircle className="w-3.5 h-3.5 mr-1" />A
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={status === 'justified' ? 'secondary' : 'outline'}
+                      aria-pressed={status === 'justified'}
+                      title="Justificado"
+                      onClick={() => setStatus(student.id, 'justified')}
+                    >
+                      <FileCheck className="w-3.5 h-3.5 mr-1" />J
                     </Button>
                   </div>
                 </div>
