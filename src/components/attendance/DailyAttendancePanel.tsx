@@ -5,11 +5,14 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
-import { CalendarCheck, Clock, Users, AlertCircle, CheckCircle2, ChevronRight, RefreshCw } from 'lucide-react';
+import { CalendarCheck, Clock, Users, AlertCircle, CheckCircle2, ChevronRight, RefreshCw, Download } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { toast } from 'sonner';
 import DailyClassAttendanceDialog from './DailyClassAttendanceDialog';
 import { buildDailyClassRows, summarizeDaily, localDateKey, type DailyClassRow } from '@/lib/attendance/dailyStatus';
+import { exportAbsentStudents } from '@/lib/attendance/absentStudentsExport';
+
 
 const shiftLabel = (shift?: string | null) => {
   switch (shift) {
