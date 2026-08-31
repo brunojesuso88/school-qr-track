@@ -21,8 +21,8 @@ import { localDateKey } from '@/lib/attendance/dailyStatus';
 import ClassSummaryDialog from '@/components/ClassSummaryDialog';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { fetchCoverage } from '@/hooks/useCertificateCoverage';
-import { isCovered } from '@/lib/medicalCertificates/status';
+import { exportAbsentStudents } from '@/lib/attendance/absentStudentsExport';
+
 
 
 interface ClassItem {
@@ -322,87 +322,20 @@ const Classes = () => {
 
 
   const handleDownloadAbsentStudents = async (className: string) => {
-    const todayStr = format(new Date(), 'yyyy-MM-dd');
     const todayDisplay = format(new Date(), "dd 'de' MMMM 'de' yyyy", { locale: ptBR });
-
     try {
-      const { data, error } = await supabase
-        .from('attendance')
-        .select('student_id, students!inner(full_name, class)')
-        .eq('date', todayStr)
-        .eq('status', 'absent');
-
-      if (error) throw error;
-
-      const absentRows = (data || [])
-        .filter((a: any) => a.students?.class === className)
-        .map((a: any) => ({ id: a.student_id as string, name: a.students.full_name as string }));
-
-      if (absentRows.length === 0) {
+      const result = await exportAbsentStudents(className, todayDisplay);
+      if (result.status === 'empty') {
         toast.info('Nenhum aluno faltoso nesta turma hoje');
         return;
       }
-
-      // Cobertura de atestados em LOTE (uma única chamada, sem CID/anexo).
-      const coverage = await fetchCoverage(absentRows.map((r) => r.id), [todayStr]);
-      const absentStudents = absentRows.map((r) =>
-        isCovered(coverage, r.id, todayStr) ? `${r.name} — Atestado` : r.name,
-      );
-
-
-      // Generate JPEG via canvas
-      const lineHeight = 32;
-      const padding = 40;
-      const headerHeight = 100;
-      const canvasHeight = headerHeight + absentStudents.length * lineHeight + padding * 2;
-      const canvasWidth = 600;
-
-      const canvas = document.createElement('canvas');
-      canvas.width = canvasWidth;
-      canvas.height = canvasHeight;
-      const ctx = canvas.getContext('2d')!;
-
-      // Background
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(0, 0, canvasWidth, canvasHeight);
-
-      // Title
-      ctx.fillStyle = '#1a1a1a';
-      ctx.font = 'bold 22px sans-serif';
-      ctx.fillText(`Alunos Faltosos - ${className}`, padding, padding + 24);
-
-      // Date
-      ctx.fillStyle = '#666666';
-      ctx.font = '14px sans-serif';
-      ctx.fillText(todayDisplay, padding, padding + 50);
-
-      // Separator
-      ctx.strokeStyle = '#e0e0e0';
-      ctx.beginPath();
-      ctx.moveTo(padding, headerHeight);
-      ctx.lineTo(canvasWidth - padding, headerHeight);
-      ctx.stroke();
-
-      // Student list
-      ctx.fillStyle = '#333333';
-      ctx.font = '16px sans-serif';
-      absentStudents.forEach((name, i) => {
-        const y = headerHeight + 20 + i * lineHeight;
-        ctx.fillText(`${i + 1}. ${name}`, padding, y + 16);
-      });
-
-      // Download
-      const link = document.createElement('a');
-      link.download = `faltosos_${className.replace(/\s/g, '_')}_${todayStr}.jpg`;
-      link.href = canvas.toDataURL('image/jpeg', 0.95);
-      link.click();
-
-      toast.success(`${absentStudents.length} aluno(s) faltoso(s) exportado(s)`);
+      toast.success(`${result.count} aluno(s) faltoso(s) exportado(s)`);
     } catch (err) {
       console.error('Error downloading absent students:', err);
       toast.error('Erro ao gerar lista de faltosos');
     }
   };
+
 
   return (
     <DashboardLayout>

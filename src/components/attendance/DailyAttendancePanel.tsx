@@ -5,11 +5,14 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
-import { CalendarCheck, Clock, Users, AlertCircle, CheckCircle2, ChevronRight, RefreshCw } from 'lucide-react';
+import { CalendarCheck, Clock, Users, AlertCircle, CheckCircle2, ChevronRight, RefreshCw, Download } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { toast } from 'sonner';
 import DailyClassAttendanceDialog from './DailyClassAttendanceDialog';
 import { buildDailyClassRows, summarizeDaily, localDateKey, type DailyClassRow } from '@/lib/attendance/dailyStatus';
+import { exportAbsentStudents } from '@/lib/attendance/absentStudentsExport';
+
 
 const shiftLabel = (shift?: string | null) => {
   switch (shift) {
@@ -67,6 +70,21 @@ const DailyAttendancePanel = () => {
   }, [rows, search]);
 
   const summary = summarizeDaily(rows);
+
+  const handleDownloadAbsentStudents = async (name: string) => {
+    const todayDisplay = format(today, "dd 'de' MMMM 'de' yyyy", { locale: ptBR });
+    try {
+      const result = await exportAbsentStudents(name, todayDisplay, today);
+      if (result.status === 'empty') {
+        toast.info('Nenhum aluno faltoso nesta turma hoje');
+        return;
+      }
+      toast.success(`${result.count} aluno(s) faltoso(s) exportado(s)`);
+    } catch {
+      toast.error('Erro ao gerar lista de faltosos');
+    }
+  };
+
 
   return (
     <div className="space-y-4">
@@ -145,10 +163,20 @@ const DailyAttendancePanel = () => {
                         </span>
                       </p>
                     </div>
-                    <Badge variant={done ? 'default' : 'outline'} className="shrink-0 gap-1">
-                      {done ? <CheckCircle2 className="w-3 h-3" /> : <AlertCircle className="w-3 h-3" />}
-                      {done ? 'Realizada' : 'Pendente'}
-                    </Badge>
+                  </div>
+
+                  <div>
+                    {done ? (
+                      <Badge className="bg-emerald-600 hover:bg-emerald-700 text-white border-0 text-xs">
+                        <CheckCircle2 className="w-3 h-3 mr-1" />
+                        Frequência realizada
+                      </Badge>
+                    ) : (
+                      <Badge variant="destructive" className="text-xs">
+                        <AlertCircle className="w-3 h-3 mr-1" />
+                        Frequência pendente
+                      </Badge>
+                    )}
                   </div>
 
                   {done && (
@@ -160,15 +188,33 @@ const DailyAttendancePanel = () => {
                   )}
 
                   <Button
-                    className="w-full"
-                    variant={done ? 'outline' : 'default'}
+                    className={
+                      done
+                        ? 'w-full bg-emerald-600 hover:bg-emerald-700 text-white'
+                        : 'w-full bg-destructive hover:bg-destructive/90 text-destructive-foreground'
+                    }
+                    size="sm"
                     disabled={row.activeStudents === 0}
                     onClick={() => setSelected(row)}
                   >
+                    <CalendarCheck className="w-3 h-3 mr-2" />
                     {done ? 'Revisar/Atualizar frequência' : 'Fazer frequência'}
                     <ChevronRight className="w-4 h-4 ml-1" />
                   </Button>
+
+                  {done && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full text-destructive border-destructive/30 hover:bg-destructive/10"
+                      onClick={() => handleDownloadAbsentStudents(row.name)}
+                    >
+                      <Download className="w-3 h-3 mr-2" />
+                      Alunos Faltosos
+                    </Button>
+                  )}
                 </CardContent>
+
               </Card>
             );
           })}
