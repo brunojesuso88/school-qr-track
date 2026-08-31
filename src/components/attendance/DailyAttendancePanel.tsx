@@ -71,6 +71,21 @@ const DailyAttendancePanel = () => {
 
   const summary = summarizeDaily(rows);
 
+  const handleDownloadAbsentStudents = async (name: string) => {
+    const todayDisplay = format(today, "dd 'de' MMMM 'de' yyyy", { locale: ptBR });
+    try {
+      const result = await exportAbsentStudents(name, todayDisplay, today);
+      if (result.status === 'empty') {
+        toast.info('Nenhum aluno faltoso nesta turma hoje');
+        return;
+      }
+      toast.success(`${result.count} aluno(s) faltoso(s) exportado(s)`);
+    } catch {
+      toast.error('Erro ao gerar lista de faltosos');
+    }
+  };
+
+
   return (
     <div className="space-y-4">
       <Card className="border-primary/30 bg-primary/5">
