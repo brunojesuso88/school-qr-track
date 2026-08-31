@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { toast } from 'sonner';
 import { Mail, Lock, User, Loader2, RefreshCw } from 'lucide-react';
 import edunexusLogo from '@/assets/edunexus-new-logo.png';
@@ -41,11 +42,19 @@ const Auth = () => {
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isForgotOpen, setIsForgotOpen] = useState(false);
+  const [recoveryEmail, setRecoveryEmail] = useState('');
+  const [sendingRecovery, setSendingRecovery] = useState(false);
   const { signIn, signUp, user, loading, userRole } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
   useEffect(() => {
+    // Modo recovery: nunca redirecionar automaticamente (evita loop e perda do token).
+    if (window.location.hash.includes('type=recovery')) {
+      navigate('/reset-password', { replace: true });
+      return;
+    }
     if (user && !loading) {
       const from = (location.state as { from?: { pathname?: string; search?: string } } | null)?.from;
       if (from?.pathname && from.pathname !== '/auth') {
@@ -59,6 +68,27 @@ const Auth = () => {
       }
     }
   }, [user, loading, userRole, navigate, location.state]);
+
+  const handleRecovery = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const target = recoveryEmail.trim();
+    if (!target) return;
+    setSendingRecovery(true);
+    // Mensagem sempre neutra: não revela se o e-mail existe.
+    const neutral = 'Se o e-mail estiver cadastrado, você receberá as instruções para redefinir sua senha.';
+    try {
+      await supabase.auth.resetPasswordForEmail(target, {
+        redirectTo: `${window.location.origin}/reset-password`,
+      });
+    } catch {
+      /* nunca expõe detalhes do provedor */
+    } finally {
+      setSendingRecovery(false);
+      toast.success(neutral);
+      setIsForgotOpen(false);
+      setRecoveryEmail('');
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -209,6 +239,21 @@ const Auth = () => {
               </div>
             </div>
 
+            {isLogin && (
+              <div className="text-right">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRecoveryEmail(email);
+                    setIsForgotOpen(true);
+                  }}
+                  className="text-sm text-muted-foreground hover:text-primary transition-colors"
+                >
+                  Esqueci minha senha
+                </button>
+              </div>
+            )}
+
             <Button type="submit" className="w-full" disabled={isLoading}>
               {isLoading ? (
                 <>
@@ -234,6 +279,38 @@ const Auth = () => {
           </div>
         </CardContent>
       </Card>
+
+      <Dialog open={isForgotOpen} onOpenChange={setIsForgotOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Recuperar senha</DialogTitle>
+            <DialogDescription>
+              Informe o e-mail cadastrado para receber o link de redefinição.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleRecovery} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="recovery-email">Email</Label>
+              <div className="relative">
+                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  id="recovery-email"
+                  type="email"
+                  className="pl-10"
+                  placeholder="seu@email.com"
+                  value={recoveryEmail}
+                  onChange={(e) => setRecoveryEmail(e.target.value)}
+                  required
+                />
+              </div>
+            </div>
+            <Button type="submit" className="w-full" disabled={sendingRecovery || !recoveryEmail.trim()}>
+              {sendingRecovery && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Enviar instruções
+            </Button>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

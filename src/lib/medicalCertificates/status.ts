@@ -162,3 +162,41 @@ export function absenceBreakdown(
   }
   return { totalAbsent, withCertificate, withoutCertificate: totalAbsent - withCertificate };
 }
+
+// ---------------------------------------------------------------------------
+// Duração inclusiva <-> data final (cálculo em data civil, sem UTC/toISOString)
+// ---------------------------------------------------------------------------
+
+/** Converte 'yyyy-MM-dd' para Date local ao meio-dia (evita virada de dia). */
+export function parseDateKey(key: string): Date | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(key);
+  if (!m) return null;
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 12, 0, 0, 0);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+/** Soma dias em data civil local, retornando 'yyyy-MM-dd'. */
+export function addDaysToDateKey(key: string, days: number): string | null {
+  const base = parseDateKey(key);
+  if (!base) return null;
+  base.setDate(base.getDate() + days);
+  return toDateKey(base);
+}
+
+/** Duração válida: inteiro >= 1. */
+export function isValidDuration(duration: number): boolean {
+  return Number.isInteger(duration) && duration >= 1;
+}
+
+/** Data final INCLUSIVA: duração 1 => própria data inicial. */
+export function endDateFromDuration(start: string, duration: number): string | null {
+  if (!isValidDuration(duration)) return null;
+  return addDaysToDateKey(start, duration - 1);
+}
+
+/** Duração inclusiva derivada de start/end (>=1) ou null se inválido. */
+export function durationFromDates(start: string, end: string): number | null {
+  if (!areDatesValid(start, end)) return null;
+  const days = durationInDays(start, end);
+  return days >= 1 ? days : null;
+}

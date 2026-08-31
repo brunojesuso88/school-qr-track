@@ -19,6 +19,7 @@ import Attendance from "./pages/Attendance";
 import Notifications from "./pages/Notifications";
 import Settings from "./pages/Settings";
 import Auth from "./pages/Auth";
+import ResetPassword from "./pages/ResetPassword";
 import InstallPWA from "./pages/InstallPWA";
 import NotFound from "./pages/NotFound";
 import AEE from "./pages/AEE";
@@ -52,6 +53,7 @@ const App = () => (
               {/* Public Routes */}
               <Route path="/" element={<SplashScreen />} />
               <Route path="/auth" element={<Auth />} />
+              <Route path="/reset-password" element={<ResetPassword />} />
               <Route path="/install" element={<InstallPWA />} />
 
               {/* Compatibilidade: antiga Home virou redirect para a Gestão */}
