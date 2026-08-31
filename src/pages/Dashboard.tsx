@@ -95,7 +95,7 @@ const Dashboard = () => {
       <div className="space-y-8">
         <header
           className={cn(
-            'relative overflow-hidden rounded-2xl border border-border p-6 sm:p-10',
+            'relative overflow-hidden rounded-2xl border border-border p-5 sm:p-8',
             !hasHero && 'bg-gradient-to-br from-primary/10 via-background to-accent/40',
           )}
         >
@@ -128,17 +128,17 @@ const Dashboard = () => {
 
             {infoLoading ? (
               <>
-                <span className="mt-4 block h-8 w-4/5 max-w-xl animate-pulse rounded-md bg-current opacity-15 sm:h-10" />
-                <span className="mt-3 block h-4 w-3/5 max-w-md animate-pulse rounded-md bg-current opacity-10" />
+                <span className="mt-3 block h-6 w-4/5 max-w-xl animate-pulse rounded-md bg-current opacity-15 sm:h-8" />
+                <span className="mt-2 block h-3.5 w-3/5 max-w-md animate-pulse rounded-md bg-current opacity-10" />
               </>
             ) : (
               <>
-                <h1 className="mt-4 max-w-3xl text-balance break-words text-2xl font-semibold leading-tight tracking-tight sm:text-3xl lg:text-4xl">
+                <h1 className="mt-3 max-w-2xl text-balance break-words text-xl font-semibold leading-snug tracking-tight sm:text-2xl lg:text-3xl">
                   {greeting}
                 </h1>
                 <p
                   className={cn(
-                    'mt-2 max-w-xl text-sm sm:text-base',
+                    'mt-1.5 max-w-xl text-xs sm:text-sm',
                     hasHero ? 'text-white/85' : 'text-muted-foreground',
                   )}
                 >

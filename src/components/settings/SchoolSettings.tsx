@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/select';
 import { Building2, Loader2, Check } from 'lucide-react';
 import SchoolHeroImage from './SchoolHeroImage';
+import SchoolLogoImage from './SchoolLogoImage';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
@@ -161,6 +162,8 @@ const SchoolSettings = () => {
           </Button>
         </CardContent>
       </Card>
+
+      <SchoolLogoImage />
 
       <SchoolHeroImage />
     </div>

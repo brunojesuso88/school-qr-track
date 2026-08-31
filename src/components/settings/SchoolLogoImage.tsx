@@ -1,19 +1,19 @@
 import { useRef, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Image as ImageIcon, Loader2, Trash2, Upload } from 'lucide-react';
+import { BadgeCheck, Loader2, Trash2, Upload } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useSchoolProfile } from '@/hooks/useSchoolProfile';
 import {
-  SCHOOL_BRANDING_BUCKET as SCHOOL_HERO_BUCKET,
-  SCHOOL_HERO_SETTING_KEY,
+  SCHOOL_BRANDING_BUCKET,
+  SCHOOL_LOGO_SETTING_KEY,
   buildBrandingPath,
   validateBrandingImage,
 } from '@/lib/school/branding';
 
-const SchoolHeroImage = () => {
-  const { heroUrl, heroPath, loading, refetch } = useSchoolProfile();
+const SchoolLogoImage = () => {
+  const { logoUrl, logoPath, schoolName, loading, refetch } = useSchoolProfile();
   const [busy, setBusy] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -26,27 +26,27 @@ const SchoolHeroImage = () => {
 
     setBusy(true);
     try {
-      const path = buildBrandingPath('hero', file.name);
+      const path = buildBrandingPath('logo', file.name);
 
       const { error: uploadError } = await supabase.storage
-        .from(SCHOOL_HERO_BUCKET)
+        .from(SCHOOL_BRANDING_BUCKET)
         .upload(path, file, { upsert: true, contentType: file.type });
       if (uploadError) throw uploadError;
 
       const { error: settingError } = await supabase
         .from('settings')
-        .upsert({ key: SCHOOL_HERO_SETTING_KEY, value: path }, { onConflict: 'key' });
+        .upsert({ key: SCHOOL_LOGO_SETTING_KEY, value: path }, { onConflict: 'key' });
       if (settingError) throw settingError;
 
-      if (heroPath && heroPath !== path) {
-        await supabase.storage.from(SCHOOL_HERO_BUCKET).remove([heroPath]);
+      if (logoPath && logoPath !== path) {
+        await supabase.storage.from(SCHOOL_BRANDING_BUCKET).remove([logoPath]);
       }
 
       await refetch();
-      toast.success('Foto de destaque atualizada!');
+      toast.success('Logo da escola atualizado!');
     } catch (err) {
-      console.error('Error uploading hero image:', err);
-      toast.error('Erro ao enviar a foto de destaque');
+      console.error('Error uploading school logo:', err);
+      toast.error('Erro ao enviar o logo da escola');
     } finally {
       setBusy(false);
       if (inputRef.current) inputRef.current.value = '';
@@ -58,16 +58,16 @@ const SchoolHeroImage = () => {
     try {
       const { error } = await supabase
         .from('settings')
-        .upsert({ key: SCHOOL_HERO_SETTING_KEY, value: '' }, { onConflict: 'key' });
+        .upsert({ key: SCHOOL_LOGO_SETTING_KEY, value: '' }, { onConflict: 'key' });
       if (error) throw error;
-      if (heroPath) {
-        await supabase.storage.from(SCHOOL_HERO_BUCKET).remove([heroPath]);
+      if (logoPath) {
+        await supabase.storage.from(SCHOOL_BRANDING_BUCKET).remove([logoPath]);
       }
       await refetch();
-      toast.success('Foto de destaque removida');
+      toast.success('Logo removido');
     } catch (err) {
-      console.error('Error removing hero image:', err);
-      toast.error('Erro ao remover a foto');
+      console.error('Error removing school logo:', err);
+      toast.error('Erro ao remover o logo');
     } finally {
       setBusy(false);
     }
@@ -77,27 +77,24 @@ const SchoolHeroImage = () => {
     <Card>
       <CardHeader>
         <CardTitle className="text-lg flex items-center gap-2">
-          <ImageIcon className="h-5 w-5 text-primary" />
-          Foto de destaque do Painel Inicial
+          <BadgeCheck className="h-5 w-5 text-primary" />
+          Logo da escola
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="relative aspect-[16/6] w-full overflow-hidden rounded-xl border border-border bg-gradient-to-br from-primary/15 via-muted to-accent/40">
+        <div className="flex h-32 w-32 items-center justify-center overflow-hidden rounded-xl border border-border bg-muted">
           {loading ? (
-            <div className="flex h-full items-center justify-center">
-              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-            </div>
-          ) : heroUrl ? (
+            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+          ) : logoUrl ? (
             <img
-              src={heroUrl}
-              alt="Foto de destaque atual da escola"
-              className="h-full w-full object-cover object-center"
+              src={logoUrl}
+              alt={schoolName ? `Logo do ${schoolName}` : 'Logo da escola'}
+              className="h-full w-full object-contain p-2"
             />
           ) : (
-            <div className="flex h-full flex-col items-center justify-center gap-1 text-center text-sm text-muted-foreground">
-              <ImageIcon className="h-6 w-6" aria-hidden />
-              Nenhuma foto cadastrada — o painel usa o fundo padrão.
-            </div>
+            <span className="px-2 text-center text-xs text-muted-foreground">
+              Nenhum logo cadastrado
+            </span>
           )}
         </div>
 
@@ -106,7 +103,7 @@ const SchoolHeroImage = () => {
           type="file"
           accept="image/*"
           className="hidden"
-          aria-label="Selecionar foto de destaque"
+          aria-label="Selecionar logo da escola"
           onChange={(e) => {
             const file = e.target.files?.[0];
             if (file) handleFile(file);
@@ -120,9 +117,9 @@ const SchoolHeroImage = () => {
             ) : (
               <Upload className="mr-2 h-4 w-4" />
             )}
-            {heroUrl ? 'Trocar imagem' : 'Selecionar imagem'}
+            {logoUrl ? 'Trocar imagem' : 'Selecionar imagem'}
           </Button>
-          {heroPath && (
+          {logoPath && (
             <Button variant="outline" onClick={handleRemove} disabled={busy}>
               <Trash2 className="mr-2 h-4 w-4" />
               Remover
@@ -130,12 +127,12 @@ const SchoolHeroImage = () => {
           )}
         </div>
         <p className="text-xs text-muted-foreground">
-          Imagem em formato paisagem (recomendado 1600×600), até 5MB. Ela é exibida ao fundo do
-          cabeçalho do Painel Inicial com camada escura para garantir a leitura do texto.
+          Preferencialmente quadrado, em PNG com fundo transparente (até 5MB). Sem logo cadastrado,
+          o sistema continua usando o logo padrão nos relatórios.
         </p>
       </CardContent>
     </Card>
   );
 };
 
-export default SchoolHeroImage;
+export default SchoolLogoImage;
