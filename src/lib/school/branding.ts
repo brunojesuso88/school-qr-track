@@ -29,6 +29,8 @@ export const buildBrandingPath = (
   fileName: string,
   now: number = Date.now(),
 ): string => {
-  const ext = (fileName.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
+  const parts = fileName.split('.');
+  const raw = parts.length > 1 ? parts.pop()! : '';
+  const ext = raw.toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
   return `branding/${kind}-${now}.${ext}`;
 };
