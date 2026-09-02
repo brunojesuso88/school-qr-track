@@ -100,10 +100,13 @@ describe('payload e privacidade', () => {
   });
 
   it('gera dedupe_key determinístico', () => {
-    expect(buildDedupeKey('medical_certificate_created', 'abc')).toBe('medical_certificate_created:abc:v1');
-    expect(buildDedupeKey('push_test', null)).toBe('push_test:none:v1');
-    expect(buildDedupeKey('push_test', 'abc', 'v2')).toBe('push_test:abc:v2');
-    expect(buildDedupeKey('x', 'y')).toBe(buildDedupeKey('x', 'y'));
+    expect(buildDedupeKey('medical_certificate_created', 'abc', 'school-1'))
+      .toBe('medical_certificate_created:school-1:abc:v1');
+    expect(buildDedupeKey('push_test', null)).toBe('push_test:global:none:v1');
+    expect(buildDedupeKey('push_test', 'abc', 'school-1', 'v2')).toBe('push_test:school-1:abc:v2');
+    expect(buildDedupeKey('x', 'y', 's')).toBe(buildDedupeKey('x', 'y', 's'));
+    // Escolas diferentes nunca colidem no dedupe.
+    expect(buildDedupeKey('x', 'y', 'school-a')).not.toBe(buildDedupeKey('x', 'y', 'school-b'));
   });
 
   it('aceita apenas rotas internas em safeRoute', () => {

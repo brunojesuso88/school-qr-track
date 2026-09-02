@@ -111,13 +111,17 @@ export function safeRoute(route: string | null | undefined): string {
   return value;
 }
 
-/** dedupe_key determinístico: mesmo evento + entidade nunca duplica. */
+/**
+ * dedupe_key determinístico: mesmo evento + escola + entidade nunca duplica.
+ * A escola faz parte da chave para que escolas diferentes nunca colidam.
+ */
 export function buildDedupeKey(
   eventType: string,
   entityId: string | null | undefined,
+  schoolId: string | null | undefined = null,
   version = 'v1',
 ): string {
-  return `${eventType}:${entityId ?? 'none'}:${version}`;
+  return `${eventType}:${schoolId ?? 'global'}:${entityId ?? 'none'}:${version}`;
 }
 
 /** Garante que nenhum termo sensível vazou para o payload final. */
