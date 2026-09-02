@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { useActiveSchoolId } from '@/contexts/SchoolContext';
 import {
   SCHOOL_BRANDING_BUCKET,
   SCHOOL_HERO_SETTING_KEY,
@@ -32,13 +33,18 @@ export const useSchoolProfile = (): SchoolProfile => {
   const [logoPath, setLogoPath] = useState('');
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const activeSchoolId = useActiveSchoolId();
 
   const load = useCallback(async () => {
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('settings')
         .select('key, value')
         .in('key', ['school_name', SCHOOL_HERO_SETTING_KEY, SCHOOL_LOGO_SETTING_KEY]);
+
+      if (activeSchoolId) query = query.eq('school_id', activeSchoolId);
+
+      const { data, error } = await query;
 
       if (error) throw error;
 
@@ -65,7 +71,7 @@ export const useSchoolProfile = (): SchoolProfile => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [activeSchoolId]);
 
   useEffect(() => {
     load();

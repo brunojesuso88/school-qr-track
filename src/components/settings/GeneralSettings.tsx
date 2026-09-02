@@ -59,7 +59,7 @@ const GeneralSettings = () => {
   const saveSetting = async (key: string, value: string | boolean) => {
     const { error } = await supabase
       .from('settings')
-      .upsert({ key, value: typeof value === 'string' ? JSON.stringify(value) : value }, { onConflict: 'key' });
+      .upsert({ key, value: typeof value === 'string' ? JSON.stringify(value) : value }, { onConflict: 'school_id,key' });
     
     if (error) throw error;
   };

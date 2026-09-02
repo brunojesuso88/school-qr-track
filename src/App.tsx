@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { AuthProvider } from "./contexts/AuthContext";
+import { SchoolProvider } from "./contexts/SchoolContext";
 import AdminRoute from "./components/AdminRoute";
 import StaffRoute from "./components/StaffRoute";
 import ProtectedRoute from "./components/ProtectedRoute";
@@ -20,6 +21,7 @@ import Notifications from "./pages/Notifications";
 import Settings from "./pages/Settings";
 import Auth from "./pages/Auth";
 import ResetPassword from "./pages/ResetPassword";
+import Join from "./pages/Join";
 import InstallPWA from "./pages/InstallPWA";
 import NotFound from "./pages/NotFound";
 import AEE from "./pages/AEE";
@@ -44,6 +46,7 @@ const App = () => (
   <QueryClientProvider client={queryClient}>
     <ThemeProvider>
       <AuthProvider>
+        <SchoolProvider>
         <TooltipProvider>
           <Toaster />
           <Sonner />
@@ -55,6 +58,7 @@ const App = () => (
               <Route path="/auth" element={<Auth />} />
               <Route path="/reset-password" element={<ResetPassword />} />
               <Route path="/install" element={<InstallPWA />} />
+              <Route path="/join/:token" element={<Join />} />
 
               {/* Compatibilidade: antiga Home virou redirect para a Gestão */}
               <Route path="/home" element={<Navigate to="/dashboard" replace />} />
@@ -95,6 +99,7 @@ const App = () => (
             </Routes>
           </BrowserRouter>
         </TooltipProvider>
+        </SchoolProvider>
       </AuthProvider>
     </ThemeProvider>
   </QueryClientProvider>

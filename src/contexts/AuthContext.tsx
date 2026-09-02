@@ -1,14 +1,29 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
+import {
+  hasSchoolAccess as computeSchoolAccess,
+  isAwaitingApproval,
+  resolveEffectiveRole,
+  type SchoolMembershipLike,
+} from '@/lib/schools/registration';
 
 type AppRole = 'admin' | 'direction' | 'teacher' | 'staff';
+
+export interface SchoolMembership extends SchoolMembershipLike {
+  school_name: string;
+}
 
 interface AuthContextType {
   user: User | null;
   session: Session | null;
   loading: boolean;
   userRole: AppRole | null;
+  memberships: SchoolMembership[];
+  isGlobalAdmin: boolean;
+  hasSchoolAccess: boolean;
+  awaitingApproval: boolean;
+  refreshAccess: () => Promise<void>;
   isAdmin: boolean;
   isDashboardUser: boolean;
   isStaffOnly: boolean;
@@ -22,42 +37,64 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+interface AccessState {
+  legacyRole: AppRole | null;
+  globalAdmin: boolean;
+  memberships: SchoolMembership[];
+}
+
+const EMPTY_ACCESS: AccessState = { legacyRole: null, globalAdmin: false, memberships: [] };
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
-  const [userRole, setUserRole] = useState<AppRole | null>(null);
+  const [access, setAccess] = useState<AccessState>(EMPTY_ACCESS);
   const [initialLoadDone, setInitialLoadDone] = useState(false);
 
-  const fetchUserRole = async (userId: string) => {
+  const fetchAccess = async (userId: string): Promise<AccessState> => {
     try {
-      const { data, error } = await supabase
-        .from('user_roles')
-        .select('role')
-        .eq('user_id', userId)
-        .single();
+      const [rolesRes, membershipsRes] = await Promise.all([
+        supabase.from('user_roles').select('role').eq('user_id', userId),
+        supabase
+          .from('school_memberships')
+          .select('school_id, role, status, schools(name)')
+          .eq('user_id', userId),
+      ]);
 
-      if (error) {
-        console.error('Error fetching user role:', error);
-        return null;
-      }
+      const legacyRoles = (rolesRes.data ?? []).map((r) => r.role as AppRole);
+      const memberships: SchoolMembership[] = (membershipsRes.data ?? []).map((m) => ({
+        school_id: m.school_id as string,
+        role: m.role as AppRole,
+        status: m.status as SchoolMembership['status'],
+        school_name:
+          (m as unknown as { schools?: { name?: string } }).schools?.name ?? 'Escola',
+      }));
 
-      return data?.role as AppRole;
+      return {
+        legacyRole: legacyRoles[0] ?? null,
+        globalAdmin: legacyRoles.includes('admin'),
+        memberships,
+      };
     } catch (error) {
-      console.error('Error fetching user role:', error);
-      return null;
+      console.error('Error fetching access:', error);
+      return EMPTY_ACCESS;
     }
   };
 
+  const refreshAccess = async () => {
+    if (!user) return;
+    setAccess(await fetchAccess(user.id));
+  };
+
   useEffect(() => {
-    // Check for existing session first
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
-      
+
       if (session?.user) {
-        fetchUserRole(session.user.id).then(role => {
-          setUserRole(role);
+        fetchAccess(session.user.id).then((next) => {
+          setAccess(next);
           setLoading(false);
           setInitialLoadDone(true);
         });
@@ -67,23 +104,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     });
 
-    // Then set up auth state listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
         setSession(session);
         setUser(session?.user ?? null);
-        
+
         if (session?.user) {
           if (initialLoadDone) setLoading(true);
-          // Use setTimeout to avoid deadlock
           setTimeout(() => {
-            fetchUserRole(session.user.id).then(role => {
-              setUserRole(role);
+            fetchAccess(session.user.id).then((next) => {
+              setAccess(next);
               setLoading(false);
             });
           }, 0);
         } else {
-          setUserRole(null);
+          setAccess(EMPTY_ACCESS);
           setLoading(false);
         }
       }
@@ -99,7 +134,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const signUp = async (email: string, password: string, fullName: string) => {
     const redirectUrl = `${window.location.origin}/`;
-    
+
     const { error } = await supabase.auth.signUp({
       email,
       password,
@@ -115,43 +150,45 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const signOut = async () => {
     await supabase.auth.signOut();
-    setUserRole(null);
+    setAccess(EMPTY_ACCESS);
   };
 
-  // Permissões granulares baseadas na role
-  // isDashboardUser: usuários com acesso ao dashboard completo (admin, direção, professor)
-  const isDashboardUser = userRole === 'admin' || userRole === 'direction' || userRole === 'teacher' || userRole === null;
-  
-  // isAdmin: mantido para compatibilidade - acesso ao sistema web
-  const isAdmin = userRole === 'admin' || userRole === 'direction' || userRole === 'teacher' || userRole === 'staff';
-  
-  // Funcionário tem acesso limitado apenas a QR (página simplificada)
-  const isStaffOnly = userRole === 'staff';
-  
-  // Acesso às configurações: admin e direção apenas
-  const canAccessSettings = userRole === 'admin' || userRole === 'direction';
-  
-  // Gestão de usuários: apenas admin
-  const canManageUsers = userRole === 'admin';
-  
-  // Acesso ao dashboard completo: admin, direção e professor
-  const canAccessFullDashboard = userRole === 'admin' || userRole === 'direction' || userRole === 'teacher';
+  const isGlobalAdmin = access.globalAdmin;
+  const userRole = resolveEffectiveRole(isGlobalAdmin, access.memberships, access.legacyRole);
+  const schoolAccess = computeSchoolAccess(isGlobalAdmin, access.memberships) ||
+    // Compatibilidade: usuários legados sem membership ainda entram pelo user_roles.
+    (access.memberships.length === 0 && access.legacyRole !== null);
+  const awaitingApproval = isAwaitingApproval(access.memberships);
+
+  // Acesso ao dashboard completo: admin, direção e professor com acesso escolar válido
+  const canAccessFullDashboard =
+    schoolAccess && (userRole === 'admin' || userRole === 'direction' || userRole === 'teacher');
+  const isDashboardUser = canAccessFullDashboard;
+  const isAdmin = schoolAccess && userRole !== null;
+  const isStaffOnly = schoolAccess && userRole === 'staff';
+  const canAccessSettings = schoolAccess && (userRole === 'admin' || userRole === 'direction');
+  const canManageUsers = isGlobalAdmin;
 
   return (
-    <AuthContext.Provider value={{ 
-      user, 
-      session, 
-      loading, 
-      userRole, 
+    <AuthContext.Provider value={{
+      user,
+      session,
+      loading,
+      userRole,
+      memberships: access.memberships,
+      isGlobalAdmin,
+      hasSchoolAccess: schoolAccess,
+      awaitingApproval,
+      refreshAccess,
       isAdmin,
       isDashboardUser,
       isStaffOnly,
       canAccessSettings,
       canManageUsers,
       canAccessFullDashboard,
-      signIn, 
-      signUp, 
-      signOut 
+      signIn,
+      signUp,
+      signOut
     }}>
       {children}
     </AuthContext.Provider>
