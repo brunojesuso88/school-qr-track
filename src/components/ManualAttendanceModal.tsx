@@ -27,6 +27,7 @@ interface ManualAttendanceModalProps {
 
 const ManualAttendanceModal = ({ onSuccess }: ManualAttendanceModalProps) => {
   const { user } = useAuth();
+  const activeSchoolId = useActiveSchoolId();
   const [open, setOpen] = useState(false);
   const [students, setStudents] = useState<Student[]>([]);
   const [selectedClass, setSelectedClass] = useState<string>('all');
