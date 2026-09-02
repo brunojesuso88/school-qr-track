@@ -8,7 +8,8 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { toast } from 'sonner';
-import { Mail, Lock, User, Loader2, RefreshCw } from 'lucide-react';
+import { Mail, Lock, Loader2, RefreshCw } from 'lucide-react';
+import { clearPendingJoinToken, getPendingJoinToken } from '@/lib/schools/joinTokenStore';
 import edunexusLogo from '@/assets/edunexus-new-logo.png';
 
 const forceUpdateApp = async () => {
@@ -37,15 +38,16 @@ const forceUpdateApp = async () => {
 };
 
 const Auth = () => {
-  const [isLogin, setIsLogin] = useState(true);
+  // Cadastro genérico REMOVIDO: novas contas existem apenas via link institucional
+  // `/join/:token` da escola. Aqui só existe login + recuperação de senha.
+  const isLogin = true;
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [fullName, setFullName] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isForgotOpen, setIsForgotOpen] = useState(false);
   const [recoveryEmail, setRecoveryEmail] = useState('');
   const [sendingRecovery, setSendingRecovery] = useState(false);
-  const { signIn, signUp, user, loading, userRole } = useAuth();
+  const { signIn, user, loading, userRole } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -56,6 +58,22 @@ const Auth = () => {
       return;
     }
     if (user && !loading) {
+      const pending = (location.state as { joinToken?: string } | null)?.joinToken
+        ?? getPendingJoinToken();
+      if (pending) {
+        // Conclui o vínculo escolar pendente antes de qualquer redirecionamento.
+        void (async () => {
+          try {
+            await supabase.rpc('join_school_with_token', { _token: pending });
+          } catch {
+            /* token inválido/expirado: a tela /join exibe o motivo */
+          } finally {
+            clearPendingJoinToken();
+            navigate(`/join/${pending}`, { replace: true });
+          }
+        })();
+        return;
+      }
       const from = (location.state as { from?: { pathname?: string; search?: string } } | null)?.from;
       if (from?.pathname && from.pathname !== '/auth') {
         navigate(`${from.pathname}${from.search ?? ''}`, { replace: true });
@@ -108,38 +126,6 @@ const Auth = () => {
           toast.success('Bem-vindo de volta!');
           // Navigation will be handled by useEffect when user state updates
         }
-      } else {
-        if (!fullName.trim()) {
-          toast.error('Por favor, insira seu nome completo');
-          setIsLoading(false);
-          return;
-        }
-        const { error } = await signUp(email, password, fullName);
-        if (error) {
-          if (error.message.includes('already registered')) {
-            toast.error('Este email já está cadastrado');
-          } else {
-            toast.error(error.message);
-          }
-          setIsLoading(false);
-        } else {
-          toast.success('Conta criada com sucesso!');
-          
-          // Notify admins about new user registration
-          try {
-            await supabase.functions.invoke('notify-new-user', {
-              body: { 
-                newUserEmail: email,
-                newUserName: fullName 
-              }
-            });
-          } catch (notifyError) {
-            console.log('Could not notify admins:', notifyError);
-            // Don't block signup if notification fails
-          }
-          
-          // Navigation will be handled by useEffect when user state updates
-        }
       }
     } catch (error) {
       toast.error('Ocorreu um erro inesperado');
@@ -188,24 +174,6 @@ const Auth = () => {
 
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
-            {!isLogin && (
-              <div className="space-y-2 animate-fade-in">
-                <Label htmlFor="fullName">Nome Completo</Label>
-                <div className="relative">
-                  <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <Input
-                    id="fullName"
-                    type="text"
-                    placeholder="João da Silva"
-                    value={fullName}
-                    onChange={(e) => setFullName(e.target.value)}
-                    className="pl-10"
-                    required={!isLogin}
-                  />
-                </div>
-              </div>
-            )}
-
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
               <div className="relative">
@@ -266,18 +234,9 @@ const Auth = () => {
             </Button>
           </form>
 
-          <div className="mt-6 text-center">
-            <button
-              type="button"
-              onClick={() => setIsLogin(!isLogin)}
-              className="text-sm text-muted-foreground hover:text-primary transition-colors"
-            >
-              {isLogin
-                ? 'Não tem uma conta? Cadastre-se'
-                : 'Já tem uma conta? Entre'}
-            </button>
-          </div>
-        </CardContent>
+          <p className="mt-6 text-center text-xs text-muted-foreground">
+            Novos acessos são criados apenas pelo link institucional da sua escola.
+          </p>ntent>
       </Card>
 
       <Dialog open={isForgotOpen} onOpenChange={setIsForgotOpen}>
