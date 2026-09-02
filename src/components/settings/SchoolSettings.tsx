@@ -16,6 +16,11 @@ import { Building2, Loader2, Check } from 'lucide-react';
 import SchoolHeroImage from './SchoolHeroImage';
 import SchoolLogoImage from './SchoolLogoImage';
 import { supabase } from '@/integrations/supabase/client';
+import {
+  SCHOOL_AUTHORITY_SETTING_KEY,
+  SCHOOL_CITY_SETTING_KEY,
+  SCHOOL_STATE_SETTING_KEY,
+} from '@/lib/school/documentBranding';
 import { toast } from 'sonner';
 
 const timezones = [
@@ -34,6 +39,9 @@ const SchoolSettings = () => {
   const activeSchoolId = useActiveSchoolId();
   const [settings, setSettings] = useState({
     schoolName: '',
+    city: '',
+    state: '',
+    authority: '',
     timezone: 'America/Fortaleza'
   });
   const [loading, setLoading] = useState(true);
@@ -53,7 +61,13 @@ const SchoolSettings = () => {
         supabase
           .from('settings')
           .select('key, value')
-          .in('key', ['school_name', 'timezone']),
+          .in('key', [
+            'school_name',
+            'timezone',
+            SCHOOL_CITY_SETTING_KEY,
+            SCHOOL_STATE_SETTING_KEY,
+            SCHOOL_AUTHORITY_SETTING_KEY,
+          ]),
         activeSchoolId,
       );
 
@@ -70,6 +84,9 @@ const SchoolSettings = () => {
           }
           if (setting.key === 'school_name') newSettings.schoolName = value as string;
           if (setting.key === 'timezone') newSettings.timezone = value as string;
+          if (setting.key === SCHOOL_CITY_SETTING_KEY) newSettings.city = value as string;
+          if (setting.key === SCHOOL_STATE_SETTING_KEY) newSettings.state = value as string;
+          if (setting.key === SCHOOL_AUTHORITY_SETTING_KEY) newSettings.authority = value as string;
         });
         setSettings(newSettings);
       }
@@ -86,6 +103,9 @@ const SchoolSettings = () => {
       // Save values directly without JSON.stringify - the jsonb column handles it
       const updates = [
         { key: 'school_name', value: settings.schoolName },
+        { key: SCHOOL_CITY_SETTING_KEY, value: settings.city },
+        { key: SCHOOL_STATE_SETTING_KEY, value: settings.state.toUpperCase() },
+        { key: SCHOOL_AUTHORITY_SETTING_KEY, value: settings.authority },
         { key: 'timezone', value: settings.timezone }
       ];
 
@@ -138,6 +158,40 @@ const SchoolSettings = () => {
               Este nome será exibido no cabeçalho e relatórios
             </p>
           </div>
+
+          <div className="grid gap-4 sm:grid-cols-3">
+            <div className="space-y-2">
+              <Label htmlFor="schoolCity">Cidade</Label>
+              <Input
+                id="schoolCity"
+                placeholder="Ex: Coelho Neto"
+                value={settings.city}
+                onChange={(e) => setSettings(prev => ({ ...prev, city: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="schoolState">UF</Label>
+              <Input
+                id="schoolState"
+                maxLength={2}
+                placeholder="Ex: MA"
+                value={settings.state}
+                onChange={(e) => setSettings(prev => ({ ...prev, state: e.target.value.toUpperCase() }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="schoolAuthority">Órgão mantenedor (opcional)</Label>
+              <Input
+                id="schoolAuthority"
+                placeholder="Ex: Secretaria de Estado da Educação"
+                value={settings.authority}
+                onChange={(e) => setSettings(prev => ({ ...prev, authority: e.target.value }))}
+              />
+            </div>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Cidade, UF e órgão aparecem nos cabeçalhos dos documentos oficiais gerados pelo sistema
+          </p>
 
           <div className="space-y-2">
             <Label htmlFor="timezone">Fuso Horário</Label>
