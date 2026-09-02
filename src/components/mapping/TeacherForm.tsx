@@ -37,6 +37,7 @@ const SHIFT_PERIOD_OFFSET: Record<string, number> = {
 
 const TeacherForm = ({ teacher, onClose }: TeacherFormProps) => {
   const { addTeacher, updateTeacher } = useSchoolMapping();
+  const activeSchoolId = useActiveSchoolId();
   const { toast } = useToast();
   
   const [name, setName] = useState(teacher?.name || "");

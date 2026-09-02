@@ -33,6 +33,7 @@ const norm = (s: string) => s.trim().toLowerCase();
 
 const TeacherBulkImportDialog = ({ open, onOpenChange }: TeacherBulkImportDialogProps) => {
   const { teachers, globalSubjects, refreshData } = useSchoolMapping();
+  const activeSchoolId = useActiveSchoolId();
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
