@@ -2,6 +2,8 @@
  * Helpers puros do cadastro multi-escola.
  * Não fazem I/O: toda validação real de token acontece no banco (RPC segura).
  */
+import { normalizePublicAppUrl, resolvePublicAppOrigin } from './publicUrl';
+
 
 export type AppRole = 'admin' | 'direction' | 'teacher' | 'staff';
 export type MembershipStatus = 'pending' | 'active' | 'inactive' | 'rejected';
