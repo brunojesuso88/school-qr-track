@@ -5,10 +5,11 @@ import { BadgeCheck, Loader2, Trash2, Upload } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useSchoolProfile } from '@/hooks/useSchoolProfile';
-import {
 import { schoolScopedPath } from '@/lib/school/storagePaths';
 import { useActiveSchoolId } from '@/contexts/SchoolContext';
+import {
   SCHOOL_BRANDING_BUCKET,
+
   SCHOOL_LOGO_SETTING_KEY,
   buildBrandingPath,
   validateBrandingImage,
