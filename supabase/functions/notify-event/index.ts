@@ -1,5 +1,7 @@
 import { requireAuth } from "../_shared/auth.ts";
-import { dispatchNotification, EVENT_AUDIENCE, resolveAudience, serviceClient } from "../_shared/notify.ts";
+import {
+  dispatchNotification, EVENT_AUDIENCE, isGlobalAdmin, resolveAudience, schoolRoleOf, serviceClient,
+} from "../_shared/notify.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -41,19 +43,19 @@ Deno.serve(async (req) => {
 
     const admin = serviceClient();
 
-    // Papel real do usuário lido no servidor (nunca o role do cliente).
-    const { data: roleRows } = await admin
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", auth.userId);
-    const callerRoles = (roleRows ?? []).map((r) => (r as { role: string }).role);
-    if (!callerRoles.some((r) => allowedTriggerRoles.includes(r))) {
-      return json({ success: false, error: "Forbidden" }, 403);
-    }
-
     const entityId = typeof body.entity_id === "string" ? body.entity_id : null;
     const entityType = typeof body.entity_type === "string" ? body.entity_type : null;
     const schoolId = typeof body.school_id === "string" ? body.school_id : null;
+
+    // Autorização SEMPRE na escola alvo: papel efetivo lido no servidor.
+    const globalAdmin = await isGlobalAdmin(admin, auth.userId);
+    if (eventType !== "push_test") {
+      if (!schoolId) return json({ success: false, error: "school_id é obrigatório" }, 400);
+      const callerRole = await schoolRoleOf(admin, auth.userId, schoolId);
+      const allowed = globalAdmin
+        || (callerRole !== null && allowedTriggerRoles.includes(callerRole));
+      if (!allowed) return json({ success: false, error: "Forbidden" }, 403);
+    }
     const context = (body.context && typeof body.context === "object")
       ? body.context as Record<string, unknown>
       : {};
@@ -94,7 +96,7 @@ Deno.serve(async (req) => {
       ? (body.extra_user_ids as unknown[]).filter((v): v is string => typeof v === "string")
       : [];
 
-    const userIds = await resolveAudience(admin, eventType, extraUsers);
+    const userIds = await resolveAudience(admin, eventType, schoolId, extraUsers);
     if (!userIds.length) {
       return json({ success: true, notification_id: null, recipients: 0, push_sent: 0 });
     }

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useActiveSchoolId } from '@/contexts/SchoolContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { detectPushPlatform, readStandaloneFlag, type PushPlatformInfo } from '@/lib/notifications/platform';
@@ -31,6 +32,7 @@ async function fetchVapidPublicKey(): Promise<string> {
 
 
 export const usePushNotifications = () => {
+  const activeSchoolId = useActiveSchoolId();
   const { user } = useAuth();
   const [isSupported, setIsSupported] = useState(false);
   const [isSubscribed, setIsSubscribed] = useState(false);
@@ -141,6 +143,7 @@ export const usePushNotifications = () => {
         .from('push_subscriptions')
         .upsert({
           user_id: user.id,
+          school_id: activeSchoolId,
           endpoint: subscription.endpoint,
           p256dh,
           auth,

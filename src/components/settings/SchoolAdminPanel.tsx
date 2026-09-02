@@ -181,6 +181,26 @@ const SchoolAdminPanel = () => {
     await load();
   };
 
+  const [migrating, setMigrating] = useState(false);
+
+  /** Executa a migração one-shot/idempotente dos arquivos legados de Storage. */
+  const migrateStorage = async () => {
+    setMigrating(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('migrate-storage-school-scope');
+      if (error) throw error;
+      if (data?.success === false) throw new Error(data.error ?? 'Falha na migração');
+      const report = (data?.report ?? {}) as Record<string, { migrated: number; failed: string[] }>;
+      const moved = Object.values(report).reduce((acc, r) => acc + r.migrated, 0);
+      const failed = Object.values(report).reduce((acc, r) => acc + r.failed.length, 0);
+      toast.success(`Arquivos migrados: ${moved}.${failed ? ` ${failed} falha(s).` : ''}`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Não foi possível migrar os arquivos.');
+    } finally {
+      setMigrating(false);
+    }
+  };
+
   const totals = useMemo(() => {
     const pending = users.reduce(
       (acc, u) => acc + u.memberships.filter((m) => m.status === 'pending').length, 0);
@@ -228,6 +248,22 @@ const SchoolAdminPanel = () => {
 
   return (
     <div className="space-y-6">
+      {/* Migração one-shot dos arquivos legados para pastas por escola */}
+      <Card>
+        <CardHeader className="flex flex-row items-start justify-between gap-3">
+          <div>
+            <CardTitle className="text-lg">Arquivos por escola</CardTitle>
+            <CardDescription>
+              Move os arquivos antigos (fotos, anexos, imagens de eventos) para a pasta
+              da escola e atualiza as referências. Pode ser executado mais de uma vez.
+            </CardDescription>
+          </div>
+          <Button size="sm" variant="outline" disabled={migrating} onClick={migrateStorage}>
+            {migrating ? 'Migrando...' : 'Migrar arquivos'}
+          </Button>
+        </CardHeader>
+      </Card>
+
       {/* Resumo */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {[

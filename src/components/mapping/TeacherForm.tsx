@@ -1,4 +1,6 @@
 import { useState, useEffect } from "react";
+import { useActiveSchoolId } from '@/contexts/SchoolContext';
+import { assertActiveSchool } from '@/lib/schools/scope';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -35,6 +37,7 @@ const SHIFT_PERIOD_OFFSET: Record<string, number> = {
 
 const TeacherForm = ({ teacher, onClose }: TeacherFormProps) => {
   const { addTeacher, updateTeacher } = useSchoolMapping();
+  const activeSchoolId = useActiveSchoolId();
   const { toast } = useToast();
   
   const [name, setName] = useState(teacher?.name || "");
@@ -178,7 +181,7 @@ const TeacherForm = ({ teacher, onClose }: TeacherFormProps) => {
           .eq("teacher_id", teacherId);
         
         // Build records for all selected shifts
-        const records: { teacher_id: string; day_of_week: number; period_number: number; available: boolean }[] = [];
+        const records: { teacher_id: string; school_id: string; day_of_week: number; period_number: number; available: boolean }[] = [];
         
         for (const shift of selectedShifts) {
           const offset = SHIFT_PERIOD_OFFSET[shift];
@@ -187,6 +190,7 @@ const TeacherForm = ({ teacher, onClose }: TeacherFormProps) => {
           availability.forEach(cell => {
             records.push({
               teacher_id: teacherId!,
+              school_id: assertActiveSchool(activeSchoolId),
               day_of_week: cell.day,
               period_number: cell.period + offset,
               available: cell.available

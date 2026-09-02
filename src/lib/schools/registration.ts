@@ -68,6 +68,9 @@ export const resolveEffectiveRole = (
   if (activeSchoolId) {
     const scoped = actives.find((m) => m.school_id === activeSchoolId);
     if (scoped) return scoped.role;
+    // Escola ativa sem vínculo: só resolve papel se houver exatamente um vínculo.
+    if (actives.length === 1) return actives[0].role;
+    if (actives.length > 1) return null;
   }
   if (actives.length > 0) return actives[0].role;
   return actives.length === 0 && memberships.length > 0 ? null : legacyRole;

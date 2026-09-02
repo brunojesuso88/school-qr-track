@@ -1,4 +1,6 @@
 import { useState, useEffect } from 'react';
+import { useActiveSchoolId } from '@/contexts/SchoolContext';
+import { assertActiveSchool } from '@/lib/schools/scope';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
@@ -32,6 +34,7 @@ interface Props {
 }
 
 const DailyClassAttendanceDialog = ({ open, onOpenChange, className, shift, onSaved, title }: Props) => {
+  const activeSchoolId = useActiveSchoolId();
   const { user } = useAuth();
   const [students, setStudents] = useState<StudentRow[]>([]);
   const [attendance, setAttendance] = useState<Record<string, AttendanceMark>>({});
@@ -101,7 +104,8 @@ const DailyClassAttendanceDialog = ({ open, onOpenChange, className, shift, onSa
     setSaving(true);
     try {
       const time = format(new Date(), 'HH:mm:ss');
-      const records = buildAttendanceRecords(students, attendance, todayKey, time, user?.id ?? null);
+      const schoolId = assertActiveSchool(activeSchoolId);
+      const records = buildAttendanceRecords(students, attendance, todayKey, time, user?.id ?? null, schoolId);
 
       if (records.length > 0) {
         const { error: attErr } = await supabase
@@ -111,8 +115,11 @@ const DailyClassAttendanceDialog = ({ open, onOpenChange, className, shift, onSa
       }
 
       const { error: closeErr } = await supabase.from('daily_attendance_closures').upsert(
-        buildClosureRow(className, todayKey, shift ?? null, counts, user?.id ?? null, new Date().toISOString()),
-        { onConflict: 'class_name,date' },
+        buildClosureRow(
+          className, todayKey, shift ?? null, counts, user?.id ?? null,
+          new Date().toISOString(), schoolId,
+        ),
+        { onConflict: 'school_id,class_name,date' },
       );
       if (closeErr) throw closeErr;
 

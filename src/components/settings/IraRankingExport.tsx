@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useSchoolScopeKey } from '@/contexts/SchoolContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -38,6 +39,7 @@ const medalColor = (place: number) =>
   place === 1 ? 'text-amber-500' : place === 2 ? 'text-slate-400' : 'text-orange-700';
 
 const IraRankingExport = ({ classes, classesWithGrades }: Props) => {
+  const schoolScopeKey = useSchoolScopeKey();
   const [selected, setSelected] = useState<string[]>([]);
   const [series, setSeries] = useState<HighSchoolSeries | ''>('');
   const [loading, setLoading] = useState(false);
@@ -56,7 +58,7 @@ const [rankingStale, setRankingStale] = useState(false);
       previewUrlRef.current = null;
     }
     setPreviewUrl(null);
-  }, []);
+  }, [schoolScopeKey]);
 
   useEffect(() => revokePreview, [revokePreview]);
 

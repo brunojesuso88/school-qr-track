@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { toast } from 'sonner';
+import { clearPendingJoinToken, setPendingJoinToken } from '@/lib/schools/joinTokenStore';
 import { CheckCircle2, Loader2, Lock, Mail, School, ShieldAlert, User } from 'lucide-react';
 import {
   registrationLinkErrorMessage,
@@ -55,6 +56,7 @@ const Join = () => {
         return;
       }
       await refreshAccess();
+      clearPendingJoinToken();
       setDone(result.status === 'active' ? 'active' : 'pending');
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Não foi possível concluir a solicitação.');
@@ -81,12 +83,16 @@ const Join = () => {
         return;
       }
 
+      // Confirmação de e-mail: preserva o token para concluir o join após o login.
+      setPendingJoinToken(token);
+
       // Se a sessão já existir (confirmação automática), conclui o vínculo agora.
       const { data: sessionData } = await supabase.auth.getSession();
       if (sessionData.session) {
         const { data } = await supabase.rpc('join_school_with_token', { _token: token });
         const result = data as unknown as { ok: boolean; status?: string } | null;
         await refreshAccess();
+        clearPendingJoinToken();
         setDone(result?.status === 'active' ? 'active' : 'pending');
       } else {
         setDone('pending');
@@ -222,7 +228,10 @@ const Join = () => {
                 type="button"
                 variant="ghost"
                 className="w-full"
-                onClick={() => navigate('/auth', { state: { joinToken: token } })}
+                onClick={() => {
+                  setPendingJoinToken(token);
+                  navigate('/auth', { state: { joinToken: token } });
+                }}
               >
                 Já tenho conta
               </Button>

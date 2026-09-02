@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { assertActiveSchool } from '@/lib/schools/scope';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -85,6 +86,7 @@ export function ManagementSignaturesDialog({ open, onOpenChange, onChanged }: Pr
         .upload(path, file, { contentType: file.type, upsert: false });
       if (upErr) throw upErr;
       const { error: insErr } = await supabase.from('management_signatures').insert({
+        school_id: assertActiveSchool(activeSchoolId),
         name: name.trim().slice(0, 80),
         role_label: roleLabel.trim() || null,
         storage_path: path,

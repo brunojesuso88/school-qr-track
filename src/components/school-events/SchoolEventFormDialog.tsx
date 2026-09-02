@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { assertActiveSchool } from '@/lib/schools/scope';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
@@ -123,7 +124,12 @@ export default function SchoolEventFormDialog({ open, onOpenChange, event, onSav
         const { error } = await supabase.from('school_events').update(payload).eq('id', data.id);
         if (error) throw error;
       } else {
-        const { error } = await supabase.from('school_events').insert({ ...payload, tags: ['evento'], created_by: u.user?.id });
+        const { error } = await supabase.from('school_events').insert({
+          ...payload,
+          school_id: assertActiveSchool(activeSchoolId),
+          tags: ['evento'],
+          created_by: u.user?.id,
+        });
         if (error) throw error;
       }
       toast.success('Evento salvo');

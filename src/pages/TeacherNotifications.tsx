@@ -23,6 +23,8 @@ import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { useActiveSchoolId } from '@/contexts/SchoolContext';
+import { assertActiveSchool } from '@/lib/schools/scope';
 import logoCepans from '@/assets/logo-cepans.png';
 import {
   NotificationData,
@@ -207,6 +209,7 @@ function escapeHTML(s: string): string {
 
 export default function TeacherNotifications() {
   const { user } = useAuth();
+  const activeSchoolId = useActiveSchoolId();
   const { userRole } = useAuth() as any;
   const [form, setForm] = useState<NotificationData>(emptyForm);
   const [customBody, setCustomBody] = useState<string>('');
@@ -327,6 +330,7 @@ export default function TeacherNotifications() {
         if (numErr) throw numErr;
         const nextNumber = numData as unknown as number;
         const { error } = await supabase.from('teacher_notifications').insert({
+          school_id: assertActiveSchool(activeSchoolId),
           doc_number: nextNumber,
           doc_year: year,
           teacher_name: form.teacher_name,

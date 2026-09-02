@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useActiveSchoolId, useSchoolScopeKey } from '@/contexts/SchoolContext';
+import { assertActiveSchool } from '@/lib/schools/scope';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -54,6 +56,8 @@ const normalize = (s: string) =>
   s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
 
 const IRASettings = () => {
+  const schoolScopeKey = useSchoolScopeKey();
+  const activeSchoolId = useActiveSchoolId();
   const [classes, setClasses] = useState<ClassRow[]>([]);
   const { userRole } = useAuth();
   const canEditSeries = userRole === 'admin' || userRole === 'direction';
@@ -90,7 +94,7 @@ const IRASettings = () => {
       setConfiguredClasses(new Set(((settingsRes.data || []) as { class_id: string }[]).map((r) => r.class_id)));
       setLoading(false);
     })();
-  }, []);
+  }, [schoolScopeKey]);
 
   const loadClassData = useCallback(async (classId: string) => {
     setLoadingClass(true);
@@ -112,7 +116,7 @@ const IRASettings = () => {
     setSelectedPeriodIds(ids);
     setUseFinal(settings?.use_final_grade ?? false);
     setLoadingClass(false);
-  }, []);
+  }, [schoolScopeKey]);
 
   useEffect(() => {
     if (selectedClassId) loadClassData(selectedClassId);
@@ -193,7 +197,9 @@ const IRASettings = () => {
     }
     setApplyingMatrix(true);
     try {
-      const result = await syncClassCurriculum(selectedClass.id, series);
+      const result = await syncClassCurriculum(selectedClass.id, series, {
+        schoolId: assertActiveSchool(activeSchoolId),
+      });
       const c = result.applied;
       toast.success(
         `Matriz de ${classSeriesLabel(series)} aplicada: ${c.created} criada(s), ${c.reused} reaproveitada(s), ` +
@@ -236,6 +242,7 @@ const IRASettings = () => {
     const { data: userData } = await supabase.auth.getUser();
     const ids = useFinal ? [] : selectedPeriodIds;
     const { error } = await supabase.from('ira_settings').upsert({
+      school_id: assertActiveSchool(activeSchoolId),
       class_id: selectedClassId,
       ira_period_ids: ids,
       ira_period_id: ids[0] ?? null,

@@ -145,8 +145,10 @@ export function buildAttendanceRecords(
   dateKey: string,
   time: string,
   recordedBy: string | null,
+  schoolId: string,
 ) {
   return students.map((s) => ({
+    school_id: schoolId,
     student_id: s.id,
     date: dateKey,
     status: marks[s.id] ?? 'present',
@@ -163,8 +165,10 @@ export function buildClosureRow(
   counts: { present: number; absent: number; justified: number; total: number },
   closedBy: string | null,
   updatedAt: string,
+  schoolId: string,
 ) {
   return {
+    school_id: schoolId,
     class_name: className,
     date: dateKey,
     shift: shift ?? null,

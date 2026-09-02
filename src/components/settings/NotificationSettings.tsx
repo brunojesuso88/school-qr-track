@@ -1,4 +1,6 @@
 import { useState, useEffect } from 'react';
+import { useActiveSchoolId, useSchoolScopeKey } from '@/contexts/SchoolContext';
+import { assertActiveSchool } from '@/lib/schools/scope';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -13,6 +15,8 @@ import { PushNotificationToggle } from '@/components/PushNotificationToggle';
 import NotificationPreferences from '@/components/notifications/NotificationPreferences';
 
 const NotificationSettings = () => {
+  const schoolScopeKey = useSchoolScopeKey();
+  const activeSchoolId = useActiveSchoolId();
   
   const [settings, setSettings] = useState({
     whatsappEnabled: false,
@@ -25,7 +29,7 @@ const NotificationSettings = () => {
 
   useEffect(() => {
     fetchSettings();
-  }, []);
+  }, [schoolScopeKey]);
 
   const fetchSettings = async () => {
     try {
@@ -67,7 +71,10 @@ const NotificationSettings = () => {
       for (const update of updates) {
         const { error } = await supabase
           .from('settings')
-          .upsert(update, { onConflict: 'school_id,key' });
+          .upsert(
+            { ...update, school_id: assertActiveSchool(activeSchoolId) },
+            { onConflict: 'school_id,key' },
+          );
         if (error) throw error;
       }
 

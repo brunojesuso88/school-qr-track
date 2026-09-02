@@ -31,7 +31,22 @@ Deno.serve(async (req) => {
     const label = (profile?.full_name as string | null) ||
       (profile?.email as string | null) || "Novo usuário";
 
-    const userIds = await resolveAudience(admin, "new_user_signup");
+    // Notifica apenas a gestão da escola do vínculo solicitado (nunca global).
+    const { data: membership } = await admin
+      .from("school_memberships")
+      .select("school_id")
+      .eq("user_id", auth.userId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const schoolId = (membership as { school_id: string } | null)?.school_id ?? null;
+    if (!schoolId) {
+      return new Response(JSON.stringify({ success: true, recipients: 0 }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const userIds = await resolveAudience(admin, "new_user_signup", schoolId);
     if (!userIds.length) {
       return new Response(JSON.stringify({ success: true, recipients: 0 }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -43,6 +58,7 @@ Deno.serve(async (req) => {
       eventType: "new_user_signup",
       entityId: auth.userId,
       entityType: "auth_user",
+      schoolId,
       createdBy: auth.userId,
       userIds,
       context: {

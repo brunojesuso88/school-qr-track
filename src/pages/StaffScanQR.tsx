@@ -1,4 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useActiveSchoolId, useSchoolScopeKey } from '@/contexts/SchoolContext';
+import { assertActiveSchool } from '@/lib/schools/scope';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent } from '@/components/ui/card';
@@ -18,6 +20,8 @@ interface DailyStats {
 }
 
 const StaffScanQR = () => {
+  const schoolScopeKey = useSchoolScopeKey();
+  const activeSchoolId = useActiveSchoolId();
   const [scanResult, setScanResult] = useState<string>('');
   const [lastScanned, setLastScanned] = useState<any>(null);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -44,7 +48,7 @@ const StaffScanQR = () => {
       setSoundEnabled(data?.value === true || data?.value === 'true');
     };
     fetchSoundPreference();
-  }, []);
+  }, [schoolScopeKey]);
 
   // Play notification sound using Web Audio API
   const playNotificationSound = useCallback(() => {
@@ -204,6 +208,7 @@ const StaffScanQR = () => {
       const { error: attendanceError } = await supabase
         .from('attendance')
         .insert({
+          school_id: assertActiveSchool(activeSchoolId),
           student_id: student.id,
           date: today,
           time: currentTime,

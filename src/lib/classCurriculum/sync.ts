@@ -178,7 +178,7 @@ async function consolidateDuplicate(
 export async function syncClassCurriculum(
   classId: string,
   series: string,
-  options: { persistSeries?: boolean } = {},
+  options: { persistSeries?: boolean; schoolId: string },
 ): Promise<SyncResult> {
   const parsed = parseSeriesValue(series);
   if (!parsed) throw new Error('Série da turma inválida — selecione 1º, 2º ou 3º ano do Ensino Médio.');
@@ -205,6 +205,7 @@ export async function syncClassCurriculum(
     if (plan.mappingCreate.length > 0) {
       const { error } = await supabase.from('mapping_class_subjects').insert(
         plan.mappingCreate.map((m, i) => ({
+          school_id: options.schoolId,
           class_id: mappingClassId,
           subject_name: m.subject_name,
           weekly_classes: m.weekly_classes,
@@ -225,7 +226,7 @@ export async function syncClassCurriculum(
   // 2) Disciplinas de notas faltantes.
   if (plan.gradeCreate.length > 0) {
     const { error } = await supabase.from('grade_subjects').insert(
-      plan.gradeCreate.map((g) => ({ ...g, class_id: classId })),
+      plan.gradeCreate.map((g) => ({ ...g, class_id: classId, school_id: options.schoolId })),
     );
     if (error) throw error;
   }

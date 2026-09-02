@@ -23,7 +23,8 @@ import { DISABILITY_OPTIONS, WEEKDAYS, AREAS } from '@/components/aee/PAEEForm';
 import { getSignedPhotoUrl } from '@/hooks/useSignedPhotoUrl';
 import logoCepans from '@/assets/logo-cepans.png';
 import { schoolScopedPath } from '@/lib/school/storagePaths';
-import { useActiveSchoolId } from '@/contexts/SchoolContext';
+import { useActiveSchoolId, useSchoolScopeKey } from '@/contexts/SchoolContext';
+import { assertActiveSchool } from '@/lib/schools/scope';
 
 interface Student {
   id: string;
@@ -55,6 +56,7 @@ interface TeacherInfo {
 }
 
 const AEE = () => {
+  const schoolScopeKey = useSchoolScopeKey();
   const activeSchoolId = useActiveSchoolId();
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(true);
@@ -97,7 +99,7 @@ const AEE = () => {
 
   useEffect(() => {
     fetchStudents();
-  }, []);
+  }, [schoolScopeKey]);
 
   const fetchStudents = async () => {
     try {
@@ -538,7 +540,9 @@ const AEE = () => {
 
       const { error } = await (supabase as any)
         .from('student_paee')
-        .upsert(payload, { onConflict: 'student_id' });
+        .upsert({ ...payload, school_id: assertActiveSchool(activeSchoolId) }, {
+          onConflict: 'student_id',
+        });
       if (error) throw error;
 
       toast.success('PAEE salvo com sucesso');
@@ -577,7 +581,9 @@ const AEE = () => {
 
       const { error } = await supabase
         .from('student_pei')
-        .upsert(payload, { onConflict: 'student_id' });
+        .upsert({ ...payload, school_id: assertActiveSchool(activeSchoolId) }, {
+          onConflict: 'student_id',
+        });
       if (error) throw error;
 
       // Also persist Laudo info + birth_date back to the students table,

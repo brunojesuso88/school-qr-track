@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { useActiveSchoolId } from '@/contexts/SchoolContext';
+import { assertActiveSchool } from '@/lib/schools/scope';
 import { useAuth } from '@/contexts/AuthContext';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -25,6 +27,7 @@ interface ManualAttendanceModalProps {
 
 const ManualAttendanceModal = ({ onSuccess }: ManualAttendanceModalProps) => {
   const { user } = useAuth();
+  const activeSchoolId = useActiveSchoolId();
   const [open, setOpen] = useState(false);
   const [students, setStudents] = useState<Student[]>([]);
   const [selectedClass, setSelectedClass] = useState<string>('all');
@@ -106,6 +109,7 @@ const ManualAttendanceModal = ({ onSuccess }: ManualAttendanceModalProps) => {
         const { error } = await supabase
           .from('attendance')
           .insert({
+            school_id: assertActiveSchool(activeSchoolId),
             student_id: selectedStudent,
             date: dateStr,
             time: currentTime,
