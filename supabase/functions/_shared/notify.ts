@@ -106,12 +106,17 @@ export function buildNotificationContent(
   }
 }
 
+/**
+ * dedupe_key SEMPRE inclui a escola: o mesmo evento em escolas diferentes
+ * nunca pode colidir (ex.: turmas/eventos homônimos em escolas distintas).
+ */
 export function buildDedupeKey(
   eventType: string,
   entityId: string | null | undefined,
+  schoolId: string | null | undefined = null,
   version = "v1",
 ): string {
-  return `${eventType}:${entityId ?? "none"}:${version}`;
+  return `${eventType}:${schoolId ?? "global"}:${entityId ?? "none"}:${version}`;
 }
 
 export function serviceClient(): SupabaseClient {
@@ -216,7 +221,7 @@ export async function dispatchNotification(opts: {
   } = opts;
 
   const content = buildNotificationContent(eventType, context);
-  const dedupeKey = buildDedupeKey(eventType, entityId, dedupeVersion);
+  const dedupeKey = buildDedupeKey(eventType, entityId, schoolId, dedupeVersion);
 
   let deduped = false;
   const { data: inserted, error: insertError } = await admin
@@ -241,22 +246,29 @@ export async function dispatchNotification(opts: {
   if (insertError) {
     if (insertError.code !== "23505") throw insertError;
     deduped = true;
-    const { data: existing, error: selError } = await admin
+    let existingQuery = admin
       .from("notifications")
       .select("id")
-      .eq("dedupe_key", dedupeKey)
-      .maybeSingle();
+      .eq("dedupe_key", dedupeKey);
+    // Reforço de escopo: nunca reutilizar uma notificação de outra escola.
+    existingQuery = schoolId
+      ? existingQuery.eq("school_id", schoolId)
+      : existingQuery.is("school_id", null);
+    const { data: existing, error: selError } = await existingQuery.maybeSingle();
     if (selError) throw selError;
     notificationId = existing?.id as string | undefined;
   }
   if (!notificationId) throw new Error("Falha ao criar notificação");
 
   // preferências (linha ausente = habilitado)
-  const { data: prefs } = await admin
+  // Preferências são POR ESCOLA: a preferência de outra escola não vale aqui.
+  let prefQuery = admin
     .from("notification_preferences")
     .select("user_id, push_enabled, inapp_enabled")
     .eq("event_type", eventType)
     .in("user_id", userIds.length ? userIds : ["00000000-0000-0000-0000-000000000000"]);
+  if (schoolId) prefQuery = prefQuery.eq("school_id", schoolId);
+  const { data: prefs } = await prefQuery;
 
   const prefMap = new Map<string, { push_enabled: boolean; inapp_enabled: boolean }>();
   for (const p of prefs ?? []) {
