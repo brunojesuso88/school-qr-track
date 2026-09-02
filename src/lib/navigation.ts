@@ -31,7 +31,7 @@ export const allNavigation: NavItem[] = [
   { name: 'Eventos', href: '/school-events', icon: CalendarDays, roles: ['admin', 'direction', 'teacher'], group: 'Projetos e Eventos', description: 'Calendário e divulgação de eventos' },
   { name: 'Declarações', href: '/declarations', icon: FileText, roles: ['admin', 'direction'], group: 'Documentos', description: 'Emissão de declarações escolares' },
   { name: 'Notificação Docente', href: '/teacher-notifications', icon: FileWarning, roles: ['admin', 'direction'], group: 'Documentos', description: 'Notificações formais para professores' },
-  { name: 'Configurações', href: '/settings', icon: Settings, roles: ['admin', 'direction'], group: 'Sistema', description: 'Horários, escola, usuários e dados' },
+  { name: 'Configurações', href: '/settings', icon: Settings, roles: ['admin', 'direction'], group: 'Sistema', description: 'Escola, usuários e dados' },
   { name: 'Notificações', href: '/notifications', icon: Bell, roles: ['admin', 'direction', 'teacher'], group: 'Sistema', description: 'Central de avisos e alertas do sistema', shortcutOnly: true },
 ];
 
