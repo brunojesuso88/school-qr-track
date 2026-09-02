@@ -487,6 +487,7 @@ const SchoolAdminPanel = () => {
               ? `Links de cadastro serão gerados em ${publicOrigin}/join/...`
               : PREVIEW_LINK_WARNING}
           </p>
+          <p className="text-xs text-amber-600 dark:text-amber-500">{PUBLIC_URL_CHANGE_WARNING}</p>
         </CardContent>
       </Card>
 
