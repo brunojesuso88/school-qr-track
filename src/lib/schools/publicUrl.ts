@@ -41,16 +41,30 @@ export const normalizePublicAppUrl = (input: string | null | undefined): string 
 };
 
 /**
+ * URL de produção realmente publicada do EDUNEXUS.
+ * Serve como base canônica de fallback: nunca depende do preview/editor e
+ * não assume domínio personalizado ainda não conectado ao deploy.
+ */
+export const DEFAULT_PUBLIC_APP_URL = 'https://school-qr-track.lovable.app';
+
+/**
  * Prioridade: (1) URL pública configurada; (2) origin atual se não for preview;
- * (3) null — sem base pública válida, o link não deve ser gerado.
+ * (3) URL de produção publicada (fallback canônico).
  */
 export const resolvePublicAppOrigin = (
   configuredUrl: string | null | undefined,
   currentOrigin: string | null | undefined,
 ): string | null =>
   normalizePublicAppUrl(configuredUrl) ??
-  (isPreviewOrigin(currentOrigin) ? null : normalizePublicAppUrl(currentOrigin ?? ''));
+  (isPreviewOrigin(currentOrigin)
+    ? DEFAULT_PUBLIC_APP_URL
+    : normalizePublicAppUrl(currentOrigin ?? '')) ??
+  DEFAULT_PUBLIC_APP_URL;
 
 export const PREVIEW_LINK_WARNING =
-  'Você está no ambiente de preview do Lovable. Configure a URL pública do EDUNEXUS ' +
-  '(ou abra a versão publicada) para copiar o link de cadastro.';
+  'Você está no ambiente de preview do Lovable. O link de cadastro usa a URL pública ' +
+  `publicada (${DEFAULT_PUBLIC_APP_URL}) para que ninguém precise de conta Lovable.`;
+
+export const PUBLIC_URL_CHANGE_WARNING =
+  'Só troque esta URL depois que o domínio personalizado estiver comprovadamente publicado ' +
+  'e apontando para este mesmo deploy. Caso contrário, os links de cadastro podem cair em 404.';
