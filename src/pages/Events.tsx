@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useActiveSchoolId, useSchoolScopeKey } from '@/contexts/SchoolContext';
+import { useSchoolBranding } from '@/hooks/useSchoolBranding';
 import { useSearchParams } from 'react-router-dom';
 import DashboardLayout from '@/components/DashboardLayout';
 import { Button } from '@/components/ui/button';
@@ -14,11 +15,12 @@ import EventFormDialog from '@/components/events/EventFormDialog';
 import EventDetailDialog from '@/components/events/EventDetailDialog';
 import { SchoolEvent, STATUS_LABELS, EventStatus } from '@/components/events/types';
 import jsPDF from 'jspdf';
-import logoCepans from '@/assets/logo-cepans.png';
 
 export default function Events() {
   const schoolScopeKey = useSchoolScopeKey();
   const activeSchoolId = useActiveSchoolId();
+  const branding = useSchoolBranding();
+  const logoDataUrl = branding.logoDataUrl;
   const [events, setEvents] = useState<SchoolEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -26,21 +28,7 @@ export default function Events() {
   const [formOpen, setFormOpen] = useState(false);
   const [detailOpen, setDetailOpen] = useState(false);
   const [active, setActive] = useState<SchoolEvent | null>(null);
-  const [logoDataUrl, setLogoDataUrl] = useState<string | null>(null);
   const [searchParams, setSearchParams] = useSearchParams();
-
-  useEffect(() => {
-    fetch(logoCepans)
-      .then(r => r.blob())
-      .then(b => new Promise<string>((res, rej) => {
-        const reader = new FileReader();
-        reader.onload = () => res(reader.result as string);
-        reader.onerror = rej;
-        reader.readAsDataURL(b);
-      }))
-      .then(setLogoDataUrl)
-      .catch(() => {});
-  }, [schoolScopeKey]);
 
   const load = async () => {
     if (!activeSchoolId) { setEvents([]); setLoading(false); return; }
@@ -98,9 +86,9 @@ export default function Events() {
         try { doc.addImage(logoDataUrl, 'PNG', margin, 24, 64, 64); } catch {}
       }
       doc.setFont('helvetica', 'bold'); doc.setFontSize(13);
-      doc.text('CENTRO DE ENSINO PROF. ANTÔNIO NONATO SAMPAIO', margin + 78, 44);
+      doc.text(branding.schoolNameUpper, margin + 78, 44);
       doc.setFont('helvetica', 'normal'); doc.setFontSize(10);
-      doc.text('Coelho Neto – MA', margin + 78, 60);
+      doc.text(branding.cityStateLine, margin + 78, 60);
       doc.setFontSize(9); doc.setTextColor(120);
       doc.text('Plano de Ação Escolar — Projetos e Atas', margin + 78, 74);
       doc.setTextColor(0);
