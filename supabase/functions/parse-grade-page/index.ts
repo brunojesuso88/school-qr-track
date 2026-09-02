@@ -260,7 +260,8 @@ serve(async (req) => {
     new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
   try {
-    const auth = await requireAuth(req, corsHeaders, ['admin', 'direction']);
+    // Autenticação apenas: a autorização é SEMPRE pela escola da linha alvo.
+    const auth = await requireAuth(req, corsHeaders);
     if (auth instanceof Response) return auth;
 
     const admin = createClient(
@@ -270,8 +271,40 @@ serve(async (req) => {
 
     const payload = await req.json().catch(() => ({}));
     const action = String(payload.action ?? 'page');
+    const MANAGERS: AppRole[] = ['admin', 'direction'];
+
+    /** Resolve a sessão no banco (school_id do servidor) e valida o papel do usuário nessa escola. */
+    const loadSessionScoped = async (columns: string) => {
+      const sessionId = payload.session_id;
+      if (!sessionId || typeof sessionId !== 'string') {
+        return { error: json({ success: false, error: 'Sessão não informada.' }, 400) };
+      }
+      const { data, error } = await admin
+        .from('grade_import_sessions')
+        .select(`school_id, ${columns}`)
+        .eq('id', sessionId)
+        .maybeSingle();
+      if (error) throw error;
+      if (!data) return { error: json({ success: false, error: 'Sessão não encontrada.' }, 404) };
+      const denied = await assertSchoolRole(auth.userClient, corsHeaders, (data as { school_id: string }).school_id, MANAGERS);
+      if (denied) return { error: denied };
+      return { session: data as Record<string, unknown> };
+    };
 
     if (action === 'create') {
+      const classId = payload.class_id;
+      if (!classId || typeof classId !== 'string') return json({ success: false, error: 'Turma não informada.' }, 400);
+      const { data: classRow, error: classErr } = await admin
+        .from('classes')
+        .select('id, school_id')
+        .eq('id', classId)
+        .maybeSingle();
+      if (classErr) throw classErr;
+      if (!classRow) return json({ success: false, error: 'Turma não encontrada.' }, 404);
+      const denied = await assertSchoolRole(auth.userClient, corsHeaders, classRow.school_id as string, MANAGERS);
+      if (denied) return denied;
+      const schoolId = classRow.school_id as string;
+
       const pdfBase64: string = payload.pdfBase64 ?? '';
       if (!pdfBase64) return json({ success: false, error: 'PDF não enviado.' }, 400);
       const bytes = base64ToBytes(pdfBase64);
@@ -289,7 +322,8 @@ serve(async (req) => {
       const { data: session, error } = await admin
         .from('grade_import_sessions')
         .insert({
-          class_id: payload.class_id,
+          class_id: classId,
+          school_id: schoolId,
           file_name: payload.fileName ?? null,
           total_pages: totalPages,
           current_page: 1,
@@ -308,6 +342,7 @@ serve(async (req) => {
 
       const pageRows = Array.from({ length: totalPages }, (_, i) => ({
         session_id: session.id,
+        school_id: schoolId,
         page_number: i + 1,
         status: 'pending',
       }));
@@ -320,41 +355,40 @@ serve(async (req) => {
     }
 
     if (action === 'status') {
-      const { data: session, error } = await admin
-        .from('grade_import_sessions')
-        .select('id, class_id, file_name, total_pages, current_page, status, confirmed_pages, ignored_pages, notes_imported, current_preview, context, created_at')
-        .eq('id', payload.session_id)
-        .maybeSingle();
-      if (error) throw error;
-      if (!session) return json({ success: false, error: 'Sessão não encontrada.' }, 404);
+      const scoped = await loadSessionScoped(
+        'id, class_id, file_name, total_pages, current_page, status, confirmed_pages, ignored_pages, notes_imported, current_preview, context, created_at',
+      );
+      if (scoped.error) return scoped.error;
+      const session = scoped.session!;
       const { data: pages } = await admin
         .from('grade_import_session_pages')
         .select('page_number, status, error')
-        .eq('session_id', session.id)
+        .eq('session_id', session.id as string)
         .order('page_number');
       return json({ success: true, session, pages: pages ?? [] });
     }
 
     if (action === 'cancel') {
+      const scoped = await loadSessionScoped('id');
+      if (scoped.error) return scoped.error;
       await admin
         .from('grade_import_sessions')
         .update({ status: 'cancelled', pdf_base64: null })
-        .eq('id', payload.session_id);
+        .eq('id', scoped.session!.id as string);
       return json({ success: true });
     }
 
     if (action !== 'page') return json({ success: false, error: 'Ação inválida.' }, 400);
 
     // ---------- action=page: processa SOMENTE uma página ----------
-    const sessionId = payload.session_id;
-    const { data: session, error: sErr } = await admin
-      .from('grade_import_sessions')
-      .select('id, class_id, file_name, total_pages, status, context, pdf_base64')
-      .eq('id', sessionId)
-      .maybeSingle();
-    if (sErr) throw sErr;
-    if (!session) return json({ success: false, error: 'Sessão não encontrada.' }, 404);
+    const scopedPage = await loadSessionScoped('id, class_id, file_name, total_pages, status, context, pdf_base64');
+    if (scopedPage.error) return scopedPage.error;
+    const session = scopedPage.session! as unknown as {
+      id: string; class_id: string; file_name: string | null; total_pages: number;
+      status: string; context: Record<string, unknown>; pdf_base64: string | null;
+    };
     if (!session.pdf_base64) return json({ success: false, error: 'O arquivo desta sessão não está mais disponível. Inicie uma nova importação.' }, 410);
+
 
     const pageNumber = Number(payload.page_number ?? 1);
     if (!Number.isInteger(pageNumber) || pageNumber < 1 || pageNumber > session.total_pages) {
