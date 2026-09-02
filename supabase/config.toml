@@ -15,16 +15,10 @@ verify_jwt = false
 [functions.parse-subjects-pdf]
 verify_jwt = false
 
-[functions.generate-timetable]
-verify_jwt = false
-
 [functions.delete-user]
 verify_jwt = false
 
 [functions.notify-new-user]
-verify_jwt = false
-
-[functions.conflict-chat]
 verify_jwt = false
 
 [functions.event-share]

@@ -82,15 +82,13 @@ const App = () => (
               <Route path="/notifications" element={<ProtectedRoute><Notifications /></ProtectedRoute>} />
               <Route path="/settings" element={<AdminRoute><Settings /></AdminRoute>} />
               
-              {/* Compatibilidade: módulos removidos (Mapeamento Escolar / Criação do Horário) */}
+              {/* Compatibilidade: módulo removido (Mapeamento Escolar) */}
               <Route path="/school-mapping/teachers" element={<Navigate to="/teachers" replace />} />
               <Route path="/school-mapping/subjects" element={<Navigate to="/subjects" replace />} />
               <Route path="/school-mapping/classes" element={<Navigate to="/classes" replace />} />
               <Route path="/school-mapping/distribution" element={<Navigate to="/dashboard" replace />} />
               <Route path="/school-mapping/summary" element={<Navigate to="/dashboard" replace />} />
               <Route path="/school-mapping" element={<Navigate to="/dashboard" replace />} />
-              <Route path="/timetable/*" element={<Navigate to="/dashboard" replace />} />
-              <Route path="/timetable" element={<Navigate to="/dashboard" replace />} />
 
               {/* Staff Route - Funcionário (página simplificada) */}
               <Route path="/staff/scan" element={<StaffRoute><StaffScanQR /></StaffRoute>} />
