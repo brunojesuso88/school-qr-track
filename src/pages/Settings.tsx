@@ -1,9 +1,8 @@
 import DashboardLayout from '@/components/DashboardLayout';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Settings as SettingsIcon, Clock, MessageSquare, Users, Building2, Download, ShieldCheck } from 'lucide-react';
+import { Settings as SettingsIcon, Clock, MessageSquare, Users, Building2, Download } from 'lucide-react';
 import GeneralSettings from '@/components/settings/GeneralSettings';
 import NotificationSettings from '@/components/settings/NotificationSettings';
-import UserManagement from '@/components/settings/UserManagement';
 import SchoolSettings from '@/components/settings/SchoolSettings';
 import DataExport from '@/components/settings/DataExport';
 import SchoolAdminPanel from '@/components/settings/SchoolAdminPanel';
@@ -12,7 +11,10 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Shield } from 'lucide-react';
 
 const Settings = () => {
-  const { canAccessSettings, canManageUsers, isGlobalAdmin } = useAuth();
+  const { canAccessSettings, isGlobalAdmin, userRole } = useAuth();
+  // Direção mantém as permissões atuais: gestão de usuários é do administrador.
+  const canManageMembers = isGlobalAdmin || userRole === 'admin';
+
 
   // Block access for teacher and staff
   if (!canAccessSettings) {
