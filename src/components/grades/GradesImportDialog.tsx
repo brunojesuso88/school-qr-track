@@ -940,10 +940,22 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
       const { data: userData } = await supabase.auth.getUser();
       const oldName = effectiveName || classItem.name;
       const newName = resolveClassNameFromPdf(preview.pdf_class_code, salaFora);
-      const { error: classError } = await supabase.from('classes').update({ name: newName }).eq('id', classItem.id);
+      const schoolId = assertActiveSchool(activeSchoolId);
+      // Turma: sempre por id + escola ativa (nome de turma nunca é identificador global).
+      const { error: classError } = await supabase
+        .from('classes')
+        .update({ name: newName })
+        .eq('id', classItem.id)
+        .eq('school_id', schoolId);
       if (classError) throw classError;
-      const { error: studentsError } = await supabase.from('students').update({ class: newName }).eq('class', oldName);
+      // Alunos: nome antigo SOMENTE dentro da escola ativa (escolas podem ter turmas homônimas).
+      const { error: studentsError } = await supabase
+        .from('students')
+        .update({ class: newName })
+        .eq('school_id', schoolId)
+        .eq('class', oldName);
       if (studentsError) throw studentsError;
+
       await supabase.from('audit_logs').insert({
         user_id: userData?.user?.id ?? null,
         action: 'UPDATE',
