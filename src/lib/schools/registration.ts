@@ -25,11 +25,16 @@ export interface ResolvedRegistrationLink {
 
 export const JOIN_ROUTE_PREFIX = '/join/';
 
-/** URL pública e exclusiva de cadastro de uma escola. */
-export const buildJoinUrl = (token: string, origin: string): string => {
-  const cleanOrigin = origin.replace(/\/+$/, '');
-  return `${cleanOrigin}${JOIN_ROUTE_PREFIX}${token}`;
+/**
+ * URL pública e exclusiva de cadastro de uma escola.
+ * Retorna null quando a base não é pública (preview/editor do Lovable, localhost, http).
+ */
+export const buildJoinUrl = (token: string, origin: string | null | undefined): string | null => {
+  const base = resolvePublicAppOrigin(null, origin) ?? normalizePublicAppUrl(origin);
+  if (!base || !token) return null;
+  return `${base}${JOIN_ROUTE_PREFIX}${token}`;
 };
+
 
 export const slugifySchoolName = (name: string): string =>
   name
