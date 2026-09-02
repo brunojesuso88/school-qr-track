@@ -108,10 +108,16 @@ const Classes = () => {
   }, [schoolScopeKey]);
 
   const fetchClasses = async () => {
+    if (!activeSchoolId) {
+      setClasses([]);
+      setLoading(false);
+      return;
+    }
     try {
       const { data, error } = await supabase
         .from('classes')
         .select('*')
+        .eq('school_id', activeSchoolId)
         .order('name');
 
       if (error) throw error;
@@ -125,10 +131,15 @@ const Classes = () => {
   };
 
   const fetchStudentCounts = async () => {
+    if (!activeSchoolId) {
+      setStudentCounts({});
+      return;
+    }
     try {
       const { data, error } = await supabase
         .from('students')
         .select('class')
+        .eq('school_id', activeSchoolId)
         .eq('status', 'active');
 
       if (error) throw error;
@@ -144,12 +155,17 @@ const Classes = () => {
   };
 
   const fetchAttendanceStatus = async () => {
+    if (!activeSchoolId) {
+      setClassesWithAttendance(new Set());
+      return;
+    }
     const todayStr = localDateKey();
     try {
       // Fonte única de verdade do status do dia: fechamento da turma.
       const { data, error } = await supabase
         .from('daily_attendance_closures')
         .select('class_name')
+        .eq('school_id', activeSchoolId)
         .eq('date', todayStr);
 
       if (error) throw error;
@@ -330,7 +346,7 @@ const Classes = () => {
   const handleDownloadAbsentStudents = async (className: string) => {
     const todayDisplay = format(new Date(), "dd 'de' MMMM 'de' yyyy", { locale: ptBR });
     try {
-      const result = await exportAbsentStudents(className, todayDisplay);
+      const result = await exportAbsentStudents(className, todayDisplay, activeSchoolId);
       if (result.status === 'empty') {
         toast.info('Nenhum aluno faltoso nesta turma hoje');
         return;

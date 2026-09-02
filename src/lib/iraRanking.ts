@@ -115,24 +115,26 @@ export interface RankingResult {
 const norm = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
 
 /** Carrega e calcula a classificação em lote (poucas queries, cálculo em memória). */
-export async function buildIraRanking(classIds: string[]): Promise<RankingResult> {
-  if (classIds.length === 0) {
-    return { ranked: [], top: [], eligibleCount: 0, ineligibleCount: 0, missingDataCount: 0, classesWithoutConfig: [], periodsLabel: '' };
+export async function buildIraRanking(classIds: string[], schoolId: string | null | undefined): Promise<RankingResult> {
+  const empty: RankingResult = { ranked: [], top: [], eligibleCount: 0, ineligibleCount: 0, missingDataCount: 0, classesWithoutConfig: [], periodsLabel: '' };
+  if (classIds.length === 0 || !schoolId) {
+    return empty;
   }
 
   const { data: classRows, error: classErr } = await supabase
     .from('classes')
     .select('id, name, series')
+    .eq('school_id', schoolId)
     .in('id', classIds);
   if (classErr) throw classErr;
   const classes = (classRows || []) as { id: string; name: string; series: string | null }[];
   const classNames = classes.map((c) => c.name);
 
   const [studentsRes, subjRes, perRes, settingsRes] = await Promise.all([
-    supabase.from('students').select('id, school_code, student_id, full_name, birth_date, class, status').in('class', classNames),
-    supabase.from('grade_subjects').select('*').in('class_id', classIds).eq('legacy_excluded', false).order('sort_order'),
-    supabase.from('grade_periods').select('*').in('class_id', classIds).order('sort_order'),
-    supabase.from('ira_settings').select('*').in('class_id', classIds),
+    supabase.from('students').select('id, school_code, student_id, full_name, birth_date, class, status').eq('school_id', schoolId).in('class', classNames),
+    supabase.from('grade_subjects').select('*').eq('school_id', schoolId).in('class_id', classIds).eq('legacy_excluded', false).order('sort_order'),
+    supabase.from('grade_periods').select('*').eq('school_id', schoolId).in('class_id', classIds).order('sort_order'),
+    supabase.from('ira_settings').select('*').eq('school_id', schoolId).in('class_id', classIds),
   ]);
   if (studentsRes.error) throw studentsRes.error;
   if (subjRes.error) throw subjRes.error;
@@ -146,12 +148,12 @@ export async function buildIraRanking(classIds: string[]): Promise<RankingResult
   const periods = (perRes.data || []) as unknown as GradePeriodRow[];
   const settings = (settingsRes.data || []) as unknown as IraSettingsRow[];
 
-  const grades: StudentGradeRow[] = await fetchGradesPaged(subjects.map((s) => s.id));
+  const grades: StudentGradeRow[] = await fetchGradesPaged(subjects.map((s) => s.id), undefined, schoolId);
 
   const mappingIds = subjects.map((s) => s.mapping_class_subject_id).filter(Boolean) as string[];
   const currentWeeklyClasses: Record<string, number> = {};
   if (mappingIds.length > 0) {
-    const { data } = await supabase.from('mapping_class_subjects').select('id, weekly_classes').in('id', mappingIds);
+    const { data } = await supabase.from('mapping_class_subjects').select('id, weekly_classes').eq('school_id', schoolId).in('id', mappingIds);
     (data || []).forEach((row: { id: string; weekly_classes: number }) => {
       currentWeeklyClasses[row.id] = row.weekly_classes;
     });
@@ -164,7 +166,7 @@ export async function buildIraRanking(classIds: string[]): Promise<RankingResult
   });
   const classNameById = new Map(classes.map((c) => [c.id, c.name]));
 
-  const matrixWeeklyByKey = await fetchMatrixWeeklyByKey(classes.map((c) => parseSeriesValue(c.series)));
+  const matrixWeeklyByKey = await fetchMatrixWeeklyByKey(classes.map((c) => parseSeriesValue(c.series)), schoolId);
 
   const dataByClass = new Map<string, ClassGradesData>();
   classIds.forEach((classId) => {

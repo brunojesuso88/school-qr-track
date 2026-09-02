@@ -15,7 +15,7 @@ import { parseSeriesValue } from '@/lib/series';
 import { isPeriodKind, periodRank } from '@/lib/gradePageLocal/normalize';
 import { fetchMatrixWeeklyByKey } from '@/lib/curriculumMatrixWeekly';
 import { IraSnapshotRow, SnapshotBuildInput, buildSnapshotRows, isDropout } from './core';
-import { NO_ACTIVE_SCHOOL_MESSAGE } from '@/lib/schools/scope';
+import { NO_ACTIVE_SCHOOL_MESSAGE, assertActiveSchool } from '@/lib/schools/scope';
 
 const norm = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
 
@@ -32,13 +32,13 @@ export interface RecomputeResult {
 export async function markIraStale(
   classId: string,
   reason: string,
-  schoolId?: string | null,
+  schoolId: string | null | undefined,
 ): Promise<void> {
   const { error } = await supabase
     .from('ira_staleness')
     .upsert(
       {
-        ...(schoolId ? { school_id: schoolId } : {}),
+        school_id: assertActiveSchool(schoolId),
         class_id: classId,
         stale: true,
         reason,
@@ -112,7 +112,7 @@ export async function recomputeIraScope(
     .sort((a, b) => periodRank(a.label) - periodRank(b.label) || a.sort_order - b.sort_order);
   const settings = (settingsRes.data || []) as unknown as IraSettingsRow[];
 
-  const grades: StudentGradeRow[] = await fetchGradesPaged(subjects.map((s) => s.id));
+  const grades: StudentGradeRow[] = await fetchGradesPaged(subjects.map((s) => s.id), undefined, schoolId);
 
   const mappingIds = subjects.map((s) => s.mapping_class_subject_id).filter(Boolean) as string[];
   const currentWeeklyClasses: Record<string, number> = {};
@@ -129,6 +129,7 @@ export async function recomputeIraScope(
 
   const matrixWeeklyByKey = await fetchMatrixWeeklyByKey(
     scopeClasses.map((c) => parseSeriesValue(c.series)),
+    schoolId,
   );
 
   const dataByClass = new Map<string, ClassGradesData>();

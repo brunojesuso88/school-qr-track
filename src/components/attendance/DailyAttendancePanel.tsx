@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { useActiveSchoolId } from '@/contexts/SchoolContext';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -28,6 +29,7 @@ const shiftLabel = (shift?: string | null) => {
 };
 
 const DailyAttendancePanel = () => {
+  const activeSchoolId = useActiveSchoolId();
   const [rows, setRows] = useState<DailyClassRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -38,13 +40,18 @@ const DailyAttendancePanel = () => {
   const todayKey = localDateKey(today);
 
   const load = useCallback(async () => {
+    if (!activeSchoolId) {
+      setRows([]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
       const [classesRes, studentsRes, closuresRes] = await Promise.all([
-        supabase.from('classes').select('id, name, shift, status').order('name'),
-        supabase.from('students').select('id, class, status'),
-        supabase.from('daily_attendance_closures').select('class_name, date, present_count, absent_count, updated_at').eq('date', todayKey),
+        supabase.from('classes').select('id, name, shift, status').eq('school_id', activeSchoolId).order('name'),
+        supabase.from('students').select('id, class, status').eq('school_id', activeSchoolId),
+        supabase.from('daily_attendance_closures').select('class_name, date, present_count, absent_count, updated_at').eq('school_id', activeSchoolId).eq('date', todayKey),
       ]);
       if (classesRes.error) throw classesRes.error;
       if (studentsRes.error) throw studentsRes.error;
@@ -57,7 +64,7 @@ const DailyAttendancePanel = () => {
     } finally {
       setLoading(false);
     }
-  }, [todayKey]);
+  }, [todayKey, activeSchoolId]);
 
   useEffect(() => {
     load();
@@ -74,7 +81,7 @@ const DailyAttendancePanel = () => {
   const handleDownloadAbsentStudents = async (name: string) => {
     const todayDisplay = format(today, "dd 'de' MMMM 'de' yyyy", { locale: ptBR });
     try {
-      const result = await exportAbsentStudents(name, todayDisplay, today);
+      const result = await exportAbsentStudents(name, todayDisplay, activeSchoolId, today);
       if (result.status === 'empty') {
         toast.info('Nenhum aluno faltoso nesta turma hoje');
         return;

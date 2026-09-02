@@ -15,6 +15,7 @@ import {
   ClassCurriculumState, describePlan, humanizeCurriculumError, inspectClassCurriculum, isPlanInSync,
   syncClassCurriculum,
 } from '@/lib/classCurriculum/sync';
+import { NO_ACTIVE_SCHOOL_MESSAGE } from '@/lib/schools/scope';
 
 
 interface Props {
@@ -36,13 +37,25 @@ export const ClassCurriculumGate = ({ classId, onReadyChange, onSynced }: Props)
   const [state, setState] = useState<ClassCurriculumState | null>(null);
 
   const load = useCallback(async () => {
+    if (!activeSchoolId) {
+      setSeries('');
+      setState(null);
+      onReadyChange(false);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
-      const { data, error } = await supabase.from('classes').select('series').eq('id', classId).maybeSingle();
+      const { data, error } = await supabase
+        .from('classes')
+        .select('series')
+        .eq('school_id', activeSchoolId)
+        .eq('id', classId)
+        .maybeSingle();
       if (error) throw error;
       const parsed = parseSeriesValue((data as { series?: string | null } | null)?.series ?? null);
       setSeries(parsed ?? '');
-      const next = parsed ? await inspectClassCurriculum(classId, parsed) : null;
+      const next = parsed ? await inspectClassCurriculum(classId, parsed, activeSchoolId) : null;
       setState(next);
       onReadyChange(Boolean(next && isPlanInSync(next.plan)));
     } catch (e) {
@@ -51,18 +64,22 @@ export const ClassCurriculumGate = ({ classId, onReadyChange, onSynced }: Props)
     } finally {
       setLoading(false);
     }
-  }, [classId, onReadyChange]);
+  }, [classId, onReadyChange, activeSchoolId]);
 
   useEffect(() => { load(); }, [load]);
 
   const handleSeriesChange = async (value: string) => {
     const parsed = parseSeriesValue(value);
     if (!parsed) return;
+    if (!activeSchoolId) {
+      toast.error(NO_ACTIVE_SCHOOL_MESSAGE);
+      return;
+    }
     setSeries(parsed);
     setSyncing(true);
     onReadyChange(false);
     try {
-      const next = await inspectClassCurriculum(classId, parsed);
+      const next = await inspectClassCurriculum(classId, parsed, activeSchoolId);
       setState(next);
     } finally {
       setSyncing(false);

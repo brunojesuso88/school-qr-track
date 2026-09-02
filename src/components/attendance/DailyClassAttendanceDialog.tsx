@@ -48,6 +48,12 @@ const DailyClassAttendanceDialog = ({ open, onOpenChange, className, shift, onSa
 
   useEffect(() => {
     if (!open || !className) return;
+    if (!activeSchoolId) {
+      setStudents([]);
+      setAttendance({});
+      setLoading(false);
+      return;
+    }
     let cancelled = false;
 
     const load = async () => {
@@ -57,6 +63,7 @@ const DailyClassAttendanceDialog = ({ open, onOpenChange, className, shift, onSa
         const studentsRes = await supabase
           .from('students')
           .select('id, full_name')
+          .eq('school_id', activeSchoolId)
           .eq('class', className)
           .eq('status', 'active')
           .order('full_name');
@@ -69,6 +76,7 @@ const DailyClassAttendanceDialog = ({ open, onOpenChange, className, shift, onSa
           const attendanceRes = await supabase
             .from('attendance')
             .select('student_id, status')
+            .eq('school_id', activeSchoolId)
             .eq('date', todayKey)
             .in('student_id', list.map((s) => s.id));
           if (attendanceRes.error) throw attendanceRes.error;
@@ -89,7 +97,7 @@ const DailyClassAttendanceDialog = ({ open, onOpenChange, className, shift, onSa
     return () => {
       cancelled = true;
     };
-  }, [open, className, todayKey]);
+  }, [open, className, todayKey, activeSchoolId]);
 
   const setStatus = (studentId: string, status: AttendanceMark) => {
     setAttendance((prev) => ({ ...prev, [studentId]: status }));

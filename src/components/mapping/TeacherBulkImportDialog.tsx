@@ -165,6 +165,10 @@ const TeacherBulkImportDialog = ({ open, onOpenChange }: TeacherBulkImportDialog
   };
 
   const handleSave = async () => {
+    if (!activeSchoolId) {
+      toast({ title: "Nenhuma escola ativa selecionada", variant: "destructive" });
+      return;
+    }
     const selected = extractedTeachers.filter(t => t.selected);
     if (selected.length === 0) {
       toast({ title: "Selecione pelo menos um professor", variant: "destructive" });
@@ -278,7 +282,8 @@ const TeacherBulkImportDialog = ({ open, onOpenChange }: TeacherBulkImportDialog
         // Fetch all matching classes in one query
         const { data: allMatchedClasses } = await supabase
           .from("mapping_classes")
-          .select("id, name");
+          .select("id, name")
+          .eq("school_id", assertActiveSchool(activeSchoolId));
 
         if (allMatchedClasses && allMatchedClasses.length > 0) {
           // Build class name -> id map (case-insensitive)
@@ -290,6 +295,7 @@ const TeacherBulkImportDialog = ({ open, onOpenChange }: TeacherBulkImportDialog
           const { data: allUnassigned } = await supabase
             .from("mapping_class_subjects")
             .select("id, class_id")
+            .eq("school_id", assertActiveSchool(activeSchoolId))
             .in("class_id", classIds)
             .is("teacher_id", null);
 

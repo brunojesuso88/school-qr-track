@@ -8,6 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { GraduationCap, Users, CheckCircle2, XCircle, Clock, ExternalLink } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { useActiveSchoolId } from '@/contexts/SchoolContext';
 import { subDays, format } from 'date-fns';
 
 interface Props {
@@ -28,12 +29,14 @@ interface StudentRow {
 
 export default function ClassSummaryDialog({ open, onOpenChange, className }: Props) {
   const navigate = useNavigate();
+  const activeSchoolId = useActiveSchoolId();
   const [loading, setLoading] = useState(false);
   const [rows, setRows] = useState<StudentRow[]>([]);
   const [days] = useState(30);
 
   useEffect(() => {
     if (!open || !className) return;
+    if (!activeSchoolId) { setRows([]); return; }
     (async () => {
       setLoading(true);
       try {
@@ -41,6 +44,7 @@ export default function ClassSummaryDialog({ open, onOpenChange, className }: Pr
         const { data: students } = await supabase
           .from('students')
           .select('id, full_name')
+          .eq('school_id', activeSchoolId)
           .eq('class', className)
           .eq('status', 'active')
           .order('full_name');
@@ -49,6 +53,7 @@ export default function ClassSummaryDialog({ open, onOpenChange, className }: Pr
         const { data: att } = await supabase
           .from('attendance')
           .select('student_id, status, date')
+          .eq('school_id', activeSchoolId)
           .in('student_id', ids)
           .gte('date', since);
         const map = new Map<string, StudentRow>();
@@ -72,7 +77,7 @@ export default function ClassSummaryDialog({ open, onOpenChange, className }: Pr
         setLoading(false);
       }
     })();
-  }, [open, className, days]);
+  }, [open, className, days, activeSchoolId]);
 
   const totals = useMemo(() => {
     const t = rows.reduce((acc, r) => ({

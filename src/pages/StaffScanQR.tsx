@@ -39,16 +39,16 @@ const StaffScanQR = () => {
   // Fetch sound preference
   useEffect(() => {
     const fetchSoundPreference = async () => {
+      if (!activeSchoolId) { setSoundEnabled(false); return; }
       const { data } = await supabase
-        .from('settings')
-        .select('value')
-        .eq('key', 'realtime_sound_enabled')
-        .maybeSingle();
+          .from('settings')
+          .select('value')
+          .eq('key', 'realtime_sound_enabled').eq('school_id', activeSchoolId).maybeSingle();
       
       setSoundEnabled(data?.value === true || data?.value === 'true');
     };
     fetchSoundPreference();
-  }, [schoolScopeKey]);
+  }, [schoolScopeKey, activeSchoolId]);
 
   // Play notification sound using Web Audio API
   const playNotificationSound = useCallback(() => {
@@ -76,28 +76,32 @@ const StaffScanQR = () => {
   }, [soundEnabled]);
 
   const fetchDailyStats = useCallback(async () => {
+    if (!activeSchoolId) {
+      setDailyStats({ totalPresent: 0, myRegistrations: 0, lastCheckInTime: null });
+      return;
+    }
     const today = format(new Date(), 'yyyy-MM-dd');
     
     try {
       // Total attendances today
       const { count: totalPresent } = await supabase
-        .from('attendance')
-        .select('*', { count: 'exact', head: true })
-        .eq('date', today)
-        .eq('status', 'present');
+          .from('attendance')
+          .select('*', { count: 'exact', head: true })
+          .eq('date', today)
+          .eq('status', 'present').eq('school_id', activeSchoolId);
       
       // My registrations
       const { count: myRegistrations } = await supabase
-        .from('attendance')
-        .select('*', { count: 'exact', head: true })
-        .eq('date', today)
-        .eq('recorded_by', user?.id);
+          .from('attendance')
+          .select('*', { count: 'exact', head: true })
+          .eq('date', today)
+          .eq('recorded_by', user?.id).eq('school_id', activeSchoolId);
       
       // Last check-in
       const { data: lastRecord } = await supabase
-        .from('attendance')
-        .select('time')
-        .eq('date', today)
+          .from('attendance')
+          .select('time')
+          .eq('date', today).eq('school_id', activeSchoolId)
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle();
@@ -110,7 +114,7 @@ const StaffScanQR = () => {
     } catch (error) {
       console.error('Error fetching daily stats:', error);
     }
-  }, [user?.id]);
+  }, [user?.id, activeSchoolId]);
 
   useEffect(() => {
     if (user?.id) {
@@ -155,7 +159,7 @@ const StaffScanQR = () => {
   }, [scanMode]);
 
   const processQRCode = useCallback(async (qrCode: string) => {
-    if (isProcessing || !qrCode.trim()) return;
+    if (isProcessing || !qrCode.trim() || !activeSchoolId) return;
     
     // Check if it's a weekend
     const today = new Date();
@@ -192,11 +196,10 @@ const StaffScanQR = () => {
 
       // Check if already registered today
       const { data: existing } = await supabase
-        .from('attendance')
-        .select('*')
-        .eq('student_id', student.id)
-        .eq('date', today)
-        .maybeSingle();
+          .from('attendance')
+          .select('*')
+          .eq('student_id', student.id)
+          .eq('date', today).eq('school_id', activeSchoolId).maybeSingle();
 
       if (existing) {
         toast.info(`${student.full_name} já registrado hoje`);
@@ -231,7 +234,7 @@ const StaffScanQR = () => {
     } finally {
       setIsProcessing(false);
     }
-  }, [isProcessing, user?.id]);
+  }, [isProcessing, user?.id, activeSchoolId]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setScanResult(e.target.value);

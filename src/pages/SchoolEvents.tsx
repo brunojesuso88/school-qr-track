@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { useActiveSchoolId, useSchoolScopeKey } from '@/contexts/SchoolContext';
 import DashboardLayout from '@/components/DashboardLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -12,6 +13,8 @@ import SchoolEventDetailDialog from '@/components/school-events/SchoolEventDetai
 import { SchoolEventSimple } from '@/components/school-events/types';
 
 export default function SchoolEvents() {
+  const schoolScopeKey = useSchoolScopeKey();
+  const activeSchoolId = useActiveSchoolId();
   const [events, setEvents] = useState<SchoolEventSimple[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -21,12 +24,12 @@ export default function SchoolEvents() {
   const [searchParams] = useSearchParams();
 
   const load = async () => {
+    if (!activeSchoolId) { setEvents([]); setLoading(false); return; }
     setLoading(true);
     const { data, error } = await supabase
-      .from('school_events')
-      .select('id, title, description, event_date, cover_image, images, created_by, created_at, updated_at')
-      .contains('tags', ['evento'])
-      .order('event_date', { ascending: false, nullsFirst: false });
+        .from('school_events')
+        .select('id, title, description, event_date, cover_image, images, created_by, created_at, updated_at')
+        .contains('tags', ['evento']).eq('school_id', activeSchoolId).order('event_date', { ascending: false, nullsFirst: false });
     if (error) toast.error('Erro ao carregar eventos');
     else setEvents(((data || []) as any[]).map(e => ({
       id: e.id,
@@ -42,7 +45,7 @@ export default function SchoolEvents() {
     setLoading(false);
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [schoolScopeKey, activeSchoolId]);
 
   useEffect(() => {
     const id = searchParams.get('id');

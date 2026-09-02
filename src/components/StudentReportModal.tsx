@@ -11,6 +11,7 @@ import { format, parse, startOfMonth, endOfMonth, startOfYear, endOfYear, differ
 import { ptBR } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { StudentPhoto } from '@/components/StudentPhoto';
+import { useActiveSchoolId } from '@/contexts/SchoolContext';
 import { StudentGradesTab } from '@/components/grades/StudentGradesTab';
 import { StudentCertificatesTab } from '@/components/medical/StudentCertificatesTab';
 import { CouncilOccurrenceCard } from '@/components/students/CouncilOccurrenceCard';
@@ -76,6 +77,7 @@ const OCCURRENCE_TYPES = [
 ];
 
 export const StudentReportModal = ({ student, onClose }: StudentReportModalProps) => {
+  const activeSchoolId = useActiveSchoolId();
   const [loading, setLoading] = useState(true);
   const [monthlyAttendance, setMonthlyAttendance] = useState<AttendanceSummary | null>(null);
   const [yearlyAttendance, setYearlyAttendance] = useState<AttendanceSummary | null>(null);
@@ -102,11 +104,18 @@ export const StudentReportModal = ({ student, onClose }: StudentReportModalProps
         setLaudoSignedUrl(null);
       }
     }
-  }, [student]);
+  }, [student, activeSchoolId]);
 
   const fetchStudentData = async () => {
     if (!student) return;
-    
+    if (!activeSchoolId) {
+      setMonthlyAttendance(null);
+      setYearlyAttendance(null);
+      setOccurrences([]);
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     try {
       const now = new Date();
@@ -118,6 +127,7 @@ export const StudentReportModal = ({ student, onClose }: StudentReportModalProps
       const { data: monthData } = await supabase
         .from('attendance')
         .select('status')
+        .eq('school_id', activeSchoolId)
         .eq('student_id', student.id)
         .gte('date', monthStart)
         .lte('date', monthEnd);
@@ -143,6 +153,7 @@ export const StudentReportModal = ({ student, onClose }: StudentReportModalProps
       const { data: yearData } = await supabase
         .from('attendance')
         .select('status')
+        .eq('school_id', activeSchoolId)
         .eq('student_id', student.id)
         .gte('date', yearStart)
         .lte('date', yearEnd);
@@ -165,6 +176,7 @@ export const StudentReportModal = ({ student, onClose }: StudentReportModalProps
       const { data: occData } = await supabase
         .from('occurrences')
         .select('*')
+        .eq('school_id', activeSchoolId)
         .eq('student_id', student.id)
         .order('date', { ascending: false });
 

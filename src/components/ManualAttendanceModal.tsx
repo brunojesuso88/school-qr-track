@@ -49,12 +49,17 @@ const ManualAttendanceModal = ({ onSuccess }: ManualAttendanceModalProps) => {
     if (open) {
       fetchStudents();
     }
-  }, [open]);
+  }, [open, activeSchoolId]);
 
   const fetchStudents = async () => {
+    if (!activeSchoolId) {
+      setStudents([]);
+      return;
+    }
     const { data } = await supabase
       .from('students')
       .select('id, full_name, class')
+      .eq('school_id', activeSchoolId)
       .eq('status', 'active')
       .order('full_name');
     
@@ -83,10 +88,13 @@ const ManualAttendanceModal = ({ onSuccess }: ManualAttendanceModalProps) => {
       const dateStr = format(selectedDate, 'yyyy-MM-dd');
       const currentTime = format(new Date(), 'HH:mm:ss');
 
+      const schoolId = assertActiveSchool(activeSchoolId);
+
       // Check if already exists
       const { data: existing } = await supabase
         .from('attendance')
         .select('id')
+        .eq('school_id', schoolId)
         .eq('student_id', selectedStudent)
         .eq('date', dateStr)
         .single();
@@ -109,7 +117,7 @@ const ManualAttendanceModal = ({ onSuccess }: ManualAttendanceModalProps) => {
         const { error } = await supabase
           .from('attendance')
           .insert({
-            school_id: assertActiveSchool(activeSchoolId),
+            school_id: schoolId,
             student_id: selectedStudent,
             date: dateStr,
             time: currentTime,

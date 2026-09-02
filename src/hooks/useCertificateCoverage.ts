@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { buildCoverageMapFromFlags, CoverageFlagRow, CoverageMap } from '@/lib/medicalCertificates/status';
+import { useActiveSchoolId } from '@/contexts/SchoolContext';
 
 /**
  * Busca em LOTE a cobertura de atestados para um conjunto de alunos e datas.
@@ -34,6 +35,7 @@ export async function fetchActiveCertificateStudents(onDate: string): Promise<Se
 
 
 export function useCertificateCoverage(studentIds: string[], dates: string[]) {
+  const activeSchoolId = useActiveSchoolId();
   const [coverage, setCoverage] = useState<CoverageMap>(new Set());
   const [loading, setLoading] = useState(false);
 
@@ -45,7 +47,7 @@ export function useCertificateCoverage(studentIds: string[], dates: string[]) {
     const map = await fetchCoverage(idsKey ? idsKey.split(',') : [], datesKey ? datesKey.split(',') : []);
     setCoverage(map);
     setLoading(false);
-  }, [idsKey, datesKey]);
+  }, [idsKey, datesKey, activeSchoolId]);
 
   useEffect(() => {
     void reload();
@@ -56,6 +58,7 @@ export function useCertificateCoverage(studentIds: string[], dates: string[]) {
 
 /** Set de alunos com atestado ativo hoje, para badges em lote. */
 export function useActiveCertificateStudents(onDate: string) {
+  const activeSchoolId = useActiveSchoolId();
   const [studentIds, setStudentIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
@@ -66,7 +69,7 @@ export function useActiveCertificateStudents(onDate: string) {
     return () => {
       cancelled = true;
     };
-  }, [onDate]);
+  }, [onDate, activeSchoolId]);
 
   return studentIds;
 }

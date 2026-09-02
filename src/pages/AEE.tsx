@@ -102,12 +102,12 @@ const AEE = () => {
   }, [schoolScopeKey]);
 
   const fetchStudents = async () => {
+    if (!activeSchoolId) { setStudents([]); setLoading(false); return; }
     try {
       const { data, error } = await supabase
-        .from('students')
-        .select('id, full_name, student_id, class, shift, photo_url, status, birth_date, has_medical_report, aee_cid_code, aee_cid_description, aee_uses_medication, aee_medication_name, aee_literacy_status, aee_adapted_activities, aee_adaptation_suggestions, aee_laudo_attachment_url, guardian_name, guardian_phone')
-        .eq('has_medical_report', true)
-        .order('full_name');
+          .from('students')
+          .select('id, full_name, student_id, class, shift, photo_url, status, birth_date, has_medical_report, aee_cid_code, aee_cid_description, aee_uses_medication, aee_medication_name, aee_literacy_status, aee_adapted_activities, aee_adaptation_suggestions, aee_laudo_attachment_url, guardian_name, guardian_phone')
+          .eq('has_medical_report', true).eq('school_id', activeSchoolId).order('full_name');
 
       if (error) throw error;
       setStudents(data || []);
@@ -122,12 +122,12 @@ const AEE = () => {
   const fetchStudentTeachers = async (studentClass: string) => {
     setLoadingTeachers(true);
     try {
+      if (!activeSchoolId) { setTeachers([]); return; }
       // 1. Find the mapping class by name
       const { data: mappingClass, error: classError } = await supabase
-        .from('mapping_classes')
-        .select('id')
-        .eq('name', studentClass)
-        .maybeSingle();
+          .from('mapping_classes')
+          .select('id')
+          .eq('name', studentClass).eq('school_id', activeSchoolId).maybeSingle();
 
       if (classError) throw classError;
       if (!mappingClass) {
@@ -137,8 +137,8 @@ const AEE = () => {
 
       // 2. Get class subjects with teachers
       const { data: classSubjects, error: subjectsError } = await supabase
-        .from('mapping_class_subjects')
-        .select(`
+          .from('mapping_class_subjects')
+          .select(`
           subject_name,
           teacher_id,
           mapping_teachers (
@@ -147,8 +147,8 @@ const AEE = () => {
             color
           )
         `)
-        .eq('class_id', mappingClass.id)
-        .not('teacher_id', 'is', null);
+          .eq('class_id', mappingClass.id)
+          .not('teacher_id', 'is', null).eq('school_id', activeSchoolId);
 
       if (subjectsError) throw subjectsError;
 
@@ -415,11 +415,11 @@ const AEE = () => {
   const loadPEI = async (student: Student) => {
     setPeiLoading(true);
     try {
+      if (!activeSchoolId) { setPeiData(emptyPEI); return; }
       const { data, error } = await supabase
-        .from('student_pei')
-        .select('*')
-        .eq('student_id', student.id)
-        .maybeSingle();
+          .from('student_pei')
+          .select('*')
+          .eq('student_id', student.id).eq('school_id', activeSchoolId).maybeSingle();
       if (error) throw error;
 
       if (data) {
@@ -470,11 +470,11 @@ const AEE = () => {
   const loadPAEE = async (student: Student) => {
     setPaeeLoading(true);
     try {
+      if (!activeSchoolId) { setPaeeData(emptyPAEE); return; }
       const { data, error } = await (supabase as any)
-        .from('student_paee')
-        .select('*')
-        .eq('student_id', student.id)
-        .maybeSingle();
+          .from('student_paee')
+          .select('*')
+          .eq('student_id', student.id).eq('school_id', activeSchoolId).maybeSingle();
       if (error) throw error;
 
       if (data) {
@@ -616,11 +616,11 @@ const AEE = () => {
   const exportPAEEReport = async (student: Student) => {
     let paee: PAEEData | null = null;
     try {
+      if (!activeSchoolId) { toast.error('Nenhuma escola ativa selecionada'); return; }
       const { data } = await (supabase as any)
-        .from('student_paee')
-        .select('*')
-        .eq('student_id', student.id)
-        .maybeSingle();
+          .from('student_paee')
+          .select('*')
+          .eq('student_id', student.id).eq('school_id', activeSchoolId).maybeSingle();
       if (data) {
         paee = {
           school: data.school || schoolName || '',
@@ -942,11 +942,11 @@ const AEE = () => {
     // Load PEI from DB (latest persisted version)
     let pei: PEIData = emptyPEI;
     try {
+      if (!activeSchoolId) { toast.error('Nenhuma escola ativa selecionada'); return; }
       const { data } = await supabase
-        .from('student_pei')
-        .select('*')
-        .eq('student_id', student.id)
-        .maybeSingle();
+          .from('student_pei')
+          .select('*')
+          .eq('student_id', student.id).eq('school_id', activeSchoolId).maybeSingle();
       if (data) {
         pei = {
           enrollment_number: data.enrollment_number || '',

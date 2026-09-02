@@ -14,6 +14,30 @@ export type Database = {
   }
   public: {
     Tables: {
+      ab_audit_results: {
+        Row: {
+          check_name: string
+          created_at: string
+          detail: string | null
+          id: string
+          passed: boolean
+        }
+        Insert: {
+          check_name: string
+          created_at?: string
+          detail?: string | null
+          id?: string
+          passed: boolean
+        }
+        Update: {
+          check_name?: string
+          created_at?: string
+          detail?: string | null
+          id?: string
+          passed?: boolean
+        }
+        Relationships: []
+      }
       attendance: {
         Row: {
           created_at: string | null
@@ -1436,7 +1460,7 @@ export type Database = {
           last_seen_at: string
           p256dh: string
           platform: string | null
-          school_id: string | null
+          school_id: string
           updated_at: string
           user_agent: string | null
           user_id: string
@@ -1451,7 +1475,7 @@ export type Database = {
           last_seen_at?: string
           p256dh: string
           platform?: string | null
-          school_id?: string | null
+          school_id: string
           updated_at?: string
           user_agent?: string | null
           user_id: string
@@ -1466,7 +1490,7 @@ export type Database = {
           last_seen_at?: string
           p256dh?: string
           platform?: string | null
-          school_id?: string | null
+          school_id?: string
           updated_at?: string
           user_agent?: string | null
           user_id?: string
@@ -2653,6 +2677,14 @@ export type Database = {
           _user_id: string
         }
         Returns: undefined
+      }
+      audit_ab_isolation: {
+        Args: never
+        Returns: {
+          check_name: string
+          detail: string
+          passed: boolean
+        }[]
       }
       can_access_school: { Args: { _school_id: string }; Returns: boolean }
       consolidate_grade_subject: {

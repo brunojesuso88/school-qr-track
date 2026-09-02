@@ -7,6 +7,7 @@ import {
 } from './useStudentGrades';
 import { fetchMatrixWeeklyByKey } from '@/lib/curriculumMatrixWeekly';
 import { parseSeriesValue } from '@/lib/series';
+import { useActiveSchoolId } from '@/contexts/SchoolContext';
 
 /**
  * Calcula o IRA de vários alunos em lote (poucas queries, independente da
@@ -14,6 +15,7 @@ import { parseSeriesValue } from '@/lib/series';
  * (`computeIraForStudent`), garantindo card e aba "Notas" idênticos.
  */
 export function useStudentsIra(students: { id: string; class: string }[]) {
+  const activeSchoolId = useActiveSchoolId();
   const [iraByStudent, setIraByStudent] = useState<Record<string, IraResult>>({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -30,7 +32,7 @@ export function useStudentsIra(students: { id: string; class: string }[]) {
 
   useEffect(() => {
     let active = true;
-    if (classNames.length === 0 || studentIds.length === 0) {
+    if (classNames.length === 0 || studentIds.length === 0 || !activeSchoolId) {
       setIraByStudent({});
       return;
     }
@@ -45,7 +47,8 @@ export function useStudentsIra(students: { id: string; class: string }[]) {
         // ou turma inexistente) em vez de silenciar.
         const { data: classRows, error: classErr } = await supabase
           .from('classes')
-          .select('id, name, series');
+          .select('id, name, series')
+          .eq('school_id', activeSchoolId);
         if (classErr) throw classErr;
         const all = (classRows || []) as { id: string; name: string; series: string | null }[];
         const norm = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
@@ -76,9 +79,9 @@ export function useStudentsIra(students: { id: string; class: string }[]) {
         }
 
         const [subjRes, perRes, settingsRes] = await Promise.all([
-          supabase.from('grade_subjects').select('*').in('class_id', classIds).eq('legacy_excluded', false).order('sort_order'),
-          supabase.from('grade_periods').select('*').in('class_id', classIds).order('sort_order'),
-          supabase.from('ira_settings').select('*').in('class_id', classIds),
+          supabase.from('grade_subjects').select('*').eq('school_id', activeSchoolId).in('class_id', classIds).eq('legacy_excluded', false).order('sort_order'),
+          supabase.from('grade_periods').select('*').eq('school_id', activeSchoolId).in('class_id', classIds).order('sort_order'),
+          supabase.from('ira_settings').select('*').eq('school_id', activeSchoolId).in('class_id', classIds),
         ]);
         if (subjRes.error) throw subjRes.error;
         if (perRes.error) throw perRes.error;
@@ -92,6 +95,7 @@ export function useStudentsIra(students: { id: string; class: string }[]) {
         const grades: StudentGradeRow[] = await fetchGradesPaged(
           subjects.map((s) => s.id),
           studentIds,
+          activeSchoolId,
         );
 
         const mappingIds = subjects.map((s) => s.mapping_class_subject_id).filter(Boolean) as string[];
@@ -100,6 +104,7 @@ export function useStudentsIra(students: { id: string; class: string }[]) {
           const { data } = await supabase
             .from('mapping_class_subjects')
             .select('id, weekly_classes')
+            .eq('school_id', activeSchoolId)
             .in('id', mappingIds);
           (data || []).forEach((row: { id: string; weekly_classes: number }) => {
             currentWeeklyClasses[row.id] = row.weekly_classes;
@@ -108,6 +113,7 @@ export function useStudentsIra(students: { id: string; class: string }[]) {
 
         const matrixWeeklyByKey = await fetchMatrixWeeklyByKey(
           all.filter((c) => classIds.includes(c.id)).map((c) => parseSeriesValue(c.series)),
+          activeSchoolId,
         );
 
         // Uma estrutura por turma (calculada uma única vez) e o IRA mapeado por aluno.
@@ -145,7 +151,7 @@ export function useStudentsIra(students: { id: string; class: string }[]) {
 
     return () => { active = false; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [classKey, studentKey]);
+  }, [classKey, studentKey, activeSchoolId]);
 
   return { iraByStudent, loading, error, unmatchedClasses };
 }

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useSchoolScopeKey } from '@/contexts/SchoolContext';
+import { useActiveSchoolId, useSchoolScopeKey } from '@/contexts/SchoolContext';
 import { useSearchParams } from 'react-router-dom';
 import DashboardLayout from '@/components/DashboardLayout';
 import { Button } from '@/components/ui/button';
@@ -18,6 +18,7 @@ import logoCepans from '@/assets/logo-cepans.png';
 
 export default function Events() {
   const schoolScopeKey = useSchoolScopeKey();
+  const activeSchoolId = useActiveSchoolId();
   const [events, setEvents] = useState<SchoolEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -42,18 +43,18 @@ export default function Events() {
   }, [schoolScopeKey]);
 
   const load = async () => {
+    if (!activeSchoolId) { setEvents([]); setLoading(false); return; }
     setLoading(true);
     const { data, error } = await supabase
-      .from('school_events')
-      .select('*')
-      .not('tags', 'cs', '{evento}')
-      .order('created_at', { ascending: false });
+        .from('school_events')
+        .select('*')
+        .not('tags', 'cs', '{evento}').eq('school_id', activeSchoolId).order('created_at', { ascending: false });
     if (error) toast.error('Erro ao carregar projetos');
     else setEvents((data || []) as any);
     setLoading(false);
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [schoolScopeKey, activeSchoolId]);
 
   useEffect(() => {
     const id = searchParams.get('id');

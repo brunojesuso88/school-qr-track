@@ -23,7 +23,7 @@ import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
-import { useActiveSchoolId } from '@/contexts/SchoolContext';
+import { useActiveSchoolId, useSchoolScopeKey } from '@/contexts/SchoolContext';
 import { assertActiveSchool } from '@/lib/schools/scope';
 import logoCepans from '@/assets/logo-cepans.png';
 import {
@@ -210,6 +210,7 @@ function escapeHTML(s: string): string {
 export default function TeacherNotifications() {
   const { user } = useAuth();
   const activeSchoolId = useActiveSchoolId();
+  const schoolScopeKey = useSchoolScopeKey();
   const { userRole } = useAuth() as any;
   const [form, setForm] = useState<NotificationData>(emptyForm);
   const [customBody, setCustomBody] = useState<string>('');
@@ -236,10 +237,11 @@ export default function TeacherNotifications() {
   const year = new Date().getFullYear();
 
   const fetchRecords = async () => {
+    if (!activeSchoolId) { setRecords([]); setPreviewDocNumber(1); return; }
     setLoading(true);
     const { data, error } = await supabase
-      .from('teacher_notifications')
-      .select('*')
+        .from('teacher_notifications')
+        .select('*').eq('school_id', activeSchoolId)
       .order('doc_year', { ascending: false })
       .order('doc_number', { ascending: false });
     setLoading(false);
@@ -253,7 +255,7 @@ export default function TeacherNotifications() {
     setPreviewDocNumber(maxThisYear + 1);
   };
 
-  useEffect(() => { fetchRecords(); }, []);
+  useEffect(() => { fetchRecords(); }, [schoolScopeKey, activeSchoolId]);
 
   const refreshSignatures = async () => {
     try {

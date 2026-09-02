@@ -174,10 +174,16 @@ const Students = () => {
   }, [schoolScopeKey]);
 
   const fetchOccurrenceMap = async () => {
+    if (!activeSchoolId) {
+      setOccurrenceMap(new Map());
+      setCouncilMap(new Map());
+      return;
+    }
     try {
       const { data, error } = await supabase
         .from('occurrences')
         .select('student_id, date, type')
+        .eq('school_id', activeSchoolId)
         .order('date', { ascending: false });
       if (error) throw error;
       const general = new Map<string, string>();
@@ -194,10 +200,15 @@ const Students = () => {
   };
 
   const fetchAbsenceCounts = async () => {
+    if (!activeSchoolId) {
+      setAbsenceCountMap(new Map());
+      return;
+    }
     try {
       const { data, error } = await supabase
         .from('attendance')
         .select('student_id')
+        .eq('school_id', activeSchoolId)
         .eq('status', 'absent');
       if (error) throw error;
       const map = new Map<string, number>();
@@ -227,10 +238,15 @@ const Students = () => {
   };
 
   const fetchClasses = async () => {
+    if (!activeSchoolId) {
+      setClasses([]);
+      return;
+    }
     try {
       const { data, error } = await supabase
         .from('classes')
         .select('id, name, shift')
+        .eq('school_id', activeSchoolId)
         .eq('status', 'active')
         .order('name');
 
@@ -242,10 +258,16 @@ const Students = () => {
   };
 
   const fetchStudents = async () => {
+    if (!activeSchoolId) {
+      setStudents([]);
+      setLoading(false);
+      return;
+    }
     try {
       const { data, error } = await supabase
         .from('students')
         .select('*')
+        .eq('school_id', activeSchoolId)
         .order('full_name');
 
       if (error) throw error;
@@ -259,10 +281,15 @@ const Students = () => {
   };
 
   const fetchOccurrences = async (studentId: string) => {
+    if (!activeSchoolId) {
+      setOccurrences([]);
+      return;
+    }
     try {
       const { data, error } = await supabase
         .from('occurrences')
         .select('*')
+        .eq('school_id', activeSchoolId)
         .eq('student_id', studentId)
         .order('date', { ascending: false });
 
@@ -557,6 +584,7 @@ const Students = () => {
 
     try {
       const insertData: any = {
+        school_id: assertActiveSchool(activeSchoolId),
         student_id: occurrencesStudent.id,
         type: occurrenceForm.type,
         description: occurrenceForm.description?.substring(0, 1000) || null,
