@@ -2720,6 +2720,7 @@ export type Database = {
       is_global_admin: { Args: never; Returns: boolean }
       is_school_member: { Args: { _school_id: string }; Returns: boolean }
       join_school_with_token: { Args: { _token: string }; Returns: Json }
+      legacy_storage_school_id: { Args: never; Returns: string }
       mark_all_notifications_read: { Args: never; Returns: number }
       next_teacher_notification_number: {
         Args: { _year: number }
