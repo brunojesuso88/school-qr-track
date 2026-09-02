@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useActiveSchoolId } from '@/contexts/SchoolContext';
+import { NO_ACTIVE_SCHOOL_MESSAGE } from '@/lib/schools/scope';
+
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { detectPushPlatform, readStandaloneFlag, type PushPlatformInfo } from '@/lib/notifications/platform';
@@ -68,7 +70,8 @@ export const usePushNotifications = () => {
 
   useEffect(() => {
     const checkSubscription = async () => {
-      if (!isSupported || !user) {
+      if (!isSupported || !user || !activeSchoolId) {
+        setIsSubscribed(false);
         setIsLoading(false);
         return;
       }
@@ -78,11 +81,14 @@ export const usePushNotifications = () => {
 
         if (subscription) {
           setEndpoint(subscription.endpoint);
+          // O mesmo device pode estar vinculado a mais de uma escola do usuário:
+          // aqui interessa apenas o vínculo da escola ATIVA.
           const { data } = await supabase
             .from('push_subscriptions')
             .select('id, disabled_at')
             .eq('user_id', user.id)
             .eq('endpoint', subscription.endpoint)
+            .eq('school_id', activeSchoolId)
             .maybeSingle();
 
           setIsSubscribed(!!data && !data.disabled_at);
@@ -99,7 +105,8 @@ export const usePushNotifications = () => {
     };
 
     checkSubscription();
-  }, [isSupported, user]);
+  }, [isSupported, user, activeSchoolId]);
+
 
   /** Só deve ser chamado a partir de um gesto explícito do usuário. */
   const subscribe = useCallback(async () => {
@@ -109,6 +116,9 @@ export const usePushNotifications = () => {
     const publicKey = vapidKey || await fetchVapidPublicKey();
     if (!isSupported || !user || !publicKey) {
       return { success: false, error: 'Push notifications not available' };
+    }
+    if (!activeSchoolId) {
+      return { success: false, error: NO_ACTIVE_SCHOOL_MESSAGE };
     }
 
     try {
@@ -123,6 +133,7 @@ export const usePushNotifications = () => {
         registration.pushManager as unknown as MinimalPushManager,
         publicKey,
         async (staleEndpoint) => {
+          // Endpoint antigo perde validade em TODAS as escolas do usuário.
           await supabase
             .from('push_subscriptions')
             .delete()
@@ -152,7 +163,7 @@ export const usePushNotifications = () => {
           last_seen_at: new Date().toISOString(),
           failure_count: 0,
           disabled_at: null,
-        }, { onConflict: 'endpoint' });
+        }, { onConflict: 'user_id,endpoint,school_id' });
 
       if (error) throw error;
 
@@ -163,32 +174,42 @@ export const usePushNotifications = () => {
       console.error('Error subscribing to push:', error);
       return { success: false, error: error.message };
     }
-  }, [isSupported, user, platform, vapidKey]);
+  }, [isSupported, user, platform, vapidKey, activeSchoolId]);
 
   const unsubscribe = useCallback(async () => {
     if (!user) return { success: false, error: 'Not authenticated' };
+    if (!activeSchoolId) return { success: false, error: NO_ACTIVE_SCHOOL_MESSAGE };
 
     try {
       const registration = await navigator.serviceWorker.ready;
       const subscription = await registration.pushManager.getSubscription();
 
       if (subscription) {
+        // Remove apenas o vínculo da escola ativa.
         await supabase
           .from('push_subscriptions')
           .delete()
           .eq('user_id', user.id)
+          .eq('endpoint', subscription.endpoint)
+          .eq('school_id', activeSchoolId);
+
+        // Só cancela a inscrição do navegador se o device não atender outra escola.
+        const { count } = await supabase
+          .from('push_subscriptions')
+          .select('id', { count: 'exact', head: true })
+          .eq('user_id', user.id)
           .eq('endpoint', subscription.endpoint);
-        await subscription.unsubscribe();
+        if (!count) await subscription.unsubscribe();
       }
 
-      setEndpoint(null);
       setIsSubscribed(false);
       return { success: true };
     } catch (error: any) {
       console.error('Error unsubscribing:', error);
       return { success: false, error: error.message };
     }
-  }, [user]);
+  }, [user, activeSchoolId]);
+
 
   const sendTestNotification = useCallback(async () => {
     if (!endpoint) return { success: false, error: 'Nenhum dispositivo registrado' };

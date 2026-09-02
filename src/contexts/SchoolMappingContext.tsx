@@ -112,13 +112,21 @@ export const SchoolMappingProvider: React.FC<{ children: React.ReactNode }> = ({
   const { toast } = useToast();
 
   const fetchData = useCallback(async () => {
+    if (!activeSchoolId) {
+      setTeachers([]);
+      setGlobalSubjects([]);
+      setClasses([]);
+      setClassSubjects([]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const [teachersRes, subjectsRes, classesRes, classSubjectsRes] = await Promise.all([
-        supabase.from('mapping_teachers').select('*').order('name'),
-        supabase.from('mapping_global_subjects').select('*').order('name'),
-        supabase.from('mapping_classes').select('*').order('name'),
-        supabase.from('mapping_class_subjects').select('*')
+        supabase.from('mapping_teachers').select('*').eq('school_id', activeSchoolId).order('name'),
+        supabase.from('mapping_global_subjects').select('*').eq('school_id', activeSchoolId).order('name'),
+        supabase.from('mapping_classes').select('*').eq('school_id', activeSchoolId).order('name'),
+        supabase.from('mapping_class_subjects').select('*').eq('school_id', activeSchoolId)
       ]);
 
       if (teachersRes.error) throw teachersRes.error;
@@ -161,7 +169,7 @@ export const SchoolMappingProvider: React.FC<{ children: React.ReactNode }> = ({
     } finally {
       setLoading(false);
     }
-  }, [toast]);
+  }, [toast, activeSchoolId]);
 
   useEffect(() => {
     fetchData();

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { useActiveSchoolId } from '@/contexts/SchoolContext';
 import { Calendar } from '@/components/ui/calendar';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -26,6 +27,7 @@ interface CalendarAttendance {
 }
 
 const AttendanceCalendar = () => {
+  const activeSchoolId = useActiveSchoolId();
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
   const [calendarMonth, setCalendarMonth] = useState(new Date());
   const [datesWithAttendance, setDatesWithAttendance] = useState<Set<string>>(new Set());
@@ -35,21 +37,26 @@ const AttendanceCalendar = () => {
 
   useEffect(() => {
     fetchMonthDates();
-  }, [calendarMonth]);
+  }, [calendarMonth, activeSchoolId]);
 
   useEffect(() => {
     if (selectedDate) {
       fetchDayAttendance(selectedDate);
     }
-  }, [selectedDate]);
+  }, [selectedDate, activeSchoolId]);
 
   const fetchMonthDates = async () => {
+    if (!activeSchoolId) {
+      setDatesWithAttendance(new Set());
+      return;
+    }
     const start = format(startOfMonth(calendarMonth), 'yyyy-MM-dd');
     const end = format(endOfMonth(calendarMonth), 'yyyy-MM-dd');
 
     const { data } = await supabase
       .from('attendance')
       .select('date')
+      .eq('school_id', activeSchoolId)
       .gte('date', start)
       .lte('date', end);
 
@@ -58,12 +65,17 @@ const AttendanceCalendar = () => {
   };
 
   const fetchDayAttendance = async (date: Date) => {
+    if (!activeSchoolId) {
+      setDayRecords([]);
+      return;
+    }
     setLoadingDay(true);
     const dateStr = format(date, 'yyyy-MM-dd');
 
     const { data } = await supabase
       .from('attendance')
       .select('date, student_id, status, students!inner(full_name, class)')
+      .eq('school_id', activeSchoolId)
       .eq('date', dateStr)
       .order('status');
 

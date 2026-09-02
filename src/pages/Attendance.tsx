@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useSchoolScopeKey } from '@/contexts/SchoolContext';
+import { useSchoolScopeKey, useActiveSchoolId } from '@/contexts/SchoolContext';
 import { useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import DashboardLayout from '@/components/DashboardLayout';
@@ -56,6 +56,7 @@ type TrendPeriod = 'week' | 'month' | '6months' | 'year';
 
 const Attendance = () => {
   const schoolScopeKey = useSchoolScopeKey();
+  const activeSchoolId = useActiveSchoolId();
   const { toast } = useToast();
   const [searchParams, setSearchParams] = useSearchParams();
   
@@ -91,11 +92,11 @@ const Attendance = () => {
 
   useEffect(() => {
     fetchData();
-  }, [currentDate, selectedClass, selectedShift, selectedStudent, selectedStatus]);
+  }, [currentDate, selectedClass, selectedShift, selectedStudent, selectedStatus, activeSchoolId]);
 
   useEffect(() => {
     fetchTrendData();
-  }, [currentDate, selectedClass, selectedShift, selectedStudent, trendPeriod]);
+  }, [currentDate, selectedClass, selectedShift, selectedStudent, trendPeriod, activeSchoolId]);
 
   const clearUrlFilters = () => {
     setSearchParams({});
@@ -105,6 +106,13 @@ const Attendance = () => {
   };
 
   const fetchData = async () => {
+    if (!activeSchoolId) {
+      setAllStudents([]);
+      setStudents([]);
+      setAttendanceData([]);
+      setClasses([]);
+      return;
+    }
     // If filtering by "today", use today's date only
     const isToday = urlDate === 'today' || isFilteredByUrl;
     const today = format(new Date(), 'yyyy-MM-dd');
@@ -115,11 +123,12 @@ const Attendance = () => {
     const { data: allStudentsData } = await supabase
       .from('students')
       .select('id, full_name, class, shift')
+      .eq('school_id', activeSchoolId)
       .eq('status', 'active')
       .order('full_name');
     setAllStudents(allStudentsData || []);
 
-    let studentQuery = supabase.from('students').select('id, full_name, class, shift').eq('status', 'active');
+    let studentQuery = supabase.from('students').select('id, full_name, class, shift').eq('school_id', activeSchoolId).eq('status', 'active');
     if (selectedClass !== 'all') {
       studentQuery = studentQuery.eq('class', selectedClass);
     }
@@ -140,6 +149,7 @@ const Attendance = () => {
       let attendanceQuery = supabase
         .from('attendance')
         .select('id, student_id, date, time, status')
+        .eq('school_id', activeSchoolId)
         .in('student_id', studentIds)
         .gte('date', start)
         .lte('date', end)
@@ -157,16 +167,20 @@ const Attendance = () => {
       setAttendanceData([]);
     }
 
-    const { data: classStudents } = await supabase.from('students').select('class').eq('status', 'active');
+    const { data: classStudents } = await supabase.from('students').select('class').eq('school_id', activeSchoolId).eq('status', 'active');
     const uniqueClasses = [...new Set(classStudents?.map(s => s.class) || [])].filter(c => c && c.trim() !== '');
     setClasses(uniqueClasses);
   };
 
   const fetchTrendData = async () => {
+    if (!activeSchoolId) {
+      setTrendData([]);
+      return;
+    }
     const trends: TrendData[] = [];
     
     // Get students based on filters
-    let studentQuery = supabase.from('students').select('id').eq('status', 'active');
+    let studentQuery = supabase.from('students').select('id').eq('school_id', activeSchoolId).eq('status', 'active');
     if (selectedClass !== 'all') {
       studentQuery = studentQuery.eq('class', selectedClass);
     }
@@ -195,6 +209,7 @@ const Attendance = () => {
         const { data: attendance } = await supabase
           .from('attendance')
           .select('status')
+          .eq('school_id', activeSchoolId)
           .in('student_id', studentIds)
           .eq('date', dateStr);
 
@@ -219,6 +234,7 @@ const Attendance = () => {
         const { data: attendance } = await supabase
           .from('attendance')
           .select('status')
+          .eq('school_id', activeSchoolId)
           .in('student_id', studentIds)
           .gte('date', format(weekStart, 'yyyy-MM-dd'))
           .lte('date', format(weekEnd, 'yyyy-MM-dd'));
@@ -245,6 +261,7 @@ const Attendance = () => {
         const { data: attendance } = await supabase
           .from('attendance')
           .select('status')
+          .eq('school_id', activeSchoolId)
           .in('student_id', studentIds)
           .gte('date', start)
           .lte('date', end);
@@ -271,6 +288,7 @@ const Attendance = () => {
         const { data: attendance } = await supabase
           .from('attendance')
           .select('status')
+          .eq('school_id', activeSchoolId)
           .in('student_id', studentIds)
           .gte('date', start)
           .lte('date', end);

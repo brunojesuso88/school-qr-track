@@ -14,9 +14,12 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { useAuth } from '@/contexts/AuthContext';
+import { useActiveSchoolId } from '@/contexts/SchoolContext';
+import { scopeToSchool, NO_ACTIVE_SCHOOL_MESSAGE } from '@/lib/schools/scope';
 
 const DataExport = () => {
   const { userRole } = useAuth();
+  const activeSchoolId = useActiveSchoolId();
   const canViewGuardianPhone = userRole === 'admin' || userRole === 'direction';
   const [exportingStudents, setExportingStudents] = useState(false);
   const [exportingAttendance, setExportingAttendance] = useState(false);
@@ -34,12 +37,18 @@ const DataExport = () => {
   };
 
   const exportStudents = async () => {
+    if (!activeSchoolId) {
+      toast.error(NO_ACTIVE_SCHOOL_MESSAGE);
+      return;
+    }
     setExportingStudents(true);
     try {
-      const { data, error } = await supabase
-        .from('students')
-        .select('student_id, full_name, class, shift, guardian_name, guardian_phone, status')
-        .order('full_name');
+      const { data, error } = await scopeToSchool(
+        supabase
+          .from('students')
+          .select('student_id, full_name, class, shift, guardian_name, guardian_phone, status'),
+        activeSchoolId,
+      ).order('full_name');
 
       if (error) throw error;
 
@@ -89,17 +98,27 @@ const DataExport = () => {
   };
 
   const exportAttendance = async () => {
+    if (!activeSchoolId) {
+      toast.error(NO_ACTIVE_SCHOOL_MESSAGE);
+      return;
+    }
     setExportingAttendance(true);
     try {
-      const { data: students, error: studentsError } = await supabase
-        .from('students')
-        .select('id, student_id, full_name, class');
+      const { data: students, error: studentsError } = await scopeToSchool(
+        supabase
+          .from('students')
+          .select('id, student_id, full_name, class'),
+        activeSchoolId,
+      );
 
       if (studentsError) throw studentsError;
 
-      const { data: attendance, error: attendanceError } = await supabase
-        .from('attendance')
-        .select('student_id, date, time, status')
+      const { data: attendance, error: attendanceError } = await scopeToSchool(
+        supabase
+          .from('attendance')
+          .select('student_id, date, time, status'),
+        activeSchoolId,
+      )
         .gte('date', dateRange.start)
         .lte('date', dateRange.end)
         .order('date', { ascending: false });
@@ -157,7 +176,7 @@ const DataExport = () => {
           <p className="text-sm text-muted-foreground">
             Exporte a lista completa de alunos cadastrados no sistema em formato CSV.
           </p>
-          <Button onClick={exportStudents} disabled={exportingStudents}>
+          <Button onClick={exportStudents} disabled={exportingStudents || !activeSchoolId} title={!activeSchoolId ? NO_ACTIVE_SCHOOL_MESSAGE : undefined}>
             {exportingStudents ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -206,7 +225,7 @@ const DataExport = () => {
             </div>
           </div>
 
-          <Button onClick={exportAttendance} disabled={exportingAttendance}>
+          <Button onClick={exportAttendance} disabled={exportingAttendance || !activeSchoolId} title={!activeSchoolId ? NO_ACTIVE_SCHOOL_MESSAGE : undefined}>
             {exportingAttendance ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />

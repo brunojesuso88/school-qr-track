@@ -318,11 +318,12 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
     const { data, error } = await supabase
       .from('classes')
       .select('name')
+      .eq('school_id', assertActiveSchool(activeSchoolId))
       .eq('id', classItem.id)
       .maybeSingle();
     if (error) console.error('Não foi possível resolver o nome atual da turma:', error);
     return pickClassName(error ? null : data?.name, effectiveNameRef.current, classItem.name);
-  }, [classItem]);
+  }, [classItem, activeSchoolId]);
 
   /** Alunos da turma + disciplinas esperadas (contexto persistido na sessão). */
   const loadContext = useCallback(async () => {
@@ -335,6 +336,7 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
     const { data: studentsData, error: studentsError } = await supabase
       .from('students')
       .select('id, full_name, student_id, school_code, birth_date, mother_name, father_name')
+      .eq('school_id', assertActiveSchool(activeSchoolId))
       .eq('class', className)
       .order('full_name');
     if (studentsError) throw studentsError;
@@ -347,9 +349,9 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
     // Guarda: contexto vazio com alunos existentes no banco = falha de carregamento/desincronia.
     if (students.length === 0) {
       const [current, byProp] = await Promise.all([
-        supabase.from('students').select('id', { count: 'exact', head: true }).eq('class', className),
+        supabase.from('students').select('id', { count: 'exact', head: true }).eq('school_id', assertActiveSchool(activeSchoolId)).eq('class', className),
         className !== classItem.name
-          ? supabase.from('students').select('id', { count: 'exact', head: true }).eq('class', classItem.name)
+          ? supabase.from('students').select('id', { count: 'exact', head: true }).eq('school_id', assertActiveSchool(activeSchoolId)).eq('class', classItem.name)
           : Promise.resolve({ count: 0 } as { count: number | null }),
       ]);
       const found = (current.count ?? 0) + (byProp.count ?? 0);
@@ -367,6 +369,7 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
       const { data: subjData } = await supabase
         .from('mapping_class_subjects')
         .select('id, subject_name, weekly_classes')
+        .eq('school_id', assertActiveSchool(activeSchoolId))
         .eq('class_id', classItem.mapping_class_id);
       expected = (subjData || []).map((s: { id: string; subject_name: string; weekly_classes: number }) => ({
         id: s.id, name: s.subject_name, weekly_classes: s.weekly_classes,
@@ -380,19 +383,20 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
     }));
     // Matriz efetiva de âncoras: mapeamento da turma + disciplinas já importadas + catálogo da série.
     const [{ data: gradeSubj }, { data: classRow }] = await Promise.all([
-      supabase.from('grade_subjects').select('name, weekly_classes').eq('class_id', classItem.id).eq('legacy_excluded', false),
-      supabase.from('classes').select('series').eq('id', classItem.id).maybeSingle(),
+      supabase.from('grade_subjects').select('name, weekly_classes').eq('school_id', assertActiveSchool(activeSchoolId)).eq('class_id', classItem.id).eq('legacy_excluded', false),
+      supabase.from('classes').select('series').eq('school_id', assertActiveSchool(activeSchoolId)).eq('id', classItem.id).maybeSingle(),
     ]);
     const series = (classRow as { series?: string | null } | null)?.series ?? null;
     const { data: catalog } = await supabase
       .from('mapping_global_subjects')
-      .select('name, abbreviation, aliases, series, default_weekly_classes');
+      .select('name, abbreviation, aliases, series, default_weekly_classes')
+      .eq('school_id', assertActiveSchool(activeSchoolId));
     // Matriz curricular OFICIAL da série tem prioridade máxima como âncora.
     const parsedSeries = parseSeriesValue(series);
     if (!parsedSeries) {
       throw new Error('Defina a série da turma e aplique a matriz curricular oficial antes de importar o boletim.');
     }
-    const official = matrixToExpectedSubjects(await fetchCurriculumMatrix(parsedSeries).catch(() => []));
+    const official = matrixToExpectedSubjects(await fetchCurriculumMatrix(parsedSeries, activeSchoolId).catch(() => []));
     localExpectedRef.current = buildEffectiveSubjectMatrix({
       matrix: official,
       mapping: expected.map((s) => ({ name: s.name, weekly_classes: s.weekly_classes })),
@@ -415,6 +419,7 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
       queries.push(supabase
         .from('students')
         .select('id, full_name, class, school_code')
+        .eq('school_id', assertActiveSchool(activeSchoolId))
         .neq('class', className)
         .ilike('school_code', `%${code}%`)
         .limit(50));
@@ -423,6 +428,7 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
       queries.push(supabase
         .from('students')
         .select('id, full_name, class, school_code')
+        .eq('school_id', assertActiveSchool(activeSchoolId))
         .neq('class', className)
         .ilike('full_name', `%${tokens[0]}%`)
         .limit(200));
@@ -430,6 +436,7 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
         queries.push(supabase
           .from('students')
           .select('id, full_name, class, school_code')
+          .eq('school_id', assertActiveSchool(activeSchoolId))
           .neq('class', className)
           .ilike('full_name', `%${tokens[tokens.length - 1]}%`)
           .limit(200));
@@ -450,7 +457,7 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
     );
     if (!student || !by) return null;
     return { ...student, by } as OtherClassMatch;
-  }, []);
+  }, [activeSchoolId]);
 
   /**
    * Notas já existentes para o aluno desta página (aluno + disciplina + período).
@@ -460,8 +467,8 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
   const loadPageConflicts = useCallback(async (studentId: string | null, p: PagePreview) => {
     if (!classItem || !studentId) { setConflictKeys(new Set()); setIdenticalKeys(new Set()); return; }
     const [subjRes, perRes] = await Promise.all([
-      supabase.from('grade_subjects').select('id, normalized_name').eq('class_id', classItem.id),
-      supabase.from('grade_periods').select('id, normalized_label').eq('class_id', classItem.id),
+      supabase.from('grade_subjects').select('id, normalized_name').eq('school_id', assertActiveSchool(activeSchoolId)).eq('class_id', classItem.id),
+      supabase.from('grade_periods').select('id, normalized_label').eq('school_id', assertActiveSchool(activeSchoolId)).eq('class_id', classItem.id),
     ]);
     const subjById = new Map<string, string>();
     (subjRes.data || []).forEach((s: { id: string; normalized_name: string }) => subjById.set(s.id, s.normalized_name));
@@ -471,6 +478,7 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
     const { data } = await supabase
       .from('student_grades')
       .select('student_id, grade_subject_id, grade_period_id, value')
+      .eq('school_id', assertActiveSchool(activeSchoolId))
       .eq('student_id', studentId);
 
     // Valores lidos do PDF por chave (aluno + disciplina + período)
@@ -496,7 +504,7 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
     });
     setConflictKeys(divergent);
     setIdenticalKeys(identical);
-  }, [classItem]);
+  }, [classItem, activeSchoolId]);
 
   const applyPreview = useCallback(async (p: PagePreview) => {
     p = keepOnlyPeriodColumns(p);
@@ -650,6 +658,7 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
       const { data } = await supabase
         .from('grade_import_sessions')
         .select('id, file_name, total_pages, current_page, confirmed_pages, ignored_pages, notes_imported, status, auto_accept, auto_accept_rules')
+        .eq('school_id', assertActiveSchool(activeSchoolId))
         .eq('class_id', classItem.id)
         .in('status', ['processing_page', 'awaiting_confirmation'])
         .order('created_at', { ascending: false })
@@ -672,7 +681,7 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
       setStep('resume');
     })();
     return () => { cancelled = true; };
-  }, [open, classItem]);
+  }, [open, classItem, activeSchoolId]);
 
   useEffect(() => {
     if (open && classItem) {
@@ -751,6 +760,7 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
       const { data: pages } = await supabase
         .from('grade_import_session_pages')
         .select('page_number, status')
+        .eq('school_id', assertActiveSchool(activeSchoolId))
         .eq('session_id', target.id)
         .order('page_number');
       const next = (pages || []).find((p: { status: string }) => !['confirmed', 'ignored'].includes(p.status));
@@ -1083,6 +1093,7 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
       const { data: existingSubjects } = await supabase
         .from('grade_subjects')
         .select('id, name, normalized_name, include_in_ira, custom_ira_weight, legacy_excluded')
+        .eq('school_id', assertActiveSchool(activeSchoolId))
         .eq('class_id', classItem.id);
       type ExistingSubjectRow = {
         id: string; name: string; normalized_name: string;
@@ -1118,6 +1129,7 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
         if (seenNorms.has(normalized_name)) return;
         seenNorms.add(normalized_name);
         subjectPayload.push({
+          school_id: assertActiveSchool(activeSchoolId),
           class_id: classItem.id,
           name,
           normalized_name,
@@ -1155,6 +1167,7 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
           const periodId = periodIdByNorm.get(normalize(row.period));
           if (!subjectId || !periodId) return null;
           return {
+            school_id: assertActiveSchool(activeSchoolId),
             student_id: studentId as string,
             grade_subject_id: subjectId,
             grade_period_id: periodId,

@@ -33,12 +33,14 @@ export function buildMatrixWeeklyByKey(rows: MatrixWeeklyRow[]): Record<string, 
 /** Carrega a carga semanal oficial das séries informadas. */
 export async function fetchMatrixWeeklyByKey(
   series: (string | null | undefined)[],
+  schoolId: string | null | undefined,
 ): Promise<Record<string, number>> {
   const list = [...new Set(series.filter(Boolean) as string[])];
-  if (list.length === 0) return {};
+  if (list.length === 0 || !schoolId) return {};
   const { data, error } = await supabase
     .from('curriculum_matrix_subjects')
     .select('series, weekly_classes, mapping_global_subjects(name, aliases)')
+    .eq('school_id', schoolId)
     .in('series', list);
   if (error) {
     console.error('Falha ao carregar carga semanal da matriz curricular:', error);

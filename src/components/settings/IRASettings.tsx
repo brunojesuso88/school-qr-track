@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useActiveSchoolId, useSchoolScopeKey } from '@/contexts/SchoolContext';
-import { assertActiveSchool } from '@/lib/schools/scope';
+import { assertActiveSchool, scopeToSchool, NO_ACTIVE_SCHOOL_MESSAGE } from '@/lib/schools/scope';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -82,11 +82,19 @@ const IRASettings = () => {
 
   useEffect(() => {
     (async () => {
+      if (!activeSchoolId) {
+        setClasses([]);
+        setMappingClasses([]);
+        setClassesWithGrades(new Set());
+        setConfiguredClasses(new Set());
+        setLoading(false);
+        return;
+      }
       const [classesRes, mappingRes, subjRes, settingsRes] = await Promise.all([
-        supabase.from('classes').select('id, name, shift, mapping_class_id, series').order('name'),
-        supabase.from('mapping_classes').select('id, name, shift').order('name'),
-        supabase.from('grade_subjects').select('class_id'),
-        supabase.from('ira_settings').select('class_id'),
+        scopeToSchool(supabase.from('classes').select('id, name, shift, mapping_class_id, series'), activeSchoolId).order('name'),
+        scopeToSchool(supabase.from('mapping_classes').select('id, name, shift'), activeSchoolId).order('name'),
+        scopeToSchool(supabase.from('grade_subjects').select('class_id'), activeSchoolId),
+        scopeToSchool(supabase.from('ira_settings').select('class_id'), activeSchoolId),
       ]);
       setClasses((classesRes.data || []) as unknown as ClassRow[]);
       setMappingClasses((mappingRes.data || []) as unknown as MappingClassRow[]);
@@ -94,14 +102,14 @@ const IRASettings = () => {
       setConfiguredClasses(new Set(((settingsRes.data || []) as { class_id: string }[]).map((r) => r.class_id)));
       setLoading(false);
     })();
-  }, [schoolScopeKey]);
+  }, [schoolScopeKey, activeSchoolId]);
 
   const loadClassData = useCallback(async (classId: string) => {
     setLoadingClass(true);
     const [subjRes, perRes, settingsRes] = await Promise.all([
-      supabase.from('grade_subjects').select('id, name, weekly_classes, include_in_ira, custom_ira_weight, mapping_class_subject_id').eq('class_id', classId).eq('legacy_excluded', false).order('sort_order'),
-      supabase.from('grade_periods').select('id, label, kind, normalized_label').eq('class_id', classId).order('sort_order'),
-      supabase.from('ira_settings').select('*').eq('class_id', classId).maybeSingle(),
+      scopeToSchool(supabase.from('grade_subjects').select('id, name, weekly_classes, include_in_ira, custom_ira_weight, mapping_class_subject_id'), activeSchoolId).eq('class_id', classId).eq('legacy_excluded', false).order('sort_order'),
+      scopeToSchool(supabase.from('grade_periods').select('id, label, kind, normalized_label'), activeSchoolId).eq('class_id', classId).order('sort_order'),
+      scopeToSchool(supabase.from('ira_settings').select('*'), activeSchoolId).eq('class_id', classId).maybeSingle(),
     ]);
     setSubjects((subjRes.data || []) as unknown as SubjectRow[]);
     setPeriods((perRes.data || []) as unknown as PeriodRow[]);
@@ -116,7 +124,7 @@ const IRASettings = () => {
     setSelectedPeriodIds(ids);
     setUseFinal(settings?.use_final_grade ?? false);
     setLoadingClass(false);
-  }, [schoolScopeKey]);
+  }, [schoolScopeKey, activeSchoolId]);
 
   useEffect(() => {
     if (selectedClassId) loadClassData(selectedClassId);
@@ -145,10 +153,10 @@ const IRASettings = () => {
 
   const syncWeeklyClasses = async (mappingClassId: string) => {
     if (!selectedClassId) return;
-    const { data } = await supabase
-      .from('mapping_class_subjects')
-      .select('id, subject_name, weekly_classes')
-      .eq('class_id', mappingClassId);
+    const { data } = await scopeToSchool(
+      supabase.from('mapping_class_subjects').select('id, subject_name, weekly_classes'),
+      activeSchoolId,
+    ).eq('class_id', mappingClassId);
     const mapping = (data || []) as { id: string; subject_name: string; weekly_classes: number }[];
     if (mapping.length === 0 || subjects.length === 0) return;
 
@@ -268,10 +276,10 @@ const IRASettings = () => {
     setApplyingAll(true);
     try {
       const targetIds = classes.map((c) => c.id).filter((id) => classesWithGrades.has(id));
-      const { data: allPeriods, error: perErr } = await supabase
-        .from('grade_periods')
-        .select('id, class_id, label, kind, normalized_label')
-        .in('class_id', targetIds);
+      const { data: allPeriods, error: perErr } = await scopeToSchool(
+        supabase.from('grade_periods').select('id, class_id, label, kind, normalized_label'),
+        activeSchoolId,
+      ).in('class_id', targetIds);
       if (perErr) throw perErr;
       const rows = (allPeriods || []) as unknown as (PeriodRow & { class_id: string })[];
       const wantedLabels = orderedSelectedPeriods.map((p) => normalize(p.label));
@@ -285,6 +293,7 @@ const IRASettings = () => {
           const hasFinal = classPeriods.some((p) => p.kind === 'final');
           if (!hasFinal) { skipped.push(classId); return; }
           payload.push({
+            school_id: assertActiveSchool(activeSchoolId),
             class_id: classId, ira_period_ids: [], ira_period_id: null,
             use_final_grade: true, updated_by: userData?.user?.id ?? null,
           });
@@ -295,6 +304,7 @@ const IRASettings = () => {
           .filter(Boolean) as string[];
         if (ids.length === 0) { skipped.push(classId); return; }
         payload.push({
+          school_id: assertActiveSchool(activeSchoolId),
           class_id: classId, ira_period_ids: ids, ira_period_id: ids[0],
           use_final_grade: false, updated_by: userData?.user?.id ?? null,
         });

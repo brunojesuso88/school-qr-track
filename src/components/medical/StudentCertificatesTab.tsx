@@ -10,6 +10,7 @@ import { FileText, Plus, Ban, Pencil, Paperclip, Eye, EyeOff, AlertTriangle, Loc
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
+import { useActiveSchoolId } from '@/contexts/SchoolContext';
 import {
   DERIVED_STATUS_LABEL,
   derivedStatus,
@@ -39,6 +40,7 @@ export const StudentCertificatesTab = ({ studentId, studentName }: Props) => {
   const canManage = userRole === 'admin' || userRole === 'direction';
   // Professor vê apenas período/situação. Funcionário (staff) não vê nenhum detalhe.
   const canViewPeriods = canManage || userRole === 'teacher';
+  const activeSchoolId = useActiveSchoolId();
 
   const [full, setFull] = useState<MedicalCertificate[]>([]);
   const [basic, setBasic] = useState<MedicalCertificateBasic[]>([]);
@@ -55,6 +57,12 @@ export const StudentCertificatesTab = ({ studentId, studentName }: Props) => {
       setLoading(false);
       return;
     }
+    if (canManage && !activeSchoolId) {
+      setFull([]);
+      setLegacyCount(0);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     if (canManage) {
 
@@ -62,11 +70,13 @@ export const StudentCertificatesTab = ({ studentId, studentName }: Props) => {
         supabase
           .from('student_medical_certificates')
           .select('*')
+          .eq('school_id', activeSchoolId as string)
           .eq('student_id', studentId)
           .order('start_date', { ascending: false }),
         supabase
           .from('occurrences')
           .select('id', { count: 'exact', head: true })
+          .eq('school_id', activeSchoolId as string)
           .eq('student_id', studentId)
           .eq('type', 'medical_certificate'),
       ]);
@@ -82,7 +92,7 @@ export const StudentCertificatesTab = ({ studentId, studentName }: Props) => {
       setBasic(((data as MedicalCertificateBasic[]) ?? []).sort((a, b) => b.start_date.localeCompare(a.start_date)));
     }
     setLoading(false);
-  }, [studentId, canManage, canViewPeriods]);
+  }, [studentId, canManage, canViewPeriods, activeSchoolId]);
 
   useEffect(() => {
     void load();

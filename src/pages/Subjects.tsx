@@ -14,6 +14,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import DashboardLayout from "@/components/DashboardLayout";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
+import { useActiveSchoolId, useSchoolScopeKey } from "@/contexts/SchoolContext";
 import { supabase } from "@/integrations/supabase/client";
 import { CLASS_SERIES_OPTIONS, HighSchoolSeries } from "@/lib/series";
 import { CurriculumMatrixItem, fetchCurriculumMatrix, matrixWeeklyTotal } from "@/lib/curriculumMatrix";
@@ -24,6 +25,8 @@ const parseAliases = (value: string) =>
 const SubjectsContent = () => {
   const { toast } = useToast();
   const { userRole } = useAuth();
+  const activeSchoolId = useActiveSchoolId();
+  const schoolScopeKey = useSchoolScopeKey();
   const canEdit = userRole === "admin" || userRole === "direction";
   const [items, setItems] = useState<CurriculumMatrixItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -33,16 +36,17 @@ const SubjectsContent = () => {
   const [form, setForm] = useState({ abbreviation: "", aliases: "", weekly: "1", ira: true });
 
   const load = useCallback(async () => {
+    if (!activeSchoolId) { setItems([]); setLoading(false); return; }
     try {
-      setItems(await fetchCurriculumMatrix());
+      setItems(await fetchCurriculumMatrix(undefined, activeSchoolId));
     } catch {
       toast({ title: "Não foi possível carregar a matriz curricular", variant: "destructive" });
     } finally {
       setLoading(false);
     }
-  }, [toast]);
+  }, [toast, activeSchoolId]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(); }, [load, schoolScopeKey]);
 
   const bySeries = useMemo(
     () => items.filter((i) => i.series === series),

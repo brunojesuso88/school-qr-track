@@ -12,6 +12,8 @@ import { toast } from 'sonner';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { useSchoolName } from '@/hooks/useSchoolName';
+import { useActiveSchoolId } from '@/contexts/SchoolContext';
+import { NO_ACTIVE_SCHOOL_MESSAGE } from '@/lib/schools/scope';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   CLASS_COUNCIL_TYPE,
@@ -77,10 +79,15 @@ export const OccurrencesReportDialog = ({ open, onOpenChange }: Props) => {
   const [generating, setGenerating] = useState(false);
   const [scope, setScope] = useState<ReportScope>('all');
   const { schoolName } = useSchoolName();
+  const activeSchoolId = useActiveSchoolId();
 
   const handleGenerate = async () => {
     if (!date) {
       toast.error('Selecione uma data');
+      return;
+    }
+    if (!activeSchoolId) {
+      toast.error(NO_ACTIVE_SCHOOL_MESSAGE);
       return;
     }
     setGenerating(true);
@@ -90,6 +97,7 @@ export const OccurrencesReportDialog = ({ open, onOpenChange }: Props) => {
       const { data, error } = await supabase
         .from('occurrences')
         .select('id, type, description, date, end_date, teacher_name, council_items, students(full_name, student_id, class, shift)')
+        .eq('school_id', activeSchoolId)
         .or(`date.eq.${target},and(date.lte.${target},end_date.gte.${target})`)
         .order('date');
 

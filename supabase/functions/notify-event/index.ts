@@ -65,12 +65,14 @@ Deno.serve(async (req) => {
       const endpoint = typeof body.endpoint === "string" ? body.endpoint : null;
       if (!endpoint) return json({ success: false, error: "endpoint é obrigatório" }, 400);
 
-      const { data: device } = await admin
+      // O mesmo endpoint pode estar vinculado a mais de uma escola do usuário.
+      const { data: devices } = await admin
         .from("push_subscriptions")
         .select("id")
         .eq("endpoint", endpoint)
         .eq("user_id", auth.userId)
-        .maybeSingle();
+        .limit(1);
+      const device = (devices ?? [])[0] ?? null;
       if (!device) {
         return json({ success: false, error: "Dispositivo não encontrado para este usuário" }, 404);
       }

@@ -4,6 +4,7 @@ import { calculateIraMultiPeriod, IraPeriodRef, IraResult, IraSubjectInput } fro
 import { canonicalSubjectKey, isPeriodKind, periodRank } from '@/lib/gradePageLocal/normalize';
 import { fetchMatrixWeeklyByKey } from '@/lib/curriculumMatrixWeekly';
 import { parseSeriesValue } from '@/lib/series';
+import { useActiveSchoolId } from '@/contexts/SchoolContext';
 
 export interface GradeSubjectRow {
   id: string;
@@ -146,15 +147,17 @@ export function computeIraForStudent(data: ClassGradesData, studentId: string): 
  */
 export async function fetchGradesPaged(
   subjectIds: string[],
-  studentIds?: string[],
+  studentIds: string[] | undefined,
+  schoolId: string | null | undefined,
 ): Promise<StudentGradeRow[]> {
-  if (subjectIds.length === 0) return [];
+  if (subjectIds.length === 0 || !schoolId) return [];
   const PAGE = 1000;
   const rows: StudentGradeRow[] = [];
   for (let from = 0; ; from += PAGE) {
     let query = supabase
       .from('student_grades')
       .select('*')
+      .eq('school_id', schoolId)
       .in('grade_subject_id', subjectIds)
       .order('id')
       .range(from, from + PAGE - 1);
@@ -175,12 +178,16 @@ export async function fetchGradesPaged(
   return rows;
 }
 
-async function fetchClassGrades(classId: string, studentIds?: string[]): Promise<ClassGradesData> {
+async function fetchClassGrades(
+  classId: string,
+  schoolId: string,
+  studentIds?: string[],
+): Promise<ClassGradesData> {
   const [subjectsRes, periodsRes, settingsRes, classRes] = await Promise.all([
-    supabase.from('grade_subjects').select('*').eq('class_id', classId).eq('legacy_excluded', false).order('sort_order'),
-    supabase.from('grade_periods').select('*').eq('class_id', classId).order('sort_order'),
-    supabase.from('ira_settings').select('*').eq('class_id', classId).maybeSingle(),
-    supabase.from('classes').select('series').eq('id', classId).maybeSingle(),
+    supabase.from('grade_subjects').select('*').eq('school_id', schoolId).eq('class_id', classId).eq('legacy_excluded', false).order('sort_order'),
+    supabase.from('grade_periods').select('*').eq('school_id', schoolId).eq('class_id', classId).order('sort_order'),
+    supabase.from('ira_settings').select('*').eq('school_id', schoolId).eq('class_id', classId).maybeSingle(),
+    supabase.from('classes').select('series').eq('school_id', schoolId).eq('id', classId).maybeSingle(),
   ]);
 
   const subjects = (subjectsRes.data || []) as unknown as GradeSubjectRow[];
@@ -191,7 +198,7 @@ async function fetchClassGrades(classId: string, studentIds?: string[]): Promise
     .sort((a, b) => periodRank(a.label) - periodRank(b.label) || a.sort_order - b.sort_order);
   const subjectIds = subjects.map((s) => s.id);
 
-  const grades = await fetchGradesPaged(subjectIds, studentIds);
+  const grades = await fetchGradesPaged(subjectIds, studentIds, schoolId);
 
   // Carga semanal atual do mapeamento escolar (quando há vínculo)
   const mappingIds = subjects.map((s) => s.mapping_class_subject_id).filter(Boolean) as string[];
@@ -200,6 +207,7 @@ async function fetchClassGrades(classId: string, studentIds?: string[]): Promise
     const { data } = await supabase
       .from('mapping_class_subjects')
       .select('id, weekly_classes')
+      .eq('school_id', schoolId)
       .in('id', mappingIds);
     (data || []).forEach((row: { id: string; weekly_classes: number }) => {
       currentWeeklyClasses[row.id] = row.weekly_classes;
@@ -208,7 +216,7 @@ async function fetchClassGrades(classId: string, studentIds?: string[]): Promise
 
   // Fonte de verdade da carga semanal quando não há vínculo de mapeamento.
   const series = parseSeriesValue((classRes.data as { series: string | null } | null)?.series ?? null);
-  const matrixWeeklyByKey = await fetchMatrixWeeklyByKey([series]);
+  const matrixWeeklyByKey = await fetchMatrixWeeklyByKey([series], schoolId);
 
   return {
     subjects,
@@ -222,20 +230,21 @@ async function fetchClassGrades(classId: string, studentIds?: string[]): Promise
 
 /** Carrega notas + configuração de IRA de uma turma inteira (em lote). */
 export function useClassGrades(classId: string | null, studentIds?: string[]) {
+  const activeSchoolId = useActiveSchoolId();
   const [data, setData] = useState<ClassGradesData>(emptyData);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const idsKey = (studentIds || []).join(',');
 
   const load = useCallback(async () => {
-    if (!classId) {
+    if (!classId || !activeSchoolId) {
       setData(emptyData);
       return;
     }
     setLoading(true);
     setError(null);
     try {
-      setData(await fetchClassGrades(classId, studentIds));
+      setData(await fetchClassGrades(classId, activeSchoolId, studentIds));
     } catch (e) {
       console.error(e);
       setError('Não foi possível carregar as notas.');
@@ -244,7 +253,7 @@ export function useClassGrades(classId: string | null, studentIds?: string[]) {
       setLoading(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [classId, idsKey]);
+  }, [classId, idsKey, activeSchoolId]);
 
   useEffect(() => { load(); }, [load]);
 

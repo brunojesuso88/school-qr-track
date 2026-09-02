@@ -8,6 +8,7 @@ import { computeMedals, MedalStudentInput, StudentMedal } from '@/lib/medals/com
 import { parseSeriesValue } from '@/lib/series';
 import { isPeriodKind, periodRank } from '@/lib/gradePageLocal/normalize';
 import { fetchMatrixWeeklyByKey } from '@/lib/curriculumMatrixWeekly';
+import { useActiveSchoolId } from '@/contexts/SchoolContext';
 
 const norm = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
 
@@ -18,6 +19,7 @@ const norm = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').t
  * portanto o loader busca as turmas/alunos da série inteira.
  */
 export function useStudentMedals(visible: { id: string; class: string }[]) {
+  const activeSchoolId = useActiveSchoolId();
   const [medalsByStudent, setMedalsByStudent] = useState<Record<string, StudentMedal[]>>({});
   const [loading, setLoading] = useState(false);
 
@@ -29,7 +31,7 @@ export function useStudentMedals(visible: { id: string; class: string }[]) {
 
   useEffect(() => {
     let active = true;
-    if (classNames.length === 0) {
+    if (classNames.length === 0 || !activeSchoolId) {
       setMedalsByStudent({});
       return;
     }
@@ -39,7 +41,8 @@ export function useStudentMedals(visible: { id: string; class: string }[]) {
       try {
         const { data: classRows, error: classErr } = await supabase
           .from('classes')
-          .select('id, name, series');
+          .select('id, name, series')
+          .eq('school_id', activeSchoolId);
         if (classErr) throw classErr;
         const all = (classRows || []) as { id: string; name: string; series: string | null }[];
 
@@ -66,10 +69,10 @@ export function useStudentMedals(visible: { id: string; class: string }[]) {
         const classIdByNormName = new Map(scopeClasses.map((c) => [norm(c.name), c.id]));
 
         const [studentsRes, subjRes, perRes, settingsRes] = await Promise.all([
-          supabase.from('students').select('id, class').in('class', scopeClasses.map((c) => c.name)),
-          supabase.from('grade_subjects').select('*').in('class_id', classIds).eq('legacy_excluded', false).order('sort_order'),
-          supabase.from('grade_periods').select('*').in('class_id', classIds).order('sort_order'),
-          supabase.from('ira_settings').select('*').in('class_id', classIds),
+          supabase.from('students').select('id, class').eq('school_id', activeSchoolId).in('class', scopeClasses.map((c) => c.name)),
+          supabase.from('grade_subjects').select('*').eq('school_id', activeSchoolId).in('class_id', classIds).eq('legacy_excluded', false).order('sort_order'),
+          supabase.from('grade_periods').select('*').eq('school_id', activeSchoolId).in('class_id', classIds).order('sort_order'),
+          supabase.from('ira_settings').select('*').eq('school_id', activeSchoolId).in('class_id', classIds),
         ]);
         if (subjRes.error) throw subjRes.error;
         if (perRes.error) throw perRes.error;
@@ -82,7 +85,7 @@ export function useStudentMedals(visible: { id: string; class: string }[]) {
           .sort((a, b) => periodRank(a.label) - periodRank(b.label) || a.sort_order - b.sort_order);
         const settings = (settingsRes.data || []) as unknown as IraSettingsRow[];
 
-        const grades: StudentGradeRow[] = await fetchGradesPaged(subjects.map((s) => s.id));
+        const grades: StudentGradeRow[] = await fetchGradesPaged(subjects.map((s) => s.id), undefined, activeSchoolId);
 
         const mappingIds = subjects.map((s) => s.mapping_class_subject_id).filter(Boolean) as string[];
         const currentWeeklyClasses: Record<string, number> = {};
@@ -90,13 +93,14 @@ export function useStudentMedals(visible: { id: string; class: string }[]) {
           const { data } = await supabase
             .from('mapping_class_subjects')
             .select('id, weekly_classes')
+            .eq('school_id', activeSchoolId)
             .in('id', mappingIds);
           (data || []).forEach((row: { id: string; weekly_classes: number }) => {
             currentWeeklyClasses[row.id] = row.weekly_classes;
           });
         }
 
-        const matrixWeeklyByKey = await fetchMatrixWeeklyByKey([...seriesInScope]);
+        const matrixWeeklyByKey = await fetchMatrixWeeklyByKey([...seriesInScope], activeSchoolId);
 
         const dataByClass = new Map<string, ClassGradesData>();
         classIds.forEach((classId) => {
@@ -131,7 +135,7 @@ export function useStudentMedals(visible: { id: string; class: string }[]) {
 
     return () => { active = false; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [classKey]);
+  }, [classKey, activeSchoolId]);
 
   return { medalsByStudent, loading };
 }

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useSchoolScopeKey } from '@/contexts/SchoolContext';
+import { useActiveSchoolId, useSchoolScopeKey } from '@/contexts/SchoolContext';
 import { supabase } from '@/integrations/supabase/client';
 import DashboardLayout from '@/components/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -41,6 +41,7 @@ const declarationSchema = z.object({
 
 const Declarations = () => {
   const schoolScopeKey = useSchoolScopeKey();
+  const activeSchoolId = useActiveSchoolId();
   const [students, setStudents] = useState<Student[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [step, setStep] = useState<'select' | 'form' | 'preview'>('select');
@@ -68,15 +69,15 @@ const Declarations = () => {
   useEffect(() => {
     fetchStudents();
     fetchSchoolSettings();
-  }, [schoolScopeKey]);
+  }, [schoolScopeKey, activeSchoolId]);
 
   const fetchStudents = async () => {
+    if (!activeSchoolId) { setStudents([]); return; }
     try {
       const { data, error } = await supabase
-        .from('students')
-        .select('id, full_name, student_id, class, shift, birth_date, guardian_name, guardian_phone')
-        .eq('status', 'active')
-        .order('full_name');
+          .from('students')
+          .select('id, full_name, student_id, class, shift, birth_date, guardian_name, guardian_phone')
+          .eq('status', 'active').eq('school_id', activeSchoolId).order('full_name');
 
       if (error) throw error;
       setStudents(data || []);
@@ -87,11 +88,12 @@ const Declarations = () => {
   };
 
   const fetchSchoolSettings = async () => {
+    if (!activeSchoolId) { setSchoolSettings({ name: '', address: '' }); return; }
     try {
       const { data, error } = await supabase
-        .from('settings')
-        .select('key, value')
-        .in('key', ['school_name', 'school_address']);
+          .from('settings')
+          .select('key, value')
+          .in('key', ['school_name', 'school_address']).eq('school_id', activeSchoolId);
 
       if (error) throw error;
       

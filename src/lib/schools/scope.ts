@@ -32,13 +32,15 @@ export function schoolScopedInsert<T extends Record<string, unknown>>(
 /**
  * Aplica `.eq('school_id', ...)` quando há escola ativa.
  * Sem escola ativa a query é mantida (a RLS continua barrando o que não é do usuário).
+ *
+ * O parâmetro é genérico "solto" de propósito: tipar o builder do Supabase aqui
+ * estoura o limite de instanciação de tipos (TS2589) nas telas maiores.
  */
-export function scopeToSchool<Q extends { eq: (col: string, val: string) => Q }>(
-  query: Q,
-  schoolId: string | null | undefined,
-): Q {
-  return schoolId ? query.eq('school_id', schoolId) : query;
+export function scopeToSchool<Q>(query: Q, schoolId: string | null | undefined): Q {
+  if (!schoolId) return query;
+  return (query as unknown as { eq: (col: string, val: string) => Q }).eq('school_id', schoolId);
 }
+
 
 /** Chave de cache/efeito que muda junto com a escola ativa. */
 export function schoolScopeKey(schoolId: string | null | undefined): string {

@@ -21,10 +21,16 @@ export function buildAbsentLines(rows: AbsentRow[], coverage: CoverageMap, dateK
 }
 
 /** Busca os faltosos da turma na data (mesma definição usada em Turmas). */
-export async function fetchAbsentRows(className: string, dateKey: string): Promise<AbsentRow[]> {
+export async function fetchAbsentRows(
+  className: string,
+  dateKey: string,
+  schoolId: string | null | undefined,
+): Promise<AbsentRow[]> {
+  if (!schoolId) return [];
   const { data, error } = await supabase
     .from('attendance')
     .select('student_id, students!inner(full_name, class)')
+    .eq('school_id', schoolId)
     .eq('date', dateKey)
     .eq('status', 'absent');
 
@@ -90,10 +96,12 @@ export interface AbsentExportResult {
 export async function exportAbsentStudents(
   className: string,
   dateLabel: string,
+  schoolId: string | null | undefined,
   date: Date = new Date(),
 ): Promise<AbsentExportResult> {
+  if (!schoolId) return { status: 'empty', count: 0 };
   const dateKey = localDateKey(date);
-  const rows = await fetchAbsentRows(className, dateKey);
+  const rows = await fetchAbsentRows(className, dateKey, schoolId);
   if (rows.length === 0) return { status: 'empty', count: 0 };
 
   const coverage = await fetchCoverage(rows.map((r) => r.id), [dateKey]);

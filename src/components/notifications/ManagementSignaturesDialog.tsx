@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { assertActiveSchool } from '@/lib/schools/scope';
+import { assertActiveSchool, scopeToSchool } from '@/lib/schools/scope';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,6 +11,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { schoolScopedPath } from '@/lib/school/storagePaths';
 import { useActiveSchoolId } from '@/contexts/SchoolContext';
+import { getActiveSchoolIdSnapshot } from '@/lib/schools/activeSchoolStore';
 
 export interface ManagementSignature {
   id: string;
@@ -27,10 +28,14 @@ interface Props {
   onChanged?: () => void;
 }
 
-async function fetchSignatures(): Promise<ManagementSignature[]> {
-  const { data, error } = await supabase
-    .from('management_signatures')
-    .select('*')
+async function fetchSignatures(schoolId: string | null): Promise<ManagementSignature[]> {
+  if (!schoolId) return [];
+  const { data, error } = await scopeToSchool(
+    supabase
+      .from('management_signatures')
+      .select('*'),
+    schoolId,
+  )
     .order('is_default', { ascending: false })
     .order('created_at', { ascending: false });
   if (error) throw error;
@@ -60,7 +65,7 @@ export function ManagementSignaturesDialog({ open, onOpenChange, onChanged }: Pr
   const refresh = async () => {
     setLoading(true);
     try {
-      setList(await fetchSignatures());
+      setList(await fetchSignatures(activeSchoolId));
     } catch (e: any) {
       toast.error(e.message || 'Erro ao carregar assinaturas');
     } finally {
@@ -251,5 +256,5 @@ export async function getSignatureAsDataUrl(storage_path: string): Promise<strin
 }
 
 export async function loadSignatures(): Promise<ManagementSignature[]> {
-  return fetchSignatures();
+  return fetchSignatures(getActiveSchoolIdSnapshot());
 }

@@ -68,12 +68,12 @@ const QRCodes = () => {
   }, [scanMode]);
 
   const fetchStudents = async () => {
+    if (!activeSchoolId) { setStudents([]); return; }
     try {
       const { data, error } = await supabase
-        .from('students')
-        .select('id, full_name, student_id, class, shift, qr_code, status, photo_url')
-        .eq('status', 'active')
-        .order('full_name');
+          .from('students')
+          .select('id, full_name, student_id, class, shift, qr_code, status, photo_url')
+          .eq('status', 'active').eq('school_id', activeSchoolId).order('full_name');
 
       if (error) throw error;
       setStudents(data || []);
@@ -84,12 +84,12 @@ const QRCodes = () => {
   };
 
   const fetchClasses = async () => {
+    if (!activeSchoolId) { setClasses([]); return; }
     try {
       const { data, error } = await supabase
-        .from('classes')
-        .select('id, name, shift')
-        .eq('status', 'active')
-        .order('name');
+          .from('classes')
+          .select('id, name, shift')
+          .eq('status', 'active').eq('school_id', activeSchoolId).order('name');
 
       if (error) throw error;
       setClasses(data || []);
@@ -99,7 +99,7 @@ const QRCodes = () => {
   };
 
   const processQRCode = useCallback(async (qrCode: string) => {
-    if (isProcessing || !qrCode.trim()) return;
+    if (isProcessing || !qrCode.trim() || !activeSchoolId) return;
     
     const today = new Date();
     const dayOfWeek = today.getDay();
@@ -117,10 +117,9 @@ const QRCodes = () => {
 
     try {
       const { data: student, error: studentError } = await supabase
-        .from('students')
-        .select('*')
-        .eq('qr_code', qrCode.trim())
-        .maybeSingle();
+          .from('students')
+          .select('*')
+          .eq('qr_code', qrCode.trim()).eq('school_id', activeSchoolId).maybeSingle();
 
       if (studentError) throw studentError;
 
@@ -134,11 +133,10 @@ const QRCodes = () => {
       const currentTime = format(new Date(), 'HH:mm:ss');
 
       const { data: existing } = await supabase
-        .from('attendance')
-        .select('*')
-        .eq('student_id', student.id)
-        .eq('date', todayStr)
-        .maybeSingle();
+          .from('attendance')
+          .select('*')
+          .eq('student_id', student.id)
+          .eq('date', todayStr).eq('school_id', activeSchoolId).maybeSingle();
 
       if (existing) {
         toast.info(`${student.full_name} já registrou presença hoje`);
@@ -169,7 +167,7 @@ const QRCodes = () => {
     } finally {
       setIsProcessing(false);
     }
-  }, [isProcessing, user?.id]);
+  }, [isProcessing, user?.id, activeSchoolId]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setScanResult(e.target.value);

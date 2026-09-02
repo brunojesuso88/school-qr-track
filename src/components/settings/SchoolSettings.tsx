@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useActiveSchoolId, useSchoolScopeKey } from '@/contexts/SchoolContext';
-import { assertActiveSchool } from '@/lib/schools/scope';
+import { assertActiveSchool, scopeToSchool } from '@/lib/schools/scope';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -44,11 +44,18 @@ const SchoolSettings = () => {
   }, [schoolScopeKey]);
 
   const fetchSettings = async () => {
+    if (!activeSchoolId) {
+      setLoading(false);
+      return;
+    }
     try {
-      const { data, error } = await supabase
-        .from('settings')
-        .select('key, value')
-        .in('key', ['school_name', 'timezone']);
+      const { data, error } = await scopeToSchool(
+        supabase
+          .from('settings')
+          .select('key, value')
+          .in('key', ['school_name', 'timezone']),
+        activeSchoolId,
+      );
 
       if (error) throw error;
 

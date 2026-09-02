@@ -32,8 +32,8 @@ const rpcClient = supabase as unknown as {
  * têm milhares de linhas em `student_grades`. Usa RPC (DISTINCT no banco) e, se ela
  * não estiver disponível, pagina por range até esgotar os resultados.
  */
-export async function fetchSubjectIdsWithGrades(subjectIds: string[]): Promise<Set<string>> {
-  if (subjectIds.length === 0) return new Set();
+export async function fetchSubjectIdsWithGrades(subjectIds: string[], schoolId: string | null | undefined): Promise<Set<string>> {
+  if (subjectIds.length === 0 || !schoolId) return new Set();
 
   const { data, error } = await rpcClient.rpc('grade_subject_ids_with_grades', { _subject_ids: subjectIds });
   if (!error && Array.isArray(data)) {
@@ -51,6 +51,7 @@ export async function fetchSubjectIdsWithGrades(subjectIds: string[]): Promise<S
     const { data: rows, error: pageError } = await supabase
       .from('student_grades')
       .select('grade_subject_id')
+      .eq('school_id', schoolId)
       .in('grade_subject_id', subjectIds)
       .range(from, from + pageSize - 1);
     if (pageError) throw pageError;
@@ -60,13 +61,14 @@ export async function fetchSubjectIdsWithGrades(subjectIds: string[]): Promise<S
   return found;
 }
 
-async function loadState(classId: string, series: HighSchoolSeries): Promise<ClassCurriculumState> {
+async function loadState(classId: string, series: HighSchoolSeries, schoolId: string): Promise<ClassCurriculumState> {
   const [matrix, classRow, gradeRes] = await Promise.all([
-    fetchCurriculumMatrix(series),
-    supabase.from('classes').select('id, mapping_class_id').eq('id', classId).maybeSingle(),
+    fetchCurriculumMatrix(series, schoolId),
+    supabase.from('classes').select('id, mapping_class_id').eq('school_id', schoolId).eq('id', classId).maybeSingle(),
     supabase
       .from('grade_subjects')
       .select('id, name, weekly_classes, include_in_ira, legacy_excluded, mapping_class_subject_id, sort_order')
+      .eq('school_id', schoolId)
       .eq('class_id', classId),
   ]);
   if (classRow.error) throw classRow.error;
@@ -75,7 +77,7 @@ async function loadState(classId: string, series: HighSchoolSeries): Promise<Cla
   const gradeRows = (gradeRes.data ?? []) as ExistingGradeSubject[];
   let gradeSubjects: ExistingGradeSubject[] = gradeRows;
   if (gradeRows.length > 0) {
-    const used = await fetchSubjectIdsWithGrades(gradeRows.map((g) => g.id));
+    const used = await fetchSubjectIdsWithGrades(gradeRows.map((g) => g.id), schoolId);
     gradeSubjects = gradeRows.map((g) => ({ ...g, hasGrades: used.has(g.id) }));
   }
 
@@ -86,6 +88,7 @@ async function loadState(classId: string, series: HighSchoolSeries): Promise<Cla
     const { data, error } = await supabase
       .from('mapping_class_subjects')
       .select('id, subject_name, weekly_classes')
+      .eq('school_id', schoolId)
       .eq('class_id', mappingClassId);
     if (error) throw error;
     mappingSubjects = (data ?? []) as ExistingMappingSubject[];
@@ -107,10 +110,11 @@ async function loadState(classId: string, series: HighSchoolSeries): Promise<Cla
 export async function inspectClassCurriculum(
   classId: string,
   series: string | null | undefined,
+  schoolId: string | null | undefined,
 ): Promise<ClassCurriculumState | null> {
   const parsed = parseSeriesValue(series);
-  if (!parsed) return null;
-  return loadState(classId, parsed);
+  if (!parsed || !schoolId) return null;
+  return loadState(classId, parsed, schoolId);
 }
 
 export interface SyncResult extends ClassCurriculumState {
@@ -188,7 +192,7 @@ export async function syncClassCurriculum(
     if (error) throw error;
   }
 
-  const state = await loadState(classId, parsed);
+  const state = await loadState(classId, parsed, options.schoolId);
   const { plan, mappingClassId } = state;
 
   // 0) Consolidação de nomenclaturas equivalentes ANTES de qualquer renomeação,
@@ -247,6 +251,6 @@ export async function syncClassCurriculum(
     if (error) throw error;
   }
 
-  const after = await loadState(classId, parsed);
+  const after = await loadState(classId, parsed, options.schoolId);
   return { ...after, applied: plan.counts };
 }

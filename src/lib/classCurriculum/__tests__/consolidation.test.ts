@@ -111,15 +111,18 @@ describe('fetchSubjectIdsWithGrades', () => {
         rpc: impl.rpc ?? (async () => ({ data: null, error: { message: 'no rpc' } })),
         from: () => ({
           select: () => ({
-            in: () => ({
-              range: async (from: number, to: number) => {
-                calls.push([from, to]);
-                const page = impl.ranges?.shift() ?? [];
-                return { data: page.map((id) => ({ grade_subject_id: id })), error: null };
-              },
+            eq: () => ({
+              in: () => ({
+                range: async (from: number, to: number) => {
+                  calls.push([from, to]);
+                  const page = impl.ranges?.shift() ?? [];
+                  return { data: page.map((id) => ({ grade_subject_id: id })), error: null };
+                },
+              }),
             }),
           }),
         }),
+
       },
     }));
     const mod = await import('../sync');
@@ -130,7 +133,7 @@ describe('fetchSubjectIdsWithGrades', () => {
     const { fetchSubjectIdsWithGrades } = await loadModule({
       rpc: async () => ({ data: ['a', 'b'], error: null }),
     });
-    const set = await fetchSubjectIdsWithGrades(['a', 'b', 'c']);
+    const set = await fetchSubjectIdsWithGrades(['a', 'b', 'c'], 'school-1');
     expect([...set].sort()).toEqual(['a', 'b']);
   });
 
@@ -139,7 +142,7 @@ describe('fetchSubjectIdsWithGrades', () => {
     const page2 = Array.from({ length: 1000 }, () => 'a');
     const page3 = ['b'];
     const { fetchSubjectIdsWithGrades, calls } = await loadModule({ ranges: [page1, page2, page3] });
-    const set = await fetchSubjectIdsWithGrades(['a', 'b']);
+    const set = await fetchSubjectIdsWithGrades(['a', 'b'], 'school-1');
     expect(set.has('a')).toBe(true);
     expect(set.has('b')).toBe(true);
     expect(calls).toEqual([[0, 999], [1000, 1999], [2000, 2999]]);

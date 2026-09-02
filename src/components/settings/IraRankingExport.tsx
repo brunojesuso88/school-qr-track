@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useSchoolScopeKey } from '@/contexts/SchoolContext';
+import { useSchoolScopeKey, useActiveSchoolId } from '@/contexts/SchoolContext';
+import { scopeToSchool, NO_ACTIVE_SCHOOL_MESSAGE } from '@/lib/schools/scope';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -40,6 +41,7 @@ const medalColor = (place: number) =>
 
 const IraRankingExport = ({ classes, classesWithGrades }: Props) => {
   const schoolScopeKey = useSchoolScopeKey();
+  const activeSchoolId = useActiveSchoolId();
   const [selected, setSelected] = useState<string[]>([]);
   const [series, setSeries] = useState<HighSchoolSeries | ''>('');
   const [loading, setLoading] = useState(false);
@@ -129,14 +131,18 @@ const [rankingStale, setRankingStale] = useState(false);
       toast.error('Selecione ao menos uma coluna do PDF.');
       return;
     }
+    if (!activeSchoolId) {
+      toast.error(NO_ACTIVE_SCHOOL_MESSAGE);
+      return;
+    }
     setLoading(true);
     try {
-      const data = await buildIraRanking(selected);
+      const data = await buildIraRanking(selected, activeSchoolId);
       setResult(data);
-      const { data: stRows } = await supabase
-        .from('ira_staleness')
-        .select('class_id, stale')
-        .in('class_id', selected);
+      const { data: stRows } = await scopeToSchool(
+        supabase.from('ira_staleness').select('class_id, stale'),
+        activeSchoolId,
+      ).in('class_id', selected);
       const rows = (stRows || []) as { stale: boolean }[];
       setRankingStale(rows.some((r) => r.stale) || rows.length < selected.length);
       if (data.eligibleCount === 0) {
@@ -300,7 +306,7 @@ const [rankingStale, setRankingStale] = useState(false);
             )}
 
             <div className="flex flex-wrap gap-2">
-              <Button size="sm" onClick={loadPreview} disabled={loading || !series || selected.length === 0}>
+              <Button size="sm" onClick={loadPreview} disabled={loading || !series || selected.length === 0 || !activeSchoolId}>
                 {loading && <Loader2 className="w-3 h-3 mr-2 animate-spin" />}
                 Calcular prévia da classificação
               </Button>

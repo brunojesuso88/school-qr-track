@@ -1436,7 +1436,7 @@ export type Database = {
           last_seen_at: string
           p256dh: string
           platform: string | null
-          school_id: string | null
+          school_id: string
           updated_at: string
           user_agent: string | null
           user_id: string
@@ -1451,7 +1451,7 @@ export type Database = {
           last_seen_at?: string
           p256dh: string
           platform?: string | null
-          school_id?: string | null
+          school_id: string
           updated_at?: string
           user_agent?: string | null
           user_id: string
@@ -1466,7 +1466,7 @@ export type Database = {
           last_seen_at?: string
           p256dh?: string
           platform?: string | null
-          school_id?: string | null
+          school_id?: string
           updated_at?: string
           user_agent?: string | null
           user_id?: string

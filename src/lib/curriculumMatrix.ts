@@ -24,10 +24,15 @@ interface RawRow {
 }
 
 /** Carrega a matriz oficial (opcionalmente de uma série), ordenada por nome. */
-export async function fetchCurriculumMatrix(series?: HighSchoolSeries): Promise<CurriculumMatrixItem[]> {
+export async function fetchCurriculumMatrix(
+  series: HighSchoolSeries | undefined,
+  schoolId: string | null | undefined,
+): Promise<CurriculumMatrixItem[]> {
+  if (!schoolId) return [];
   let query = supabase
     .from('curriculum_matrix_subjects')
-    .select('id, subject_id, series, weekly_classes, include_in_ira, mapping_global_subjects(name, abbreviation, aliases)');
+    .select('id, subject_id, series, weekly_classes, include_in_ira, mapping_global_subjects(name, abbreviation, aliases)')
+    .eq('school_id', schoolId);
   if (series) query = query.eq('series', series);
   const { data, error } = await query;
   if (error) throw error;
@@ -45,4 +50,3 @@ export async function fetchCurriculumMatrix(series?: HighSchoolSeries): Promise<
     }))
     .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
 }
-

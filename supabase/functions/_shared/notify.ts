@@ -298,11 +298,23 @@ export async function dispatchNotification(opts: {
     .in("user_id", pushUsers)
     .is("disabled_at", null);
   if (onlyDeviceId) deviceQuery = deviceQuery.eq("id", onlyDeviceId);
+  // Um device pode estar vinculado a várias escolas do mesmo usuário: envia só o da escola alvo.
+  else if (schoolId) deviceQuery = deviceQuery.eq("school_id", schoolId);
 
   const { data: devices, error: devError } = await deviceQuery;
   if (devError) throw devError;
 
-  for (const batch of chunk((devices ?? []) as PushDevice[], 100)) {
+  // Defesa extra contra duplicidade: um envio por (user_id, endpoint).
+  const seen = new Set<string>();
+  const uniqueDevices = ((devices ?? []) as PushDevice[]).filter((d) => {
+    const key = `${d.user_id}|${d.endpoint}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+
+
+  for (const batch of chunk(uniqueDevices, 100)) {
     await Promise.all(
       batch.map(async (device) => {
         let send;
