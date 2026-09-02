@@ -22,6 +22,8 @@ import { PAEEForm, PAEEData, emptyPAEE } from '@/components/aee/PAEEForm';
 import { DISABILITY_OPTIONS, WEEKDAYS, AREAS } from '@/components/aee/PAEEForm';
 import { getSignedPhotoUrl } from '@/hooks/useSignedPhotoUrl';
 import logoCepans from '@/assets/logo-cepans.png';
+import { schoolScopedPath } from '@/lib/school/storagePaths';
+import { useActiveSchoolId } from '@/contexts/SchoolContext';
 
 interface Student {
   id: string;

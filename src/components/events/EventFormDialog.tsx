@@ -12,6 +12,8 @@ import { Sparkles, Plus, Trash2, FileUp, Upload, X, Loader2, Image as ImageIcon 
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { SchoolEvent, EventStatus, STATUS_LABELS, emptyEvent, normalizeEventFromAI, countFilled, CronogramaItem } from './types';
+import { schoolScopedPath } from '@/lib/school/storagePaths';
+import { useActiveSchoolId } from '@/contexts/SchoolContext';
 
 type EventDraft = Omit<SchoolEvent, 'id' | 'created_at' | 'updated_at' | 'created_by'> & { id?: string };
 

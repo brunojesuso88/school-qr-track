@@ -6,6 +6,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useSchoolProfile } from '@/hooks/useSchoolProfile';
 import {
+import { schoolScopedPath } from '@/lib/school/storagePaths';
+import { useActiveSchoolId } from '@/contexts/SchoolContext';
   SCHOOL_BRANDING_BUCKET as SCHOOL_HERO_BUCKET,
   SCHOOL_HERO_SETTING_KEY,
   buildBrandingPath,

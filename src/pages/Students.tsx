@@ -45,6 +45,8 @@ import { CouncilOccurrenceCard } from '@/components/students/CouncilOccurrenceCa
 
 import { formatIra } from '@/lib/ira';
 import { useActiveCertificateStudents } from '@/hooks/useCertificateCoverage';
+import { schoolScopedPath } from '@/lib/school/storagePaths';
+import { useActiveSchoolId } from '@/contexts/SchoolContext';
 
 interface Student {
   id: string;

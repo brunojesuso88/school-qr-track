@@ -31,6 +31,8 @@ import {
   type CidSource,
 } from '@/lib/medicalCertificates/cidLookup';
 import type { MedicalCertificate } from './types';
+import { schoolScopedPath } from '@/lib/school/storagePaths';
+import { useActiveSchoolId } from '@/contexts/SchoolContext';
 
 const BUCKET = 'medical-certificates';
 const MAX_FILE_SIZE = 10 * 1024 * 1024;

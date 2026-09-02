@@ -9,6 +9,8 @@ import { Upload, X, Loader2, Image as ImageIcon } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { SchoolEventSimple, emptySchoolEvent } from './types';
+import { schoolScopedPath } from '@/lib/school/storagePaths';
+import { useActiveSchoolId } from '@/contexts/SchoolContext';
 
 type Draft = Omit<SchoolEventSimple, 'id' | 'created_at' | 'updated_at' | 'created_by'> & { id?: string };
 
