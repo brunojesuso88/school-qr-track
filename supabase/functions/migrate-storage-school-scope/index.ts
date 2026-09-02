@@ -120,25 +120,29 @@ Deno.serve(async (req) => {
     }
     const schoolId = (schools as { id: string }[])[0].id;
 
+    // Processa em lotes com orçamento de tempo para evitar o timeout de 150s
+    // do runtime. O cliente reinvoca enquanto `done` for false (idempotente).
+    const startedAt = Date.now();
+    const TIME_BUDGET_MS = 90_000;
     const report: Record<string, { migrated: number; skipped: number; failed: string[] }> = {};
+    let done = true;
+    let remaining = 0;
 
     for (const bucket of BUCKETS) {
       const entry = { migrated: 0, skipped: 0, failed: [] as string[] };
-      const names = await listAll(admin, bucket);
-      for (const name of names) {
-        if (name.startsWith("schools/")) {
-          entry.skipped++;
-          continue;
+      report[bucket] = entry;
+      const names = (await listAll(admin, bucket)).filter((n) => !n.startsWith("schools/"));
+      for (const [index, name] of names.entries()) {
+        if (Date.now() - startedAt > TIME_BUDGET_MS) {
+          done = false;
+          remaining += names.length - index;
+          break;
         }
         const target = `schools/${schoolId}/${name}`;
         const { error: copyErr } = await admin.storage.from(bucket).copy(name, target);
-        if (copyErr && !String(copyErr.message).toLowerCase().includes("exists")) {
-          entry.failed.push(name);
-          continue;
-        }
-        // Confirma que o destino existe fisicamente antes de mexer nas referências.
-        const { data: check } = await admin.storage.from(bucket).download(target);
-        if (!check) {
+        const alreadyThere = copyErr
+          && /exist|duplicate/i.test(String(copyErr.message));
+        if (copyErr && !alreadyThere) {
           entry.failed.push(name);
           continue;
         }
@@ -147,10 +151,11 @@ Deno.serve(async (req) => {
         if (rmErr) entry.failed.push(name);
         else entry.migrated++;
       }
-      report[bucket] = entry;
+      if (!done) break;
     }
 
-    return json({ success: true, school_id: schoolId, report });
+    return json({ success: true, school_id: schoolId, done, remaining, report });
+
   } catch (error) {
     console.error("migrate-storage-school-scope error:", error);
     return json({ success: false, error: String((error as Error)?.message ?? error) }, 500);

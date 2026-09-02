@@ -183,16 +183,22 @@ const SchoolAdminPanel = () => {
 
   const [migrating, setMigrating] = useState(false);
 
-  /** Executa a migração one-shot/idempotente dos arquivos legados de Storage. */
+  /** Executa a migração em lotes, reinvocando até concluir (idempotente). */
   const migrateStorage = async () => {
     setMigrating(true);
     try {
-      const { data, error } = await supabase.functions.invoke('migrate-storage-school-scope');
-      if (error) throw error;
-      if (data?.success === false) throw new Error(data.error ?? 'Falha na migração');
-      const report = (data?.report ?? {}) as Record<string, { migrated: number; failed: string[] }>;
-      const moved = Object.values(report).reduce((acc, r) => acc + r.migrated, 0);
-      const failed = Object.values(report).reduce((acc, r) => acc + r.failed.length, 0);
+      let moved = 0;
+      let failed = 0;
+      for (let round = 0; round < 40; round++) {
+        const { data, error } = await supabase.functions.invoke('migrate-storage-school-scope');
+        if (error) throw error;
+        if (data?.success === false) throw new Error(data.error ?? 'Falha na migração');
+        const report = (data?.report ?? {}) as Record<string, { migrated: number; failed: string[] }>;
+        moved += Object.values(report).reduce((acc, r) => acc + r.migrated, 0);
+        failed += Object.values(report).reduce((acc, r) => acc + r.failed.length, 0);
+        if (data?.done !== false) break;
+        toast.info(`Migrando arquivos... ${moved} concluídos`);
+      }
       toast.success(`Arquivos migrados: ${moved}.${failed ? ` ${failed} falha(s).` : ''}`);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Não foi possível migrar os arquivos.');
@@ -200,6 +206,7 @@ const SchoolAdminPanel = () => {
       setMigrating(false);
     }
   };
+
 
   const totals = useMemo(() => {
     const pending = users.reduce(
