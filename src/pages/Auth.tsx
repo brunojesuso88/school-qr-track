@@ -40,7 +40,6 @@ const forceUpdateApp = async () => {
 const Auth = () => {
   // Cadastro genérico REMOVIDO: novas contas existem apenas via link institucional
   // `/join/:token` da escola. Aqui só existe login + recuperação de senha.
-  const isLogin = true;
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -113,7 +112,7 @@ const Auth = () => {
     setIsLoading(true);
 
     try {
-      if (isLogin) {
+      {
         const { error } = await signIn(email, password);
         if (error) {
           if (error.message.includes('Invalid login credentials')) {
@@ -162,12 +161,10 @@ const Auth = () => {
           </div>
           <div>
             <CardTitle className="text-2xl">
-              {isLogin ? 'Log in' : 'Criar Conta'}
+              Log in
             </CardTitle>
             <CardDescription className="mt-2">
-              {isLogin
-                ? 'Sistema digital de secretaria escolar'
-                : 'Cadastre-se como administrador'}
+              Sistema digital de secretaria escolar
             </CardDescription>
           </div>
         </CardHeader>
@@ -207,7 +204,7 @@ const Auth = () => {
               </div>
             </div>
 
-            {isLogin && (
+            {(
               <div className="text-right">
                 <button
                   type="button"
