@@ -47,16 +47,18 @@ describe('resolução da origem pública', () => {
       .toBe('https://school-qr-track.lovable.app');
   });
 
-  it('retorna null no preview sem URL configurada', () => {
-    expect(resolvePublicAppOrigin(null, PREVIEW)).toBeNull();
-    expect(resolvePublicAppOrigin('', 'http://localhost:8080')).toBeNull();
+  it('cai na URL de produção publicada no preview/localhost', () => {
+    expect(resolvePublicAppOrigin(null, PREVIEW)).toBe(DEFAULT_PUBLIC_APP_URL);
+    expect(resolvePublicAppOrigin('', 'http://localhost:8080')).toBe(DEFAULT_PUBLIC_APP_URL);
   });
 });
 
 describe('buildJoinUrl nunca aponta para o preview', () => {
-  it('bloqueia bases não públicas', () => {
-    expect(buildJoinUrl('abc123', PREVIEW)).toBeNull();
-    expect(buildJoinUrl('abc123', 'http://localhost:8080')).toBeNull();
+  it('usa a URL publicada quando a base é preview/localhost', () => {
+    expect(buildJoinUrl('abc123', PREVIEW)).toBe(`${DEFAULT_PUBLIC_APP_URL}/join/abc123`);
+    expect(buildJoinUrl('abc123', 'http://localhost:8080')).toBe(
+      `${DEFAULT_PUBLIC_APP_URL}/join/abc123`,
+    );
     expect(buildJoinUrl('', PUBLIC)).toBeNull();
   });
 
