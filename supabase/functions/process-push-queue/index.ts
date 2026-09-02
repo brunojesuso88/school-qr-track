@@ -17,19 +17,67 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const auth = await requireAuth(req, corsHeaders, ["admin", "direction"]);
+    const auth = await requireAuth(req, corsHeaders);
     if (auth instanceof Response) return auth;
 
     const admin = serviceClient();
 
-    const { data: pending, error } = await admin
+    // Escopo: a fila só processa entregas das escolas em que o usuário é
+    // admin/direção (admin global processa todas). Nunca papel global isolado.
+    const { data: globalAdmin } = await admin
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", auth.userId)
+      .eq("role", "admin")
+      .maybeSingle();
+    const isGlobal = Boolean(globalAdmin);
+
+    let managedSchools: string[] = [];
+    if (!isGlobal) {
+      const { data: memberships, error: memErr } = await admin
+        .from("school_memberships")
+        .select("school_id")
+        .eq("user_id", auth.userId)
+        .eq("status", "active")
+        .in("role", ["admin", "direction"]);
+      if (memErr) throw memErr;
+      managedSchools = (memberships ?? []).map((m) => (m as { school_id: string }).school_id);
+      if (!managedSchools.length) {
+        return new Response(
+          JSON.stringify({ success: false, error: "Forbidden" }),
+          { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+    }
+
+    let notificationIds: string[] | null = null;
+    if (!isGlobal) {
+      const { data: notifs, error: notifErr } = await admin
+        .from("notifications")
+        .select("id")
+        .in("school_id", managedSchools);
+      if (notifErr) throw notifErr;
+      notificationIds = (notifs ?? []).map((n) => (n as { id: string }).id);
+      if (!notificationIds.length) {
+        return new Response(
+          JSON.stringify({ success: true, processed: 0, sent: 0, failed: 0, expired: 0, skipped: 0 }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+    }
+
+    let pendingQuery = admin
       .from("notification_deliveries")
       .select("id, notification_id, user_id, device_id, attempts, status")
       .in("status", ["failed", "queued"])
       .lt("attempts", MAX_ATTEMPTS)
       .order("created_at", { ascending: true })
       .limit(200);
+    if (notificationIds) pendingQuery = pendingQuery.in("notification_id", notificationIds);
+
+    const { data: pending, error } = await pendingQuery;
     if (error) throw error;
+
 
     let sent = 0, failed = 0, expired = 0, skipped = 0;
 
