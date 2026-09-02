@@ -111,15 +111,18 @@ describe('fetchSubjectIdsWithGrades', () => {
         rpc: impl.rpc ?? (async () => ({ data: null, error: { message: 'no rpc' } })),
         from: () => ({
           select: () => ({
-            in: () => ({
-              range: async (from: number, to: number) => {
-                calls.push([from, to]);
-                const page = impl.ranges?.shift() ?? [];
-                return { data: page.map((id) => ({ grade_subject_id: id })), error: null };
-              },
+            eq: () => ({
+              in: () => ({
+                range: async (from: number, to: number) => {
+                  calls.push([from, to]);
+                  const page = impl.ranges?.shift() ?? [];
+                  return { data: page.map((id) => ({ grade_subject_id: id })), error: null };
+                },
+              }),
             }),
           }),
         }),
+
       },
     }));
     const mod = await import('../sync');
