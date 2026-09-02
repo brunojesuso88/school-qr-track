@@ -2710,6 +2710,13 @@ export type Database = {
         }
         Returns: boolean
       }
+      has_row_role: {
+        Args: {
+          _roles: Database["public"]["Enums"]["app_role"][]
+          _school_id: string
+        }
+        Returns: boolean
+      }
       has_school_role: {
         Args: {
           _roles: Database["public"]["Enums"]["app_role"][]
