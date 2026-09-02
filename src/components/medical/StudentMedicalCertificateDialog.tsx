@@ -201,7 +201,7 @@ export const StudentMedicalCertificateDialog = ({
         if (error) throw error;
         if (file && fileValid(file)) {
           const ext = file.name.split('.').pop() ?? 'bin';
-          const path = `${studentId}/${certificateId}/atestado.${ext}`;
+          const path = schoolScopedPath(activeSchoolId, `${studentId}/${certificateId}/atestado.${ext}`);
           const { error: upErr } = await supabase.storage
             .from(BUCKET)
             .upload(path, file, { upsert: true, contentType: file.type });
@@ -220,7 +220,7 @@ export const StudentMedicalCertificateDialog = ({
         let attachmentPath: string | null = null;
         if (file && fileValid(file)) {
           const ext = file.name.split('.').pop() ?? 'bin';
-          const path = `${studentId}/${certificateId}/atestado-${Date.now()}.${ext}`;
+          const path = schoolScopedPath(activeSchoolId, `${studentId}/${certificateId}/atestado-${Date.now()}.${ext}`);
           const { error: upErr } = await supabase.storage
             .from(BUCKET)
             .upload(path, file, { upsert: false, contentType: file.type });
@@ -245,7 +245,7 @@ export const StudentMedicalCertificateDialog = ({
         certificateId = data.id;
         if (file && fileValid(file)) {
           const ext = file.name.split('.').pop() ?? 'bin';
-          const path = `${studentId}/${certificateId}/atestado.${ext}`;
+          const path = schoolScopedPath(activeSchoolId, `${studentId}/${certificateId}/atestado.${ext}`);
           const { error: upErr } = await supabase.storage
             .from(BUCKET)
             .upload(path, file, { upsert: true, contentType: file.type });
