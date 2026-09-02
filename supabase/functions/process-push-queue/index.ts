@@ -17,19 +17,67 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const auth = await requireAuth(req, corsHeaders, ["admin", "direction"]);
+    const auth = await requireAuth(req, corsHeaders);
     if (auth instanceof Response) return auth;
 
     const admin = serviceClient();
 
-    const { data: pending, error } = await admin
+    // Escopo: a fila só processa entregas das escolas em que o usuário é
+    // admin/direção (admin global processa todas). Nunca papel global isolado.
+    const { data: globalAdmin } = await admin
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", auth.userId)
+      .eq("role", "admin")
+      .maybeSingle();
+    const isGlobal = Boolean(globalAdmin);
+
+    let managedSchools: string[] = [];
+    if (!isGlobal) {
+      const { data: memberships, error: memErr } = await admin
+        .from("school_memberships")
+        .select("school_id")
+        .eq("user_id", auth.userId)
+        .eq("status", "active")
+        .in("role", ["admin", "direction"]);
+      if (memErr) throw memErr;
+      managedSchools = (memberships ?? []).map((m) => (m as { school_id: string }).school_id);
+      if (!managedSchools.length) {
+        return new Response(
+          JSON.stringify({ success: false, error: "Forbidden" }),
+          { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+    }
+
+    let notificationIds: string[] | null = null;
+    if (!isGlobal) {
+      const { data: notifs, error: notifErr } = await admin
+        .from("notifications")
+        .select("id")
+        .in("school_id", managedSchools);
+      if (notifErr) throw notifErr;
+      notificationIds = (notifs ?? []).map((n) => (n as { id: string }).id);
+      if (!notificationIds.length) {
+        return new Response(
+          JSON.stringify({ success: true, processed: 0, sent: 0, failed: 0, expired: 0, skipped: 0 }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+    }
+
+    let pendingQuery = admin
       .from("notification_deliveries")
       .select("id, notification_id, user_id, device_id, attempts, status")
       .in("status", ["failed", "queued"])
       .lt("attempts", MAX_ATTEMPTS)
       .order("created_at", { ascending: true })
       .limit(200);
+    if (notificationIds) pendingQuery = pendingQuery.in("notification_id", notificationIds);
+
+    const { data: pending, error } = await pendingQuery;
     if (error) throw error;
+
 
     let sent = 0, failed = 0, expired = 0, skipped = 0;
 
@@ -41,20 +89,24 @@ Deno.serve(async (req) => {
         };
         if (!delivery.device_id) { skipped++; return; }
 
-        const { data: device } = await admin
-          .from("push_subscriptions")
-          .select("id, user_id, endpoint, p256dh, auth, failure_count, disabled_at")
-          .eq("id", delivery.device_id)
-          .is("disabled_at", null)
-          .maybeSingle();
-        if (!device) { skipped++; return; }
-
         const { data: notification } = await admin
           .from("notifications")
-          .select("title, body, route")
+          .select("title, body, route, school_id")
           .eq("id", delivery.notification_id)
           .maybeSingle();
         if (!notification) { skipped++; return; }
+
+        // Device precisa ser da MESMA escola da notificação.
+        let deviceQuery = admin
+          .from("push_subscriptions")
+          .select("id, user_id, endpoint, p256dh, auth, failure_count, disabled_at, school_id")
+          .eq("id", delivery.device_id)
+          .is("disabled_at", null);
+        if (notification.school_id) {
+          deviceQuery = deviceQuery.eq("school_id", notification.school_id as string);
+        }
+        const { data: device } = await deviceQuery.maybeSingle();
+        if (!device) { skipped++; return; }
 
         const send = await sendWebPush(device as PushDevice, {
           title: notification.title as string,

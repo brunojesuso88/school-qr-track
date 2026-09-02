@@ -11,7 +11,7 @@ import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import NotificationBell from '@/components/notifications/NotificationBell';
 import { ThemeToggle } from '@/components/ThemeToggle';
-import logoEscola from "@/assets/logo-escola.jpg";
+import { useSchoolBranding } from '@/hooks/useSchoolBranding';
 
 interface DailyStats {
   totalPresent: number;
@@ -35,6 +35,7 @@ const StaffScanQR = () => {
   const [soundEnabled, setSoundEnabled] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const { user, signOut } = useAuth();
+  const branding = useSchoolBranding();
 
   // Fetch sound preference
   useEffect(() => {
@@ -124,16 +125,18 @@ const StaffScanQR = () => {
 
   // Realtime subscription for instant stats updates
   useEffect(() => {
-    if (!user?.id) return;
+    if (!user?.id || !activeSchoolId) return;
 
+    // Canal por escola: um dispositivo nunca escuta eventos de outra escola.
     const channel = supabase
-      .channel('attendance-changes')
+      .channel(`attendance-changes:${activeSchoolId}`)
       .on(
         'postgres_changes',
         {
           event: 'INSERT',
           schema: 'public',
-          table: 'attendance'
+          table: 'attendance',
+          filter: `school_id=eq.${activeSchoolId}`,
         },
         (payload) => {
           console.log('New attendance record detected:', payload);
@@ -149,7 +152,7 @@ const StaffScanQR = () => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user?.id, fetchDailyStats, playNotificationSound]);
+  }, [user?.id, activeSchoolId, fetchDailyStats, playNotificationSound]);
 
   // Focus input for USB scanner
   useEffect(() => {
@@ -257,13 +260,15 @@ const StaffScanQR = () => {
       <header className="bg-card border-b border-border px-4 py-3">
         <div className="max-w-2xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <img 
-              src={logoEscola} 
-              alt="Logo CEPANS" 
-              className="w-10 h-10 rounded-lg object-cover"
-            />
+            {branding.logoUrl && (
+              <img
+                src={branding.logoUrl}
+                alt={`Logo de ${branding.schoolName}`}
+                className="w-10 h-10 rounded-lg object-cover"
+              />
+            )}
             <div>
-              <h1 className="font-semibold text-sm">CEPANS</h1>
+              <h1 className="font-semibold text-sm">{branding.schoolName}</h1>
               <p className="text-xs text-muted-foreground">Leitor de Presença</p>
             </div>
           </div>

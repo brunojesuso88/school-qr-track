@@ -1,4 +1,5 @@
-import logoCepans from '@/assets/logo-cepans.png';
+import { useSchoolBranding } from '@/hooks/useSchoolBranding';
+import { cityDateLine, formatCityState } from '@/lib/school/documentBranding';
 import {
   NotificationData,
   STAGE_TITLES,
@@ -7,6 +8,7 @@ import {
   formatDocNumber,
   todayBR,
 } from '@/lib/notificationTemplates';
+
 
 interface Props {
   data: NotificationData;
@@ -21,10 +23,15 @@ interface Props {
 }
 
 export function NotificationPreview({ data, docNumber, docYear, customBody, signature }: Props) {
+  const branding = useSchoolBranding();
   const stage = STAGE_TITLES[data.stage];
-  const body = customBody && customBody.trim() ? customBody : buildNotificationBody(data);
+  const body = customBody && customBody.trim()
+    ? customBody
+    : buildNotificationBody({ ...data, school_name: data.school_name ?? branding.schoolName });
   const obligations = getResolvedObligations(data);
   const directionLabel = signature?.role_label?.trim() || 'Direção Escolar';
+  const placeDate = cityDateLine(formatCityState(branding.city, branding.state, '/'), todayBR());
+
 
   return (
     <div
@@ -45,13 +52,25 @@ export function NotificationPreview({ data, docNumber, docYear, customBody, sign
     >
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-        <img src={logoCepans} alt="Brasão CEPANS" style={{ width: 110, height: 110, objectFit: 'contain' }} />
+        {branding.logoDataUrl && (
+          <img
+            src={branding.logoDataUrl}
+            alt={`Brasão de ${branding.schoolName}`}
+            style={{ width: 110, height: 110, objectFit: 'contain' }}
+          />
+        )}
         <div style={{ flex: 1, textAlign: 'center' }}>
-          <div style={{ fontSize: 12, letterSpacing: 1, color: '#0B2E59' }}>ESTADO DO MARANHÃO</div>
-          <div style={{ fontSize: 11, letterSpacing: 0.5, color: '#0B2E59', whiteSpace: 'nowrap' }}>SECRETARIA DE ESTADO DA EDUCAÇÃO DO MARANHÃO (SEDUC MA)</div>
+          {branding.authority && (
+            <div style={{ fontSize: 11, letterSpacing: 0.5, color: '#0B2E59' }}>
+              {branding.authority.toUpperCase()}
+            </div>
+          )}
           <div style={{ fontSize: 13, fontWeight: 700, color: '#0D47A1', marginTop: 2 }}>
-            CENTRO DE ENSINO PROFESSOR ANTÔNIO NONATO SAMPAIO – CEPANS
+            {branding.schoolNameUpper}
           </div>
+          {branding.cityStateLine && (
+            <div style={{ fontSize: 11, color: '#0B2E59', marginTop: 2 }}>{branding.cityStateLine}</div>
+          )}
         </div>
         <div style={{ width: 40 }} />
       </div>
@@ -64,9 +83,10 @@ export function NotificationPreview({ data, docNumber, docYear, customBody, sign
         <div style={{ marginTop: 10, fontSize: 12, color: '#0B2E59' }}>
           <strong>Documento nº {formatDocNumber(docNumber, docYear)}</strong>
           <span style={{ margin: '0 10px' }}>•</span>
-          Coelho Neto/MA, {todayBR()}
+          {placeDate}
         </div>
       </div>
+
 
       {/* Body */}
       <div style={{ whiteSpace: 'pre-wrap', textAlign: 'justify', marginBottom: 18 }}>{body}</div>

@@ -56,17 +56,20 @@ export interface NotificationData {
   classes_subjects?: string | null;
   teacher_justification?: string | null;
   management_guidance?: string | null;
+  /** Nome institucional da escola ativa (nunca hardcoded). */
+  school_name?: string | null;
 }
 
 export function buildNotificationBody(data: NotificationData): string {
   const name = (data.teacher_name || '_______________________').toUpperCase();
   const orig = fmt(data.original_deadline);
   const novo = fmt(data.new_deadline);
+  const school = (data.school_name || '').trim() || 'desta unidade escolar';
 
   if (data.stage === 'stage_1') {
     return `Prezado(a) Professor(a) ${name},
 
-A Gestão Escolar do Centro de Ensino Professor Antônio Nonato Sampaio vem, por meio desta, registrar orientação referente ao não cumprimento da(s) obrigação(ões) acadêmica(s) abaixo identificada(s), dentro do prazo institucional previamente estabelecido em ${orig}.
+A Gestão Escolar do ${school} vem, por meio desta, registrar orientação referente ao não cumprimento da(s) obrigação(ões) acadêmica(s) abaixo identificada(s), dentro do prazo institucional previamente estabelecido em ${orig}.
 
 Considerando a importância do alinhamento pedagógico e organizacional da unidade escolar, solicitamos a regularização da pendência até o prazo de ${novo}.
 
@@ -77,7 +80,7 @@ Esta comunicação possui caráter orientativo, preventivo e de acompanhamento i
 
   return `Prezado(a) Professor(a) ${name},
 
-A Gestão Escolar do Centro de Ensino Professor Antônio Nonato Sampaio vem, por meio desta, NOTIFICAR Vossa Senhoria acerca do não cumprimento da(s) obrigação(ões) acadêmica(s) relacionadas abaixo, cujo prazo institucional anteriormente estabelecido expirou em ${orig}.
+A Gestão Escolar do ${school} vem, por meio desta, NOTIFICAR Vossa Senhoria acerca do não cumprimento da(s) obrigação(ões) acadêmica(s) relacionadas abaixo, cujo prazo institucional anteriormente estabelecido expirou em ${orig}.
 
 Registra-se que a ausência da regularização compromete os processos pedagógicos, administrativos e o acompanhamento do rendimento escolar dos estudantes.
 
@@ -85,6 +88,7 @@ Dessa forma, fica estabelecido o prazo até ${novo} para regularização da(s) p
 
 Esta notificação possui caráter administrativo interno, de acompanhamento funcional e regularização institucional.`;
 }
+
 
 export function getResolvedObligations(data: NotificationData): string[] {
   const list = data.obligations.filter((o) => o !== 'Outros');

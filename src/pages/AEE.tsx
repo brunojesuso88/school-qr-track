@@ -21,7 +21,7 @@ import { PEIForm, PEIData, emptyPEI, InterventionRow, PerformanceLevel } from '@
 import { PAEEForm, PAEEData, emptyPAEE } from '@/components/aee/PAEEForm';
 import { DISABILITY_OPTIONS, WEEKDAYS, AREAS } from '@/components/aee/PAEEForm';
 import { getSignedPhotoUrl } from '@/hooks/useSignedPhotoUrl';
-import logoCepans from '@/assets/logo-cepans.png';
+import { useSchoolBranding } from '@/hooks/useSchoolBranding';
 import { schoolScopedPath } from '@/lib/school/storagePaths';
 import { useActiveSchoolId, useSchoolScopeKey } from '@/contexts/SchoolContext';
 import { assertActiveSchool } from '@/lib/schools/scope';
@@ -78,6 +78,7 @@ const AEE = () => {
   const cameraInputRef = useRef<HTMLInputElement>(null);
   
   const { schoolName } = useSchoolName();
+  const branding = useSchoolBranding();
 
   const [formData, setFormData] = useState({
     aee_cid_code: '',
@@ -844,10 +845,10 @@ const AEE = () => {
 </head>
 <body>
   <div class="institutional-header">
-    <img src="${logoCepans}" alt="Brasão CEPANS" />
+    ${branding.logoDataUrl ? `<img src="${branding.logoDataUrl}" alt="Brasão da escola" />` : ''}
     <div class="info">
       <div class="school">${escapeHtml(schoolHeader)}</div>
-      <div class="city">Coelho Neto - MA</div>
+      ${branding.cityStateLine ? `<div class="city">${escapeHtml(branding.cityStateLine)}</div>` : ''}
       <div class="doc">Plano de Atendimento Educacional Especializado — PAEE</div>
     </div>
   </div>
@@ -1237,10 +1238,10 @@ const AEE = () => {
       </head>
       <body>
         <div class="institutional-header">
-          <img src="${logoCepans}" alt="Brasão CEPANS" />
+          ${branding.logoDataUrl ? `<img src="${branding.logoDataUrl}" alt="Brasão da escola" />` : ''}
           <div class="info">
-            <div class="school">CENTRO DE ENSINO PROF° ANTÔNIO NONATO SAMPAIO</div>
-            <div class="city">Coelho Neto - MA</div>
+            <div class="school">${escapeHtml(branding.schoolNameUpper || schoolName)}</div>
+            ${branding.cityStateLine ? `<div class="city">${escapeHtml(branding.cityStateLine)}</div>` : ''}
             <div class="doc">Plano Educacional Individualizado — PEI</div>
           </div>
         </div>

@@ -5,6 +5,7 @@
  * (`computeIraForStudent`), respeitando a configuração de IRA de cada turma.
  * Nenhum nome de aluno é carregado para o PDF (privacidade).
  */
+import { splitSchoolNameLines } from '@/lib/school/documentBranding';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { format } from 'date-fns';
@@ -262,14 +263,16 @@ export interface RankingPdfOptions {
   totalEligible: number;
   /** URL do brasão da escola (opcional). */
   logoUrl?: string;
+  /** Brasão já carregado como dataURL (preferido — vem da escola ativa). */
+  logoDataUrl?: string | null;
+  /** Nome institucional da escola ativa. */
+  schoolName?: string | null;
   /** Série do Ensino Médio da classificação (obrigatória no fluxo da UI). */
   series?: HighSchoolSeries;
   /** Colunas do documento. Ausente = conjunto padrão histórico. */
   columns?: RankingPdfColumn[];
 }
 
-const SCHOOL_LINE_1 = 'CENTRO DE ENSINO';
-const SCHOOL_LINE_2 = 'PROFESSOR ANTÔNIO NONATO SAMPAIO';
 const TITLE_TOP = 'CLASSIFICAÇÃO DE DESEMPENHO';
 const TITLE_MAIN = 'RANKING DO IRA';
 
@@ -372,7 +375,7 @@ export async function buildIraRankingPdf(entries: RankingEntry[], options: Ranki
   const LOGO_BOX = 46;
   const MASCOT_BOX = 40; // ~40 mm
   const [logo, mascot] = await Promise.all([
-    loadImageDataUrl(options.logoUrl ?? ''),
+    options.logoDataUrl ?? loadImageDataUrl(options.logoUrl ?? ''),
     loadImageDataUrl(mascotAsset),
   ]);
   if (logo) drawFittedImage(doc, logo, margin + 1, margin + 1, LOGO_BOX);
@@ -387,9 +390,10 @@ export async function buildIraRankingPdf(entries: RankingEntry[], options: Ranki
   doc.setTextColor(...NAVY);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(10);
-  doc.text(SCHOOL_LINE_1, cxT, margin + 8, { align: 'center', charSpace: 0.8 });
+  const [schoolLine1, schoolLine2] = splitSchoolNameLines(options.schoolName);
+  if (schoolLine1) doc.text(schoolLine1, cxT, margin + 8, { align: 'center', charSpace: 0.8 });
   doc.setFontSize(14);
-  doc.text(SCHOOL_LINE_2, cxT, margin + 15.5, { align: 'center' });
+  doc.text(schoolLine2, cxT, margin + 15.5, { align: 'center' });
 
   doc.setDrawColor(...FRAME);
   doc.setLineWidth(0.5);

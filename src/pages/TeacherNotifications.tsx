@@ -25,7 +25,6 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useActiveSchoolId, useSchoolScopeKey } from '@/contexts/SchoolContext';
 import { assertActiveSchool } from '@/lib/schools/scope';
-import logoCepans from '@/assets/logo-cepans.png';
 import {
   NotificationData,
   NotificationStage,
@@ -38,6 +37,8 @@ import {
   formatDateBR,
   todayBR,
 } from '@/lib/notificationTemplates';
+import { useSchoolBranding } from '@/hooks/useSchoolBranding';
+import { cityDateLine, formatCityState, type SchoolDocumentBranding } from '@/lib/school/documentBranding';
 import { NotificationPreview } from '@/components/notifications/NotificationPreview';
 import {
   ManagementSignaturesDialog,
@@ -105,9 +106,18 @@ function buildPrintHTML(
   docYear: number,
   customBody: string | null,
   signature?: SignatureForPrint | null,
+  branding?: SchoolDocumentBranding | null,
 ) {
   const stage = STAGE_TITLES[data.stage];
-  const body = (customBody?.trim() || buildNotificationBody(data)).replace(/\n/g, '<br/>');
+  const schoolName = branding?.schoolNameUpper || (data.school_name ?? '').toUpperCase();
+  const placeDate = cityDateLine(
+    formatCityState(branding?.city, branding?.state, '/'),
+    todayBR(),
+  );
+  const body = (
+    customBody?.trim() ||
+    buildNotificationBody({ ...data, school_name: data.school_name ?? branding?.schoolName ?? null })
+  ).replace(/\n/g, '<br/>');
   const obligations = getResolvedObligations(data);
   const sigHtml = signature
     ? `<img src="${signature.dataUrl}" alt="Assinatura" style="display:block;margin:0 auto 2px;max-height:56px;max-width:80%;object-fit:contain;" />`
@@ -150,11 +160,11 @@ function buildPrintHTML(
   <div class="sheet">
   <div class="content">
   <div class="header">
-    <img src="${logoCepans}" alt="CEPANS" />
+    ${branding?.logoDataUrl ? `<img src="${branding.logoDataUrl}" alt="Brasão" />` : ''}
     <div class="info">
-      <div class="line">ESTADO DO MARANHÃO</div>
-      <div class="line seduc">SECRETARIA DE ESTADO DA EDUCAÇÃO DO MARANHÃO (SEDUC MA)</div>
-      <div class="school">CENTRO DE ENSINO PROFESSOR ANTÔNIO NONATO SAMPAIO – CEPANS</div>
+      ${branding?.authority ? `<div class="line seduc">${escapeHTML(branding.authority.toUpperCase())}</div>` : ''}
+      <div class="school">${escapeHTML(schoolName)}</div>
+      ${branding?.cityStateLine ? `<div class="line">${escapeHTML(branding.cityStateLine)}</div>` : ''}
     </div>
     <div style="width:40px"></div>
   </div>
@@ -162,7 +172,7 @@ function buildPrintHTML(
   <div class="title">
     <div class="t1">${stage.title}</div>
     <div class="t2">${stage.subtitle}</div>
-    <div class="meta"><strong>Documento nº ${formatDocNumber(docNumber, docYear)}</strong> &nbsp;•&nbsp; Coelho Neto/MA, ${todayBR()}</div>
+    <div class="meta"><strong>Documento nº ${formatDocNumber(docNumber, docYear)}</strong> &nbsp;•&nbsp; ${escapeHTML(placeDate)}</div>
   </div>
   <div class="body section">${body}</div>
   ${data.reason ? `<div class="section"><div class="label">Motivo da notificação</div><div class="body">${escapeHTML(data.reason)}</div></div>` : ''}
@@ -210,6 +220,7 @@ function escapeHTML(s: string): string {
 export default function TeacherNotifications() {
   const { user } = useAuth();
   const activeSchoolId = useActiveSchoolId();
+  const branding = useSchoolBranding();
   const schoolScopeKey = useSchoolScopeKey();
   const { userRole } = useAuth() as any;
   const [form, setForm] = useState<NotificationData>(emptyForm);
@@ -328,7 +339,10 @@ export default function TeacherNotifications() {
         if (error) throw error;
         toast.success('Notificação atualizada.');
       } else {
-        const { data: numData, error: numErr } = await supabase.rpc('next_teacher_notification_number', { _year: year });
+        const { data: numData, error: numErr } = await supabase.rpc('next_teacher_notification_number', {
+          _year: year,
+          _school_id: assertActiveSchool(activeSchoolId),
+        });
         if (numErr) throw numErr;
         const nextNumber = numData as unknown as number;
         const { error } = await supabase.from('teacher_notifications').insert({
@@ -378,7 +392,7 @@ export default function TeacherNotifications() {
     const err = validate();
     if (err) { toast.error(err); return; }
     const sig = await resolveSelectedSignature();
-    const html = buildPrintHTML(form, previewDocNumber, previewYear, customBody || null, sig);
+    const html = buildPrintHTML(form, previewDocNumber, previewYear, customBody || null, sig, branding);
     const w = window.open('', '_blank', 'width=900,height=1000');
     if (!w) { toast.error('Permita pop-ups para imprimir.'); return; }
     w.document.write(html);
@@ -435,6 +449,7 @@ export default function TeacherNotifications() {
       r.doc_year,
       r.custom_body,
       sig,
+      branding,
     );
     const w = window.open('', '_blank', 'width=900,height=1000');
     if (!w) return;
@@ -463,7 +478,7 @@ export default function TeacherNotifications() {
           <div>
             <h1 className="text-2xl font-semibold">Notificação Docente</h1>
             <p className="text-sm text-muted-foreground">
-              Emissão de comunicações orientativas e notificações administrativas internas — CEPANS.
+              Emissão de comunicações orientativas e notificações administrativas internas.
             </p>
           </div>
           {editingId && (
