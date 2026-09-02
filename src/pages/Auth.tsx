@@ -226,18 +226,20 @@ const Auth = () => {
               {isLoading ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  {isLogin ? 'Entrando...' : 'Criando conta...'}
+                  Entrando...
                 </>
               ) : (
-                <>{isLogin ? 'Entrar' : 'Criar Conta'}</>
+                <>Entrar</>
               )}
             </Button>
           </form>
 
           <p className="mt-6 text-center text-xs text-muted-foreground">
             Novos acessos são criados apenas pelo link institucional da sua escola.
-          </p>ntent>
+          </p>
+        </CardContent>
       </Card>
+
 
       <Dialog open={isForgotOpen} onOpenChange={setIsForgotOpen}>
         <DialogContent className="sm:max-w-md">
