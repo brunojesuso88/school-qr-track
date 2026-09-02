@@ -1505,6 +1505,33 @@ export type Database = {
         }
         Relationships: []
       }
+      role_permission_defaults: {
+        Row: {
+          allowed: boolean
+          label: string
+          module: string
+          permission_key: string
+          role: Database["public"]["Enums"]["app_role"]
+          sort_order: number
+        }
+        Insert: {
+          allowed: boolean
+          label: string
+          module: string
+          permission_key: string
+          role: Database["public"]["Enums"]["app_role"]
+          sort_order?: number
+        }
+        Update: {
+          allowed?: boolean
+          label?: string
+          module?: string
+          permission_key?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          sort_order?: number
+        }
+        Relationships: []
+      }
       school_event_simple: {
         Row: {
           cover_image: string | null
@@ -1768,8 +1795,47 @@ export type Database = {
           },
         ]
       }
+      school_role_permissions: {
+        Row: {
+          allowed: boolean
+          created_at: string
+          id: string
+          permission_key: string
+          role: Database["public"]["Enums"]["app_role"]
+          school_id: string
+          updated_at: string
+        }
+        Insert: {
+          allowed: boolean
+          created_at?: string
+          id?: string
+          permission_key: string
+          role: Database["public"]["Enums"]["app_role"]
+          school_id: string
+          updated_at?: string
+        }
+        Update: {
+          allowed?: boolean
+          created_at?: string
+          id?: string
+          permission_key?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          school_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "school_role_permissions_school_id_fkey"
+            columns: ["school_id"]
+            isOneToOne: false
+            referencedRelation: "schools"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       schools: {
         Row: {
+          auto_approve_registration: boolean
           city: string | null
           code: string
           created_at: string
@@ -1784,6 +1850,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          auto_approve_registration?: boolean
           city?: string | null
           code: string
           created_at?: string
@@ -1798,6 +1865,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          auto_approve_registration?: boolean
           city?: string | null
           code?: string
           created_at?: string
@@ -2427,7 +2495,13 @@ export type Database = {
     }
     Functions: {
       admin_create_school: {
-        Args: { _city?: string; _code?: string; _name: string; _state?: string }
+        Args: {
+          _auto_approve?: boolean
+          _city?: string
+          _code?: string
+          _name: string
+          _state?: string
+        }
         Returns: string
       }
       admin_list_users: {
@@ -2448,6 +2522,13 @@ export type Database = {
         Args: { _school_id: string; _user_id: string }
         Returns: undefined
       }
+      admin_reset_school_permissions: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _school_id: string
+        }
+        Returns: undefined
+      }
       admin_revoke_registration_link: {
         Args: { _school_id: string }
         Returns: undefined
@@ -2466,6 +2547,7 @@ export type Database = {
       admin_school_overview: {
         Args: never
         Returns: {
+          auto_approve_registration: boolean
           city: string
           code: string
           member_count: number
@@ -2478,6 +2560,31 @@ export type Database = {
           token: string
         }[]
       }
+      admin_school_permissions: {
+        Args: { _school_id: string }
+        Returns: {
+          allowed: boolean
+          is_default: boolean
+          label: string
+          module: string
+          permission_key: string
+          role: Database["public"]["Enums"]["app_role"]
+          sort_order: number
+        }[]
+      }
+      admin_set_school_auto_approve: {
+        Args: { _enabled: boolean; _school_id: string }
+        Returns: undefined
+      }
+      admin_set_school_permission: {
+        Args: {
+          _allowed: boolean
+          _permission_key: string
+          _role: Database["public"]["Enums"]["app_role"]
+          _school_id: string
+        }
+        Returns: undefined
+      }
       admin_upsert_membership: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -2488,6 +2595,10 @@ export type Database = {
         Returns: undefined
       }
       can_access_school: { Args: { _school_id: string }; Returns: boolean }
+      can_manage_school_permissions: {
+        Args: { _school_id: string }
+        Returns: boolean
+      }
       consolidate_grade_subject: {
         Args: { _source: string; _target: string }
         Returns: Json
@@ -2550,6 +2661,10 @@ export type Database = {
         }
         Returns: boolean
       }
+      has_school_permission: {
+        Args: { _permission_key: string; _school_id: string }
+        Returns: boolean
+      }
       has_school_role: {
         Args: {
           _roles: Database["public"]["Enums"]["app_role"][]
@@ -2562,12 +2677,25 @@ export type Database = {
       join_school_with_token: { Args: { _token: string }; Returns: Json }
       legacy_storage_school_id: { Args: never; Returns: string }
       mark_all_notifications_read: { Args: never; Returns: number }
+      my_manageable_schools: {
+        Args: never
+        Returns: {
+          auto_approve_registration: boolean
+          name: string
+          school_id: string
+        }[]
+      }
+      my_school_permissions: { Args: { _school_id: string }; Returns: Json }
       next_teacher_notification_number: {
         Args: { _school_id: string; _year: number }
         Returns: number
       }
       normalize_subject_key: { Args: { _name: string }; Returns: string }
       resolve_registration_link: { Args: { _token: string }; Returns: Json }
+      seed_school_permissions: {
+        Args: { _school_id: string }
+        Returns: undefined
+      }
       storage_path_school_id: { Args: { _name: string }; Returns: string }
       storage_school_allowed: { Args: { _name: string }; Returns: boolean }
       unread_notifications_count: { Args: never; Returns: number }
@@ -2576,6 +2704,10 @@ export type Database = {
         Returns: undefined
       }
       user_has_any_role: {
+        Args: { _roles: Database["public"]["Enums"]["app_role"][] }
+        Returns: boolean
+      }
+      user_has_any_school_role: {
         Args: { _roles: Database["public"]["Enums"]["app_role"][] }
         Returns: boolean
       }
