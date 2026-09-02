@@ -31,6 +31,8 @@ import {
   type CidSource,
 } from '@/lib/medicalCertificates/cidLookup';
 import type { MedicalCertificate } from './types';
+import { schoolScopedPath } from '@/lib/school/storagePaths';
+import { useActiveSchoolId } from '@/contexts/SchoolContext';
 
 const BUCKET = 'medical-certificates';
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
@@ -58,6 +60,8 @@ export const StudentMedicalCertificateDialog = ({
   onSaved,
   restrictedCreate = false,
 }: Props) => {
+  const activeSchoolId = useActiveSchoolId();
+
 
   const [startDate, setStartDate] = useState<Date | undefined>();
   const [endDate, setEndDate] = useState<Date | undefined>();
@@ -199,7 +203,7 @@ export const StudentMedicalCertificateDialog = ({
         if (error) throw error;
         if (file && fileValid(file)) {
           const ext = file.name.split('.').pop() ?? 'bin';
-          const path = `${studentId}/${certificateId}/atestado.${ext}`;
+          const path = schoolScopedPath(activeSchoolId, `${studentId}/${certificateId}/atestado.${ext}`);
           const { error: upErr } = await supabase.storage
             .from(BUCKET)
             .upload(path, file, { upsert: true, contentType: file.type });
@@ -218,7 +222,7 @@ export const StudentMedicalCertificateDialog = ({
         let attachmentPath: string | null = null;
         if (file && fileValid(file)) {
           const ext = file.name.split('.').pop() ?? 'bin';
-          const path = `${studentId}/${certificateId}/atestado-${Date.now()}.${ext}`;
+          const path = schoolScopedPath(activeSchoolId, `${studentId}/${certificateId}/atestado-${Date.now()}.${ext}`);
           const { error: upErr } = await supabase.storage
             .from(BUCKET)
             .upload(path, file, { upsert: false, contentType: file.type });
@@ -243,7 +247,7 @@ export const StudentMedicalCertificateDialog = ({
         certificateId = data.id;
         if (file && fileValid(file)) {
           const ext = file.name.split('.').pop() ?? 'bin';
-          const path = `${studentId}/${certificateId}/atestado.${ext}`;
+          const path = schoolScopedPath(activeSchoolId, `${studentId}/${certificateId}/atestado.${ext}`);
           const { error: upErr } = await supabase.storage
             .from(BUCKET)
             .upload(path, file, { upsert: true, contentType: file.type });

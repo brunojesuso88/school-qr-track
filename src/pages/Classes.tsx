@@ -22,6 +22,8 @@ import ClassSummaryDialog from '@/components/ClassSummaryDialog';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { exportAbsentStudents } from '@/lib/attendance/absentStudentsExport';
+import { schoolScopedPath } from '@/lib/school/storagePaths';
+import { useActiveSchoolId } from '@/contexts/SchoolContext';
 
 
 
@@ -63,6 +65,7 @@ const ClassPhoto = ({ photoUrl, className: name }: { photoUrl: string | null; cl
 };
 
 const Classes = () => {
+  const activeSchoolId = useActiveSchoolId();
   const navigate = useNavigate();
   const { userRole } = useAuth();
   const canViewGuardianPhone = userRole === 'admin' || userRole === 'direction';
@@ -283,7 +286,7 @@ const Classes = () => {
     setUploadingPhoto(true);
     try {
       const ext = file.name.split('.').pop();
-      const fileName = `${editingClass.id}.${ext}`;
+      const fileName = schoolScopedPath(activeSchoolId, `${editingClass.id}.${ext}`);
 
       const { error: uploadError } = await supabase.storage
         .from('class-photos')

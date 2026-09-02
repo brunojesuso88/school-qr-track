@@ -9,6 +9,8 @@ import { Upload, X, Loader2, Image as ImageIcon } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { SchoolEventSimple, emptySchoolEvent } from './types';
+import { schoolScopedPath } from '@/lib/school/storagePaths';
+import { useActiveSchoolId } from '@/contexts/SchoolContext';
 
 type Draft = Omit<SchoolEventSimple, 'id' | 'created_at' | 'updated_at' | 'created_by'> & { id?: string };
 
@@ -20,6 +22,7 @@ interface Props {
 }
 
 export default function SchoolEventFormDialog({ open, onOpenChange, event, onSaved }: Props) {
+  const activeSchoolId = useActiveSchoolId();
   const [data, setData] = useState<Draft>({ ...emptySchoolEvent });
   const [saving, setSaving] = useState(false);
   const [coverThumb, setCoverThumb] = useState<string | null>(null);
@@ -59,7 +62,7 @@ export default function SchoolEventFormDialog({ open, onOpenChange, event, onSav
     setCoverBusy(true);
     try {
       const ext = file.name.split('.').pop() || 'jpg';
-      const path = `simple-covers/${crypto.randomUUID()}.${ext}`;
+      const path = schoolScopedPath(activeSchoolId, `simple-covers/${crypto.randomUUID()}.${ext}`);
       const { error } = await supabase.storage.from('school-events').upload(path, file, { upsert: false });
       if (error) throw error;
       if (data.cover_image) {
@@ -85,7 +88,7 @@ export default function SchoolEventFormDialog({ open, onOpenChange, event, onSav
     try {
       const paths: string[] = [];
       for (const f of Array.from(files)) {
-        const path = `simple-images/${crypto.randomUUID()}-${f.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+        const path = schoolScopedPath(activeSchoolId, `simple-images/${crypto.randomUUID()}-${f.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`);
         const { error } = await supabase.storage.from('school-events').upload(path, f, { upsert: false });
         if (error) throw error;
         paths.push(path);

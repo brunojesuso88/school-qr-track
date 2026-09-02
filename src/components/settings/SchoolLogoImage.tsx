@@ -5,14 +5,18 @@ import { BadgeCheck, Loader2, Trash2, Upload } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useSchoolProfile } from '@/hooks/useSchoolProfile';
+import { schoolScopedPath } from '@/lib/school/storagePaths';
+import { useActiveSchoolId } from '@/contexts/SchoolContext';
 import {
   SCHOOL_BRANDING_BUCKET,
+
   SCHOOL_LOGO_SETTING_KEY,
   buildBrandingPath,
   validateBrandingImage,
 } from '@/lib/school/branding';
 
 const SchoolLogoImage = () => {
+  const activeSchoolId = useActiveSchoolId();
   const { logoUrl, logoPath, schoolName, loading, refetch } = useSchoolProfile();
   const [busy, setBusy] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -26,7 +30,7 @@ const SchoolLogoImage = () => {
 
     setBusy(true);
     try {
-      const path = buildBrandingPath('logo', file.name);
+      const path = schoolScopedPath(activeSchoolId, buildBrandingPath('logo', file.name));
 
       const { error: uploadError } = await supabase.storage
         .from(SCHOOL_BRANDING_BUCKET)

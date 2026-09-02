@@ -45,6 +45,8 @@ import { CouncilOccurrenceCard } from '@/components/students/CouncilOccurrenceCa
 
 import { formatIra } from '@/lib/ira';
 import { useActiveCertificateStudents } from '@/hooks/useCertificateCoverage';
+import { schoolScopedPath } from '@/lib/school/storagePaths';
+import { useActiveSchoolId } from '@/contexts/SchoolContext';
 
 interface Student {
   id: string;
@@ -94,6 +96,7 @@ const OCCURRENCE_TYPES = [
 ];
 
 const Students = () => {
+  const activeSchoolId = useActiveSchoolId();
   const [searchParams] = useSearchParams();
   const classFromUrl = searchParams.get('class');
   const { userRole, user } = useAuth();
@@ -301,7 +304,7 @@ const Students = () => {
     if (!photoFile) return null;
 
     const fileExt = photoFile.name.split('.').pop();
-    const fileName = `${studentId}-${Date.now()}.${fileExt}`;
+    const fileName = schoolScopedPath(activeSchoolId, `${studentId}-${Date.now()}.${fileExt}`);
 
     const { error } = await supabase.storage
       .from('student-photos')

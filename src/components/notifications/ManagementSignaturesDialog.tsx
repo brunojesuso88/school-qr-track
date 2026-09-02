@@ -8,6 +8,8 @@ import { Trash2, Star, Upload } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { schoolScopedPath } from '@/lib/school/storagePaths';
+import { useActiveSchoolId } from '@/contexts/SchoolContext';
 
 export interface ManagementSignature {
   id: string;
@@ -45,6 +47,7 @@ async function fetchSignatures(): Promise<ManagementSignature[]> {
 }
 
 export function ManagementSignaturesDialog({ open, onOpenChange, onChanged }: Props) {
+  const activeSchoolId = useActiveSchoolId();
   const { user } = useAuth();
   const [list, setList] = useState<ManagementSignature[]>([]);
   const [loading, setLoading] = useState(false);
@@ -76,7 +79,7 @@ export function ManagementSignaturesDialog({ open, onOpenChange, onChanged }: Pr
     setBusy(true);
     try {
       const ext = file.type === 'image/png' ? 'png' : 'jpg';
-      const path = `${user?.id || 'anon'}/${Date.now()}.${ext}`;
+      const path = schoolScopedPath(activeSchoolId, `${user?.id || 'anon'}/${Date.now()}.${ext}`);
       const { error: upErr } = await supabase.storage
         .from('management-signatures')
         .upload(path, file, { contentType: file.type, upsert: false });

@@ -12,6 +12,8 @@ import { Sparkles, Plus, Trash2, FileUp, Upload, X, Loader2, Image as ImageIcon 
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { SchoolEvent, EventStatus, STATUS_LABELS, emptyEvent, normalizeEventFromAI, countFilled, CronogramaItem } from './types';
+import { schoolScopedPath } from '@/lib/school/storagePaths';
+import { useActiveSchoolId } from '@/contexts/SchoolContext';
 
 type EventDraft = Omit<SchoolEvent, 'id' | 'created_at' | 'updated_at' | 'created_by'> & { id?: string };
 
@@ -23,6 +25,7 @@ interface Props {
 }
 
 export default function EventFormDialog({ open, onOpenChange, event, onSaved }: Props) {
+  const activeSchoolId = useActiveSchoolId();
   const [data, setData] = useState<EventDraft>({ ...emptyEvent });
   const [saving, setSaving] = useState(false);
   const [aiBusy, setAiBusy] = useState<string | null>(null);
@@ -111,7 +114,7 @@ export default function EventFormDialog({ open, onOpenChange, event, onSaved }: 
       const { data: res, error } = await supabase.functions.invoke('parse-event-pdf', { body: { pdfBase64: b64 } });
       if (error || !res?.success) throw new Error(res?.error || error?.message || 'Falha');
       // upload pdf
-      const path = `pdfs/${crypto.randomUUID()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+      const path = schoolScopedPath(activeSchoolId, `pdfs/${crypto.randomUUID()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`);
       await supabase.storage.from('school-events').upload(path, file, { upsert: false });
       const normalized = normalizeEventFromAI(res.event);
       setData(d => ({ ...d, ...normalized, pdf_original: path }));
@@ -132,7 +135,7 @@ export default function EventFormDialog({ open, onOpenChange, event, onSaved }: 
       const paths: string[] = [];
       for (const f of Array.from(files)) {
         if (!f.type.startsWith('image/')) continue;
-        const path = `images/${crypto.randomUUID()}-${f.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+        const path = schoolScopedPath(activeSchoolId, `images/${crypto.randomUUID()}-${f.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`);
         const { error } = await supabase.storage.from('school-events').upload(path, f, { upsert: false });
         if (!error) paths.push(path);
       }
@@ -155,7 +158,7 @@ export default function EventFormDialog({ open, onOpenChange, event, onSaved }: 
     setCoverBusy(true);
     try {
       const ext = file.name.split('.').pop() || 'jpg';
-      const path = `covers/${crypto.randomUUID()}.${ext}`;
+      const path = schoolScopedPath(activeSchoolId, `covers/${crypto.randomUUID()}.${ext}`);
       const { error } = await supabase.storage.from('school-events').upload(path, file, { upsert: false });
       if (error) throw error;
       if (data.cover_image) {

@@ -22,6 +22,8 @@ import { PAEEForm, PAEEData, emptyPAEE } from '@/components/aee/PAEEForm';
 import { DISABILITY_OPTIONS, WEEKDAYS, AREAS } from '@/components/aee/PAEEForm';
 import { getSignedPhotoUrl } from '@/hooks/useSignedPhotoUrl';
 import logoCepans from '@/assets/logo-cepans.png';
+import { schoolScopedPath } from '@/lib/school/storagePaths';
+import { useActiveSchoolId } from '@/contexts/SchoolContext';
 
 interface Student {
   id: string;
@@ -53,6 +55,7 @@ interface TeacherInfo {
 }
 
 const AEE = () => {
+  const activeSchoolId = useActiveSchoolId();
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -324,7 +327,7 @@ const AEE = () => {
       }
 
       const fileExt = laudoFile.name.split('.').pop();
-      const fileName = `${selectedStudent.id}-laudo-${Date.now()}.${fileExt}`;
+      const fileName = schoolScopedPath(activeSchoolId, `${selectedStudent.id}-laudo-${Date.now()}.${fileExt}`);
 
       const { error: uploadError } = await supabase.storage
         .from('aee-documents')
