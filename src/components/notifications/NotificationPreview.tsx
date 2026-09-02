@@ -85,9 +85,8 @@ export function NotificationPreview({ data, docNumber, docYear, customBody, sign
           <span style={{ margin: '0 10px' }}>•</span>
           {placeDate}
         </div>
-
-        </div>
       </div>
+
 
       {/* Body */}
       <div style={{ whiteSpace: 'pre-wrap', textAlign: 'justify', marginBottom: 18 }}>{body}</div>
