@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { assertActiveSchool } from '@/lib/schools/scope';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
@@ -235,7 +236,11 @@ export default function EventFormDialog({ open, onOpenChange, event, onSaved }: 
         const { error } = await supabase.from('school_events').update(payload).eq('id', event.id);
         if (error) throw error;
       } else {
-        const { error } = await supabase.from('school_events').insert({ ...payload, created_by: user?.id });
+        const { error } = await supabase.from('school_events').insert({
+          ...payload,
+          school_id: assertActiveSchool(activeSchoolId),
+          created_by: user?.id,
+        });
         if (error) throw error;
       }
       toast.success('Projeto salvo');

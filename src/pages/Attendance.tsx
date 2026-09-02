@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useSchoolScopeKey } from '@/contexts/SchoolContext';
 import { useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import DashboardLayout from '@/components/DashboardLayout';
@@ -54,6 +55,7 @@ interface TrendData {
 type TrendPeriod = 'week' | 'month' | '6months' | 'year';
 
 const Attendance = () => {
+  const schoolScopeKey = useSchoolScopeKey();
   const { toast } = useToast();
   const [searchParams, setSearchParams] = useSearchParams();
   
@@ -85,7 +87,7 @@ const Attendance = () => {
         setCurrentDate(new Date());
       }
     }
-  }, []);
+  }, [schoolScopeKey]);
 
   useEffect(() => {
     fetchData();

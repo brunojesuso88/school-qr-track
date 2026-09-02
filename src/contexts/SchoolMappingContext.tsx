@@ -1,4 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { useActiveSchoolId } from '@/contexts/SchoolContext';
+import { assertActiveSchool } from '@/lib/schools/scope';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 
@@ -101,6 +103,7 @@ interface SchoolMappingContextType {
 const SchoolMappingContext = createContext<SchoolMappingContextType | undefined>(undefined);
 
 export const SchoolMappingProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const activeSchoolId = useActiveSchoolId();
   const [teachers, setTeachers] = useState<MappingTeacher[]>([]);
   const [globalSubjects, setGlobalSubjects] = useState<MappingGlobalSubject[]>([]);
   const [classes, setClasses] = useState<MappingClass[]>([]);
@@ -174,6 +177,7 @@ export const SchoolMappingProvider: React.FC<{ children: React.ReactNode }> = ({
   const addTeacher = async (teacher: Omit<MappingTeacher, 'id' | 'created_at' | 'updated_at' | 'color' | 'current_hours'>): Promise<{ id: string } | undefined> => {
     const { data, error } = await supabase.from('mapping_teachers').insert({
       ...teacher,
+      school_id: assertActiveSchool(activeSchoolId),
       color: getNextColor(),
       current_hours: 0
     }).select('id').single();
@@ -196,7 +200,9 @@ export const SchoolMappingProvider: React.FC<{ children: React.ReactNode }> = ({
 
   // Global Subject functions
   const addGlobalSubject = async (subject: Omit<MappingGlobalSubject, 'id' | 'created_at'>) => {
-    const { error } = await supabase.from('mapping_global_subjects').insert(subject);
+    const { error } = await supabase
+      .from('mapping_global_subjects')
+      .insert({ ...subject, school_id: assertActiveSchool(activeSchoolId) });
     if (error) throw error;
     await fetchData();
   };
@@ -215,7 +221,9 @@ export const SchoolMappingProvider: React.FC<{ children: React.ReactNode }> = ({
 
   // Class functions
   const addClass = async (classData: Omit<MappingClass, 'id' | 'created_at' | 'updated_at'>) => {
-    const { error } = await supabase.from('mapping_classes').insert(classData);
+    const { error } = await supabase
+      .from('mapping_classes')
+      .insert({ ...classData, school_id: assertActiveSchool(activeSchoolId) });
     if (error) throw error;
     await fetchData();
   };

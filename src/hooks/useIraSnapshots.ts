@@ -8,6 +8,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { StudentMedal } from '@/lib/medals/compute';
 import { IraDisplayState, resolveDisplayState } from '@/lib/iraSnapshot/core';
+import { useActiveSchoolId } from '@/contexts/SchoolContext';
 
 export interface SnapshotEntry {
   value: number | null;
@@ -19,6 +20,7 @@ export interface SnapshotEntry {
 }
 
 export function useIraSnapshots(students: { id: string; class: string }[]) {
+  const activeSchoolId = useActiveSchoolId();
   const [snapshotByStudent, setSnapshotByStudent] = useState<Record<string, SnapshotEntry>>({});
   const [stale, setStale] = useState(false);
   const [lastComputedAt, setLastComputedAt] = useState<string | null>(null);
@@ -31,7 +33,7 @@ export function useIraSnapshots(students: { id: string; class: string }[]) {
   const classKey = classNames.join('|');
 
   const load = useCallback(async () => {
-    if (classNames.length === 0) {
+    if (classNames.length === 0 || !activeSchoolId) {
       setSnapshotByStudent({});
       setStale(false);
       return;
@@ -40,7 +42,8 @@ export function useIraSnapshots(students: { id: string; class: string }[]) {
     try {
       const { data: snapRows, error } = await supabase
         .from('ira_snapshots')
-        .select('student_id, ira_value, ira_status, ira_reason, eligible, medals, computed_at, class_name');
+        .select('student_id, ira_value, ira_status, ira_reason, eligible, medals, computed_at, class_name')
+        .eq('school_id', activeSchoolId);
       if (error) throw error;
 
       const map: Record<string, SnapshotEntry> = {};
@@ -56,7 +59,7 @@ export function useIraSnapshots(students: { id: string; class: string }[]) {
       });
       setSnapshotByStudent(map);
 
-      const { data: classRows } = await supabase.from('classes').select('id, name');
+      const { data: classRows } = await supabase.from('classes').select('id, name').eq('school_id', activeSchoolId);
       const ids = (classRows || [])
         .filter((c: { name: string }) => classNames.includes(c.name))
         .map((c: { id: string }) => c.id);
@@ -67,6 +70,7 @@ export function useIraSnapshots(students: { id: string; class: string }[]) {
       const { data: stRows } = await supabase
         .from('ira_staleness')
         .select('class_id, stale, last_computed_at')
+        .eq('school_id', activeSchoolId)
         .in('class_id', ids);
       const rows = (stRows || []) as { stale: boolean; last_computed_at: string | null }[];
       setStale(rows.some((r) => r.stale) || rows.length < ids.length);
@@ -78,7 +82,7 @@ export function useIraSnapshots(students: { id: string; class: string }[]) {
       setLoading(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [classKey]);
+  }, [classKey, activeSchoolId]);
 
   useEffect(() => {
     void load();

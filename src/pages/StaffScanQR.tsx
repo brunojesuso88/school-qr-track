@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useSchoolScopeKey } from '@/contexts/SchoolContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent } from '@/components/ui/card';
@@ -18,6 +19,7 @@ interface DailyStats {
 }
 
 const StaffScanQR = () => {
+  const schoolScopeKey = useSchoolScopeKey();
   const [scanResult, setScanResult] = useState<string>('');
   const [lastScanned, setLastScanned] = useState<any>(null);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -44,7 +46,7 @@ const StaffScanQR = () => {
       setSoundEnabled(data?.value === true || data?.value === 'true');
     };
     fetchSoundPreference();
-  }, []);
+  }, [schoolScopeKey]);
 
   // Play notification sound using Web Audio API
   const playNotificationSound = useCallback(() => {

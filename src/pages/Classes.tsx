@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { assertActiveSchool } from '@/lib/schools/scope';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import DashboardLayout from '@/components/DashboardLayout';
@@ -23,7 +24,7 @@ import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { exportAbsentStudents } from '@/lib/attendance/absentStudentsExport';
 import { schoolScopedPath } from '@/lib/school/storagePaths';
-import { useActiveSchoolId } from '@/contexts/SchoolContext';
+import { useActiveSchoolId, useSchoolScopeKey } from '@/contexts/SchoolContext';
 
 
 
@@ -65,6 +66,7 @@ const ClassPhoto = ({ photoUrl, className: name }: { photoUrl: string | null; cl
 };
 
 const Classes = () => {
+  const schoolScopeKey = useSchoolScopeKey();
   const activeSchoolId = useActiveSchoolId();
   const navigate = useNavigate();
   const { userRole } = useAuth();
@@ -103,7 +105,7 @@ const Classes = () => {
     fetchClasses();
     fetchStudentCounts();
     fetchAttendanceStatus();
-  }, []);
+  }, [schoolScopeKey]);
 
   const fetchClasses = async () => {
     try {
@@ -198,6 +200,7 @@ const Classes = () => {
         const { error } = await supabase
           .from('classes')
           .insert({
+            school_id: assertActiveSchool(activeSchoolId),
             name: validationData.name,
             shift: validationData.shift,
             description: validationData.description,

@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import { assertActiveSchool } from '@/lib/schools/scope';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Image as ImageIcon, Loader2, Trash2, Upload } from 'lucide-react';
@@ -39,7 +40,10 @@ const SchoolHeroImage = () => {
 
       const { error: settingError } = await supabase
         .from('settings')
-        .upsert({ key: SCHOOL_HERO_SETTING_KEY, value: path }, { onConflict: 'school_id,key' });
+        .upsert(
+          { school_id: assertActiveSchool(activeSchoolId), key: SCHOOL_HERO_SETTING_KEY, value: path },
+          { onConflict: 'school_id,key' },
+        );
       if (settingError) throw settingError;
 
       if (heroPath && heroPath !== path) {
@@ -62,7 +66,10 @@ const SchoolHeroImage = () => {
     try {
       const { error } = await supabase
         .from('settings')
-        .upsert({ key: SCHOOL_HERO_SETTING_KEY, value: '' }, { onConflict: 'school_id,key' });
+        .upsert(
+          { school_id: assertActiveSchool(activeSchoolId), key: SCHOOL_HERO_SETTING_KEY, value: '' },
+          { onConflict: 'school_id,key' },
+        );
       if (error) throw error;
       if (heroPath) {
         await supabase.storage.from(SCHOOL_HERO_BUCKET).remove([heroPath]);

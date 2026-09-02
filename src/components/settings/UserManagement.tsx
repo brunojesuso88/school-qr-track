@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useSchoolScopeKey } from '@/contexts/SchoolContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -58,6 +59,7 @@ const roleBadgeVariants: Record<AppRole, 'default' | 'secondary' | 'outline' | '
 };
 
 const UserManagement = () => {
+  const schoolScopeKey = useSchoolScopeKey();
   const { userRole, user } = useAuth();
   const [users, setUsers] = useState<UserWithRole[]>([]);
   const [loading, setLoading] = useState(true);
@@ -66,7 +68,7 @@ const UserManagement = () => {
 
   useEffect(() => {
     fetchUsers();
-  }, []);
+  }, [schoolScopeKey]);
 
   const fetchUsers = async () => {
     try {

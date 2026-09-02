@@ -15,6 +15,7 @@ import { parseSeriesValue } from '@/lib/series';
 import { isPeriodKind, periodRank } from '@/lib/gradePageLocal/normalize';
 import { fetchMatrixWeeklyByKey } from '@/lib/curriculumMatrixWeekly';
 import { IraSnapshotRow, SnapshotBuildInput, buildSnapshotRows, isDropout } from './core';
+import { NO_ACTIVE_SCHOOL_MESSAGE } from '@/lib/schools/scope';
 
 const norm = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
 
@@ -28,13 +29,25 @@ export interface RecomputeResult {
 }
 
 /** Marca o IRA de uma turma como desatualizado (ex.: após importar boletim). */
-export async function markIraStale(classId: string, reason: string): Promise<void> {
-  await supabase
+export async function markIraStale(
+  classId: string,
+  reason: string,
+  schoolId?: string | null,
+): Promise<void> {
+  const { error } = await supabase
     .from('ira_staleness')
     .upsert(
-      { class_id: classId, stale: true, reason, marked_at: new Date().toISOString() } as never,
+      {
+        ...(schoolId ? { school_id: schoolId } : {}),
+        class_id: classId,
+        stale: true,
+        reason,
+        marked_at: new Date().toISOString(),
+      } as never,
       { onConflict: 'class_id' },
     );
+  // Falhar silenciosamente aqui esconderia IRA desatualizado: propagar o erro.
+  if (error) throw error;
 }
 
 /**
@@ -45,13 +58,18 @@ export async function markIraStale(classId: string, reason: string): Promise<voi
 export async function recomputeIraScope(
   classNames: string[],
   computedBy: string | null,
+  schoolId: string,
 ): Promise<RecomputeResult> {
   const empty: RecomputeResult = { classIds: [], students: 0, eligible: 0, dropouts: 0, medals: 0 };
   if (classNames.length === 0) return empty;
+  if (!schoolId) throw new Error(NO_ACTIVE_SCHOOL_MESSAGE);
 
+  // Todo o escopo (turmas, alunos, notas, medalhas) é restrito à escola ativa:
+  // a disputa por série NUNCA cruza escolas.
   const { data: classRows, error: classErr } = await supabase
     .from('classes')
-    .select('id, name, series');
+    .select('id, name, series')
+    .eq('school_id', schoolId);
   if (classErr) throw classErr;
   const all = (classRows || []) as { id: string; name: string; series: string | null }[];
 
@@ -74,10 +92,13 @@ export async function recomputeIraScope(
   const classIdByNormName = new Map(scopeClasses.map((c) => [norm(c.name), c.id]));
 
   const [studentsRes, subjRes, perRes, settingsRes] = await Promise.all([
-    supabase.from('students').select('id, class, status').in('class', scopeClasses.map((c) => c.name)),
-    supabase.from('grade_subjects').select('*').in('class_id', classIds).eq('legacy_excluded', false).order('sort_order'),
-    supabase.from('grade_periods').select('*').in('class_id', classIds).order('sort_order'),
-    supabase.from('ira_settings').select('*').in('class_id', classIds),
+    supabase.from('students').select('id, class, status')
+      .eq('school_id', schoolId).in('class', scopeClasses.map((c) => c.name)),
+    supabase.from('grade_subjects').select('*').eq('school_id', schoolId)
+      .in('class_id', classIds).eq('legacy_excluded', false).order('sort_order'),
+    supabase.from('grade_periods').select('*').eq('school_id', schoolId)
+      .in('class_id', classIds).order('sort_order'),
+    supabase.from('ira_settings').select('*').eq('school_id', schoolId).in('class_id', classIds),
   ]);
   if (studentsRes.error) throw studentsRes.error;
   if (subjRes.error) throw subjRes.error;
@@ -99,6 +120,7 @@ export async function recomputeIraScope(
     const { data } = await supabase
       .from('mapping_class_subjects')
       .select('id, weekly_classes')
+      .eq('school_id', schoolId)
       .in('id', mappingIds);
     (data || []).forEach((row: { id: string; weekly_classes: number }) => {
       currentWeeklyClasses[row.id] = row.weekly_classes;
@@ -154,7 +176,8 @@ export async function recomputeIraScope(
     };
   });
 
-  const rows: IraSnapshotRow[] = buildSnapshotRows(inputs, computedBy, computedAt);
+  const rows: IraSnapshotRow[] = buildSnapshotRows(inputs, computedBy, computedAt)
+    .map((r) => ({ ...r, school_id: schoolId })) as IraSnapshotRow[];
 
   for (let i = 0; i < rows.length; i += 400) {
     const chunk = rows.slice(i, i + 400);
@@ -165,6 +188,7 @@ export async function recomputeIraScope(
   }
 
   const stalenessRows = classIds.map((classId) => ({
+    school_id: schoolId,
     class_id: classId,
     stale: false,
     reason: null,

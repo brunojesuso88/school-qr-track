@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useSchoolScopeKey } from '@/contexts/SchoolContext';
 import { supabase } from '@/integrations/supabase/client';
 import DashboardLayout from '@/components/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -39,6 +40,7 @@ const declarationSchema = z.object({
 });
 
 const Declarations = () => {
+  const schoolScopeKey = useSchoolScopeKey();
   const [students, setStudents] = useState<Student[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [step, setStep] = useState<'select' | 'form' | 'preview'>('select');
@@ -66,7 +68,7 @@ const Declarations = () => {
   useEffect(() => {
     fetchStudents();
     fetchSchoolSettings();
-  }, []);
+  }, [schoolScopeKey]);
 
   const fetchStudents = async () => {
     try {

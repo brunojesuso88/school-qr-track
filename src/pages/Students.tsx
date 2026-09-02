@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { assertActiveSchool } from '@/lib/schools/scope';
 import { useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import DashboardLayout from '@/components/DashboardLayout';
@@ -46,7 +47,7 @@ import { CouncilOccurrenceCard } from '@/components/students/CouncilOccurrenceCa
 import { formatIra } from '@/lib/ira';
 import { useActiveCertificateStudents } from '@/hooks/useCertificateCoverage';
 import { schoolScopedPath } from '@/lib/school/storagePaths';
-import { useActiveSchoolId } from '@/contexts/SchoolContext';
+import { useActiveSchoolId, useSchoolScopeKey } from '@/contexts/SchoolContext';
 
 interface Student {
   id: string;
@@ -96,6 +97,7 @@ const OCCURRENCE_TYPES = [
 ];
 
 const Students = () => {
+  const schoolScopeKey = useSchoolScopeKey();
   const activeSchoolId = useActiveSchoolId();
   const [searchParams] = useSearchParams();
   const classFromUrl = searchParams.get('class');
@@ -169,7 +171,7 @@ const Students = () => {
     fetchCurrentUserName();
     fetchOccurrenceMap();
     fetchAbsenceCounts();
-  }, []);
+  }, [schoolScopeKey]);
 
   const fetchOccurrenceMap = async () => {
     try {
@@ -391,6 +393,7 @@ const Students = () => {
         const { data: newStudent, error: insertError } = await supabase
           .from('students')
           .insert({
+            school_id: assertActiveSchool(activeSchoolId),
             full_name: validationData.full_name,
             class: validationData.class,
             shift: validationData.shift,
@@ -740,7 +743,7 @@ const Students = () => {
     setRecomputingIra(true);
     const toastId = toast.loading('Atualizando IRA e condecorações...');
     try {
-      const result = await recomputeIraScope(scope, user?.id ?? null);
+      const result = await recomputeIraScope(scope, user?.id ?? null, assertActiveSchool(activeSchoolId));
       await reloadIraSnapshots();
       toast.success(
         `IRA atualizado: ${result.eligible} aluno(s) ativos, ${result.medals} condecoração(ões).`

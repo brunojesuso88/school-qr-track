@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState, useSyncExternalStore } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 import {
@@ -7,6 +7,10 @@ import {
   resolveEffectiveRole,
   type SchoolMembershipLike,
 } from '@/lib/schools/registration';
+import {
+  getActiveSchoolIdSnapshot,
+  subscribeActiveSchoolId,
+} from '@/lib/schools/activeSchoolStore';
 
 type AppRole = 'admin' | 'direction' | 'teacher' | 'staff';
 
@@ -19,6 +23,8 @@ interface AuthContextType {
   session: Session | null;
   loading: boolean;
   userRole: AppRole | null;
+  /** Papel do vínculo na escola ativa (null para admin global sem vínculo). */
+  activeSchoolRole: AppRole | null;
   memberships: SchoolMembership[];
   isGlobalAdmin: boolean;
   hasSchoolAccess: boolean;
@@ -154,7 +160,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const isGlobalAdmin = access.globalAdmin;
-  const userRole = resolveEffectiveRole(isGlobalAdmin, access.memberships, access.legacyRole);
+  // Papel EFETIVO depende da escola ativa: teacher na Escola A, direction na B.
+  const activeSchoolId = useSyncExternalStore(
+    subscribeActiveSchoolId,
+    getActiveSchoolIdSnapshot,
+    getActiveSchoolIdSnapshot,
+  );
+  const userRole = resolveEffectiveRole(
+    isGlobalAdmin,
+    access.memberships,
+    access.legacyRole,
+    activeSchoolId,
+  );
+  const activeMembershipRole =
+    access.memberships.find((m) => m.school_id === activeSchoolId && m.status === 'active')?.role ??
+    null;
   const schoolAccess = computeSchoolAccess(isGlobalAdmin, access.memberships) ||
     // Compatibilidade: usuários legados sem membership ainda entram pelo user_roles.
     (access.memberships.length === 0 && access.legacyRole !== null);
@@ -175,6 +195,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       session,
       loading,
       userRole,
+      activeSchoolRole: activeMembershipRole,
       memberships: access.memberships,
       isGlobalAdmin,
       hasSchoolAccess: schoolAccess,

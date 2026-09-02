@@ -9,7 +9,7 @@ export const EVENT_AUDIENCE: Record<string, AppRole[]> = {
   school_event_published: ["admin", "direction", "teacher", "staff"],
   grades_import_finished: ["admin", "direction"],
   planning_deadline: ["admin", "direction"],
-  new_user_signup: ["admin"],
+  new_user_signup: ["admin", "direction"],
 };
 
 /** Eventos em que a central interna não pode ser desligada pelo usuário. */
@@ -121,24 +121,59 @@ export function serviceClient(): SupabaseClient {
   );
 }
 
-/** Resolve a audiência no servidor a partir de user_roles. */
+/**
+ * Resolve a audiência no servidor a partir dos VÍNCULOS ATIVOS da escola.
+ *
+ * `user_roles` (global) NUNCA é usado como audiência: um professor/direção só
+ * recebe notificações da escola em que possui membership ativo.
+ */
 export async function resolveAudience(
   admin: SupabaseClient,
   eventType: string,
+  schoolId: string | null,
   extraUserIds: string[] = [],
 ): Promise<string[]> {
   const roles = EVENT_AUDIENCE[eventType] ?? [];
   const ids = new Set<string>(extraUserIds.filter(Boolean));
 
-  if (roles.length) {
+  if (roles.length && schoolId) {
     const { data, error } = await admin
-      .from("user_roles")
+      .from("school_memberships")
       .select("user_id")
+      .eq("school_id", schoolId)
+      .eq("status", "active")
       .in("role", roles);
     if (error) throw error;
     for (const row of data ?? []) ids.add((row as { user_id: string }).user_id);
   }
   return [...ids];
+}
+
+/** Papel efetivo do usuário NA escola informada (`null` se não houver vínculo ativo). */
+export async function schoolRoleOf(
+  admin: SupabaseClient,
+  userId: string,
+  schoolId: string,
+): Promise<string | null> {
+  const { data } = await admin
+    .from("school_memberships")
+    .select("role")
+    .eq("user_id", userId)
+    .eq("school_id", schoolId)
+    .eq("status", "active")
+    .maybeSingle();
+  return (data as { role: string } | null)?.role ?? null;
+}
+
+/** Admin global (tabela user_roles) — mantido apenas para administração. */
+export async function isGlobalAdmin(admin: SupabaseClient, userId: string): Promise<boolean> {
+  const { data } = await admin
+    .from("user_roles")
+    .select("role")
+    .eq("user_id", userId)
+    .eq("role", "admin")
+    .maybeSingle();
+  return Boolean(data);
 }
 
 export interface NotifyResult {

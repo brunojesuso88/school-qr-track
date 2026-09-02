@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useSchoolScopeKey } from '@/contexts/SchoolContext';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -54,6 +55,7 @@ const normalize = (s: string) =>
   s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
 
 const IRASettings = () => {
+  const schoolScopeKey = useSchoolScopeKey();
   const [classes, setClasses] = useState<ClassRow[]>([]);
   const { userRole } = useAuth();
   const canEditSeries = userRole === 'admin' || userRole === 'direction';
@@ -90,7 +92,7 @@ const IRASettings = () => {
       setConfiguredClasses(new Set(((settingsRes.data || []) as { class_id: string }[]).map((r) => r.class_id)));
       setLoading(false);
     })();
-  }, []);
+  }, [schoolScopeKey]);
 
   const loadClassData = useCallback(async (classId: string) => {
     setLoadingClass(true);
@@ -112,7 +114,7 @@ const IRASettings = () => {
     setSelectedPeriodIds(ids);
     setUseFinal(settings?.use_final_grade ?? false);
     setLoadingClass(false);
-  }, []);
+  }, [schoolScopeKey]);
 
   useEffect(() => {
     if (selectedClassId) loadClassData(selectedClassId);

@@ -39,6 +39,7 @@ import { LocalContextStudent, LocalExpectedSubject } from '@/lib/gradePageLocal/
 import { CatalogSubject, buildEffectiveSubjectMatrix } from '@/lib/gradePageLocal/effectiveMatrix';
 import { fetchCurriculumMatrix, matrixToExpectedSubjects } from '@/lib/curriculumMatrix';
 import { markIraStale } from '@/lib/iraSnapshot/recompute';
+import { useActiveSchoolId } from '@/contexts/SchoolContext';
 import { parseSeriesValue } from '@/lib/series';
 import { canonicalSubjectKey, classifyPeriodLabel, isPeriodKind, periodRank } from '@/lib/gradePageLocal/normalize';
 import { resolveClassNameFromPdf, samePdfClassBaseName } from '@/lib/classNames/salaFora';
@@ -215,6 +216,7 @@ const keepOnlyPeriodColumns = (p: PagePreview): PagePreview => {
 };
 
 export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }: GradesImportDialogProps) => {
+  const activeSchoolId = useActiveSchoolId();
   /** Turma só libera upload após série definida + matriz oficial sincronizada. */
   const [curriculumReady, setCurriculumReady] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -1249,7 +1251,7 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
       // Não recalcula IRA aqui: apenas marca o escopo como desatualizado.
       if (finalPayload.length > 0) {
         try {
-          await markIraStale(classItem.id, 'Boletim importado');
+          await markIraStale(classItem.id, 'Boletim importado', activeSchoolId);
           toast.warning(
             'Boletim importado. O IRA e as medalhas estão desatualizados. Acesse Alunos e clique em Atualizar IRA.',
             { duration: 8000 },

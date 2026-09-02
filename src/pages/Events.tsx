@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useSchoolScopeKey } from '@/contexts/SchoolContext';
 import { useSearchParams } from 'react-router-dom';
 import DashboardLayout from '@/components/DashboardLayout';
 import { Button } from '@/components/ui/button';
@@ -16,6 +17,7 @@ import jsPDF from 'jspdf';
 import logoCepans from '@/assets/logo-cepans.png';
 
 export default function Events() {
+  const schoolScopeKey = useSchoolScopeKey();
   const [events, setEvents] = useState<SchoolEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -37,7 +39,7 @@ export default function Events() {
       }))
       .then(setLogoDataUrl)
       .catch(() => {});
-  }, []);
+  }, [schoolScopeKey]);
 
   const load = async () => {
     setLoading(true);

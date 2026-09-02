@@ -33,6 +33,7 @@ import {
 import type { MedicalCertificate } from './types';
 import { schoolScopedPath } from '@/lib/school/storagePaths';
 import { useActiveSchoolId } from '@/contexts/SchoolContext';
+import { assertActiveSchool } from '@/lib/schools/scope';
 
 const BUCKET = 'medical-certificates';
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
@@ -231,6 +232,7 @@ export const StudentMedicalCertificateDialog = ({
         }
         const { error } = await supabase.from('student_medical_certificates').insert({
           ...payload,
+          school_id: assertActiveSchool(activeSchoolId),
           id: certificateId,
           attachment_path: attachmentPath,
           status_manual: 'active',
@@ -240,7 +242,11 @@ export const StudentMedicalCertificateDialog = ({
       } else {
         const { data, error } = await supabase
           .from('student_medical_certificates')
-          .insert({ ...payload, created_by: userData?.user?.id ?? null })
+          .insert({
+            ...payload,
+            school_id: assertActiveSchool(activeSchoolId),
+            created_by: userData?.user?.id ?? null,
+          })
           .select('id')
           .single();
         if (error) throw error;
@@ -268,6 +274,7 @@ export const StudentMedicalCertificateDialog = ({
             event_type: 'medical_certificate_created',
             entity_id: certificateId,
             entity_type: 'medical_certificate',
+            school_id: activeSchoolId,
           },
         }).catch(() => { /* falha de notificação nunca bloqueia o cadastro */ });
       }

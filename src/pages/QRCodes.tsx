@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useSchoolScopeKey } from '@/contexts/SchoolContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import DashboardLayout from '@/components/DashboardLayout';
@@ -38,6 +39,7 @@ interface ClassItem {
 }
 
 const QRCodes = () => {
+  const schoolScopeKey = useSchoolScopeKey();
   const [scanResult, setScanResult] = useState<string>('');
   const [lastScanned, setLastScanned] = useState<any>(null);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -55,7 +57,7 @@ const QRCodes = () => {
   useEffect(() => {
     fetchStudents();
     fetchClasses();
-  }, []);
+  }, [schoolScopeKey]);
 
   useEffect(() => {
     if (scanMode === 'usb' && inputRef.current) {
