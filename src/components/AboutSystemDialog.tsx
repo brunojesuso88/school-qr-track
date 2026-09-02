@@ -33,8 +33,9 @@ const AboutSystemDialog = ({ open, onOpenChange }: AboutSystemDialogProps) => {
           <p className="text-sm text-muted-foreground mb-4">
             Plataforma completa para gestão escolar digital, integrando controle de alunos, 
             frequência automatizada por QR Code, mapeamento de professores e turmas, 
-            geração inteligente de horários com IA e muito mais.
+            boletins, IRA e muito mais.
           </p>
+
 
           <Accordion type="multiple" className="w-full">
             {/* 1. Gestão de Alunos */}
