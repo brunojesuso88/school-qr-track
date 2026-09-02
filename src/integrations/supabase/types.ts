@@ -1234,6 +1234,7 @@ export type Database = {
           push_enabled: boolean
           quiet_hours_end: string | null
           quiet_hours_start: string | null
+          school_id: string
           updated_at: string
           user_id: string
         }
@@ -1245,6 +1246,7 @@ export type Database = {
           push_enabled?: boolean
           quiet_hours_end?: string | null
           quiet_hours_start?: string | null
+          school_id: string
           updated_at?: string
           user_id: string
         }
@@ -1256,10 +1258,19 @@ export type Database = {
           push_enabled?: boolean
           quiet_hours_end?: string | null
           quiet_hours_start?: string | null
+          school_id?: string
           updated_at?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "notification_preferences_school_id_fkey"
+            columns: ["school_id"]
+            isOneToOne: false
+            referencedRelation: "schools"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       notification_recipients: {
         Row: {
@@ -2531,7 +2542,7 @@ export type Database = {
       legacy_storage_school_id: { Args: never; Returns: string }
       mark_all_notifications_read: { Args: never; Returns: number }
       next_teacher_notification_number: {
-        Args: { _year: number }
+        Args: { _school_id: string; _year: number }
         Returns: number
       }
       normalize_subject_key: { Args: { _name: string }; Returns: string }
