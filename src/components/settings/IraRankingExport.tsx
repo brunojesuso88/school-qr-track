@@ -21,7 +21,7 @@ import {
   orderRankingColumns,
 } from '@/lib/iraRanking';
 import { supabase } from '@/integrations/supabase/client';
-import logoAsset from '@/assets/logo-cepans.png.asset.json';
+import { useSchoolBranding } from '@/hooks/useSchoolBranding';
 
 interface ClassOption {
   id: string;
@@ -41,6 +41,7 @@ const medalColor = (place: number) =>
 
 const IraRankingExport = ({ classes, classesWithGrades }: Props) => {
   const schoolScopeKey = useSchoolScopeKey();
+  const branding = useSchoolBranding();
   const activeSchoolId = useActiveSchoolId();
   const [selected, setSelected] = useState<string[]>([]);
   const [series, setSeries] = useState<HighSchoolSeries | ''>('');
@@ -170,7 +171,8 @@ const [rankingStale, setRankingStale] = useState(false);
         classNames: selectedNames,
         periodsLabel: result.periodsLabel,
         totalEligible: result.eligibleCount,
-        logoUrl: logoAsset.url,
+        logoDataUrl: branding.logoDataUrl,
+        schoolName: branding.schoolName,
         series: series || undefined,
         columns: activeColumns,
       });
@@ -195,7 +197,8 @@ const [rankingStale, setRankingStale] = useState(false);
         classNames: selectedNames,
         periodsLabel: result.periodsLabel,
         totalEligible: result.eligibleCount,
-        logoUrl: logoAsset.url,
+        logoDataUrl: branding.logoDataUrl,
+        schoolName: branding.schoolName,
         series: series || undefined,
         columns: activeColumns,
       });
