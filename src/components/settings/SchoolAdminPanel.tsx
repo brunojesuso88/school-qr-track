@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { useSchool } from '@/contexts/SchoolContext';
+import { usePublicAppUrl } from '@/hooks/usePublicAppUrl';
 import { toast } from 'sonner';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -12,14 +14,19 @@ import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
 import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
+  AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
+import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import {
-  Building2, Check, Copy, Loader2, Plus, RefreshCw, School, Search, ShieldAlert, Trash2,
-  UserPlus, Users, X,
+  Building2, Check, Copy, Globe, Loader2, Plus, RefreshCw, School, Search, ShieldAlert, Trash2,
+  UserMinus, UserPlus, Users, X,
 } from 'lucide-react';
 import { buildJoinUrl, type AppRole } from '@/lib/schools/registration';
+import { PREVIEW_LINK_WARNING } from '@/lib/schools/publicUrl';
 
 interface SchoolRow {
   school_id: string;
@@ -69,7 +76,16 @@ const statusVariant = (status: string): 'default' | 'secondary' | 'outline' | 'd
   status === 'active' ? 'default' : status === 'pending' ? 'secondary' : 'outline';
 
 const SchoolAdminPanel = () => {
-  const { isGlobalAdmin, user } = useAuth();
+  const { isGlobalAdmin, user, userRole } = useAuth();
+  const { activeSchoolId, activeSchool } = useSchool();
+  // Direção mantém as permissões atuais: gestão de usuários é do administrador.
+  const isSchoolAdmin = !isGlobalAdmin && userRole === 'admin';
+
+  const { configuredUrl, publicOrigin, save: savePublicUrl } = usePublicAppUrl();
+  const [urlDraft, setUrlDraft] = useState('');
+  const [savingUrl, setSavingUrl] = useState(false);
+  useEffect(() => setUrlDraft(configuredUrl ?? ''), [configuredUrl]);
+
   const [loading, setLoading] = useState(true);
   const [schools, setSchools] = useState<SchoolRow[]>([]);
   const [users, setUsers] = useState<UserRow[]>([]);
@@ -86,6 +102,14 @@ const SchoolAdminPanel = () => {
   const [membersLoading, setMembersLoading] = useState(false);
   const [addUserId, setAddUserId] = useState<string>('');
   const [addRole, setAddRole] = useState<AppRole>('teacher');
+  const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
+  const [memberSearch, setMemberSearch] = useState('');
+  const [memberStatusFilter, setMemberStatusFilter] = useState<string>('all');
+
+  const joinUrl = useCallback(
+    (token: string | null) => (token ? buildJoinUrl(token, publicOrigin) : null),
+    [publicOrigin],
+  );
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -100,11 +124,6 @@ const SchoolAdminPanel = () => {
     setLoading(false);
   }, []);
 
-  useEffect(() => {
-    if (isGlobalAdmin) void load();
-    else setLoading(false);
-  }, [isGlobalAdmin, load]);
-
   const loadMembers = useCallback(async (schoolId: string) => {
     setMembersLoading(true);
     const { data, error } = await supabase.rpc('admin_school_members', { _school_id: schoolId });
@@ -113,6 +132,17 @@ const SchoolAdminPanel = () => {
     setMembersLoading(false);
   }, []);
 
+  useEffect(() => {
+    if (isGlobalAdmin) {
+      void load();
+    } else if (isSchoolAdmin && activeSchoolId) {
+      setLoading(false);
+      void loadMembers(activeSchoolId);
+    } else {
+      setLoading(false);
+    }
+  }, [isGlobalAdmin, isSchoolAdmin, activeSchoolId, load, loadMembers]);
+
   const openManage = async (school: SchoolRow) => {
     setManageSchool(school);
     setAddUserId('');
@@ -120,12 +150,25 @@ const SchoolAdminPanel = () => {
   };
 
   const copyLink = async (token: string | null) => {
+    const url = joinUrl(token);
     if (!token) {
       toast.error('Esta escola não possui link ativo. Gere um novo link.');
       return;
     }
-    await navigator.clipboard.writeText(buildJoinUrl(token, window.location.origin));
-    toast.success('Link de cadastro copiado');
+    if (!url) {
+      toast.error(PREVIEW_LINK_WARNING);
+      return;
+    }
+    await navigator.clipboard.writeText(url);
+    toast.success('Link público de cadastro copiado');
+  };
+
+  const persistPublicUrl = async () => {
+    setSavingUrl(true);
+    const { error } = await savePublicUrl(urlDraft);
+    setSavingUrl(false);
+    if (error) return toast.error(error);
+    toast.success('URL pública atualizada');
   };
 
   const regenerate = async (schoolId: string) => {
@@ -168,7 +211,7 @@ const SchoolAdminPanel = () => {
     if (error) return toast.error(error.message);
     toast.success('Vínculo atualizado');
     await loadMembers(schoolId);
-    await load();
+    if (isGlobalAdmin) await load();
   };
 
   const removeMembership = async (schoolId: string, userId: string) => {
@@ -178,7 +221,23 @@ const SchoolAdminPanel = () => {
     if (error) return toast.error(error.message);
     toast.success('Vínculo removido (a conta do usuário foi preservada)');
     await loadMembers(schoolId);
-    await load();
+    if (isGlobalAdmin) await load();
+  };
+
+  /** Exclusão da CONTA inteira: exclusiva do administrador global. */
+  const deleteAccount = async (schoolId: string, userId: string) => {
+    setDeletingUserId(userId);
+    try {
+      const response = await supabase.functions.invoke('delete-user', { body: { userId } });
+      if (response.error) throw new Error(response.error.message);
+      toast.success('Conta excluída em todas as escolas');
+      await loadMembers(schoolId);
+      await load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Não foi possível excluir a conta');
+    } finally {
+      setDeletingUserId(null);
+    }
   };
 
   const [migrating, setMigrating] = useState(false);
@@ -207,7 +266,6 @@ const SchoolAdminPanel = () => {
     }
   };
 
-
   const totals = useMemo(() => {
     const pending = users.reduce(
       (acc, u) => acc + u.memberships.filter((m) => m.status === 'pending').length, 0);
@@ -232,13 +290,112 @@ const SchoolAdminPanel = () => {
     });
   }, [users, search, schoolFilter, statusFilter]);
 
-  if (!isGlobalAdmin) {
+  const filteredMembers = useMemo(() => {
+    const term = memberSearch.trim().toLowerCase();
+    return members.filter((m) => {
+      if (term && !(m.full_name ?? '').toLowerCase().includes(term)
+          && !(m.email ?? '').toLowerCase().includes(term)) return false;
+      if (memberStatusFilter !== 'all' && m.status !== memberStatusFilter) return false;
+      return true;
+    });
+  }, [members, memberSearch, memberStatusFilter]);
+
+  /** Card de membro reutilizado nos dois modos (global e escola ativa). */
+  const renderMember = (schoolId: string, m: MemberRow, allowAccountDeletion: boolean) => (
+    <div key={m.user_id} className="rounded-lg border p-3 space-y-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <p className="text-sm font-medium">{m.full_name ?? 'Sem nome'}</p>
+          <p className="text-xs text-muted-foreground">{m.email}</p>
+        </div>
+        <Badge variant={statusVariant(m.status)}>{statusLabels[m.status]}</Badge>
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <Select
+          value={m.role}
+          onValueChange={(v) => upsertMembership(schoolId, m.user_id, v as AppRole, m.status)}
+        >
+          <SelectTrigger className="w-56 h-8 text-xs"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            {Object.entries(roleLabels).map(([k, v]) => (
+              <SelectItem key={k} value={k}>{v}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {m.status !== 'active' && (
+          <Button size="sm" variant="outline"
+            onClick={() => upsertMembership(schoolId, m.user_id, m.role, 'active')}>
+            <Check className="h-3.5 w-3.5 mr-1" /> Aprovar
+          </Button>
+        )}
+        {m.status === 'pending' && (
+          <Button size="sm" variant="ghost"
+            onClick={() => upsertMembership(schoolId, m.user_id, m.role, 'rejected')}>
+            <X className="h-3.5 w-3.5 mr-1" /> Recusar
+          </Button>
+        )}
+        {m.status === 'active' && (
+          <Button size="sm" variant="outline"
+            onClick={() => upsertMembership(schoolId, m.user_id, m.role, 'inactive')}>
+            Desativar
+          </Button>
+        )}
+        <Button
+          size="sm"
+          variant="ghost"
+          className="text-destructive"
+          disabled={m.user_id === user?.id}
+          onClick={() => removeMembership(schoolId, m.user_id)}
+        >
+          <UserMinus className="h-3.5 w-3.5 mr-1" /> Remover vínculo
+        </Button>
+        {allowAccountDeletion && (
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="text-destructive"
+                disabled={m.user_id === user?.id || deletingUserId === m.user_id}
+              >
+                {deletingUserId === m.user_id
+                  ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+                  : <Trash2 className="h-3.5 w-3.5 mr-1" />}
+                Excluir conta
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Excluir a conta inteira?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  A conta de <strong>{m.full_name ?? m.email}</strong> será excluída do EDUNEXUS.
+                  Isso remove o acesso em <strong>todas as escolas</strong> e não pode ser desfeito.
+                  Para apenas retirar o acesso desta escola, use “Remover vínculo”.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                <AlertDialogAction
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  onClick={() => deleteAccount(schoolId, m.user_id)}
+                >
+                  Excluir conta
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        )}
+      </div>
+    </div>
+  );
+
+  if (!isGlobalAdmin && !isSchoolAdmin) {
     return (
       <Card>
         <CardContent className="flex flex-col items-center py-12 gap-3 text-center">
           <ShieldAlert className="h-10 w-10 text-muted-foreground" />
           <p className="text-sm text-muted-foreground">
-            Área exclusiva do administrador global.
+            Área exclusiva do administrador da escola.
           </p>
         </CardContent>
       </Card>
@@ -253,8 +410,86 @@ const SchoolAdminPanel = () => {
     );
   }
 
+  // ============ Modo escola ativa (administrador não global) ============
+  if (isSchoolAdmin) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-lg">
+            <Users className="h-5 w-5 text-primary" /> Usuários de {activeSchool?.school_name ?? 'sua escola'}
+          </CardTitle>
+          <CardDescription>
+            Aprove solicitações, altere funções e remova vínculos desta escola.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex flex-col sm:flex-row gap-2">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                className="pl-9"
+                placeholder="Buscar por nome ou e-mail"
+                value={memberSearch}
+                onChange={(e) => setMemberSearch(e.target.value)}
+              />
+            </div>
+            <Select value={memberStatusFilter} onValueChange={setMemberStatusFilter}>
+              <SelectTrigger className="sm:w-40"><SelectValue placeholder="Situação" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas</SelectItem>
+                {Object.entries(statusLabels).map(([k, v]) => (
+                  <SelectItem key={k} value={k}>{v}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          {membersLoading ? (
+            <Loader2 className="h-5 w-5 animate-spin text-primary" />
+          ) : filteredMembers.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Nenhum membro encontrado.</p>
+          ) : (
+            <div className="space-y-3">
+              {activeSchoolId && filteredMembers.map((m) => renderMember(activeSchoolId, m, false))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // ============ Modo administrador global ============
   return (
     <div className="space-y-6">
+      {/* URL pública canônica do cadastro */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-lg">
+            <Globe className="h-5 w-5 text-primary" /> URL pública do EDUNEXUS
+          </CardTitle>
+          <CardDescription>
+            Base usada nos links exclusivos de cadastro. Nunca use o endereço de preview do editor —
+            quem recebe o link não deve precisar de conta Lovable.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          <div className="flex flex-col sm:flex-row gap-2">
+            <Input
+              placeholder="https://suaescola.com.br"
+              value={urlDraft}
+              onChange={(e) => setUrlDraft(e.target.value)}
+            />
+            <Button onClick={persistPublicUrl} disabled={savingUrl}>
+              {savingUrl && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}Salvar
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {publicOrigin
+              ? `Links de cadastro serão gerados em ${publicOrigin}/join/...`
+              : PREVIEW_LINK_WARNING}
+          </p>
+        </CardContent>
+      </Card>
+
       {/* Migração one-shot dos arquivos legados para pastas por escola */}
       <Card>
         <CardHeader className="flex flex-row items-start justify-between gap-3">
@@ -325,7 +560,9 @@ const SchoolAdminPanel = () => {
                 </Badge>
               </div>
               <div className="rounded-md bg-muted/50 p-2 text-xs break-all font-mono">
-                {s.token ? buildJoinUrl(s.token, window.location.origin) : 'Nenhum link ativo'}
+                {s.token
+                  ? joinUrl(s.token) ?? PREVIEW_LINK_WARNING
+                  : 'Nenhum link ativo'}
               </div>
               <div className="flex flex-wrap gap-2">
                 <Button size="sm" variant="outline" onClick={() => openManage(s)}>Gerenciar</Button>
@@ -488,7 +725,7 @@ const SchoolAdminPanel = () => {
             <div className="space-y-5">
               <div className="rounded-md bg-muted/50 p-2 text-xs break-all font-mono">
                 {manageSchool.token
-                  ? buildJoinUrl(manageSchool.token, window.location.origin)
+                  ? joinUrl(manageSchool.token) ?? PREVIEW_LINK_WARNING
                   : 'Nenhum link ativo'}
               </div>
 
@@ -536,58 +773,7 @@ const SchoolAdminPanel = () => {
                 {membersLoading ? (
                   <Loader2 className="h-5 w-5 animate-spin text-primary" />
                 ) : (
-                  members.map((m) => (
-                    <div key={m.user_id} className="rounded-lg border p-3 space-y-2">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <div>
-                          <p className="text-sm font-medium">{m.full_name ?? 'Sem nome'}</p>
-                          <p className="text-xs text-muted-foreground">{m.email}</p>
-                        </div>
-                        <Badge variant={statusVariant(m.status)}>{statusLabels[m.status]}</Badge>
-                      </div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Select
-                          value={m.role}
-                          onValueChange={(v) =>
-                            upsertMembership(manageSchool.school_id, m.user_id, v as AppRole, m.status)}
-                        >
-                          <SelectTrigger className="w-56 h-8 text-xs"><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            {Object.entries(roleLabels).map(([k, v]) => (
-                              <SelectItem key={k} value={k}>{v}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        {m.status !== 'active' && (
-                          <Button size="sm" variant="outline"
-                            onClick={() => upsertMembership(manageSchool.school_id, m.user_id, m.role, 'active')}>
-                            <Check className="h-3.5 w-3.5 mr-1" /> Aprovar
-                          </Button>
-                        )}
-                        {m.status === 'pending' && (
-                          <Button size="sm" variant="ghost"
-                            onClick={() => upsertMembership(manageSchool.school_id, m.user_id, m.role, 'rejected')}>
-                            <X className="h-3.5 w-3.5 mr-1" /> Recusar
-                          </Button>
-                        )}
-                        {m.status === 'active' && (
-                          <Button size="sm" variant="outline"
-                            onClick={() => upsertMembership(manageSchool.school_id, m.user_id, m.role, 'inactive')}>
-                            Desativar
-                          </Button>
-                        )}
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="text-destructive"
-                          disabled={m.user_id === user?.id}
-                          onClick={() => removeMembership(manageSchool.school_id, m.user_id)}
-                        >
-                          <Trash2 className="h-3.5 w-3.5 mr-1" /> Remover vínculo
-                        </Button>
-                      </div>
-                    </div>
-                  ))
+                  members.map((m) => renderMember(manageSchool.school_id, m, true))
                 )}
               </div>
             </div>
