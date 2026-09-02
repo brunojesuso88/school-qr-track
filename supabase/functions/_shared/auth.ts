@@ -67,3 +67,30 @@ export async function requireAuth(
 
   return { userId: userData.user.id, role, userClient };
 }
+
+/**
+ * Autorização ESCOLAR: valida que o usuário autenticado tem um dos papéis
+ * informados NA ESCOLA da linha alvo (via has_row_role, que também aceita
+ * admin global). Nunca confie em school_id vindo do cliente — resolva o
+ * school_id no banco antes de chamar esta função.
+ *
+ * Retorna `null` quando autorizado ou uma Response 403 pronta para retorno.
+ */
+export async function assertSchoolRole(
+  userClient: ReturnType<typeof createClient>,
+  corsHeaders: Record<string, string>,
+  schoolId: string | null | undefined,
+  roles: AppRole[],
+): Promise<Response | null> {
+  const forbidden = new Response(
+    JSON.stringify({ success: false, error: "Forbidden" }),
+    { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+  );
+  if (!schoolId) return forbidden;
+  const { data, error } = await userClient.rpc("has_row_role", {
+    _school_id: schoolId,
+    _roles: roles,
+  });
+  if (error || data !== true) return forbidden;
+  return null;
+}
