@@ -23,10 +23,15 @@ interface Props {
 }
 
 export function NotificationPreview({ data, docNumber, docYear, customBody, signature }: Props) {
+  const branding = useSchoolBranding();
   const stage = STAGE_TITLES[data.stage];
-  const body = customBody && customBody.trim() ? customBody : buildNotificationBody(data);
+  const body = customBody && customBody.trim()
+    ? customBody
+    : buildNotificationBody({ ...data, school_name: data.school_name ?? branding.schoolName });
   const obligations = getResolvedObligations(data);
   const directionLabel = signature?.role_label?.trim() || 'Direção Escolar';
+  const placeDate = cityDateLine(formatCityState(branding.city, branding.state, '/'), todayBR());
+
 
   return (
     <div
