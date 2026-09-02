@@ -392,7 +392,7 @@ export default function TeacherNotifications() {
     const err = validate();
     if (err) { toast.error(err); return; }
     const sig = await resolveSelectedSignature();
-    const html = buildPrintHTML(form, previewDocNumber, previewYear, customBody || null, sig);
+    const html = buildPrintHTML(form, previewDocNumber, previewYear, customBody || null, sig, branding);
     const w = window.open('', '_blank', 'width=900,height=1000');
     if (!w) { toast.error('Permita pop-ups para imprimir.'); return; }
     w.document.write(html);
@@ -449,6 +449,7 @@ export default function TeacherNotifications() {
       r.doc_year,
       r.custom_body,
       sig,
+      branding,
     );
     const w = window.open('', '_blank', 'width=900,height=1000');
     if (!w) return;
