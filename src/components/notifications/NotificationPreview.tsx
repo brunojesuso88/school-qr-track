@@ -1,4 +1,5 @@
-import logoCepans from '@/assets/logo-cepans.png';
+import { useSchoolBranding } from '@/hooks/useSchoolBranding';
+import { cityDateLine, formatCityState } from '@/lib/school/documentBranding';
 import {
   NotificationData,
   STAGE_TITLES,
@@ -7,6 +8,7 @@ import {
   formatDocNumber,
   todayBR,
 } from '@/lib/notificationTemplates';
+
 
 interface Props {
   data: NotificationData;
