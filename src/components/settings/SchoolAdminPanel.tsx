@@ -26,7 +26,7 @@ import {
   UserMinus, UserPlus, Users, X,
 } from 'lucide-react';
 import { buildJoinUrl, type AppRole } from '@/lib/schools/registration';
-import { PREVIEW_LINK_WARNING } from '@/lib/schools/publicUrl';
+import { PREVIEW_LINK_WARNING, PUBLIC_URL_CHANGE_WARNING } from '@/lib/schools/publicUrl';
 
 interface SchoolRow {
   school_id: string;
