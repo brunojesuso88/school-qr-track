@@ -21,6 +21,7 @@ interface DailyStats {
 
 const StaffScanQR = () => {
   const schoolScopeKey = useSchoolScopeKey();
+  const activeSchoolId = useActiveSchoolId();
   const [scanResult, setScanResult] = useState<string>('');
   const [lastScanned, setLastScanned] = useState<any>(null);
   const [isProcessing, setIsProcessing] = useState(false);

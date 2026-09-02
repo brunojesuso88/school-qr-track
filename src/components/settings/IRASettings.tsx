@@ -57,6 +57,7 @@ const normalize = (s: string) =>
 
 const IRASettings = () => {
   const schoolScopeKey = useSchoolScopeKey();
+  const activeSchoolId = useActiveSchoolId();
   const [classes, setClasses] = useState<ClassRow[]>([]);
   const { userRole } = useAuth();
   const canEditSeries = userRole === 'admin' || userRole === 'direction';
