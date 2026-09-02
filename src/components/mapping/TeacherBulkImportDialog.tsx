@@ -1,4 +1,6 @@
 import { useState, useRef } from "react";
+import { useActiveSchoolId } from '@/contexts/SchoolContext';
+import { assertActiveSchool } from '@/lib/schools/scope';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -177,7 +179,11 @@ const TeacherBulkImportDialog = ({ open, onOpenChange }: TeacherBulkImportDialog
       if (subjectsToCreate.length > 0) {
         const { error: subjErr } = await supabase
           .from("mapping_global_subjects")
-          .insert(subjectsToCreate.map(s => ({ name: s.name, default_weekly_classes: 4 })));
+          .insert(subjectsToCreate.map(s => ({
+            school_id: assertActiveSchool(activeSchoolId),
+            name: s.name,
+            default_weekly_classes: 4,
+          })));
         if (subjErr) console.error("Erro ao criar disciplinas:", subjErr);
         else createdSubjectsCount = subjectsToCreate.length;
       }
@@ -216,7 +222,7 @@ const TeacherBulkImportDialog = ({ open, onOpenChange }: TeacherBulkImportDialog
       if (teachersToInsert.length > 0) {
         const { data, error } = await supabase
           .from("mapping_teachers")
-          .insert(teachersToInsert)
+          .insert(teachersToInsert.map((t) => ({ ...t, school_id: assertActiveSchool(activeSchoolId) })))
           .select("id, name");
         if (error) throw error;
         insertedTeachers = data || [];

@@ -242,7 +242,9 @@ export const SchoolMappingProvider: React.FC<{ children: React.ReactNode }> = ({
 
   // Class Subject functions
   const addClassSubject = async (subject: Omit<MappingClassSubject, 'id' | 'created_at'>) => {
-    const { error } = await supabase.from('mapping_class_subjects').insert(subject);
+    const { error } = await supabase
+      .from('mapping_class_subjects')
+      .insert({ ...subject, school_id: assertActiveSchool(activeSchoolId) });
     if (error) throw error;
     await fetchData();
   };

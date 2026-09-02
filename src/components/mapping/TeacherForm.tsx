@@ -1,4 +1,6 @@
 import { useState, useEffect } from "react";
+import { useActiveSchoolId } from '@/contexts/SchoolContext';
+import { assertActiveSchool } from '@/lib/schools/scope';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -187,6 +189,7 @@ const TeacherForm = ({ teacher, onClose }: TeacherFormProps) => {
           availability.forEach(cell => {
             records.push({
               teacher_id: teacherId!,
+              school_id: assertActiveSchool(activeSchoolId),
               day_of_week: cell.day,
               period_number: cell.period + offset,
               available: cell.available
