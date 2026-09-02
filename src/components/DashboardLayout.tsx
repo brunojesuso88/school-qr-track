@@ -16,6 +16,7 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import AboutSystemDialog from '@/components/AboutSystemDialog';
 import NotificationBell from '@/components/notifications/NotificationBell';
+import SchoolSwitcher from '@/components/SchoolSwitcher';
 
 import {
   DropdownMenu,
@@ -273,6 +274,7 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
 
             {/* Right side actions */}
             <div className="flex items-center gap-2">
+              <SchoolSwitcher />
               <ThemeToggle />
               <NotificationBell />
             </div>

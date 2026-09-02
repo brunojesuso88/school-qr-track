@@ -81,7 +81,7 @@ const SchoolSettings = () => {
       for (const update of updates) {
         const { error } = await supabase
           .from('settings')
-          .upsert(update, { onConflict: 'key' });
+          .upsert(update, { onConflict: 'school_id,key' });
         if (error) throw error;
       }
 
