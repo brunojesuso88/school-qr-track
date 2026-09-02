@@ -89,20 +89,24 @@ Deno.serve(async (req) => {
         };
         if (!delivery.device_id) { skipped++; return; }
 
-        const { data: device } = await admin
-          .from("push_subscriptions")
-          .select("id, user_id, endpoint, p256dh, auth, failure_count, disabled_at")
-          .eq("id", delivery.device_id)
-          .is("disabled_at", null)
-          .maybeSingle();
-        if (!device) { skipped++; return; }
-
         const { data: notification } = await admin
           .from("notifications")
-          .select("title, body, route")
+          .select("title, body, route, school_id")
           .eq("id", delivery.notification_id)
           .maybeSingle();
         if (!notification) { skipped++; return; }
+
+        // Device precisa ser da MESMA escola da notificação.
+        let deviceQuery = admin
+          .from("push_subscriptions")
+          .select("id, user_id, endpoint, p256dh, auth, failure_count, disabled_at, school_id")
+          .eq("id", delivery.device_id)
+          .is("disabled_at", null);
+        if (notification.school_id) {
+          deviceQuery = deviceQuery.eq("school_id", notification.school_id as string);
+        }
+        const { data: device } = await deviceQuery.maybeSingle();
+        if (!device) { skipped++; return; }
 
         const send = await sendWebPush(device as PushDevice, {
           title: notification.title as string,
