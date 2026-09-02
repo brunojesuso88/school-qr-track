@@ -11,7 +11,7 @@ import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import NotificationBell from '@/components/notifications/NotificationBell';
 import { ThemeToggle } from '@/components/ThemeToggle';
-import logoEscola from "@/assets/logo-escola.jpg";
+import { useSchoolBranding } from '@/hooks/useSchoolBranding';
 
 interface DailyStats {
   totalPresent: number;
@@ -257,13 +257,15 @@ const StaffScanQR = () => {
       <header className="bg-card border-b border-border px-4 py-3">
         <div className="max-w-2xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <img 
-              src={logoEscola} 
-              alt="Logo CEPANS" 
-              className="w-10 h-10 rounded-lg object-cover"
-            />
+            {branding.logoUrl && (
+              <img
+                src={branding.logoUrl}
+                alt={`Logo de ${branding.schoolName}`}
+                className="w-10 h-10 rounded-lg object-cover"
+              />
+            )}
             <div>
-              <h1 className="font-semibold text-sm">CEPANS</h1>
+              <h1 className="font-semibold text-sm">{branding.schoolName}</h1>
               <p className="text-xs text-muted-foreground">Leitor de Presença</p>
             </div>
           </div>
