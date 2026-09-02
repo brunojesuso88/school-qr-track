@@ -190,6 +190,7 @@ export type Database = {
           created_at: string
           id: string
           include_in_ira: boolean
+          school_id: string | null
           series: string
           subject_id: string
           updated_at: string
@@ -199,6 +200,7 @@ export type Database = {
           created_at?: string
           id?: string
           include_in_ira?: boolean
+          school_id?: string | null
           series: string
           subject_id: string
           updated_at?: string
@@ -208,12 +210,20 @@ export type Database = {
           created_at?: string
           id?: string
           include_in_ira?: boolean
+          school_id?: string | null
           series?: string
           subject_id?: string
           updated_at?: string
           weekly_classes?: number
         }
         Relationships: [
+          {
+            foreignKeyName: "curriculum_matrix_subjects_school_id_fkey"
+            columns: ["school_id"]
+            isOneToOne: false
+            referencedRelation: "schools"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "curriculum_matrix_subjects_subject_id_fkey"
             columns: ["subject_id"]
@@ -1015,6 +1025,7 @@ export type Database = {
           default_weekly_classes: number
           id: string
           name: string
+          school_id: string | null
           series: string[]
           shift: string
         }
@@ -1025,6 +1036,7 @@ export type Database = {
           default_weekly_classes?: number
           id?: string
           name: string
+          school_id?: string | null
           series?: string[]
           shift?: string
         }
@@ -1035,10 +1047,19 @@ export type Database = {
           default_weekly_classes?: number
           id?: string
           name?: string
+          school_id?: string | null
           series?: string[]
           shift?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "mapping_global_subjects_school_id_fkey"
+            columns: ["school_id"]
+            isOneToOne: false
+            referencedRelation: "schools"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       mapping_teachers: {
         Row: {
