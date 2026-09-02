@@ -24,6 +24,7 @@ import { getSignedPhotoUrl } from '@/hooks/useSignedPhotoUrl';
 import logoCepans from '@/assets/logo-cepans.png';
 import { schoolScopedPath } from '@/lib/school/storagePaths';
 import { useActiveSchoolId, useSchoolScopeKey } from '@/contexts/SchoolContext';
+import { assertActiveSchool } from '@/lib/schools/scope';
 
 interface Student {
   id: string;

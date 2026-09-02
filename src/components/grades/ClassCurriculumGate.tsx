@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { useActiveSchoolId } from '@/contexts/SchoolContext';
+import { assertActiveSchool } from '@/lib/schools/scope';
 import { toast } from 'sonner';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -27,6 +29,7 @@ interface Props {
  * e que suas disciplinas de notas herdam a matriz curricular oficial da série.
  */
 export const ClassCurriculumGate = ({ classId, onReadyChange, onSynced }: Props) => {
+  const activeSchoolId = useActiveSchoolId();
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [series, setSeries] = useState<HighSchoolSeries | ''>('');
