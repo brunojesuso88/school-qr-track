@@ -20,7 +20,7 @@ export type Database = {
           date: string
           id: string
           recorded_by: string | null
-          school_id: string
+          school_id: string | null
           status: Database["public"]["Enums"]["attendance_status"]
           student_id: string
           time: string | null
@@ -30,7 +30,7 @@ export type Database = {
           date?: string
           id?: string
           recorded_by?: string | null
-          school_id: string
+          school_id?: string | null
           status?: Database["public"]["Enums"]["attendance_status"]
           student_id: string
           time?: string | null
@@ -40,7 +40,7 @@ export type Database = {
           date?: string
           id?: string
           recorded_by?: string | null
-          school_id?: string
+          school_id?: string | null
           status?: Database["public"]["Enums"]["attendance_status"]
           student_id?: string
           time?: string | null
@@ -134,7 +134,7 @@ export type Database = {
           mapping_class_id: string | null
           name: string
           photo_url: string | null
-          school_id: string
+          school_id: string | null
           series: string | null
           shift: string
           status: string | null
@@ -148,7 +148,7 @@ export type Database = {
           mapping_class_id?: string | null
           name: string
           photo_url?: string | null
-          school_id: string
+          school_id?: string | null
           series?: string | null
           shift?: string
           status?: string | null
@@ -162,7 +162,7 @@ export type Database = {
           mapping_class_id?: string | null
           name?: string
           photo_url?: string | null
-          school_id?: string
+          school_id?: string | null
           series?: string | null
           shift?: string
           status?: string | null
@@ -232,7 +232,7 @@ export type Database = {
           date: string
           id: string
           present_count: number
-          school_id: string
+          school_id: string | null
           shift: string | null
           student_count: number
           updated_at: string
@@ -245,7 +245,7 @@ export type Database = {
           date: string
           id?: string
           present_count?: number
-          school_id: string
+          school_id?: string | null
           shift?: string | null
           student_count?: number
           updated_at?: string
@@ -258,7 +258,7 @@ export type Database = {
           date?: string
           id?: string
           present_count?: number
-          school_id?: string
+          school_id?: string | null
           shift?: string | null
           student_count?: number
           updated_at?: string
@@ -291,7 +291,7 @@ export type Database = {
           pdf_base64: string | null
           progress: number
           result_json: Json | null
-          school_id: string
+          school_id: string | null
           status: string
           total_chunks: number
           total_pages: number
@@ -314,7 +314,7 @@ export type Database = {
           pdf_base64?: string | null
           progress?: number
           result_json?: Json | null
-          school_id: string
+          school_id?: string | null
           status?: string
           total_chunks?: number
           total_pages?: number
@@ -337,7 +337,7 @@ export type Database = {
           pdf_base64?: string | null
           progress?: number
           result_json?: Json | null
-          school_id?: string
+          school_id?: string | null
           status?: string
           total_chunks?: number
           total_pages?: number
@@ -370,7 +370,7 @@ export type Database = {
           id: string
           page_number: number
           preview_json: Json | null
-          school_id: string
+          school_id: string | null
           session_id: string
           status: string
           updated_at: string
@@ -384,7 +384,7 @@ export type Database = {
           id?: string
           page_number: number
           preview_json?: Json | null
-          school_id: string
+          school_id?: string | null
           session_id: string
           status?: string
           updated_at?: string
@@ -398,7 +398,7 @@ export type Database = {
           id?: string
           page_number?: number
           preview_json?: Json | null
-          school_id?: string
+          school_id?: string | null
           session_id?: string
           status?: string
           updated_at?: string
@@ -436,7 +436,7 @@ export type Database = {
           ignored_pages: number
           notes_imported: number
           pdf_base64: string | null
-          school_id: string
+          school_id: string | null
           status: string
           total_pages: number
           updated_at: string
@@ -456,7 +456,7 @@ export type Database = {
           ignored_pages?: number
           notes_imported?: number
           pdf_base64?: string | null
-          school_id: string
+          school_id?: string | null
           status?: string
           total_pages?: number
           updated_at?: string
@@ -476,7 +476,7 @@ export type Database = {
           ignored_pages?: number
           notes_imported?: number
           pdf_base64?: string | null
-          school_id?: string
+          school_id?: string | null
           status?: string
           total_pages?: number
           updated_at?: string
@@ -507,7 +507,7 @@ export type Database = {
           file_name: string | null
           id: string
           issues: Json
-          school_id: string
+          school_id: string | null
           school_year: number
           stats: Json
           status: string
@@ -521,7 +521,7 @@ export type Database = {
           file_name?: string | null
           id?: string
           issues?: Json
-          school_id: string
+          school_id?: string | null
           school_year?: number
           stats?: Json
           status?: string
@@ -535,7 +535,7 @@ export type Database = {
           file_name?: string | null
           id?: string
           issues?: Json
-          school_id?: string
+          school_id?: string | null
           school_year?: number
           stats?: Json
           status?: string
@@ -566,7 +566,7 @@ export type Database = {
           kind: string
           label: string
           normalized_label: string
-          school_id: string
+          school_id: string | null
           sort_order: number
           updated_at: string
         }
@@ -577,7 +577,7 @@ export type Database = {
           kind?: string
           label: string
           normalized_label: string
-          school_id: string
+          school_id?: string | null
           sort_order?: number
           updated_at?: string
         }
@@ -588,7 +588,7 @@ export type Database = {
           kind?: string
           label?: string
           normalized_label?: string
-          school_id?: string
+          school_id?: string | null
           sort_order?: number
           updated_at?: string
         }
@@ -620,7 +620,7 @@ export type Database = {
           mapping_class_subject_id: string | null
           name: string
           normalized_name: string
-          school_id: string
+          school_id: string | null
           sort_order: number
           updated_at: string
           weekly_classes: number | null
@@ -635,7 +635,7 @@ export type Database = {
           mapping_class_subject_id?: string | null
           name: string
           normalized_name: string
-          school_id: string
+          school_id?: string | null
           sort_order?: number
           updated_at?: string
           weekly_classes?: number | null
@@ -650,7 +650,7 @@ export type Database = {
           mapping_class_subject_id?: string | null
           name?: string
           normalized_name?: string
-          school_id?: string
+          school_id?: string | null
           sort_order?: number
           updated_at?: string
           weekly_classes?: number | null
@@ -687,7 +687,7 @@ export type Database = {
           ira_period_id: string | null
           ira_period_ids: string[]
           scale_max: number
-          school_id: string
+          school_id: string | null
           updated_at: string
           updated_by: string | null
           use_final_grade: boolean
@@ -699,7 +699,7 @@ export type Database = {
           ira_period_id?: string | null
           ira_period_ids?: string[]
           scale_max?: number
-          school_id: string
+          school_id?: string | null
           updated_at?: string
           updated_by?: string | null
           use_final_grade?: boolean
@@ -711,7 +711,7 @@ export type Database = {
           ira_period_id?: string | null
           ira_period_ids?: string[]
           scale_max?: number
-          school_id?: string
+          school_id?: string | null
           updated_at?: string
           updated_by?: string | null
           use_final_grade?: boolean
@@ -753,7 +753,7 @@ export type Database = {
           ira_status: string
           ira_value: number | null
           medals: Json
-          school_id: string
+          school_id: string | null
           series: string | null
           student_id: string
           updated_at: string
@@ -770,7 +770,7 @@ export type Database = {
           ira_status?: string
           ira_value?: number | null
           medals?: Json
-          school_id: string
+          school_id?: string | null
           series?: string | null
           student_id: string
           updated_at?: string
@@ -787,7 +787,7 @@ export type Database = {
           ira_status?: string
           ira_value?: number | null
           medals?: Json
-          school_id?: string
+          school_id?: string | null
           series?: string | null
           student_id?: string
           updated_at?: string
@@ -824,7 +824,7 @@ export type Database = {
           last_computed_at: string | null
           marked_at: string
           reason: string | null
-          school_id: string
+          school_id: string | null
           stale: boolean
           updated_at: string
         }
@@ -835,7 +835,7 @@ export type Database = {
           last_computed_at?: string | null
           marked_at?: string
           reason?: string | null
-          school_id: string
+          school_id?: string | null
           stale?: boolean
           updated_at?: string
         }
@@ -846,7 +846,7 @@ export type Database = {
           last_computed_at?: string | null
           marked_at?: string
           reason?: string | null
-          school_id?: string
+          school_id?: string | null
           stale?: boolean
           updated_at?: string
         }
@@ -875,7 +875,7 @@ export type Database = {
           is_default: boolean
           name: string
           role_label: string | null
-          school_id: string
+          school_id: string | null
           storage_path: string
           updated_at: string
         }
@@ -886,7 +886,7 @@ export type Database = {
           is_default?: boolean
           name: string
           role_label?: string | null
-          school_id: string
+          school_id?: string | null
           storage_path: string
           updated_at?: string
         }
@@ -897,7 +897,7 @@ export type Database = {
           is_default?: boolean
           name?: string
           role_label?: string | null
-          school_id?: string
+          school_id?: string | null
           storage_path?: string
           updated_at?: string
         }
@@ -916,7 +916,7 @@ export type Database = {
           class_id: string | null
           created_at: string | null
           id: string
-          school_id: string
+          school_id: string | null
           sort_order: number | null
           subject_name: string
           teacher_id: string | null
@@ -926,7 +926,7 @@ export type Database = {
           class_id?: string | null
           created_at?: string | null
           id?: string
-          school_id: string
+          school_id?: string | null
           sort_order?: number | null
           subject_name: string
           teacher_id?: string | null
@@ -936,7 +936,7 @@ export type Database = {
           class_id?: string | null
           created_at?: string | null
           id?: string
-          school_id?: string
+          school_id?: string | null
           sort_order?: number | null
           subject_name?: string
           teacher_id?: string | null
@@ -971,7 +971,7 @@ export type Database = {
           created_at: string | null
           id: string
           name: string
-          school_id: string
+          school_id: string | null
           shift: string
           student_count: number | null
           updated_at: string | null
@@ -981,7 +981,7 @@ export type Database = {
           created_at?: string | null
           id?: string
           name: string
-          school_id: string
+          school_id?: string | null
           shift?: string
           student_count?: number | null
           updated_at?: string | null
@@ -991,7 +991,7 @@ export type Database = {
           created_at?: string | null
           id?: string
           name?: string
-          school_id?: string
+          school_id?: string | null
           shift?: string
           student_count?: number | null
           updated_at?: string | null
@@ -1053,7 +1053,7 @@ export type Database = {
           name: string
           notes: string | null
           phone: string | null
-          school_id: string
+          school_id: string | null
           subjects: string[] | null
           updated_at: string | null
         }
@@ -1069,7 +1069,7 @@ export type Database = {
           name: string
           notes?: string | null
           phone?: string | null
-          school_id: string
+          school_id?: string | null
           subjects?: string[] | null
           updated_at?: string | null
         }
@@ -1085,7 +1085,7 @@ export type Database = {
           name?: string
           notes?: string | null
           phone?: string | null
-          school_id?: string
+          school_id?: string | null
           subjects?: string[] | null
           updated_at?: string | null
         }
@@ -1164,7 +1164,7 @@ export type Database = {
           id: string
           message: string | null
           message_status: string | null
-          school_id: string
+          school_id: string | null
           student_id: string
         }
         Insert: {
@@ -1174,7 +1174,7 @@ export type Database = {
           id?: string
           message?: string | null
           message_status?: string | null
-          school_id: string
+          school_id?: string | null
           student_id: string
         }
         Update: {
@@ -1184,7 +1184,7 @@ export type Database = {
           id?: string
           message?: string | null
           message_status?: string | null
-          school_id?: string
+          school_id?: string | null
           student_id?: string
         }
         Relationships: [
@@ -1329,7 +1329,7 @@ export type Database = {
           description: string | null
           end_date: string | null
           id: string
-          school_id: string
+          school_id: string | null
           student_id: string
           teacher_name: string | null
           type: string
@@ -1343,7 +1343,7 @@ export type Database = {
           description?: string | null
           end_date?: string | null
           id?: string
-          school_id: string
+          school_id?: string | null
           student_id: string
           teacher_name?: string | null
           type: string
@@ -1357,7 +1357,7 @@ export type Database = {
           description?: string | null
           end_date?: string | null
           id?: string
-          school_id?: string
+          school_id?: string | null
           student_id?: string
           teacher_name?: string | null
           type?: string
@@ -1462,7 +1462,7 @@ export type Database = {
           id: string
           images: Json
           name: string
-          school_id: string
+          school_id: string | null
           updated_at: string
         }
         Insert: {
@@ -1474,7 +1474,7 @@ export type Database = {
           id?: string
           images?: Json
           name: string
-          school_id: string
+          school_id?: string | null
           updated_at?: string
         }
         Update: {
@@ -1486,7 +1486,7 @@ export type Database = {
           id?: string
           images?: Json
           name?: string
-          school_id?: string
+          school_id?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -1528,7 +1528,7 @@ export type Database = {
           recursos: Json
           responsaveis: Json
           resumo_ia: string | null
-          school_id: string
+          school_id: string | null
           status: string
           tags: string[]
           title: string
@@ -1562,7 +1562,7 @@ export type Database = {
           recursos?: Json
           responsaveis?: Json
           resumo_ia?: string | null
-          school_id: string
+          school_id?: string | null
           status?: string
           tags?: string[]
           title: string
@@ -1596,7 +1596,7 @@ export type Database = {
           recursos?: Json
           responsaveis?: Json
           resumo_ia?: string | null
-          school_id?: string
+          school_id?: string | null
           status?: string
           tags?: string[]
           title?: string
@@ -1764,21 +1764,21 @@ export type Database = {
         Row: {
           id: string
           key: string
-          school_id: string
+          school_id: string | null
           updated_at: string | null
           value: Json
         }
         Insert: {
           id?: string
           key: string
-          school_id: string
+          school_id?: string | null
           updated_at?: string | null
           value: Json
         }
         Update: {
           id?: string
           key?: string
-          school_id?: string
+          school_id?: string | null
           updated_at?: string | null
           value?: Json
         }
@@ -1802,7 +1802,7 @@ export type Database = {
           id: string
           import_id: string | null
           raw_text: string | null
-          school_id: string
+          school_id: string | null
           source: string
           student_id: string
           updated_at: string
@@ -1817,7 +1817,7 @@ export type Database = {
           id?: string
           import_id?: string | null
           raw_text?: string | null
-          school_id: string
+          school_id?: string | null
           source?: string
           student_id: string
           updated_at?: string
@@ -1832,7 +1832,7 @@ export type Database = {
           id?: string
           import_id?: string | null
           raw_text?: string | null
-          school_id?: string
+          school_id?: string | null
           source?: string
           student_id?: string
           updated_at?: string
@@ -1891,7 +1891,7 @@ export type Database = {
           id: string
           issuer: string | null
           notes: string | null
-          school_id: string
+          school_id: string | null
           start_date: string
           status_manual: string
           student_id: string
@@ -1911,7 +1911,7 @@ export type Database = {
           id?: string
           issuer?: string | null
           notes?: string | null
-          school_id: string
+          school_id?: string | null
           start_date: string
           status_manual?: string
           student_id: string
@@ -1931,7 +1931,7 @@ export type Database = {
           id?: string
           issuer?: string | null
           notes?: string | null
-          school_id?: string
+          school_id?: string | null
           start_date?: string
           status_manual?: string
           student_id?: string
@@ -1972,7 +1972,7 @@ export type Database = {
           periodicity: string | null
           schedule_time: string | null
           school: string | null
-          school_id: string
+          school_id: string | null
           shift_snapshot: string | null
           student_id: string
           support_assistant: boolean
@@ -1996,7 +1996,7 @@ export type Database = {
           periodicity?: string | null
           schedule_time?: string | null
           school?: string | null
-          school_id: string
+          school_id?: string | null
           shift_snapshot?: string | null
           student_id: string
           support_assistant?: boolean
@@ -2020,7 +2020,7 @@ export type Database = {
           periodicity?: string | null
           schedule_time?: string | null
           school?: string | null
-          school_id?: string
+          school_id?: string | null
           shift_snapshot?: string | null
           student_id?: string
           support_assistant?: boolean
@@ -2058,7 +2058,7 @@ export type Database = {
           performance_levels: Json
           phone: string | null
           potentialities: string | null
-          school_id: string
+          school_id: string | null
           shift_snapshot: string | null
           student_id: string
           updated_at: string
@@ -2083,7 +2083,7 @@ export type Database = {
           performance_levels?: Json
           phone?: string | null
           potentialities?: string | null
-          school_id: string
+          school_id?: string | null
           shift_snapshot?: string | null
           student_id: string
           updated_at?: string
@@ -2108,7 +2108,7 @@ export type Database = {
           performance_levels?: Json
           phone?: string | null
           potentialities?: string | null
-          school_id?: string
+          school_id?: string | null
           shift_snapshot?: string | null
           student_id?: string
           updated_at?: string
@@ -2155,7 +2155,7 @@ export type Database = {
           photo_url: string | null
           qr_code: string | null
           school_code: string | null
-          school_id: string
+          school_id: string | null
           shift: Database["public"]["Enums"]["student_shift"]
           status: string | null
           student_id: string
@@ -2185,7 +2185,7 @@ export type Database = {
           photo_url?: string | null
           qr_code?: string | null
           school_code?: string | null
-          school_id: string
+          school_id?: string | null
           shift?: Database["public"]["Enums"]["student_shift"]
           status?: string | null
           student_id: string
@@ -2215,7 +2215,7 @@ export type Database = {
           photo_url?: string | null
           qr_code?: string | null
           school_code?: string | null
-          school_id?: string
+          school_id?: string | null
           shift?: Database["public"]["Enums"]["student_shift"]
           status?: string | null
           student_id?: string
@@ -2238,7 +2238,7 @@ export type Database = {
           day_of_week: number
           id: string
           period_number: number
-          school_id: string
+          school_id: string | null
           teacher_id: string
         }
         Insert: {
@@ -2247,7 +2247,7 @@ export type Database = {
           day_of_week: number
           id?: string
           period_number: number
-          school_id: string
+          school_id?: string | null
           teacher_id: string
         }
         Update: {
@@ -2256,7 +2256,7 @@ export type Database = {
           day_of_week?: number
           id?: string
           period_number?: number
-          school_id?: string
+          school_id?: string | null
           teacher_id?: string
         }
         Relationships: [
@@ -2291,7 +2291,7 @@ export type Database = {
           original_deadline: string
           other_obligation: string | null
           reason: string
-          school_id: string
+          school_id: string | null
           stage: string
           teacher_justification: string | null
           teacher_name: string
@@ -2311,7 +2311,7 @@ export type Database = {
           original_deadline: string
           other_obligation?: string | null
           reason: string
-          school_id: string
+          school_id?: string | null
           stage: string
           teacher_justification?: string | null
           teacher_name: string
@@ -2331,7 +2331,7 @@ export type Database = {
           original_deadline?: string
           other_obligation?: string | null
           reason?: string
-          school_id?: string
+          school_id?: string | null
           stage?: string
           teacher_justification?: string | null
           teacher_name?: string
@@ -2355,7 +2355,7 @@ export type Database = {
           id: string
           is_locked: boolean
           period_number: number
-          school_id: string
+          school_id: string | null
           subject_name: string
           teacher_id: string | null
           updated_at: string
@@ -2367,7 +2367,7 @@ export type Database = {
           id?: string
           is_locked?: boolean
           period_number: number
-          school_id: string
+          school_id?: string | null
           subject_name: string
           teacher_id?: string | null
           updated_at?: string
@@ -2379,7 +2379,7 @@ export type Database = {
           id?: string
           is_locked?: boolean
           period_number?: number
-          school_id?: string
+          school_id?: string | null
           subject_name?: string
           teacher_id?: string | null
           updated_at?: string
@@ -2417,7 +2417,7 @@ export type Database = {
           generated_by: string | null
           id: string
           quality_score: number | null
-          school_id: string
+          school_id: string | null
           snapshot: Json | null
           status: string
         }
@@ -2429,7 +2429,7 @@ export type Database = {
           generated_by?: string | null
           id?: string
           quality_score?: number | null
-          school_id: string
+          school_id?: string | null
           snapshot?: Json | null
           status?: string
         }
@@ -2441,7 +2441,7 @@ export type Database = {
           generated_by?: string | null
           id?: string
           quality_score?: number | null
-          school_id?: string
+          school_id?: string | null
           snapshot?: Json | null
           status?: string
         }
@@ -2465,7 +2465,7 @@ export type Database = {
           priority: number
           rule_name: string
           rule_type: string
-          school_id: string
+          school_id: string | null
         }
         Insert: {
           created_at?: string
@@ -2476,7 +2476,7 @@ export type Database = {
           priority?: number
           rule_name: string
           rule_type: string
-          school_id: string
+          school_id?: string | null
         }
         Update: {
           created_at?: string
@@ -2487,7 +2487,7 @@ export type Database = {
           priority?: number
           rule_name?: string
           rule_type?: string
-          school_id?: string
+          school_id?: string | null
         }
         Relationships: [
           {
@@ -2508,7 +2508,7 @@ export type Database = {
           id: string
           period_duration_minutes: number
           periods_per_day: number
-          school_id: string
+          school_id: string | null
           school_year: string
           updated_at: string
         }
@@ -2520,7 +2520,7 @@ export type Database = {
           id?: string
           period_duration_minutes?: number
           periods_per_day?: number
-          school_id: string
+          school_id?: string | null
           school_year?: string
           updated_at?: string
         }
@@ -2532,7 +2532,7 @@ export type Database = {
           id?: string
           period_duration_minutes?: number
           periods_per_day?: number
-          school_id?: string
+          school_id?: string | null
           school_year?: string
           updated_at?: string
         }
