@@ -35,6 +35,7 @@ const StaffScanQR = () => {
   const [soundEnabled, setSoundEnabled] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const { user, signOut } = useAuth();
+  const branding = useSchoolBranding();
 
   // Fetch sound preference
   useEffect(() => {
@@ -124,16 +125,18 @@ const StaffScanQR = () => {
 
   // Realtime subscription for instant stats updates
   useEffect(() => {
-    if (!user?.id) return;
+    if (!user?.id || !activeSchoolId) return;
 
+    // Canal por escola: um dispositivo nunca escuta eventos de outra escola.
     const channel = supabase
-      .channel('attendance-changes')
+      .channel(`attendance-changes:${activeSchoolId}`)
       .on(
         'postgres_changes',
         {
           event: 'INSERT',
           schema: 'public',
-          table: 'attendance'
+          table: 'attendance',
+          filter: `school_id=eq.${activeSchoolId}`,
         },
         (payload) => {
           console.log('New attendance record detected:', payload);
