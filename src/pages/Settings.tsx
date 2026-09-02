@@ -47,7 +47,7 @@ const Settings = () => {
         </div>
 
         <Tabs defaultValue="general" className="w-full">
-          <TabsList className={`grid w-full h-auto gap-2 ${isGlobalAdmin ? 'grid-cols-2 lg:grid-cols-6' : canManageUsers ? 'grid-cols-2 lg:grid-cols-5' : 'grid-cols-2 lg:grid-cols-4'}`}>
+          <TabsList className={`grid w-full h-auto gap-2 ${canManageMembers ? 'grid-cols-2 lg:grid-cols-5' : 'grid-cols-2 lg:grid-cols-4'}`}>
             <TabsTrigger value="general" className="flex items-center gap-2 py-2">
               <Clock className="h-4 w-4" />
               <span className="hidden sm:inline">Geral</span>
@@ -56,17 +56,11 @@ const Settings = () => {
               <MessageSquare className="h-4 w-4" />
               <span className="hidden sm:inline">Central de notificações</span>
             </TabsTrigger>
-            {/* Only show Users tab for admin */}
-            {canManageUsers && (
-              <TabsTrigger value="users" className="flex items-center gap-2 py-2">
-                <Users className="h-4 w-4" />
-                <span className="hidden sm:inline">Usuários</span>
-              </TabsTrigger>
-            )}
-            {isGlobalAdmin && (
+            {/* Aba única de gestão de usuários e escolas (admin global ou admin da escola) */}
+            {canManageMembers && (
               <TabsTrigger value="administration" className="flex items-center gap-2 py-2">
-                <ShieldCheck className="h-4 w-4" />
-                <span className="hidden sm:inline">Escolas e usuários</span>
+                <Users className="h-4 w-4" />
+                <span className="hidden sm:inline">Usuários e escolas</span>
               </TabsTrigger>
             )}
             <TabsTrigger value="school" className="flex items-center gap-2 py-2">
@@ -88,17 +82,12 @@ const Settings = () => {
               <NotificationSettings />
             </TabsContent>
 
-            {canManageUsers && (
-              <TabsContent value="users">
-                <UserManagement />
-              </TabsContent>
-            )}
-
-            {isGlobalAdmin && (
+            {canManageMembers && (
               <TabsContent value="administration">
                 <SchoolAdminPanel />
               </TabsContent>
             )}
+
 
             <TabsContent value="school">
               <SchoolSettings />
