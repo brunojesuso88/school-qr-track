@@ -118,17 +118,19 @@ describe('persistência canônica compartilhada (Turmas e Frequência diária)',
   });
 
   it('gera uma única linha por aluno+data com data local e responsável', () => {
-    const recs = buildAttendanceRecords(list, { s3: 'absent' }, '2026-08-31', '07:10:00', 'u1');
+    const recs = buildAttendanceRecords(list, { s3: 'absent' }, '2026-08-31', '07:10:00', 'u1', 'esc-1');
     expect(recs).toHaveLength(3);
     expect(new Set(recs.map((r) => `${r.student_id}|${r.date}`)).size).toBe(3);
     expect(recs.every((r) => r.date === '2026-08-31' && r.recorded_by === 'u1')).toBe(true);
+    expect(recs.every((r) => r.school_id === 'esc-1')).toBe(true);
     expect(recs.find((r) => r.student_id === 's3')!.status).toBe('absent');
   });
 
   it('gera fechamento turma+data (usado pelos dois pontos de entrada)', () => {
     const counts = countMarks(list, { s2: 'justified', s3: 'absent' });
-    const row = buildClosureRow('26RMM101', '2026-08-31', 'morning', counts, 'u1', 'ts');
+    const row = buildClosureRow('26RMM101', '2026-08-31', 'morning', counts, 'u1', 'ts', 'esc-1');
     expect(row).toEqual({
+      school_id: 'esc-1',
       class_name: '26RMM101',
       date: '2026-08-31',
       shift: 'morning',
@@ -142,7 +144,7 @@ describe('persistência canônica compartilhada (Turmas e Frequência diária)',
 
   it('salvar por Turmas marca a turma como Realizada no status diário', () => {
     const counts = countMarks(list, {});
-    const closure = buildClosureRow('26RMM101', '2026-08-31', 'morning', counts, 'u1', 'ts');
+    const closure = buildClosureRow('26RMM101', '2026-08-31', 'morning', counts, 'u1', 'ts', 'esc-1');
     const rows = buildDailyClassRows(classes, students, [closure], '2026-08-31');
     expect(rows.find((r) => r.name === '26RMM101')!.status).toBe('done');
   });

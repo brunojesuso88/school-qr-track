@@ -197,7 +197,9 @@ const IRASettings = () => {
     }
     setApplyingMatrix(true);
     try {
-      const result = await syncClassCurriculum(selectedClass.id, series);
+      const result = await syncClassCurriculum(selectedClass.id, series, {
+        schoolId: assertActiveSchool(activeSchoolId),
+      });
       const c = result.applied;
       toast.success(
         `Matriz de ${classSeriesLabel(series)} aplicada: ${c.created} criada(s), ${c.reused} reaproveitada(s), ` +

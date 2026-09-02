@@ -1039,6 +1039,7 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
         const { data: created, error: createError } = await supabase
           .from('students')
           .insert({
+            school_id: assertActiveSchool(activeSchoolId),
             full_name: detected.pdf_name,
             student_id: `${initials}-${effectiveName || classItem.name}-${shiftCode}`,
             class: effectiveName || classItem.name,
@@ -1061,6 +1062,7 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
       const periodPayload = preview.periods
         .filter((p) => columnIsPeriod(p.label, p.kind))
         .map((p) => ({
+        school_id: assertActiveSchool(activeSchoolId),
         class_id: classItem.id,
         label: p.label,
         normalized_label: p.normalized_label || normalize(p.label),

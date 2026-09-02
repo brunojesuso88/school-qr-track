@@ -181,7 +181,7 @@ const TeacherForm = ({ teacher, onClose }: TeacherFormProps) => {
           .eq("teacher_id", teacherId);
         
         // Build records for all selected shifts
-        const records: { teacher_id: string; day_of_week: number; period_number: number; available: boolean }[] = [];
+        const records: { teacher_id: string; school_id: string; day_of_week: number; period_number: number; available: boolean }[] = [];
         
         for (const shift of selectedShifts) {
           const offset = SHIFT_PERIOD_OFFSET[shift];

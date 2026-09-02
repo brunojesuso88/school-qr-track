@@ -539,7 +539,9 @@ const AEE = () => {
 
       const { error } = await (supabase as any)
         .from('student_paee')
-        .upsert(payload, { onConflict: 'student_id' });
+        .upsert({ ...payload, school_id: assertActiveSchool(activeSchoolId) }, {
+          onConflict: 'student_id',
+        });
       if (error) throw error;
 
       toast.success('PAEE salvo com sucesso');

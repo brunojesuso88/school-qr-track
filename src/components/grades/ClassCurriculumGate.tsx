@@ -70,7 +70,7 @@ export const ClassCurriculumGate = ({ classId, onReadyChange, onSynced }: Props)
     if (!series) return;
     setSyncing(true);
     try {
-      const result = await syncClassCurriculum(classId, series);
+      const result = await syncClassCurriculum(classId, series, { schoolId: assertActiveSchool(activeSchoolId) });
       setState(result);
       onReadyChange(isPlanInSync(result.plan));
       const c = result.applied;
