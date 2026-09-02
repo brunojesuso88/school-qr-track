@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  DEFAULT_PUBLIC_APP_URL,
   isPreviewHost,
   isPreviewOrigin,
   normalizePublicAppUrl,
