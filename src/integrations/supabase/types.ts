@@ -2727,6 +2727,8 @@ export type Database = {
       }
       normalize_subject_key: { Args: { _name: string }; Returns: string }
       resolve_registration_link: { Args: { _token: string }; Returns: Json }
+      storage_path_school_id: { Args: { _name: string }; Returns: string }
+      storage_school_allowed: { Args: { _name: string }; Returns: boolean }
       unread_notifications_count: { Args: never; Returns: number }
       update_student_photo: {
         Args: { _photo_url: string; _student_id: string }
