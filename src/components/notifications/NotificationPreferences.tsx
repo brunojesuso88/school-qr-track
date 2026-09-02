@@ -6,6 +6,8 @@ import { Loader2, SlidersHorizontal } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { useActiveSchoolId, useSchoolRole, useSchoolScopeKey } from '@/contexts/SchoolContext';
+import { assertActiveSchool } from '@/lib/schools/scope';
 import { CONFIGURABLE_EVENTS, isInappMandatory } from '@/lib/notifications/events';
 
 interface PreferenceRow {
@@ -15,21 +17,26 @@ interface PreferenceRow {
 }
 
 const NotificationPreferences = () => {
-  const { user, userRole } = useAuth();
+  const { user } = useAuth();
+  const schoolRole = useSchoolRole();
+  const activeSchoolId = useActiveSchoolId();
+  const schoolScopeKey = useSchoolScopeKey();
   const [prefs, setPrefs] = useState<Record<string, PreferenceRow>>({});
   const [loading, setLoading] = useState(true);
 
   const visibleEvents = CONFIGURABLE_EVENTS.filter((e) =>
-    e.roles.includes((userRole ?? 'staff') as never),
+    e.roles.includes((schoolRole ?? 'staff') as never),
   );
 
   useEffect(() => {
     const load = async () => {
-      if (!user) return;
+      if (!user || !activeSchoolId) { setLoading(false); return; }
+      // Preferências são POR ESCOLA: a escola ativa define o que é carregado.
       const { data, error } = await supabase
         .from('notification_preferences')
         .select('event_type, push_enabled, inapp_enabled')
-        .eq('user_id', user.id);
+        .eq('user_id', user.id)
+        .eq('school_id', activeSchoolId);
       if (error) console.error('Erro ao carregar preferências:', error);
       const map: Record<string, PreferenceRow> = {};
       for (const row of data ?? []) map[row.event_type] = row as PreferenceRow;
@@ -37,7 +44,7 @@ const NotificationPreferences = () => {
       setLoading(false);
     };
     load();
-  }, [user]);
+  }, [user, activeSchoolId, schoolScopeKey]);
 
   const update = async (
     eventType: string,
@@ -53,10 +60,11 @@ const NotificationPreferences = () => {
       .from('notification_preferences')
       .upsert({
         user_id: user.id,
+        school_id: assertActiveSchool(activeSchoolId),
         event_type: eventType,
         push_enabled: next.push_enabled,
         inapp_enabled: next.inapp_enabled,
-      }, { onConflict: 'user_id,event_type' });
+      }, { onConflict: 'user_id,school_id,event_type' });
 
     if (error) {
       toast.error('Não foi possível salvar a preferência');
