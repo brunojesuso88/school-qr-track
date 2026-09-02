@@ -152,7 +152,7 @@ const StaffScanQR = () => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user?.id, fetchDailyStats, playNotificationSound]);
+  }, [user?.id, activeSchoolId, fetchDailyStats, playNotificationSound]);
 
   // Focus input for USB scanner
   useEffect(() => {
