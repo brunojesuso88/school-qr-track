@@ -60,6 +60,8 @@ export const StudentMedicalCertificateDialog = ({
   onSaved,
   restrictedCreate = false,
 }: Props) => {
+  const activeSchoolId = useActiveSchoolId();
+
 
   const [startDate, setStartDate] = useState<Date | undefined>();
   const [endDate, setEndDate] = useState<Date | undefined>();
