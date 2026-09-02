@@ -40,6 +40,7 @@ import { CatalogSubject, buildEffectiveSubjectMatrix } from '@/lib/gradePageLoca
 import { fetchCurriculumMatrix, matrixToExpectedSubjects } from '@/lib/curriculumMatrix';
 import { markIraStale } from '@/lib/iraSnapshot/recompute';
 import { useActiveSchoolId } from '@/contexts/SchoolContext';
+import { assertActiveSchool } from '@/lib/schools/scope';
 import { parseSeriesValue } from '@/lib/series';
 import { canonicalSubjectKey, classifyPeriodLabel, isPeriodKind, periodRank } from '@/lib/gradePageLocal/normalize';
 import { resolveClassNameFromPdf, samePdfClassBaseName } from '@/lib/classNames/salaFora';

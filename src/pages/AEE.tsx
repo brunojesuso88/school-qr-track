@@ -581,7 +581,9 @@ const AEE = () => {
 
       const { error } = await supabase
         .from('student_pei')
-        .upsert(payload, { onConflict: 'student_id' });
+        .upsert({ ...payload, school_id: assertActiveSchool(activeSchoolId) }, {
+          onConflict: 'student_id',
+        });
       if (error) throw error;
 
       // Also persist Laudo info + birth_date back to the students table,
