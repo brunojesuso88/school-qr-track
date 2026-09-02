@@ -46,6 +46,11 @@ export default defineConfig(({ mode }) => ({
         importScripts: ['sw-push.js'],
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2}'],
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024, // 5 MB limit
+        cleanupOutdatedCaches: true,
+        // Rotas públicas de cadastro sempre vão à rede: um bundle antigo em cache
+        // não pode responder /join/:token com a versão sem a rota (404).
+        navigateFallbackDenylist: [/^\/join\//],
+
 
         runtimeCaching: [
           {
