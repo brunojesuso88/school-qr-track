@@ -25,6 +25,7 @@ interface Props {
 }
 
 export default function EventFormDialog({ open, onOpenChange, event, onSaved }: Props) {
+  const activeSchoolId = useActiveSchoolId();
   const [data, setData] = useState<EventDraft>({ ...emptyEvent });
   const [saving, setSaving] = useState(false);
   const [aiBusy, setAiBusy] = useState<string | null>(null);

@@ -55,6 +55,7 @@ interface TeacherInfo {
 }
 
 const AEE = () => {
+  const activeSchoolId = useActiveSchoolId();
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');

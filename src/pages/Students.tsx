@@ -96,6 +96,7 @@ const OCCURRENCE_TYPES = [
 ];
 
 const Students = () => {
+  const activeSchoolId = useActiveSchoolId();
   const [searchParams] = useSearchParams();
   const classFromUrl = searchParams.get('class');
   const { userRole, user } = useAuth();

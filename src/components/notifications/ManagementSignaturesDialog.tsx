@@ -47,6 +47,7 @@ async function fetchSignatures(): Promise<ManagementSignature[]> {
 }
 
 export function ManagementSignaturesDialog({ open, onOpenChange, onChanged }: Props) {
+  const activeSchoolId = useActiveSchoolId();
   const { user } = useAuth();
   const [list, setList] = useState<ManagementSignature[]>([]);
   const [loading, setLoading] = useState(false);

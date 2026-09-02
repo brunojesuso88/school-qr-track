@@ -22,6 +22,7 @@ interface Props {
 }
 
 export default function SchoolEventFormDialog({ open, onOpenChange, event, onSaved }: Props) {
+  const activeSchoolId = useActiveSchoolId();
   const [data, setData] = useState<Draft>({ ...emptySchoolEvent });
   const [saving, setSaving] = useState(false);
   const [coverThumb, setCoverThumb] = useState<string | null>(null);

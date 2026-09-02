@@ -15,6 +15,7 @@ import { useActiveSchoolId } from '@/contexts/SchoolContext';
 } from '@/lib/school/branding';
 
 const SchoolLogoImage = () => {
+  const activeSchoolId = useActiveSchoolId();
   const { logoUrl, logoPath, schoolName, loading, refetch } = useSchoolProfile();
   const [busy, setBusy] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);

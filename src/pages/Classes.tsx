@@ -65,6 +65,7 @@ const ClassPhoto = ({ photoUrl, className: name }: { photoUrl: string | null; cl
 };
 
 const Classes = () => {
+  const activeSchoolId = useActiveSchoolId();
   const navigate = useNavigate();
   const { userRole } = useAuth();
   const canViewGuardianPhone = userRole === 'admin' || userRole === 'direction';
