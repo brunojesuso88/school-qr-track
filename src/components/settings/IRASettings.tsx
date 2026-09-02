@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useSchoolScopeKey } from '@/contexts/SchoolContext';
+import { useActiveSchoolId, useSchoolScopeKey } from '@/contexts/SchoolContext';
+import { assertActiveSchool } from '@/lib/schools/scope';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -238,6 +239,7 @@ const IRASettings = () => {
     const { data: userData } = await supabase.auth.getUser();
     const ids = useFinal ? [] : selectedPeriodIds;
     const { error } = await supabase.from('ira_settings').upsert({
+      school_id: assertActiveSchool(activeSchoolId),
       class_id: selectedClassId,
       ira_period_ids: ids,
       ira_period_id: ids[0] ?? null,

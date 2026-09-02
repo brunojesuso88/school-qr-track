@@ -505,6 +505,7 @@ const Students = () => {
       } else {
         const { error } = await supabase.from('occurrences').insert({
           ...payload,
+          school_id: assertActiveSchool(activeSchoolId),
           student_id: occurrencesStudent.id,
           teacher_name: currentUserName,
         });
