@@ -76,7 +76,7 @@ export function ManagementSignaturesDialog({ open, onOpenChange, onChanged }: Pr
     setBusy(true);
     try {
       const ext = file.type === 'image/png' ? 'png' : 'jpg';
-      const path = `${user?.id || 'anon'}/${Date.now()}.${ext}`;
+      const path = schoolScopedPath(activeSchoolId, `${user?.id || 'anon'}/${Date.now()}.${ext}`);
       const { error: upErr } = await supabase.storage
         .from('management-signatures')
         .upload(path, file, { contentType: file.type, upsert: false });

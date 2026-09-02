@@ -301,7 +301,7 @@ const Students = () => {
     if (!photoFile) return null;
 
     const fileExt = photoFile.name.split('.').pop();
-    const fileName = `${studentId}-${Date.now()}.${fileExt}`;
+    const fileName = schoolScopedPath(activeSchoolId, `${studentId}-${Date.now()}.${fileExt}`);
 
     const { error } = await supabase.storage
       .from('student-photos')

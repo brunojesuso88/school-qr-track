@@ -283,7 +283,7 @@ const Classes = () => {
     setUploadingPhoto(true);
     try {
       const ext = file.name.split('.').pop();
-      const fileName = `${editingClass.id}.${ext}`;
+      const fileName = schoolScopedPath(activeSchoolId, `${editingClass.id}.${ext}`);
 
       const { error: uploadError } = await supabase.storage
         .from('class-photos')

@@ -324,7 +324,7 @@ const AEE = () => {
       }
 
       const fileExt = laudoFile.name.split('.').pop();
-      const fileName = `${selectedStudent.id}-laudo-${Date.now()}.${fileExt}`;
+      const fileName = schoolScopedPath(activeSchoolId, `${selectedStudent.id}-laudo-${Date.now()}.${fileExt}`);
 
       const { error: uploadError } = await supabase.storage
         .from('aee-documents')

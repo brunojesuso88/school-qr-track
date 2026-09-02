@@ -26,7 +26,7 @@ const SchoolLogoImage = () => {
 
     setBusy(true);
     try {
-      const path = buildBrandingPath('logo', file.name);
+      const path = schoolScopedPath(activeSchoolId, buildBrandingPath('logo', file.name));
 
       const { error: uploadError } = await supabase.storage
         .from(SCHOOL_BRANDING_BUCKET)

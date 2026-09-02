@@ -59,7 +59,7 @@ export default function SchoolEventFormDialog({ open, onOpenChange, event, onSav
     setCoverBusy(true);
     try {
       const ext = file.name.split('.').pop() || 'jpg';
-      const path = `simple-covers/${crypto.randomUUID()}.${ext}`;
+      const path = schoolScopedPath(activeSchoolId, `simple-covers/${crypto.randomUUID()}.${ext}`);
       const { error } = await supabase.storage.from('school-events').upload(path, file, { upsert: false });
       if (error) throw error;
       if (data.cover_image) {
@@ -85,7 +85,7 @@ export default function SchoolEventFormDialog({ open, onOpenChange, event, onSav
     try {
       const paths: string[] = [];
       for (const f of Array.from(files)) {
-        const path = `simple-images/${crypto.randomUUID()}-${f.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+        const path = schoolScopedPath(activeSchoolId, `simple-images/${crypto.randomUUID()}-${f.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`);
         const { error } = await supabase.storage.from('school-events').upload(path, f, { upsert: false });
         if (error) throw error;
         paths.push(path);
