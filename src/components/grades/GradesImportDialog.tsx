@@ -995,7 +995,9 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
       const { error: moveError } = await supabase
         .from('students')
         .update({ class: target })
-        .eq('id', otherClassMatch.id);
+        .eq('id', otherClassMatch.id)
+        .eq('school_id', assertActiveSchool(activeSchoolId));
+
       if (moveError) throw moveError;
       await supabase.from('audit_logs').insert({
         user_id: userData?.user?.id ?? null,
