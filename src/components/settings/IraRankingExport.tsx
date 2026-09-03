@@ -141,11 +141,12 @@ const [rankingStale, setRankingStale] = useState(false);
       const data = await buildIraRanking(selected, activeSchoolId);
       setResult(data);
       const { data: stRows } = await scopeToSchool(
-        supabase.from('ira_staleness').select('class_id, stale'),
+        supabase.from('ira_staleness').select('class_id, stale, last_computed_at'),
         activeSchoolId,
       ).in('class_id', selected);
-      const rows = (stRows || []) as { stale: boolean }[];
-      setRankingStale(rows.some((r) => r.stale) || rows.length < selected.length);
+      const rows = (stRows || []) as { stale: boolean; last_computed_at: string | null }[];
+      // Falta de linha nao significa desatualizado: so marca quando ha marcacao real.
+      setRankingStale(rows.some((r) => r.stale));
       if (data.eligibleCount === 0) {
         toast.error('Nenhum aluno elegível encontrado nas turmas selecionadas.');
       }

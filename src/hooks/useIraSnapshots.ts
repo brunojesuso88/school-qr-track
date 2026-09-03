@@ -7,7 +7,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { StudentMedal } from '@/lib/medals/compute';
-import { IraDisplayState, resolveDisplayState } from '@/lib/iraSnapshot/core';
+import { IraDisplayState, StalenessRow, resolveDisplayState, resolveIraFreshness } from '@/lib/iraSnapshot/core';
 import { useActiveSchoolId } from '@/contexts/SchoolContext';
 
 export interface SnapshotEntry {
@@ -65,6 +65,7 @@ export function useIraSnapshots(students: { id: string; class: string }[]) {
         .map((c: { id: string }) => c.id);
       if (ids.length === 0) {
         setStale(false);
+        setLastComputedAt(null);
         return;
       }
       const { data: stRows } = await supabase
@@ -72,10 +73,11 @@ export function useIraSnapshots(students: { id: string; class: string }[]) {
         .select('class_id, stale, last_computed_at')
         .eq('school_id', activeSchoolId)
         .in('class_id', ids);
-      const rows = (stRows || []) as { stale: boolean; last_computed_at: string | null }[];
-      setStale(rows.some((r) => r.stale) || rows.length < ids.length);
-      const dates = rows.map((r) => r.last_computed_at).filter(Boolean) as string[];
-      setLastComputedAt(dates.length > 0 ? dates.sort().slice(-1)[0] : null);
+      const rows = (stRows || []) as StalenessRow[];
+      // Falta de linha = "nunca calculado" (nunca "desatualizado").
+      const freshness = resolveIraFreshness({ hasSnapshot: Object.keys(map).length > 0, rows });
+      setStale(freshness.stale);
+      setLastComputedAt(freshness.lastComputedAt);
     } catch (e) {
       console.error('Falha ao ler o IRA persistido:', e);
     } finally {

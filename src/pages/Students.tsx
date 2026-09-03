@@ -1118,7 +1118,7 @@ const Students = () => {
               <p className="text-muted-foreground">
                 {iraDisplayState === 'never'
                   ? 'Nenhum cálculo salvo para as turmas filtradas.'
-                  : 'Houve alterações de notas após o último cálculo. Os valores exibidos são do último cálculo salvo.'}
+                  : 'Houve alterações de notas ou das configurações do IRA após o último cálculo. Os valores exibidos são do último cálculo salvo.'}
                 {canRecomputeIra
                   ? ' Clique em "Atualizar IRA" para recalcular.'
                   : ' Solicite à gestão o uso do botão "Atualizar IRA".'}
