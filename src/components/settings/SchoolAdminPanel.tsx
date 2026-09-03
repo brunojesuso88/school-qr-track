@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { sortMembersByRole, sortUsersByRole } from '@/lib/settings/userHierarchy';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSchool } from '@/contexts/SchoolContext';
 import { usePublicAppUrl } from '@/hooks/usePublicAppUrl';
@@ -374,26 +375,37 @@ const SchoolAdminPanel = () => {
     };
   }, [schools, users]);
 
+  // Ordem SEMPRE hierárquica: filtra e só depois ordena (filtros não quebram a ordem).
   const filteredUsers = useMemo(() => {
     const term = search.trim().toLowerCase();
-    return users.filter((u) => {
+    const rows = users.filter((u) => {
       if (term && !(u.full_name ?? '').toLowerCase().includes(term)
           && !(u.email ?? '').toLowerCase().includes(term)) return false;
       if (schoolFilter !== 'all' && !u.memberships.some((m) => m.school_id === schoolFilter)) return false;
       if (statusFilter !== 'all' && !u.memberships.some((m) => m.status === statusFilter)) return false;
       return true;
     });
+    return sortUsersByRole(rows);
   }, [users, search, schoolFilter, statusFilter]);
+
+  const sortedMembers = useMemo(() => sortMembersByRole(members), [members]);
 
   const filteredMembers = useMemo(() => {
     const term = memberSearch.trim().toLowerCase();
-    return members.filter((m) => {
+    const rows = members.filter((m) => {
       if (term && !(m.full_name ?? '').toLowerCase().includes(term)
           && !(m.email ?? '').toLowerCase().includes(term)) return false;
       if (memberStatusFilter !== 'all' && m.status !== memberStatusFilter) return false;
       return true;
     });
+    return sortMembersByRole(rows);
   }, [members, memberSearch, memberStatusFilter]);
+
+  const addableUsers = useMemo(
+    () => sortUsersByRole(users.filter((u) => !members.some((m) => m.user_id === u.user_id))),
+    [users, members],
+  );
+
 
   /** Card de membro reutilizado nos dois modos (global e escola ativa). */
   const renderMember = (schoolId: string, m: MemberRow, allowAccountDeletion: boolean) => (
@@ -954,8 +966,7 @@ const SchoolAdminPanel = () => {
                       <SelectValue placeholder="Selecione um usuário" />
                     </SelectTrigger>
                     <SelectContent>
-                      {users
-                        .filter((u) => !members.some((m) => m.user_id === u.user_id))
+                      {addableUsers
                         .map((u) => (
                           <SelectItem key={u.user_id} value={u.user_id}>
                             {u.full_name ?? u.email}
@@ -988,7 +999,7 @@ const SchoolAdminPanel = () => {
                 {membersLoading ? (
                   <Loader2 className="h-5 w-5 animate-spin text-primary" />
                 ) : (
-                  members.map((m) => renderMember(manageSchool.school_id, m, true))
+                  sortedMembers.map((m) => renderMember(manageSchool.school_id, m, true))
                 )}
               </div>
             </div>
