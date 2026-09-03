@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { assertActiveSchool } from '@/lib/schools/scope';
+import { usePermissions } from '@/contexts/PermissionsContext';
 import { useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import DashboardLayout from '@/components/DashboardLayout';
@@ -620,6 +621,10 @@ const Students = () => {
   };
 
   const handleDeleteOccurrence = async (id: string) => {
+    if (!canDeleteOccurrences) {
+      toast.error('Acesso negado: seu perfil não tem permissão para excluir ocorrências.');
+      return;
+    }
     if (!confirm('Tem certeza que deseja excluir esta ocorrência?')) return;
 
     try {
@@ -664,7 +669,7 @@ const Students = () => {
 
   const handleDelete = async (id: string) => {
     if (!canDeleteStudents) {
-      toast.error('Acesso negado: apenas administração e direção podem excluir alunos.');
+      toast.error('Acesso negado: seu perfil não tem permissão para excluir alunos.');
       return;
     }
     if (!confirm('Tem certeza que deseja excluir este aluno?')) return;
@@ -861,7 +866,7 @@ const Students = () => {
             }
           }}>
             <DialogTrigger asChild>
-              <Button>
+              <Button disabled={!canCreateStudents && !editingStudent}>
                 <Plus className="w-4 h-4 mr-2" />
                 Adicionar Aluno
               </Button>
@@ -1329,9 +1334,11 @@ const Students = () => {
                     >
                       <FileText className="w-3 h-3" />
                     </Button>
+                    {canEditStudents && (
                     <Button variant="ghost" size="sm" onClick={() => handleEdit(student)}>
                       <Edit2 className="w-3 h-3" />
                     </Button>
+                    )}
                     {canDeleteStudents && (
                       <Button variant="ghost" size="sm" onClick={() => handleDelete(student.id)}>
                         <Trash2 className="w-3 h-3 text-destructive" />
@@ -1499,13 +1506,15 @@ const Students = () => {
                                 </p>
                               )}
                             </div>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleDeleteOccurrence(occurrence.id)}
-                            >
-                              <Trash2 className="w-3 h-3 text-destructive" />
-                            </Button>
+                            {canDeleteOccurrences && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleDeleteOccurrence(occurrence.id)}
+                              >
+                                <Trash2 className="w-3 h-3 text-destructive" />
+                              </Button>
+                            )}
                           </div>
                         </CardContent>
                       </Card>
