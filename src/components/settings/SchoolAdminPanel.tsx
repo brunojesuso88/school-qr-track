@@ -374,26 +374,37 @@ const SchoolAdminPanel = () => {
     };
   }, [schools, users]);
 
+  // Ordem SEMPRE hierárquica: filtra e só depois ordena (filtros não quebram a ordem).
   const filteredUsers = useMemo(() => {
     const term = search.trim().toLowerCase();
-    return users.filter((u) => {
+    const rows = users.filter((u) => {
       if (term && !(u.full_name ?? '').toLowerCase().includes(term)
           && !(u.email ?? '').toLowerCase().includes(term)) return false;
       if (schoolFilter !== 'all' && !u.memberships.some((m) => m.school_id === schoolFilter)) return false;
       if (statusFilter !== 'all' && !u.memberships.some((m) => m.status === statusFilter)) return false;
       return true;
     });
+    return sortUsersByRole(rows);
   }, [users, search, schoolFilter, statusFilter]);
+
+  const sortedMembers = useMemo(() => sortMembersByRole(members), [members]);
 
   const filteredMembers = useMemo(() => {
     const term = memberSearch.trim().toLowerCase();
-    return members.filter((m) => {
+    const rows = members.filter((m) => {
       if (term && !(m.full_name ?? '').toLowerCase().includes(term)
           && !(m.email ?? '').toLowerCase().includes(term)) return false;
       if (memberStatusFilter !== 'all' && m.status !== memberStatusFilter) return false;
       return true;
     });
+    return sortMembersByRole(rows);
   }, [members, memberSearch, memberStatusFilter]);
+
+  const addableUsers = useMemo(
+    () => sortUsersByRole(users.filter((u) => !members.some((m) => m.user_id === u.user_id))),
+    [users, members],
+  );
+
 
   /** Card de membro reutilizado nos dois modos (global e escola ativa). */
   const renderMember = (schoolId: string, m: MemberRow, allowAccountDeletion: boolean) => (
