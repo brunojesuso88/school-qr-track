@@ -2644,6 +2644,7 @@ export type Database = {
           school_name: string
         }[]
       }
+      get_school_preferences: { Args: { _school_id: string }; Returns: Json }
       get_student_basic_by_qr: {
         Args: { _qr_code: string }
         Returns: {
