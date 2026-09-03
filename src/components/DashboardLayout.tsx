@@ -305,7 +305,9 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
 
             {/* Right side actions */}
             <div className="flex items-center gap-2">
-              <SchoolSwitcher />
+              {/* Admin troca a escola pelo topo da sidebar (sem duplicar aqui). */}
+              {!isAdminRole && <SchoolSwitcher />}
+
               <ThemeToggle />
               <NotificationBell />
             </div>
