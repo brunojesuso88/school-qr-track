@@ -18,6 +18,9 @@ import AboutSystemDialog from '@/components/AboutSystemDialog';
 import NotificationBell from '@/components/notifications/NotificationBell';
 import SchoolSwitcher from '@/components/SchoolSwitcher';
 import { usePermissions } from '@/contexts/PermissionsContext';
+import { useSchool } from '@/contexts/SchoolContext';
+import { useSchoolProfile } from '@/hooks/useSchoolProfile';
+
 
 import {
   DropdownMenu,
