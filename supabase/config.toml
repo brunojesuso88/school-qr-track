@@ -26,3 +26,6 @@ verify_jwt = false
 
 [functions.push-public-key]
 verify_jwt = false
+
+[functions.join-branding]
+verify_jwt = false

@@ -35,6 +35,7 @@ const Join = () => {
 
   const [link, setLink] = useState<ResolvedRegistrationLink | null>(null);
   const [checking, setChecking] = useState(true);
+  const [heroUrl, setHeroUrl] = useState<string | null>(null);
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -58,6 +59,30 @@ const Join = () => {
       cancelled = true;
     };
   }, [token]);
+
+  /**
+   * Foto de destaque da escola no cadastro público: o servidor valida o token e
+   * assina apenas o hero daquela escola (bucket privado, path nunca vem do cliente).
+   */
+  useEffect(() => {
+    let cancelled = false;
+    if (!link?.valid) {
+      setHeroUrl(null);
+      return;
+    }
+    (async () => {
+      try {
+        const { data } = await supabase.functions.invoke('join-branding', { body: { token } });
+        const payload = data as { valid?: boolean; hero_url?: string | null } | null;
+        if (!cancelled && payload?.valid) setHeroUrl(payload.hero_url ?? null);
+      } catch {
+        if (!cancelled) setHeroUrl(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [token, link?.valid]);
 
   /**
    * Aplica o resultado do vínculo: quando o aceite é automático (status active),
@@ -181,11 +206,21 @@ const Join = () => {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
-      <Card className="w-full max-w-md">
+      <Card className="w-full max-w-md overflow-hidden">
+        {heroUrl && (
+          <img
+            src={heroUrl}
+            alt={`Foto de destaque da escola ${link.school_name ?? ''}`}
+            className="h-40 w-full object-cover sm:h-48"
+            onError={() => setHeroUrl(null)}
+          />
+        )}
         <CardHeader className="text-center space-y-2">
-          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
-            <School className="h-6 w-6 text-primary" />
-          </div>
+          {!heroUrl && (
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
+              <School className="h-6 w-6 text-primary" />
+            </div>
+          )}
           <CardTitle className="text-xl">{link.school_name}</CardTitle>
           <CardDescription>
             {[link.city, link.state].filter(Boolean).join(' / ') || 'Cadastro institucional'}
