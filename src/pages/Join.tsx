@@ -20,7 +20,13 @@ interface JoinResult {
   status?: string;
   school_id?: string;
   already_member?: boolean;
+  requires_admin_approval?: boolean;
+  /** Vínculo com uma segunda escola: aprovação do administrador é obrigatória. */
+  second_school?: boolean;
 }
+
+const SECOND_SCHOOL_MESSAGE =
+  'Você já possui acesso a outra escola. O vínculo com uma segunda escola precisa ser aprovado pelo administrador.';
 
 const Join = () => {
   const { token = '' } = useParams();
