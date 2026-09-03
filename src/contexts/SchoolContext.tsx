@@ -21,7 +21,9 @@ interface SchoolContextType {
   needsSchoolChoice: boolean;
   /** Muda a cada troca de escola: use como dependência de useEffect/useState. */
   schoolScopeKey: string;
-  setActiveSchoolId: (schoolId: string) => void;
+  setActiveSchoolId: (schoolId: string | null) => void;
+  /** Recarrega vínculos (após criar/excluir escola ou novo vínculo). */
+  refresh: () => Promise<void>;
 }
 
 const SchoolContext = createContext<SchoolContextType>({
@@ -33,10 +35,11 @@ const SchoolContext = createContext<SchoolContextType>({
   needsSchoolChoice: false,
   schoolScopeKey: 'no-school',
   setActiveSchoolId: () => undefined,
+  refresh: async () => undefined,
 });
 
 export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { memberships, user, isGlobalAdmin } = useAuth();
+  const { memberships, user, isGlobalAdmin, refreshAccess } = useAuth();
   const queryClient = useQueryClient();
   const [activeSchoolId, setActiveState] = useState<string | null>(getActiveSchoolIdSnapshot());
 
@@ -59,7 +62,7 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   }, [user, activeMemberships, setActive]);
 
   const setActiveSchoolId = useCallback(
-    (schoolId: string) => {
+    (schoolId: string | null) => {
       if (schoolId === activeSchoolId) return;
       setActive(schoolId);
       // Troca de escola nunca deve exibir dados da escola anterior.
@@ -67,6 +70,11 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     },
     [activeSchoolId, queryClient, setActive],
   );
+
+  const refresh = useCallback(async () => {
+    await refreshAccess();
+    queryClient.clear();
+  }, [refreshAccess, queryClient]);
 
   const active = useMemo(
     () => activeMemberships.find((m) => m.school_id === activeSchoolId) ?? null,
@@ -84,8 +92,9 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       needsSchoolChoice: activeMemberships.length > 1 && !activeSchoolId,
       schoolScopeKey: schoolScopeKey(activeSchoolId),
       setActiveSchoolId,
+      refresh,
     }),
-    [activeMemberships, activeSchoolId, active, schoolRole, setActiveSchoolId],
+    [activeMemberships, activeSchoolId, active, schoolRole, setActiveSchoolId, refresh],
   );
 
   return <SchoolContext.Provider value={value}>{children}</SchoolContext.Provider>;
