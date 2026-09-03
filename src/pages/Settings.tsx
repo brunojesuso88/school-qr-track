@@ -45,7 +45,7 @@ const Settings = () => {
             Configurações
           </h1>
           <p className="text-muted-foreground">
-            Gerencie as configurações do sistema de presença
+            Gerencie as configurações da escola e do EDUNEXUS
           </p>
         </div>
 
