@@ -20,7 +20,13 @@ interface JoinResult {
   status?: string;
   school_id?: string;
   already_member?: boolean;
+  requires_admin_approval?: boolean;
+  /** Vínculo com uma segunda escola: aprovação do administrador é obrigatória. */
+  second_school?: boolean;
 }
+
+const SECOND_SCHOOL_MESSAGE =
+  'Você já possui acesso a outra escola. O vínculo com uma segunda escola precisa ser aprovado pelo administrador.';
 
 const Join = () => {
   const { token = '' } = useParams();
@@ -34,6 +40,7 @@ const Join = () => {
   const [password, setPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState<null | 'pending' | 'active'>(null);
+  const [secondSchool, setSecondSchool] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -61,6 +68,7 @@ const Join = () => {
     if (active && result?.school_id) setActiveSchoolIdStore(result.school_id);
     await refreshAccess();
     clearPendingJoinToken();
+    setSecondSchool(!active && result?.second_school === true);
     setDone(active ? 'active' : 'pending');
   };
 
@@ -156,7 +164,9 @@ const Join = () => {
             <p className="text-sm text-muted-foreground">
               {done === 'active'
                 ? `Seu acesso a ${link.school_name} já está liberado.`
-                : `Sua solicitação de acesso a ${link.school_name} foi enviada e aguarda aprovação da gestão.`}
+                : secondSchool
+                  ? SECOND_SCHOOL_MESSAGE
+                  : `Sua solicitação de acesso a ${link.school_name} foi enviada e aguarda aprovação da gestão.`}
             </p>
             {done === 'active' && user ? (
               <Button onClick={() => navigate('/dashboard')}>Entrar no sistema</Button>

@@ -22,9 +22,10 @@ export interface SchoolProfile {
 }
 
 /**
- * Fonte de verdade institucional: tabela `settings`
- * (`school_name` + `school_hero_path` + `school_logo_path`),
- * com URL assinada do bucket privado.
+ * Fonte de verdade institucional: RPC `get_school_branding` (SECURITY DEFINER),
+ * que devolve apenas nome + hero + logo para membros da escola — professor
+ * incluído — sem abrir leitura de `settings` sensíveis. URLs assinadas no
+ * bucket privado de branding.
  */
 export const useSchoolProfile = (): SchoolProfile => {
   const [schoolName, setSchoolName] = useState('');
@@ -37,20 +38,27 @@ export const useSchoolProfile = (): SchoolProfile => {
 
   const load = useCallback(async () => {
     try {
-      let query = supabase
-        .from('settings')
-        .select('key, value')
-        .in('key', ['school_name', SCHOOL_HERO_SETTING_KEY, SCHOOL_LOGO_SETTING_KEY]);
+      if (!activeSchoolId) {
+        setSchoolName('');
+        setHeroPath('');
+        setLogoPath('');
+        setHeroUrl(null);
+        setLogoUrl(null);
+        return;
+      }
 
-      if (activeSchoolId) query = query.eq('school_id', activeSchoolId);
-
-      const { data, error } = await query;
-
+      const { data, error } = await supabase.rpc('get_school_branding', {
+        _school_id: activeSchoolId,
+      });
       if (error) throw error;
 
-      const name = unwrapSettingValue(data?.find((s) => s.key === 'school_name')?.value);
-      const hero = unwrapSettingValue(data?.find((s) => s.key === SCHOOL_HERO_SETTING_KEY)?.value);
-      const logo = unwrapSettingValue(data?.find((s) => s.key === SCHOOL_LOGO_SETTING_KEY)?.value);
+      const row = (data ?? [])[0] as
+        | { school_name: string | null; hero_path: string | null; logo_path: string | null }
+        | undefined;
+
+      const name = unwrapSettingValue(row?.school_name ?? '');
+      const hero = unwrapSettingValue(row?.hero_path ?? '');
+      const logo = unwrapSettingValue(row?.logo_path ?? '');
 
       setSchoolName(name);
       setHeroPath(hero);

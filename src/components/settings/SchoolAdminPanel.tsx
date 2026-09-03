@@ -109,6 +109,9 @@ const SchoolAdminPanel = () => {
   const [saving, setSaving] = useState(false);
 
   const [manageSchool, setManageSchool] = useState<SchoolRow | null>(null);
+  const [renameDraft, setRenameDraft] = useState('');
+  const [renaming, setRenaming] = useState(false);
+  const [activeNameDraft, setActiveNameDraft] = useState('');
   const [members, setMembers] = useState<MemberRow[]>([]);
   const [membersLoading, setMembersLoading] = useState(false);
   const [addUserId, setAddUserId] = useState<string>('');
@@ -154,10 +157,36 @@ const SchoolAdminPanel = () => {
     }
   }, [isGlobalAdmin, isSchoolAdmin, activeSchoolId, load, loadMembers]);
 
+  useEffect(() => setActiveNameDraft(activeSchool?.school_name ?? ''), [activeSchool?.school_name]);
+
   const openManage = async (school: SchoolRow) => {
     setManageSchool(school);
+    setRenameDraft(school.name);
     setAddUserId('');
     await loadMembers(school.school_id);
+  };
+
+  /**
+   * Renomeia a escola: `schools.name` é a fonte canônica e a RPC sincroniza
+   * `settings.school_name` da MESMA escola (documentos/PDFs). Slug, código e
+   * link `/join/:token` permanecem inalterados.
+   */
+  const renameSchool = async (schoolId: string, name: string) => {
+    const value = name.trim();
+    if (value.length < 3 || value.length > 150) {
+      return toast.error('O nome da escola deve ter entre 3 e 150 caracteres');
+    }
+    setRenaming(true);
+    const { error } = await supabase.rpc('admin_rename_school', {
+      _school_id: schoolId, _name: value,
+    });
+    setRenaming(false);
+    if (error) return toast.error(error.message);
+    setSchools((prev) => prev.map((s) => (s.school_id === schoolId ? { ...s, name: value } : s)));
+    setManageSchool((prev) => (prev && prev.school_id === schoolId ? { ...prev, name: value } : prev));
+    await refreshSchools();
+    if (isGlobalAdmin) await load();
+    toast.success('Nome da escola atualizado');
   };
 
   const copyLink = async (token: string | null) => {
@@ -477,6 +506,28 @@ const SchoolAdminPanel = () => {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          {/* Nome da escola ativa (administrador da própria escola) */}
+          {activeSchoolId && (
+            <div className="space-y-2 rounded-md border p-3">
+              <Label>Nome da escola</Label>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <Input
+                  value={activeNameDraft}
+                  maxLength={150}
+                  onChange={(e) => setActiveNameDraft(e.target.value)}
+                />
+                <Button
+                  disabled={renaming || activeNameDraft.trim() === (activeSchool?.school_name ?? '')}
+                  onClick={() => renameSchool(activeSchoolId, activeNameDraft)}
+                >
+                  {renaming && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}Salvar
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                O apelido (slug), o código e o link de cadastro permanecem os mesmos.
+              </p>
+            </div>
+          )}
           <div className="flex flex-col sm:flex-row gap-2">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -641,8 +692,9 @@ const SchoolAdminPanel = () => {
                 <div>
                   <p className="text-sm font-medium">Aceitar novos cadastros automaticamente</p>
                   <p className="text-xs text-muted-foreground">
-                    Ligado: quem usa o link entra direto com acesso ativo. Desligado: fica pendente
-                    de aprovação da gestão.
+                    Ligado: quem usa o link entra direto com acesso ativo, desde que ainda não tenha
+                    acesso ativo em outra escola. Desligado: fica pendente de aprovação. Vínculo com
+                    uma segunda escola sempre exige aprovação do administrador.
                   </p>
                 </div>
                 <Switch
@@ -844,11 +896,33 @@ const SchoolAdminPanel = () => {
                   : 'Nenhum link ativo'}
               </div>
 
+              <div className="space-y-2 rounded-md border p-3">
+                <Label>Nome da escola</Label>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <Input
+                    value={renameDraft}
+                    maxLength={150}
+                    onChange={(e) => setRenameDraft(e.target.value)}
+                  />
+                  <Button
+                    disabled={renaming || renameDraft.trim() === manageSchool.name}
+                    onClick={() => renameSchool(manageSchool.school_id, renameDraft)}
+                  >
+                    {renaming && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}Salvar
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  O apelido (slug), o código e o link de cadastro permanecem os mesmos.
+                </p>
+              </div>
+
               <div className="flex items-center justify-between gap-3 rounded-md border p-3">
                 <div>
                   <p className="text-sm font-medium">Aceitar novos cadastros automaticamente</p>
                   <p className="text-xs text-muted-foreground">
-                    Vale apenas para cadastros feitos pelo link exclusivo desta escola.
+                    Vale apenas para cadastros feitos pelo link exclusivo desta escola e para quem
+                    ainda não possui acesso ativo em outra escola. O vínculo com uma segunda escola
+                    sempre exige aprovação do administrador.
                   </p>
                 </div>
                 <Switch
