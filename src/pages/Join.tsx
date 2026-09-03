@@ -8,11 +8,19 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { toast } from 'sonner';
 import { clearPendingJoinToken, setPendingJoinToken } from '@/lib/schools/joinTokenStore';
+import { setActiveSchoolIdStore } from '@/lib/schools/activeSchoolStore';
 import { CheckCircle2, Loader2, Lock, Mail, School, ShieldAlert, User } from 'lucide-react';
 import {
   registrationLinkErrorMessage,
   type ResolvedRegistrationLink,
 } from '@/lib/schools/registration';
+
+interface JoinResult {
+  ok: boolean;
+  status?: string;
+  school_id?: string;
+  already_member?: boolean;
+}
 
 const Join = () => {
   const { token = '' } = useParams();
@@ -44,20 +52,30 @@ const Join = () => {
     };
   }, [token]);
 
+  /**
+   * Aplica o resultado do vínculo: quando o aceite é automático (status active),
+   * a escola recém-vinculada já vira a escola ativa e o acesso é imediato.
+   */
+  const applyJoinResult = async (result: JoinResult | null) => {
+    const active = result?.status === 'active';
+    if (active && result?.school_id) setActiveSchoolIdStore(result.school_id);
+    await refreshAccess();
+    clearPendingJoinToken();
+    setDone(active ? 'active' : 'pending');
+  };
+
   /** Usuário já logado: apenas solicita o vínculo com a escola do token. */
   const requestMembership = async () => {
     setSubmitting(true);
     try {
       const { data, error } = await supabase.rpc('join_school_with_token', { _token: token });
       if (error) throw error;
-      const result = data as unknown as { ok: boolean; status?: string };
+      const result = data as unknown as JoinResult;
       if (!result?.ok) {
         toast.error('Link inválido ou expirado.');
         return;
       }
-      await refreshAccess();
-      clearPendingJoinToken();
-      setDone(result.status === 'active' ? 'active' : 'pending');
+      await applyJoinResult(result);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Não foi possível concluir a solicitação.');
     } finally {
@@ -90,10 +108,7 @@ const Join = () => {
       const { data: sessionData } = await supabase.auth.getSession();
       if (sessionData.session) {
         const { data } = await supabase.rpc('join_school_with_token', { _token: token });
-        const result = data as unknown as { ok: boolean; status?: string } | null;
-        await refreshAccess();
-        clearPendingJoinToken();
-        setDone(result?.status === 'active' ? 'active' : 'pending');
+        await applyJoinResult((data ?? null) as unknown as JoinResult | null);
       } else {
         setDone('pending');
       }
@@ -143,7 +158,11 @@ const Join = () => {
                 ? `Seu acesso a ${link.school_name} já está liberado.`
                 : `Sua solicitação de acesso a ${link.school_name} foi enviada e aguarda aprovação da gestão.`}
             </p>
-            <Button onClick={() => navigate('/auth')}>Ir para o login</Button>
+            {done === 'active' && user ? (
+              <Button onClick={() => navigate('/dashboard')}>Entrar no sistema</Button>
+            ) : (
+              <Button onClick={() => navigate('/auth')}>Ir para o login</Button>
+            )}
           </CardContent>
         </Card>
       </div>
