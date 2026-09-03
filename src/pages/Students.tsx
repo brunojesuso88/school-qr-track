@@ -102,9 +102,15 @@ const Students = () => {
   const [searchParams] = useSearchParams();
   const classFromUrl = searchParams.get('class');
   const { userRole, user } = useAuth();
+  const { can } = usePermissions();
   const canViewGuardianPhone = userRole === 'admin' || userRole === 'direction';
-  // Professor não pode excluir alunos (também bloqueado por RLS no backend)
-  const canDeleteStudents = userRole === 'admin' || userRole === 'direction';
+  // Permissões configuráveis por escola (também aplicadas por RLS no backend)
+  const canDeleteStudents = can('students.delete');
+  const canCreateStudents = can('students.create');
+  const canEditStudents = can('students.edit');
+  const canCreateOccurrences = can('occurrences.create');
+  const canDeleteOccurrences = can('occurrences.delete');
+
   
   const [students, setStudents] = useState<Student[]>([]);
   const [classes, setClasses] = useState<ClassItem[]>([]);
