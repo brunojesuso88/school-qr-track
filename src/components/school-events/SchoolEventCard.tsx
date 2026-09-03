@@ -9,8 +9,8 @@ import { toast } from 'sonner';
 interface Props {
   event: SchoolEventSimple;
   onView: () => void;
-  onEdit: () => void;
-  onDelete: () => void;
+  onEdit?: () => void;
+  onDelete?: () => void;
 }
 
 const formatDate = (d: string | null) => {
@@ -66,9 +66,9 @@ export default function SchoolEventCard({ event, onView, onEdit, onDelete }: Pro
           <div className="mt-auto pt-3 border-t border-border/50 flex items-center gap-1">
             <TooltipProvider delayDuration={200}>
               <IconBtn label="Visualizar" onClick={onView}><Eye className="w-4 h-4" /></IconBtn>
-              <IconBtn label="Editar" onClick={onEdit}><Pencil className="w-4 h-4" /></IconBtn>
+              {onEdit && <IconBtn label="Editar" onClick={onEdit}><Pencil className="w-4 h-4" /></IconBtn>}
               <IconBtn label="Compartilhar link" onClick={handleShare}><Link2 className="w-4 h-4" /></IconBtn>
-              <IconBtn label="Excluir" onClick={onDelete} danger><Trash2 className="w-4 h-4" /></IconBtn>
+              {onDelete && <IconBtn label="Excluir" onClick={onDelete} danger><Trash2 className="w-4 h-4" /></IconBtn>}
             </TooltipProvider>
           </div>
         </div>
