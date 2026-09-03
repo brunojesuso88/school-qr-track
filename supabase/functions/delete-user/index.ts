@@ -30,18 +30,19 @@ Deno.serve(async (req) => {
       global: { headers: { Authorization: authHeader } }
     })
 
-    // Verify the JWT and get user claims
-    const token = authHeader.replace('Bearer ', '')
-    const { data: claimsData, error: claimsError } = await userClient.auth.getClaims(token)
-    
-    if (claimsError || !claimsData?.claims) {
+    // Verifica o JWT pelo servidor de auth (getUser funciona com o novo
+    // sistema de signing keys, ao contrário de getClaims local).
+    const { data: userData, error: userError } = await userClient.auth.getUser()
+
+    if (userError || !userData?.user) {
       return new Response(
         JSON.stringify({ error: 'Invalid token' }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
-    const currentUserId = claimsData.claims.sub
+    const currentUserId = userData.user.id
+
 
     // Autorização crítica: somente ADMINISTRADOR GLOBAL exclui contas
     const { data: isGlobalAdmin } = await userClient.rpc('is_global_admin')
