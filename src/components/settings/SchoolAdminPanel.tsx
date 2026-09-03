@@ -109,6 +109,9 @@ const SchoolAdminPanel = () => {
   const [saving, setSaving] = useState(false);
 
   const [manageSchool, setManageSchool] = useState<SchoolRow | null>(null);
+  const [renameDraft, setRenameDraft] = useState('');
+  const [renaming, setRenaming] = useState(false);
+  const [activeNameDraft, setActiveNameDraft] = useState('');
   const [members, setMembers] = useState<MemberRow[]>([]);
   const [membersLoading, setMembersLoading] = useState(false);
   const [addUserId, setAddUserId] = useState<string>('');
@@ -156,8 +159,32 @@ const SchoolAdminPanel = () => {
 
   const openManage = async (school: SchoolRow) => {
     setManageSchool(school);
+    setRenameDraft(school.name);
     setAddUserId('');
     await loadMembers(school.school_id);
+  };
+
+  /**
+   * Renomeia a escola: `schools.name` é a fonte canônica e a RPC sincroniza
+   * `settings.school_name` da MESMA escola (documentos/PDFs). Slug, código e
+   * link `/join/:token` permanecem inalterados.
+   */
+  const renameSchool = async (schoolId: string, name: string) => {
+    const value = name.trim();
+    if (value.length < 3 || value.length > 150) {
+      return toast.error('O nome da escola deve ter entre 3 e 150 caracteres');
+    }
+    setRenaming(true);
+    const { error } = await supabase.rpc('admin_rename_school', {
+      _school_id: schoolId, _name: value,
+    });
+    setRenaming(false);
+    if (error) return toast.error(error.message);
+    setSchools((prev) => prev.map((s) => (s.school_id === schoolId ? { ...s, name: value } : s)));
+    setManageSchool((prev) => (prev && prev.school_id === schoolId ? { ...prev, name: value } : prev));
+    await refreshSchools();
+    if (isGlobalAdmin) await load();
+    toast.success('Nome da escola atualizado');
   };
 
   const copyLink = async (token: string | null) => {
