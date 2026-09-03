@@ -1,6 +1,6 @@
 import DashboardLayout from '@/components/DashboardLayout';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Settings as SettingsIcon, Clock, MessageSquare, Users, Building2, Download, ShieldCheck } from 'lucide-react';
+import { Settings as SettingsIcon, SlidersHorizontal, MessageSquare, Users, Building2, Download, ShieldCheck } from 'lucide-react';
 import GeneralSettings from '@/components/settings/GeneralSettings';
 import NotificationSettings from '@/components/settings/NotificationSettings';
 import SchoolSettings from '@/components/settings/SchoolSettings';
