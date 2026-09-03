@@ -51,13 +51,28 @@ export async function requireAuth(
 
   let role: AppRole | null = null;
   if (allowedRoles && allowedRoles.length > 0) {
-    const { data: roleRow } = await userClient
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", userData.user.id)
-      .single();
-    role = (roleRow?.role as AppRole | undefined) ?? null;
-    if (!role || !allowedRoles.includes(role)) {
+    // Papel ESCOLAR: vem de school_memberships ativos (user_roles é apenas
+    // compatibilidade do admin GLOBAL). Um professor novo sem linha legada
+    // precisa funcionar normalmente.
+    const [membershipsRes, globalRes] = await Promise.all([
+      userClient
+        .from("school_memberships")
+        .select("role")
+        .eq("user_id", userData.user.id)
+        .eq("status", "active"),
+      userClient
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", userData.user.id)
+        .eq("role", "admin")
+        .maybeSingle(),
+    ]);
+
+    const schoolRoles = ((membershipsRes.data ?? []) as { role: AppRole }[]).map((r) => r.role);
+    const isGlobalAdmin = !!globalRes.data;
+    role = isGlobalAdmin ? "admin" : (schoolRoles.find((r) => allowedRoles.includes(r)) ?? schoolRoles[0] ?? null);
+
+    if (!isGlobalAdmin && !schoolRoles.some((r) => allowedRoles.includes(r))) {
       return new Response(
         JSON.stringify({ success: false, error: "Forbidden" }),
         { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } },
