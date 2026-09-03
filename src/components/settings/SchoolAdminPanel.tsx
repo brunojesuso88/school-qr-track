@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { sortMembersByRole, sortUsersByRole } from '@/lib/settings/userHierarchy';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSchool } from '@/contexts/SchoolContext';
 import { usePublicAppUrl } from '@/hooks/usePublicAppUrl';
@@ -965,8 +966,7 @@ const SchoolAdminPanel = () => {
                       <SelectValue placeholder="Selecione um usuário" />
                     </SelectTrigger>
                     <SelectContent>
-                      {users
-                        .filter((u) => !members.some((m) => m.user_id === u.user_id))
+                      {addableUsers
                         .map((u) => (
                           <SelectItem key={u.user_id} value={u.user_id}>
                             {u.full_name ?? u.email}
@@ -999,7 +999,7 @@ const SchoolAdminPanel = () => {
                 {membersLoading ? (
                   <Loader2 className="h-5 w-5 animate-spin text-primary" />
                 ) : (
-                  members.map((m) => renderMember(manageSchool.school_id, m, true))
+                  sortedMembers.map((m) => renderMember(manageSchool.school_id, m, true))
                 )}
               </div>
             </div>
