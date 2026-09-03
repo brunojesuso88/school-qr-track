@@ -30,8 +30,8 @@ describe('catálogo de permissões escolares', () => {
   });
 
   it('agrupa permissões por módulo sem perder itens', () => {
-    const groups = groupByModule();
-    const total = groups.reduce((acc, g) => acc + g.permissions.length, 0);
+    const groups = groupByModule(PERMISSION_CATALOG);
+    const total = groups.reduce((acc, [, defs]) => acc + defs.length, 0);
     expect(total).toBe(PERMISSION_CATALOG.length);
   });
 });
