@@ -1,9 +1,10 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { createClient } from 'npm:@supabase/supabase-js@2'
+import { corsHeaders } from 'npm:@supabase/supabase-js@2/cors'
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
+const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
+  status,
+  headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+})
 
 Deno.serve(async (req) => {
   // Handle CORS preflight
@@ -15,47 +16,33 @@ Deno.serve(async (req) => {
     // Verify authentication
     const authHeader = req.headers.get('Authorization')
     if (!authHeader?.startsWith('Bearer ')) {
-      return new Response(
-        JSON.stringify({ error: 'Unauthorized' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
+      return json({ error: 'Unauthorized' }, 401)
     }
 
-    // Create client with user's auth
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!
-    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+    // Create separate clients: the caller identity is never replaced by the
+    // privileged client used exclusively for the final account deletion.
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')
+    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+    if (!supabaseUrl || !supabaseAnonKey || !supabaseServiceKey) {
+      console.error('Missing required backend environment variables')
+      return json({ error: 'Backend configuration error' }, 500)
+    }
 
     const userClient = createClient(supabaseUrl, supabaseAnonKey, {
       global: { headers: { Authorization: authHeader } }
     })
 
-    // Verifica o JWT. `getUser()` com o header do usuário é o caminho normal;
-    // se falhar, valida o token pelo service role (mais tolerante a chaves
-    // publicáveis/opacas) antes de recusar.
     const token = authHeader.replace('Bearer ', '')
     const adminClient = createClient(supabaseUrl, supabaseServiceKey, {
       auth: { autoRefreshToken: false, persistSession: false }
     })
 
-    let currentUserId: string | null = null
-    const { data: userData, error: userError } = await userClient.auth.getUser()
-    if (userData?.user) {
-      currentUserId = userData.user.id
-    } else {
-      const { data: adminUser, error: adminErr } = await adminClient.auth.getUser(token)
-      if (adminUser?.user) {
-        currentUserId = adminUser.user.id
-      } else {
-        console.error('Auth failed:', userError?.message, adminErr?.message)
-      }
-    }
-
-    if (!currentUserId) {
-      return new Response(
-        JSON.stringify({ error: 'Invalid token' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
+    const { data: userData, error: userError } = await adminClient.auth.getUser(token)
+    const currentUserId = userData.user?.id
+    if (userError || !currentUserId) {
+      console.error('Caller token validation failed:', userError?.message ?? 'user missing')
+      return json({ error: 'Invalid or expired session' }, 401)
     }
 
 
@@ -64,28 +51,20 @@ Deno.serve(async (req) => {
     const { data: isGlobalAdmin } = await userClient.rpc('is_global_admin')
 
     if (isGlobalAdmin !== true) {
-      return new Response(
-        JSON.stringify({ error: 'Apenas o administrador global pode excluir contas' }),
-        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
+      return json({ error: 'Apenas o administrador global pode excluir contas' }, 403)
     }
 
     // Get userId to delete from request body
-    const { userId } = await req.json()
+    const body = await req.json().catch(() => ({}))
+    const userId = typeof body?.userId === 'string' ? body.userId.trim() : ''
     
-    if (!userId) {
-      return new Response(
-        JSON.stringify({ error: 'userId is required' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId)) {
+      return json({ error: 'userId inválido' }, 400)
     }
 
     // Prevent self-deletion
     if (userId === currentUserId) {
-      return new Response(
-        JSON.stringify({ error: 'Cannot delete your own account' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
+      return json({ error: 'Não é possível excluir a própria conta' }, 400)
     }
 
     // adminClient (service role) já criado acima
@@ -96,22 +75,13 @@ Deno.serve(async (req) => {
 
     if (deleteError) {
       console.error('Error deleting user:', deleteError)
-      return new Response(
-        JSON.stringify({ error: 'Failed to delete user', details: deleteError.message }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
+      return json({ error: 'Falha ao excluir usuário', details: deleteError.message }, 500)
     }
 
-    return new Response(
-      JSON.stringify({ success: true, message: 'User deleted successfully' }),
-      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    )
+    return json({ success: true, message: 'Usuário excluído com sucesso' })
 
   } catch (error) {
     console.error('Unexpected error:', error)
-    return new Response(
-      JSON.stringify({ error: 'Internal server error' }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    )
+    return json({ error: 'Erro interno do servidor' }, 500)
   }
 })
