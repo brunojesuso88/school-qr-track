@@ -1,11 +1,12 @@
 import DashboardLayout from '@/components/DashboardLayout';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Settings as SettingsIcon, Clock, MessageSquare, Users, Building2, Download } from 'lucide-react';
+import { Settings as SettingsIcon, Clock, MessageSquare, Users, Building2, Download, ShieldCheck } from 'lucide-react';
 import GeneralSettings from '@/components/settings/GeneralSettings';
 import NotificationSettings from '@/components/settings/NotificationSettings';
 import SchoolSettings from '@/components/settings/SchoolSettings';
 import DataExport from '@/components/settings/DataExport';
 import SchoolAdminPanel from '@/components/settings/SchoolAdminPanel';
+import SchoolPermissionsPanel from '@/components/settings/SchoolPermissionsPanel';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent } from '@/components/ui/card';
 import { Shield } from 'lucide-react';
@@ -49,7 +50,7 @@ const Settings = () => {
         </div>
 
         <Tabs defaultValue="general" className="w-full">
-          <TabsList className={`grid w-full h-auto gap-2 ${canManageMembers ? 'grid-cols-2 lg:grid-cols-5' : 'grid-cols-2 lg:grid-cols-4'}`}>
+          <TabsList className={`grid w-full h-auto gap-2 ${canManageMembers ? 'grid-cols-2 lg:grid-cols-6' : 'grid-cols-2 lg:grid-cols-4'}`}>
             <TabsTrigger value="general" className="flex items-center gap-2 py-2">
               <Clock className="h-4 w-4" />
               <span className="hidden sm:inline">Geral</span>
@@ -63,6 +64,13 @@ const Settings = () => {
               <TabsTrigger value="administration" className="flex items-center gap-2 py-2">
                 <Users className="h-4 w-4" />
                 <span className="hidden sm:inline">Usuários e escolas</span>
+              </TabsTrigger>
+            )}
+            {/* Permissões: exclusivo de administrador global ou da escola ativa */}
+            {canManageMembers && (
+              <TabsTrigger value="permissions" className="flex items-center gap-2 py-2">
+                <ShieldCheck className="h-4 w-4" />
+                <span className="hidden sm:inline">Permissões</span>
               </TabsTrigger>
             )}
             <TabsTrigger value="school" className="flex items-center gap-2 py-2">
@@ -90,6 +98,12 @@ const Settings = () => {
               </TabsContent>
             )}
 
+
+            {canManageMembers && (
+              <TabsContent value="permissions">
+                <SchoolPermissionsPanel />
+              </TabsContent>
+            )}
 
             <TabsContent value="school">
               <SchoolSettings />

@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { AuthProvider } from "./contexts/AuthContext";
 import { SchoolProvider } from "./contexts/SchoolContext";
+import { PermissionsProvider } from "./contexts/PermissionsContext";
 import AdminRoute from "./components/AdminRoute";
 import StaffRoute from "./components/StaffRoute";
 import ProtectedRoute from "./components/ProtectedRoute";
@@ -47,6 +48,7 @@ const App = () => (
     <ThemeProvider>
       <AuthProvider>
         <SchoolProvider>
+        <PermissionsProvider>
         <TooltipProvider>
           <Toaster />
           <Sonner />
@@ -65,19 +67,19 @@ const App = () => (
 
               {/* Admin Routes (Web) - Admin, Direção, Professor */}
               <Route path="/dashboard" element={<AdminRoute><Dashboard /></AdminRoute>} />
-              <Route path="/students" element={<AdminRoute><Students /></AdminRoute>} />
-              <Route path="/aee" element={<AdminRoute><AEE /></AdminRoute>} />
-              <Route path="/classes" element={<AdminRoute><Classes /></AdminRoute>} />
-              <Route path="/teachers" element={<AdminRoute><Teachers /></AdminRoute>} />
-              <Route path="/subjects" element={<AdminRoute><Subjects /></AdminRoute>} />
-              <Route path="/ira" element={<AdminRoute><IRA /></AdminRoute>} />
+              <Route path="/students" element={<AdminRoute permission="students.view"><Students /></AdminRoute>} />
+              <Route path="/aee" element={<AdminRoute permission="aee.view"><AEE /></AdminRoute>} />
+              <Route path="/classes" element={<AdminRoute permission="classes.view"><Classes /></AdminRoute>} />
+              <Route path="/teachers" element={<AdminRoute permission="teachers.view"><Teachers /></AdminRoute>} />
+              <Route path="/subjects" element={<AdminRoute permission="subjects.view"><Subjects /></AdminRoute>} />
+              <Route path="/ira" element={<AdminRoute permission="ira.view"><IRA /></AdminRoute>} />
               <Route path="/settings/ira" element={<Navigate to="/ira" replace />} />
               <Route path="/scan" element={<AdminRoute><QRCodes /></AdminRoute>} />
-              <Route path="/attendance" element={<AdminRoute><Attendance /></AdminRoute>} />
-              <Route path="/events" element={<AdminRoute><Events /></AdminRoute>} />
-              <Route path="/school-events" element={<AdminRoute><SchoolEvents /></AdminRoute>} />
-              <Route path="/declarations" element={<AdminRoute><Declarations /></AdminRoute>} />
-              <Route path="/teacher-notifications" element={<AdminRoute><TeacherNotifications /></AdminRoute>} />
+              <Route path="/attendance" element={<AdminRoute permission="attendance.view"><Attendance /></AdminRoute>} />
+              <Route path="/events" element={<AdminRoute permission="projects.view"><Events /></AdminRoute>} />
+              <Route path="/school-events" element={<AdminRoute permission="events.view"><SchoolEvents /></AdminRoute>} />
+              <Route path="/declarations" element={<AdminRoute permission="declarations.access"><Declarations /></AdminRoute>} />
+              <Route path="/teacher-notifications" element={<AdminRoute permission="teacher_notifications.access"><TeacherNotifications /></AdminRoute>} />
               {/* Central de notificações: todos os perfis autenticados (inclui staff) */}
               <Route path="/notifications" element={<ProtectedRoute><Notifications /></ProtectedRoute>} />
               <Route path="/settings" element={<AdminRoute><Settings /></AdminRoute>} />
@@ -97,6 +99,7 @@ const App = () => (
             </Routes>
           </BrowserRouter>
         </TooltipProvider>
+        </PermissionsProvider>
         </SchoolProvider>
       </AuthProvider>
     </ThemeProvider>

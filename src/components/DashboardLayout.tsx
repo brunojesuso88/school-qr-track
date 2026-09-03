@@ -17,6 +17,7 @@ import { supabase } from '@/integrations/supabase/client';
 import AboutSystemDialog from '@/components/AboutSystemDialog';
 import NotificationBell from '@/components/notifications/NotificationBell';
 import SchoolSwitcher from '@/components/SchoolSwitcher';
+import { usePermissions } from '@/contexts/PermissionsContext';
 
 import {
   DropdownMenu,
@@ -38,6 +39,7 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, signOut, userRole, isStaffOnly } = useAuth();
+  const { can } = usePermissions();
   const { theme, setTheme } = useTheme();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isSettingsSheetOpen, setIsSettingsSheetOpen] = useState(false);
@@ -51,9 +53,10 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
   const [deleteConfirmation, setDeleteConfirmation] = useState("");
 
   // Filter navigation based on user role
-  const navigation = sidebarNavigation.filter(item =>
-    item.roles.includes(userRole || 'user')
-  );
+  const navigation = sidebarNavigation
+    .filter((item) => item.roles.includes(userRole || 'user'))
+    // Permissões da escola ativa também controlam o menu (não só o papel).
+    .filter((item) => !item.permission || can(item.permission));
 
   const handleSignOut = async () => {
     await signOut();

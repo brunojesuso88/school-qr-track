@@ -43,16 +43,12 @@ Deno.serve(async (req) => {
 
     const currentUserId = claimsData.claims.sub
 
-    // Check if current user is admin
-    const { data: roleData, error: roleError } = await userClient
-      .from('user_roles')
-      .select('role')
-      .eq('user_id', currentUserId)
-      .single()
+    // Autorização crítica: somente ADMINISTRADOR GLOBAL exclui contas
+    const { data: isGlobalAdmin } = await userClient.rpc('is_global_admin')
 
-    if (roleError || roleData?.role !== 'admin') {
+    if (isGlobalAdmin !== true) {
       return new Response(
-        JSON.stringify({ error: 'Only admins can delete users' }),
+        JSON.stringify({ error: 'Apenas o administrador global pode excluir contas' }),
         { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
