@@ -40,6 +40,7 @@ const Join = () => {
   const [password, setPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState<null | 'pending' | 'active'>(null);
+  const [secondSchool, setSecondSchool] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -67,6 +68,7 @@ const Join = () => {
     if (active && result?.school_id) setActiveSchoolIdStore(result.school_id);
     await refreshAccess();
     clearPendingJoinToken();
+    setSecondSchool(!active && result?.second_school === true);
     setDone(active ? 'active' : 'pending');
   };
 
