@@ -107,3 +107,29 @@ export function resolveDisplayState(opts: { hasSnapshot: boolean; stale: boolean
   if (!opts.hasSnapshot) return 'never';
   return opts.stale ? 'stale' : 'fresh';
 }
+
+export interface StalenessRow {
+  stale: boolean;
+  last_computed_at: string | null;
+}
+
+/**
+ * Deriva o estado salvo do IRA a partir das linhas de `ira_staleness`.
+ *
+ * Regras:
+ * - Ausência de linha significa "nunca calculado", NUNCA "desatualizado".
+ * - `stale` só é verdadeiro quando alguma turma foi explicitamente marcada
+ *   (notas ou configurações do IRA alteradas).
+ */
+export function resolveIraFreshness(opts: {
+  hasSnapshot: boolean;
+  rows: StalenessRow[];
+}): { stale: boolean; neverCalculated: boolean; lastComputedAt: string | null } {
+  const computedDates = opts.rows.map((r) => r.last_computed_at).filter(Boolean) as string[];
+  const neverCalculated = !opts.hasSnapshot || computedDates.length === 0;
+  return {
+    stale: !neverCalculated && opts.rows.some((r) => r.stale),
+    neverCalculated,
+    lastComputedAt: computedDates.length > 0 ? computedDates.slice().sort().slice(-1)[0] : null,
+  };
+}

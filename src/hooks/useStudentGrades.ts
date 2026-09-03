@@ -152,24 +152,29 @@ export async function fetchGradesPaged(
 ): Promise<StudentGradeRow[]> {
   if (subjectIds.length === 0 || !schoolId) return [];
   const PAGE = 1000;
+  // Lotes de disciplinas: uma lista grande em `in(...)` estoura a URL do REST (erro 500).
+  const SUBJECT_CHUNK = 60;
   const rows: StudentGradeRow[] = [];
-  for (let from = 0; ; from += PAGE) {
-    let query = supabase
-      .from('student_grades')
-      .select('*')
-      .eq('school_id', schoolId)
-      .in('grade_subject_id', subjectIds)
-      .order('id')
-      .range(from, from + PAGE - 1);
-    // Só filtra por aluno quando a lista é curta (URL longa quebra a requisição)
-    if (studentIds && studentIds.length > 0 && studentIds.length <= 100) {
-      query = query.in('student_id', studentIds);
+  for (let s = 0; s < subjectIds.length; s += SUBJECT_CHUNK) {
+    const subjectChunk = subjectIds.slice(s, s + SUBJECT_CHUNK);
+    for (let from = 0; ; from += PAGE) {
+      let query = supabase
+        .from('student_grades')
+        .select('*')
+        .eq('school_id', schoolId)
+        .in('grade_subject_id', subjectChunk)
+        .order('id')
+        .range(from, from + PAGE - 1);
+      // Só filtra por aluno quando a lista é curta (URL longa quebra a requisição)
+      if (studentIds && studentIds.length > 0 && studentIds.length <= 100) {
+        query = query.in('student_id', studentIds);
+      }
+      const { data, error } = await query;
+      if (error) throw error;
+      const page = ((data || []) as unknown as StudentGradeRow[]).map((g) => ({ ...g, flags: g.flags || [] }));
+      rows.push(...page);
+      if (page.length < PAGE) break;
     }
-    const { data, error } = await query;
-    if (error) throw error;
-    const page = ((data || []) as unknown as StudentGradeRow[]).map((g) => ({ ...g, flags: g.flags || [] }));
-    rows.push(...page);
-    if (page.length < PAGE) break;
   }
   if (studentIds && studentIds.length > 100) {
     const set = new Set(studentIds);

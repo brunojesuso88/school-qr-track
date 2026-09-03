@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  DROPOUT_STATUS, buildSnapshotRows, isDropout, resolveDisplayState, splitByEligibility,
+  DROPOUT_STATUS, buildSnapshotRows, isDropout, resolveDisplayState, resolveIraFreshness, splitByEligibility,
 } from '../core';
 import { computeMedals, MedalStudentInput } from '@/lib/medals/compute';
 import { ClassGradesData } from '@/hooks/useStudentGrades';
@@ -119,5 +119,42 @@ describe('medalhas x desistentes', () => {
     ]);
     expect(medals.a?.some((m) => m.areaId === 'matematica' && m.shared)).toBe(true);
     expect(medals.b?.some((m) => m.areaId === 'matematica' && m.shared)).toBe(true);
+  });
+});
+
+describe('estado salvo do IRA (staleness)', () => {
+  it('A) turma sem linha de staleness = nunca calculado, não desatualizado', () => {
+    const r = resolveIraFreshness({ hasSnapshot: false, rows: [] });
+    expect(r.neverCalculated).toBe(true);
+    expect(r.stale).toBe(false);
+  });
+
+  it('B/C) após cálculo salvo, sem marcação = atualizado e permanece assim', () => {
+    const rows = [{ stale: false, last_computed_at: '2026-09-03T12:00:00.000Z' }];
+    const r = resolveIraFreshness({ hasSnapshot: true, rows });
+    expect(r.stale).toBe(false);
+    expect(r.neverCalculated).toBe(false);
+    expect(r.lastComputedAt).toBe('2026-09-03T12:00:00.000Z');
+    expect(resolveDisplayState({ hasSnapshot: true, stale: r.stale })).toBe('fresh');
+  });
+
+  it('D/F) qualquer turma marcada deixa o escopo desatualizado', () => {
+    const r = resolveIraFreshness({
+      hasSnapshot: true,
+      rows: [
+        { stale: false, last_computed_at: '2026-09-01T00:00:00.000Z' },
+        { stale: true, last_computed_at: '2026-09-01T00:00:00.000Z' },
+      ],
+    });
+    expect(r.stale).toBe(true);
+    expect(resolveDisplayState({ hasSnapshot: true, stale: r.stale })).toBe('stale');
+  });
+
+  it('G) turma sem linha ao lado de turma calculada não gera aviso de desatualizado', () => {
+    const r = resolveIraFreshness({
+      hasSnapshot: true,
+      rows: [{ stale: false, last_computed_at: '2026-09-01T00:00:00.000Z' }],
+    });
+    expect(r.stale).toBe(false);
   });
 });
