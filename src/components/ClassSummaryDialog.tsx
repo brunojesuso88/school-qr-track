@@ -91,8 +91,8 @@ export default function ClassSummaryDialog({ open, onOpenChange, className }: Pr
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
-        <DialogHeader>
+      <DialogContent className="flex max-h-[90dvh] max-w-3xl flex-col gap-4 overflow-hidden">
+        <DialogHeader className="shrink-0">
           <DialogTitle className="flex items-center gap-2">
             <GraduationCap className="w-5 h-5 text-primary" />
             Resumo de Presença — {className}
@@ -100,7 +100,7 @@ export default function ClassSummaryDialog({ open, onOpenChange, className }: Pr
           <DialogDescription>Últimos {days} dias</DialogDescription>
         </DialogHeader>
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="grid shrink-0 grid-cols-2 gap-3 md:grid-cols-4">
           <Card><CardContent className="p-3">
             <div className="text-xs text-muted-foreground flex items-center gap-1"><Users className="w-3 h-3" /> Alunos</div>
             <div className="text-2xl font-bold">{rows.length}</div>
@@ -119,16 +119,17 @@ export default function ClassSummaryDialog({ open, onOpenChange, className }: Pr
           </CardContent></Card>
         </div>
 
-        <div className="flex items-center justify-between p-3 rounded-md bg-muted/40">
+        <div className="flex shrink-0 items-center justify-between rounded-md bg-muted/40 p-3">
           <span className="text-sm font-medium">Frequência geral da turma</span>
           <Badge className={totals.rate >= 75 ? 'bg-emerald-600' : totals.rate >= 50 ? 'bg-amber-600' : 'bg-destructive'}>
             {totals.rate}%
           </Badge>
         </div>
 
-        <ScrollArea className="flex-1 h-[40vh] border rounded-md">
+        {/* Rolagem determinística: div nativa (ScrollArea exigia altura fixa e travava o gesto) */}
+        <div className="min-h-0 flex-1 touch-pan-y overflow-y-auto overflow-x-auto overscroll-contain rounded-md border">
           <Table>
-            <TableHeader className="sticky top-0 bg-background">
+            <TableHeader className="sticky top-0 z-10 bg-background">
               <TableRow>
                 <TableHead>Aluno</TableHead>
                 <TableHead className="text-center">Pres.</TableHead>
@@ -164,7 +165,7 @@ export default function ClassSummaryDialog({ open, onOpenChange, className }: Pr
               ))}
             </TableBody>
           </Table>
-        </ScrollArea>
+        </div>
       </DialogContent>
     </Dialog>
   );
