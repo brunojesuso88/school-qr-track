@@ -4,6 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useSchoolProfile } from '@/hooks/useSchoolProfile';
 import { useUserFullName } from '@/hooks/useUserFullName';
 import { allNavigation } from '@/lib/navigation';
+import { usePermissions } from '@/contexts/PermissionsContext';
 import { cn } from '@/lib/utils';
 import { ArrowRight, Users, Heart, BookOpen, ClipboardList, CalendarDays, Calendar, Sparkles } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
@@ -68,13 +69,17 @@ const HIGHLIGHTS: HighlightCard[] = [
 
 const Dashboard = () => {
   const { userRole } = useAuth();
+  const { can } = usePermissions();
   const role = userRole || 'user';
   const { fullName, loading: nameLoading } = useUserFullName();
   const { schoolName, heroUrl, loading: schoolLoading } = useSchoolProfile();
 
   // Permissões: reaproveita exatamente a mesma matriz de rotas/menu.
   const allowedHrefs = new Set(
-    allNavigation.filter((item) => item.roles.includes(role)).map((item) => item.href),
+    allNavigation
+      .filter((item) => item.roles.includes(role))
+      .filter((item) => !item.permission || can(item.permission))
+      .map((item) => item.href),
   );
   const cards = HIGHLIGHTS.filter((card) => allowedHrefs.has(card.href));
 

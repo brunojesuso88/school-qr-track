@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { AuthProvider } from "./contexts/AuthContext";
 import { SchoolProvider } from "./contexts/SchoolContext";
+import { PermissionsProvider } from "./contexts/PermissionsContext";
 import AdminRoute from "./components/AdminRoute";
 import StaffRoute from "./components/StaffRoute";
 import ProtectedRoute from "./components/ProtectedRoute";
@@ -47,6 +48,7 @@ const App = () => (
     <ThemeProvider>
       <AuthProvider>
         <SchoolProvider>
+        <PermissionsProvider>
         <TooltipProvider>
           <Toaster />
           <Sonner />
@@ -97,6 +99,7 @@ const App = () => (
             </Routes>
           </BrowserRouter>
         </TooltipProvider>
+        </PermissionsProvider>
         </SchoolProvider>
       </AuthProvider>
     </ThemeProvider>
