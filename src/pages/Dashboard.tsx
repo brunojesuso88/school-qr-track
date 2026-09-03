@@ -2,6 +2,8 @@ import { Link } from 'react-router-dom';
 import DashboardLayout from '@/components/DashboardLayout';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSchoolProfile } from '@/hooks/useSchoolProfile';
+import { useSchoolPreferences } from '@/hooks/useSchoolPreferences';
+import { BIMESTER_LABELS } from '@/lib/settings/schoolPreferences';
 import { useUserFullName } from '@/hooks/useUserFullName';
 import { allNavigation, NAV_GROUPS, type NavItem } from '@/lib/navigation';
 import { usePermissions } from '@/contexts/PermissionsContext';
@@ -14,6 +16,7 @@ const Dashboard = () => {
   const role = userRole || 'user';
   const { fullName, loading: nameLoading } = useUserFullName();
   const { schoolName, heroUrl, loading: schoolLoading } = useSchoolProfile();
+  const { preferences, loading: prefsLoading } = useSchoolPreferences();
 
   // Permissões: reaproveita exatamente a mesma matriz de rotas/menu.
   const shortcuts: NavItem[] = allNavigation
