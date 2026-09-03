@@ -311,8 +311,20 @@ const SchoolAdminPanel = () => {
   const deleteAccount = async (schoolId: string | null, userId: string) => {
     setDeletingUserId(userId);
     try {
-      const response = await supabase.functions.invoke('delete-user', { body: { userId } });
-      if (response.error) throw new Error(response.error.message);
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      const accessToken = sessionData.session?.access_token;
+      if (sessionError || !accessToken) {
+        throw new Error('Sua sessão expirou. Entre novamente para excluir a conta.');
+      }
+
+      const response = await supabase.functions.invoke('delete-user', {
+        body: { userId },
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      const payload = response.data as { error?: string; details?: string } | null;
+      if (response.error || payload?.error) {
+        throw new Error(payload?.details ?? payload?.error ?? response.error?.message ?? 'Falha ao excluir conta');
+      }
       toast.success('Conta excluída em todas as escolas');
       if (schoolId) await loadMembers(schoolId);
       await load();
