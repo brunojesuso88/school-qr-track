@@ -40,7 +40,13 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
   const navigate = useNavigate();
   const { user, signOut, userRole, isStaffOnly } = useAuth();
   const { can } = usePermissions();
+  const { activeSchool } = useSchool();
+  const { schoolName, loading: schoolProfileLoading } = useSchoolProfile();
   const { theme, setTheme } = useTheme();
+  const isAdminRole = userRole === 'admin';
+  const schoolLabel = schoolName || activeSchool?.school_name || 'Escola não selecionada';
+  const schoolLabelLoading = schoolProfileLoading && !schoolName && !activeSchool?.school_name;
+
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isSettingsSheetOpen, setIsSettingsSheetOpen] = useState(false);
   const [isPasswordDialogOpen, setIsPasswordDialogOpen] = useState(false);
