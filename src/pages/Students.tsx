@@ -99,6 +99,8 @@ const OCCURRENCE_TYPES = [
   { value: 'other', label: 'Outros' },
 ];
 
+type SortOption = 'none' | 'name-asc' | 'absences-desc' | 'absences-asc' | 'ira-desc' | 'ira-asc';
+
 const Students = () => {
   const schoolScopeKey = useSchoolScopeKey();
   const activeSchoolId = useActiveSchoolId();
@@ -141,6 +143,14 @@ const Students = () => {
   const [sortBy, setSortBy] = useState<SortOption>('none');
   const [filterStatus, setFilterStatus] = useState<StudentStatusFilter>('all');
   const [recomputingIra, setRecomputingIra] = useState(false);
+
+  // Preferências gerais da escola ativa definem os padrões iniciais da listagem.
+  const { preferences: schoolPreferences, loading: preferencesLoading } = useSchoolPreferences();
+  useEffect(() => {
+    if (preferencesLoading) return;
+    setFilterStatus(initialStudentStatusFilter(schoolPreferences.show_inactive_students));
+    setSortBy(schoolPreferences.default_student_sort as SortOption);
+  }, [preferencesLoading, schoolPreferences, schoolScopeKey]);
 
 
   const [formData, setFormData] = useState({
