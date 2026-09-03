@@ -206,11 +206,21 @@ const Join = () => {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
-      <Card className="w-full max-w-md">
+      <Card className="w-full max-w-md overflow-hidden">
+        {heroUrl && (
+          <img
+            src={heroUrl}
+            alt={`Foto de destaque da escola ${link.school_name ?? ''}`}
+            className="h-40 w-full object-cover sm:h-48"
+            onError={() => setHeroUrl(null)}
+          />
+        )}
         <CardHeader className="text-center space-y-2">
-          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
-            <School className="h-6 w-6 text-primary" />
-          </div>
+          {!heroUrl && (
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
+              <School className="h-6 w-6 text-primary" />
+            </div>
+          )}
           <CardTitle className="text-xl">{link.school_name}</CardTitle>
           <CardDescription>
             {[link.city, link.state].filter(Boolean).join(' / ') || 'Cadastro institucional'}
