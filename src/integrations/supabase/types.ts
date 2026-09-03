@@ -2504,6 +2504,7 @@ export type Database = {
         }
         Returns: string
       }
+      admin_delete_school: { Args: { _school_id: string }; Returns: Json }
       admin_list_users: {
         Args: never
         Returns: {
