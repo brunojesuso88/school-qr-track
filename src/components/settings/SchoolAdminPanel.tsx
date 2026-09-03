@@ -157,6 +157,8 @@ const SchoolAdminPanel = () => {
     }
   }, [isGlobalAdmin, isSchoolAdmin, activeSchoolId, load, loadMembers]);
 
+  useEffect(() => setActiveNameDraft(activeSchool?.school_name ?? ''), [activeSchool?.school_name]);
+
   const openManage = async (school: SchoolRow) => {
     setManageSchool(school);
     setRenameDraft(school.name);
