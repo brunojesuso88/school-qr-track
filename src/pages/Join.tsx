@@ -164,7 +164,9 @@ const Join = () => {
             <p className="text-sm text-muted-foreground">
               {done === 'active'
                 ? `Seu acesso a ${link.school_name} já está liberado.`
-                : `Sua solicitação de acesso a ${link.school_name} foi enviada e aguarda aprovação da gestão.`}
+                : secondSchool
+                  ? SECOND_SCHOOL_MESSAGE
+                  : `Sua solicitação de acesso a ${link.school_name} foi enviada e aguarda aprovação da gestão.`}
             </p>
             {done === 'active' && user ? (
               <Button onClick={() => navigate('/dashboard')}>Entrar no sistema</Button>
