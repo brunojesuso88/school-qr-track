@@ -169,19 +169,38 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
         )}
       >
         <div className="flex flex-col h-full">
-          {/* Header */}
-          <div className="flex items-center gap-3 px-6 py-5 border-b border-sidebar-border">
-            <div className="flex-1 min-w-0">
-              <h1 className="font-semibold text-sidebar-foreground text-sm leading-tight">EDUNEXUS</h1>
-              <p className="text-xs text-sidebar-foreground/60">Sistema Digital de Secretaria Escolar</p>
+          {/* Header: identificação da escola ativa */}
+          <div className="px-4 py-4 border-b border-sidebar-border">
+            <div className="flex items-start gap-2">
+              <div className="flex-1 min-w-0">
+                {schoolLabelLoading ? (
+                  <>
+                    <span className="block h-3.5 w-4/5 animate-pulse rounded bg-sidebar-foreground/15" />
+                    <span className="mt-1.5 block h-3.5 w-3/5 animate-pulse rounded bg-sidebar-foreground/10" />
+                  </>
+                ) : (
+                  <h1 className="font-semibold text-sidebar-foreground text-sm leading-snug line-clamp-3 break-words">
+                    {schoolLabel}
+                  </h1>
+                )}
+              </div>
+              <button
+                className="lg:hidden text-sidebar-foreground"
+                onClick={() => setSidebarOpen(false)}
+                aria-label="Fechar menu"
+              >
+                <X className="w-5 h-5" />
+              </button>
             </div>
-            <button
-              className="lg:hidden text-sidebar-foreground"
-              onClick={() => setSidebarOpen(false)}
-            >
-              <X className="w-5 h-5" />
-            </button>
+
+            {/* Troca de escola: exclusiva do administrador */}
+            {isAdminRole && (
+              <div className="mt-3">
+                <SchoolSwitcher variant="sidebar" />
+              </div>
+            )}
           </div>
+
 
           {/* Navigation */}
           <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
