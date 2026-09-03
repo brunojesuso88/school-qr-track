@@ -1440,6 +1440,8 @@ const Students = () => {
                   Conselho de Classe
                 </Button>
               </div>
+              )}
+
 
               {/* Conselho de Classe — separado das ocorrências gerais */}
               <div className="space-y-2">
