@@ -35,6 +35,7 @@ const Join = () => {
 
   const [link, setLink] = useState<ResolvedRegistrationLink | null>(null);
   const [checking, setChecking] = useState(true);
+  const [heroUrl, setHeroUrl] = useState<string | null>(null);
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -58,6 +59,30 @@ const Join = () => {
       cancelled = true;
     };
   }, [token]);
+
+  /**
+   * Foto de destaque da escola no cadastro público: o servidor valida o token e
+   * assina apenas o hero daquela escola (bucket privado, path nunca vem do cliente).
+   */
+  useEffect(() => {
+    let cancelled = false;
+    if (!link?.valid) {
+      setHeroUrl(null);
+      return;
+    }
+    (async () => {
+      try {
+        const { data } = await supabase.functions.invoke('join-branding', { body: { token } });
+        const payload = data as { valid?: boolean; hero_url?: string | null } | null;
+        if (!cancelled && payload?.valid) setHeroUrl(payload.hero_url ?? null);
+      } catch {
+        if (!cancelled) setHeroUrl(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [token, link?.valid]);
 
   /**
    * Aplica o resultado do vínculo: quando o aceite é automático (status active),
