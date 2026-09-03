@@ -30,18 +30,34 @@ Deno.serve(async (req) => {
       global: { headers: { Authorization: authHeader } }
     })
 
-    // Verifica o JWT pelo servidor de auth (getUser funciona com o novo
-    // sistema de signing keys, ao contrário de getClaims local).
-    const { data: userData, error: userError } = await userClient.auth.getUser()
+    // Verifica o JWT. `getUser()` com o header do usuário é o caminho normal;
+    // se falhar, valida o token pelo service role (mais tolerante a chaves
+    // publicáveis/opacas) antes de recusar.
+    const token = authHeader.replace('Bearer ', '')
+    const adminClient = createClient(supabaseUrl, supabaseServiceKey, {
+      auth: { autoRefreshToken: false, persistSession: false }
+    })
 
-    if (userError || !userData?.user) {
+    let currentUserId: string | null = null
+    const { data: userData, error: userError } = await userClient.auth.getUser()
+    if (userData?.user) {
+      currentUserId = userData.user.id
+    } else {
+      const { data: adminUser, error: adminErr } = await adminClient.auth.getUser(token)
+      if (adminUser?.user) {
+        currentUserId = adminUser.user.id
+      } else {
+        console.error('Auth failed:', userError?.message, adminErr?.message)
+      }
+    }
+
+    if (!currentUserId) {
       return new Response(
         JSON.stringify({ error: 'Invalid token' }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
-    const currentUserId = userData.user.id
 
 
     // Autorização crítica: somente ADMINISTRADOR GLOBAL exclui contas
@@ -72,10 +88,8 @@ Deno.serve(async (req) => {
       )
     }
 
-    // Create admin client with service role key
-    const adminClient = createClient(supabaseUrl, supabaseServiceKey, {
-      auth: { autoRefreshToken: false, persistSession: false }
-    })
+    // adminClient (service role) já criado acima
+
 
     // Delete user from auth (this will cascade to profiles and user_roles)
     const { error: deleteError } = await adminClient.auth.admin.deleteUser(userId)
