@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
+import { Switch } from '@/components/ui/switch';
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
@@ -25,6 +26,7 @@ import {
   Building2, Check, Copy, Globe, Loader2, Plus, RefreshCw, School, Search, ShieldAlert, Trash2,
   UserMinus, UserPlus, Users, X,
 } from 'lucide-react';
+import { Textarea } from '@/components/ui/textarea';
 import { buildJoinUrl, type AppRole } from '@/lib/schools/registration';
 import { PREVIEW_LINK_WARNING, PUBLIC_URL_CHANGE_WARNING } from '@/lib/schools/publicUrl';
 
@@ -39,6 +41,7 @@ interface SchoolRow {
   member_count: number;
   pending_count: number;
   token: string | null;
+  auto_approve_registration: boolean;
 }
 
 interface MemberRow {
@@ -77,7 +80,7 @@ const statusVariant = (status: string): 'default' | 'secondary' | 'outline' | 'd
 
 const SchoolAdminPanel = () => {
   const { isGlobalAdmin, user, userRole } = useAuth();
-  const { activeSchoolId, activeSchool } = useSchool();
+  const { activeSchoolId, activeSchool, setActiveSchoolId, refresh: refreshSchools } = useSchool();
   // Direção mantém as permissões atuais: gestão de usuários é do administrador.
   const isSchoolAdmin = !isGlobalAdmin && userRole === 'admin';
 
@@ -94,7 +97,15 @@ const SchoolAdminPanel = () => {
   const [statusFilter, setStatusFilter] = useState<string>('all');
 
   const [createOpen, setCreateOpen] = useState(false);
-  const [newSchool, setNewSchool] = useState({ name: '', city: '', state: '', code: '' });
+  const [newSchool, setNewSchool] = useState({
+    name: '', city: '', state: '', code: '', autoApprove: false,
+  });
+  const [autoApproveBusy, setAutoApproveBusy] = useState<string | null>(null);
+  const [deleteSchool, setDeleteSchool] = useState<SchoolRow | null>(null);
+  const [deleteSchoolConfirm, setDeleteSchoolConfirm] = useState('');
+  const [deletingSchool, setDeletingSchool] = useState(false);
+  const [deleteAccountUser, setDeleteAccountUser] = useState<UserRow | null>(null);
+  const [deleteAccountConfirm, setDeleteAccountConfirm] = useState('');
   const [saving, setSaving] = useState(false);
 
   const [manageSchool, setManageSchool] = useState<SchoolRow | null>(null);
@@ -193,12 +204,13 @@ const SchoolAdminPanel = () => {
       _city: newSchool.city.trim() || null,
       _state: newSchool.state.trim() || null,
       _code: newSchool.code.trim() || null,
+      _auto_approve: newSchool.autoApprove,
     });
     setSaving(false);
     if (error) return toast.error(error.message);
     toast.success('Escola criada com link de cadastro ativo');
     setCreateOpen(false);
-    setNewSchool({ name: '', city: '', state: '', code: '' });
+    setNewSchool({ name: '', city: '', state: '', code: '', autoApprove: false });
     await load();
   };
 
@@ -224,14 +236,56 @@ const SchoolAdminPanel = () => {
     if (isGlobalAdmin) await load();
   };
 
+  /** Aceite automático de novos cadastros pelo link exclusivo da escola. */
+  const toggleAutoApprove = async (school: SchoolRow, enabled: boolean) => {
+    setAutoApproveBusy(school.school_id);
+    const { error } = await supabase.rpc('admin_set_school_auto_approve', {
+      _school_id: school.school_id, _enabled: enabled,
+    });
+    setAutoApproveBusy(null);
+    if (error) return toast.error(error.message);
+    setSchools((prev) => prev.map((s) =>
+      s.school_id === school.school_id ? { ...s, auto_approve_registration: enabled } : s));
+    setManageSchool((prev) => prev && prev.school_id === school.school_id
+      ? { ...prev, auto_approve_registration: enabled } : prev);
+    toast.success(enabled
+      ? 'Novos cadastros por link serão aceitos automaticamente'
+      : 'Novos cadastros por link ficarão pendentes de aprovação');
+  };
+
+  /** Exclusão DEFINITIVA da escola: exclusiva do administrador global. */
+  const confirmDeleteSchool = async () => {
+    if (!deleteSchool) return;
+    setDeletingSchool(true);
+    try {
+      const response = await supabase.functions.invoke('delete-school', {
+        body: { schoolId: deleteSchool.school_id },
+      });
+      const payload = response.data as { error?: string } | null;
+      if (response.error || payload?.error) {
+        throw new Error(payload?.error ?? response.error?.message ?? 'Falha ao excluir escola');
+      }
+      toast.success('Escola excluída definitivamente');
+      setDeleteSchool(null);
+      setDeleteSchoolConfirm('');
+      if (activeSchoolId === deleteSchool.school_id) setActiveSchoolId(null);
+      await refreshSchools();
+      await load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Não foi possível excluir a escola');
+    } finally {
+      setDeletingSchool(false);
+    }
+  };
+
   /** Exclusão da CONTA inteira: exclusiva do administrador global. */
-  const deleteAccount = async (schoolId: string, userId: string) => {
+  const deleteAccount = async (schoolId: string | null, userId: string) => {
     setDeletingUserId(userId);
     try {
       const response = await supabase.functions.invoke('delete-user', { body: { userId } });
       if (response.error) throw new Error(response.error.message);
       toast.success('Conta excluída em todas as escolas');
-      await loadMembers(schoolId);
+      if (schoolId) await loadMembers(schoolId);
       await load();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Não foi possível excluir a conta');
@@ -556,9 +610,14 @@ const SchoolAdminPanel = () => {
                     {s.pending_count > 0 && ` · ${s.pending_count} pendentes`}
                   </p>
                 </div>
-                <Badge variant={s.status === 'active' ? 'default' : 'outline'}>
-                  {s.status === 'active' ? 'Ativa' : 'Inativa'}
-                </Badge>
+                <div className="flex items-center gap-2">
+                  {s.auto_approve_registration && (
+                    <Badge variant="secondary">Aceite automático</Badge>
+                  )}
+                  <Badge variant={s.status === 'active' ? 'default' : 'outline'}>
+                    {s.status === 'active' ? 'Ativa' : 'Inativa'}
+                  </Badge>
+                </div>
               </div>
               <div className="rounded-md bg-muted/50 p-2 text-xs break-all font-mono">
                 {s.token
@@ -575,6 +634,34 @@ const SchoolAdminPanel = () => {
                 </Button>
                 <Button size="sm" variant="ghost" onClick={() => revoke(s.school_id)}>
                   <X className="h-3.5 w-3.5 mr-1" /> Revogar
+                </Button>
+              </div>
+              {/* Aceite automático por escola */}
+              <div className="flex items-center justify-between gap-3 rounded-md border border-dashed p-3">
+                <div>
+                  <p className="text-sm font-medium">Aceitar novos cadastros automaticamente</p>
+                  <p className="text-xs text-muted-foreground">
+                    Ligado: quem usa o link entra direto com acesso ativo. Desligado: fica pendente
+                    de aprovação da gestão.
+                  </p>
+                </div>
+                <Switch
+                  checked={s.auto_approve_registration}
+                  disabled={autoApproveBusy === s.school_id}
+                  onCheckedChange={(v) => toggleAutoApprove(s, v)}
+                />
+              </div>
+              {/* Zona destrutiva separada */}
+              <div className="flex items-center justify-between gap-3 rounded-md border border-destructive/40 bg-destructive/5 p-3">
+                <p className="text-xs text-muted-foreground">
+                  Excluir esta escola remove definitivamente todos os dados e arquivos dela.
+                </p>
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  onClick={() => { setDeleteSchool(s); setDeleteSchoolConfirm(''); }}
+                >
+                  <Trash2 className="h-3.5 w-3.5 mr-1" /> Excluir escola
                 </Button>
               </div>
             </div>
@@ -627,6 +714,7 @@ const SchoolAdminPanel = () => {
                 <TableRow>
                   <TableHead>Usuário</TableHead>
                   <TableHead>Escolas e papéis</TableHead>
+                  <TableHead className="text-right">Ações</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -651,6 +739,20 @@ const SchoolAdminPanel = () => {
                           ))}
                         </div>
                       )}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="text-destructive"
+                        disabled={u.user_id === user?.id || deletingUserId === u.user_id}
+                        onClick={() => { setDeleteAccountUser(u); setDeleteAccountConfirm(''); }}
+                      >
+                        {deletingUserId === u.user_id
+                          ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+                          : <Trash2 className="h-3.5 w-3.5 mr-1" />}
+                        Excluir definitivamente
+                      </Button>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -701,6 +803,18 @@ const SchoolAdminPanel = () => {
                 onChange={(e) => setNewSchool((p) => ({ ...p, code: e.target.value.toUpperCase() }))}
               />
             </div>
+            <div className="flex items-center justify-between gap-3 rounded-md border p-3">
+              <div>
+                <Label>Aceitar novos cadastros automaticamente</Label>
+                <p className="text-xs text-muted-foreground">
+                  Sem necessidade de aprovação manual do administrador.
+                </p>
+              </div>
+              <Switch
+                checked={newSchool.autoApprove}
+                onCheckedChange={(v) => setNewSchool((p) => ({ ...p, autoApprove: v }))}
+              />
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setCreateOpen(false)}>Cancelar</Button>
@@ -728,6 +842,20 @@ const SchoolAdminPanel = () => {
                 {manageSchool.token
                   ? joinUrl(manageSchool.token) ?? PREVIEW_LINK_WARNING
                   : 'Nenhum link ativo'}
+              </div>
+
+              <div className="flex items-center justify-between gap-3 rounded-md border p-3">
+                <div>
+                  <p className="text-sm font-medium">Aceitar novos cadastros automaticamente</p>
+                  <p className="text-xs text-muted-foreground">
+                    Vale apenas para cadastros feitos pelo link exclusivo desta escola.
+                  </p>
+                </div>
+                <Switch
+                  checked={manageSchool.auto_approve_registration}
+                  disabled={autoApproveBusy === manageSchool.school_id}
+                  onCheckedChange={(v) => toggleAutoApprove(manageSchool, v)}
+                />
               </div>
 
               <Separator />
@@ -779,6 +907,93 @@ const SchoolAdminPanel = () => {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Confirmação forte: excluir escola */}
+      <Dialog
+        open={!!deleteSchool}
+        onOpenChange={(open) => { if (!open) { setDeleteSchool(null); setDeleteSchoolConfirm(''); } }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Excluir a escola “{deleteSchool?.name}”?</DialogTitle>
+            <DialogDescription>
+              Todos os alunos, turmas, frequências, notas, projetos, eventos, documentos e arquivos
+              desta escola serão excluídos definitivamente. As contas dos usuários são preservadas e
+              continuam válidas nas outras escolas. Esta ação não pode ser desfeita.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label>
+              Para confirmar, digite o nome da escola: <strong>{deleteSchool?.name}</strong>
+            </Label>
+            <Textarea
+              rows={2}
+              value={deleteSchoolConfirm}
+              onChange={(e) => setDeleteSchoolConfirm(e.target.value)}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteSchool(null)}>Cancelar</Button>
+            <Button
+              variant="destructive"
+              disabled={
+                deletingSchool
+                || deleteSchoolConfirm.trim().toLowerCase() !== (deleteSchool?.name ?? '').toLowerCase()
+              }
+              onClick={confirmDeleteSchool}
+            >
+              {deletingSchool && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              Excluir definitivamente
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Confirmação forte: excluir conta de usuário */}
+      <Dialog
+        open={!!deleteAccountUser}
+        onOpenChange={(open) => {
+          if (!open) { setDeleteAccountUser(null); setDeleteAccountConfirm(''); }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Excluir definitivamente esta conta?</DialogTitle>
+            <DialogDescription>
+              A conta de <strong>{deleteAccountUser?.full_name ?? deleteAccountUser?.email}</strong>{' '}
+              será removida do EDUNEXUS, junto com o acesso em todas as escolas. Os dados
+              pedagógicos já registrados (alunos, frequência, notas, ocorrências) são preservados.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label>Para confirmar, digite <strong>EXCLUIR</strong></Label>
+            <Input
+              value={deleteAccountConfirm}
+              onChange={(e) => setDeleteAccountConfirm(e.target.value)}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteAccountUser(null)}>Cancelar</Button>
+            <Button
+              variant="destructive"
+              disabled={
+                deleteAccountConfirm.trim().toUpperCase() !== 'EXCLUIR'
+                || deletingUserId === deleteAccountUser?.user_id
+              }
+              onClick={async () => {
+                if (!deleteAccountUser) return;
+                await deleteAccount(null, deleteAccountUser.user_id);
+                setDeleteAccountUser(null);
+                setDeleteAccountConfirm('');
+              }}
+            >
+              {deletingUserId === deleteAccountUser?.user_id
+                && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              Excluir definitivamente
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
