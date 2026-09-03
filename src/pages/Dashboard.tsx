@@ -3,69 +3,10 @@ import DashboardLayout from '@/components/DashboardLayout';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSchoolProfile } from '@/hooks/useSchoolProfile';
 import { useUserFullName } from '@/hooks/useUserFullName';
-import { allNavigation } from '@/lib/navigation';
+import { allNavigation, NAV_GROUPS, type NavItem } from '@/lib/navigation';
 import { usePermissions } from '@/contexts/PermissionsContext';
 import { cn } from '@/lib/utils';
-import { ArrowRight, Users, Heart, BookOpen, ClipboardList, CalendarDays, Calendar, Sparkles } from 'lucide-react';
-import type { LucideIcon } from 'lucide-react';
-
-interface HighlightCard {
-  name: string;
-  href: string;
-  icon: LucideIcon;
-  description: string;
-  /** Classe do bloco de ícone (tokens semânticos). */
-  accent: string;
-  /** Card em destaque no grid do desktop. */
-  wide?: boolean;
-}
-
-const HIGHLIGHTS: HighlightCard[] = [
-  {
-    name: 'Alunos',
-    href: '/students',
-    icon: Users,
-    description: 'Cadastros, notas, IRA, ocorrências e acompanhamento dos estudantes.',
-    accent: 'bg-primary/10 text-primary',
-    wide: true,
-  },
-  {
-    name: 'Sistema AEE',
-    href: '/aee',
-    icon: Heart,
-    description: 'PEI, PAEE e acompanhamento educacional especializado.',
-    accent: 'bg-accent text-accent-foreground',
-  },
-  {
-    name: 'Turmas',
-    href: '/classes',
-    icon: BookOpen,
-    description: 'Organize turmas, estudantes, disciplinas e informações acadêmicas.',
-    accent: 'bg-secondary text-secondary-foreground',
-  },
-  {
-    name: 'Frequências',
-    href: '/attendance',
-    icon: Calendar,
-    description: 'Realize a frequência diária, acompanhe turmas pendentes e consulte registros e relatórios.',
-    accent: 'bg-primary/10 text-primary',
-  },
-  {
-    name: 'Projetos',
-    href: '/events',
-    icon: ClipboardList,
-    description: 'Planeje, acompanhe e registre projetos desenvolvidos pela escola.',
-    accent: 'bg-primary/10 text-primary',
-  },
-  {
-    name: 'Eventos',
-    href: '/school-events',
-    icon: CalendarDays,
-    description: 'Organize eventos, atas, registros e ações da comunidade escolar.',
-    accent: 'bg-accent text-accent-foreground',
-    wide: true,
-  },
-];
+import { Sparkles } from 'lucide-react';
 
 const Dashboard = () => {
   const { userRole } = useAuth();
@@ -75,13 +16,15 @@ const Dashboard = () => {
   const { schoolName, heroUrl, loading: schoolLoading } = useSchoolProfile();
 
   // Permissões: reaproveita exatamente a mesma matriz de rotas/menu.
-  const allowedHrefs = new Set(
-    allNavigation
-      .filter((item) => item.roles.includes(role))
-      .filter((item) => !item.permission || can(item.permission))
-      .map((item) => item.href),
-  );
-  const cards = HIGHLIGHTS.filter((card) => allowedHrefs.has(card.href));
+  const shortcuts: NavItem[] = allNavigation
+    .filter((item) => item.href !== '/dashboard')
+    .filter((item) => item.roles.includes(role))
+    .filter((item) => !item.permission || can(item.permission));
+
+  const groups = NAV_GROUPS.map((group) => ({
+    group,
+    items: shortcuts.filter((item) => item.group === group),
+  })).filter((g) => g.items.length > 0);
 
   const infoLoading = nameLoading || schoolLoading;
   const greeting = (() => {
@@ -97,10 +40,10 @@ const Dashboard = () => {
 
   return (
     <DashboardLayout>
-      <div className="space-y-8">
+      <div className="space-y-6">
         <header
           className={cn(
-            'relative overflow-hidden rounded-2xl border border-border p-5 sm:p-8',
+            'relative overflow-hidden rounded-2xl border border-border p-4 sm:p-5',
             !hasHero && 'bg-gradient-to-br from-primary/10 via-background to-accent/40',
           )}
         >
@@ -121,79 +64,71 @@ const Dashboard = () => {
           <div className={cn('relative', hasHero && 'text-white')}>
             <span
               className={cn(
-                'inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-medium',
+                'inline-flex items-center gap-2 rounded-full px-2.5 py-0.5 text-[11px] font-medium',
                 hasHero
                   ? 'border border-white/40 bg-white/15 text-white backdrop-blur-sm'
                   : 'border border-primary/30 bg-background/70 text-primary',
               )}
             >
-              <Sparkles className="h-3.5 w-3.5" />
+              <Sparkles className="h-3 w-3" />
               EDUNEXUS
             </span>
 
             {infoLoading ? (
               <>
-                <span className="mt-3 block h-6 w-4/5 max-w-xl animate-pulse rounded-md bg-current opacity-15 sm:h-8" />
-                <span className="mt-2 block h-3.5 w-3/5 max-w-md animate-pulse rounded-md bg-current opacity-10" />
+                <span className="mt-2 block h-5 w-4/5 max-w-xl animate-pulse rounded-md bg-current opacity-15 sm:h-6" />
+                <span className="mt-2 block h-3 w-3/5 max-w-md animate-pulse rounded-md bg-current opacity-10" />
               </>
             ) : (
               <>
-                <h1 className="mt-3 max-w-2xl text-balance break-words text-xl font-semibold leading-snug tracking-tight sm:text-2xl lg:text-3xl">
+                <h1 className="mt-2 max-w-2xl text-balance break-words text-base font-semibold leading-snug tracking-tight sm:text-lg lg:text-xl">
                   {greeting}
                 </h1>
                 <p
                   className={cn(
-                    'mt-1.5 max-w-xl text-xs sm:text-sm',
+                    'mt-1 max-w-xl text-xs',
                     hasHero ? 'text-white/85' : 'text-muted-foreground',
                   )}
                 >
-                  Escolha uma área abaixo para começar a gestão pedagógica da escola.
+                  Acesso rápido aos módulos disponíveis para o seu perfil.
                 </p>
               </>
             )}
           </div>
         </header>
 
+        {groups.map(({ group, items }) => (
+          <section key={group} className="space-y-2.5">
+            <h2 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+              {group}
+            </h2>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5">
+              {items.map((item) => (
+                <Link
+                  key={item.href}
+                  to={item.href}
+                  aria-label={`${item.name} — ${item.description}`}
+                  className={cn(
+                    'group flex h-[128px] flex-col items-center justify-center gap-2 rounded-xl border border-border bg-card px-3 py-3 text-center',
+                    'transition-all duration-200 ease-out hover:-translate-y-0.5 hover:border-primary/50 hover:shadow-md',
+                    'active:translate-y-0 active:scale-[0.99]',
+                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
+                  )}
+                >
+                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary transition-transform duration-200 group-hover:scale-110">
+                    <item.icon className="h-6 w-6" />
+                  </span>
+                  <span className="block text-sm font-semibold leading-tight">{item.name}</span>
+                  <span className="line-clamp-2 block text-[11px] leading-tight text-muted-foreground">
+                    {item.description}
+                  </span>
+                </Link>
+              ))}
+            </div>
+          </section>
+        ))}
 
-        <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {cards.map((card) => (
-            <Link
-              key={card.href}
-              to={card.href}
-              aria-label={`${card.name} — ${card.description}`}
-              className={cn(
-                'group relative flex min-h-[190px] flex-col justify-between overflow-hidden rounded-2xl border border-border bg-card p-6',
-                'transition-all duration-300 ease-out hover:-translate-y-1 hover:border-primary/50 hover:shadow-xl',
-                'active:translate-y-0 active:scale-[0.99]',
-                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
-                card.wide && 'lg:col-span-2',
-              )}
-            >
-              <span
-                aria-hidden
-                className="pointer-events-none absolute -right-10 -top-10 h-32 w-32 rounded-full bg-primary/5 opacity-0 transition-opacity duration-300 group-hover:opacity-100"
-              />
-              <span
-                className={cn(
-                  'flex h-16 w-16 items-center justify-center rounded-2xl transition-transform duration-300 group-hover:scale-110 group-hover:-rotate-3',
-                  card.accent,
-                )}
-              >
-                <card.icon className="h-8 w-8" />
-              </span>
-              <span className="mt-5 block">
-                <span className="block text-xl font-semibold leading-tight">{card.name}</span>
-                <span className="mt-1.5 block text-sm text-muted-foreground">{card.description}</span>
-              </span>
-              <span className="mt-4 inline-flex items-center gap-1 text-sm font-medium text-primary">
-                Acessar
-                <ArrowRight className="h-4 w-4 transition-transform duration-300 group-hover:translate-x-1" />
-              </span>
-            </Link>
-          ))}
-        </section>
-
-        {cards.length === 0 && (
+        {shortcuts.length === 0 && (
           <p className="text-sm text-muted-foreground">Nenhum módulo disponível para o seu perfil.</p>
         )}
       </div>
