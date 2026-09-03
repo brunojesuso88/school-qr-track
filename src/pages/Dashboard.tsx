@@ -65,17 +65,32 @@ const Dashboard = () => {
           )}
 
           <div className={cn('relative', hasHero && 'text-white')}>
-            <span
-              className={cn(
-                'inline-flex items-center gap-2 rounded-full px-2.5 py-0.5 text-[11px] font-medium',
-                hasHero
-                  ? 'border border-white/40 bg-white/15 text-white backdrop-blur-sm'
-                  : 'border border-primary/30 bg-background/70 text-primary',
+            <div className="flex flex-wrap items-center gap-2">
+              <span
+                className={cn(
+                  'inline-flex items-center gap-2 rounded-full px-2.5 py-0.5 text-[11px] font-medium',
+                  hasHero
+                    ? 'border border-white/40 bg-white/15 text-white backdrop-blur-sm'
+                    : 'border border-primary/30 bg-background/70 text-primary',
+                )}
+              >
+                <Sparkles className="h-3 w-3" />
+                EDUNEXUS
+              </span>
+              {!prefsLoading && (
+                <span
+                  className={cn(
+                    'inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-medium',
+                    hasHero
+                      ? 'border border-white/30 bg-white/10 text-white/90 backdrop-blur-sm'
+                      : 'border border-border bg-background/70 text-muted-foreground',
+                  )}
+                >
+                  Ano letivo {preferences.academic_year} · {BIMESTER_LABELS[preferences.current_bimester]}
+                </span>
               )}
-            >
-              <Sparkles className="h-3 w-3" />
-              EDUNEXUS
-            </span>
+            </div>
+
 
             {infoLoading ? (
               <>
