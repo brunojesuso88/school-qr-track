@@ -2523,6 +2523,10 @@ export type Database = {
         Args: { _school_id: string; _user_id: string }
         Returns: undefined
       }
+      admin_rename_school: {
+        Args: { _name: string; _school_id: string }
+        Returns: undefined
+      }
       admin_reset_school_permissions: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -2630,6 +2634,14 @@ export type Database = {
           covered: boolean
           date: string
           student_id: string
+        }[]
+      }
+      get_school_branding: {
+        Args: { _school_id: string }
+        Returns: {
+          hero_path: string
+          logo_path: string
+          school_name: string
         }[]
       }
       get_student_basic_by_qr: {
