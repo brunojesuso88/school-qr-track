@@ -14,9 +14,9 @@ import { toast } from 'sonner';
 interface Props {
   event: SchoolEvent;
   onView: () => void;
-  onEdit: () => void;
+  onEdit?: () => void;
   onExport: () => void;
-  onDelete: () => void;
+  onDelete?: () => void;
 }
 
 export default function EventCard({ event, onView, onEdit, onExport, onDelete }: Props) {
@@ -115,10 +115,10 @@ export default function EventCard({ event, onView, onEdit, onExport, onDelete }:
             <div className="flex justify-end items-center gap-1 pt-1 border-t border-border/50">
               <TooltipProvider delayDuration={200}>
                 <IconBtn label="Visualizar" onClick={onView} icon={Eye} />
-                <IconBtn label="Editar" onClick={onEdit} icon={Pencil} />
+                {onEdit && <IconBtn label="Editar" onClick={onEdit} icon={Pencil} />}
                 <IconBtn label="Exportar PDF" onClick={onExport} icon={FileDown} />
                 <IconBtn label="Compartilhar link" onClick={handleShare} icon={Link2} />
-                <IconBtn label="Excluir" onClick={onDelete} icon={Trash2} danger />
+                {onDelete && <IconBtn label="Excluir" onClick={onDelete} icon={Trash2} danger />}
               </TooltipProvider>
             </div>
           </CardContent>

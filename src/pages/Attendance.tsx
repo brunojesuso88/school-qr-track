@@ -20,6 +20,7 @@ import { useCertificateCoverage } from '@/hooks/useCertificateCoverage';
 import { isCovered } from '@/lib/medicalCertificates/status';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import DailyAttendancePanel from '@/components/attendance/DailyAttendancePanel';
+import { usePermissions } from '@/contexts/PermissionsContext';
 
 
 interface Student {
@@ -55,6 +56,8 @@ interface TrendData {
 type TrendPeriod = 'week' | 'month' | '6months' | 'year';
 
 const Attendance = () => {
+  const { can } = usePermissions();
+  const canDeleteAttendance = can('attendance.delete');
   const schoolScopeKey = useSchoolScopeKey();
   const activeSchoolId = useActiveSchoolId();
   const { toast } = useToast();
@@ -459,6 +462,10 @@ const Attendance = () => {
   };
 
   const handleDeleteAttendance = async (studentId: string) => {
+    if (!canDeleteAttendance) {
+      toast({ title: 'Acesso negado', description: 'Seu perfil não tem permissão para excluir frequência.', variant: 'destructive' });
+      return;
+    }
     const start = format(startOfMonth(currentDate), 'yyyy-MM-dd');
     const end = format(endOfMonth(currentDate), 'yyyy-MM-dd');
 
@@ -487,6 +494,10 @@ const Attendance = () => {
   };
 
   const handleDeleteIndividualAttendance = async (attendanceId: string) => {
+    if (!canDeleteAttendance) {
+      toast({ title: 'Acesso negado', description: 'Seu perfil não tem permissão para excluir frequência.', variant: 'destructive' });
+      return;
+    }
     setDeletingIndividual(attendanceId);
     
     const { error } = await supabase
@@ -967,7 +978,7 @@ const Attendance = () => {
                                 variant="ghost" 
                                 size="sm"
                                 className="text-red-600 hover:text-red-700 hover:bg-red-100"
-                                disabled={deletingIndividual === record.id}
+                                disabled={deletingIndividual === record.id || !canDeleteAttendance}
                               >
                                 <Trash2 className="w-4 h-4" />
                               </Button>

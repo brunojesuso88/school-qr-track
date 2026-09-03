@@ -5,6 +5,7 @@ import DashboardLayout from '@/components/DashboardLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Plus, Search, CalendarDays } from 'lucide-react';
+import { usePermissions } from '@/contexts/PermissionsContext';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import SchoolEventCard from '@/components/school-events/SchoolEventCard';
@@ -61,6 +62,7 @@ export default function SchoolEvents() {
     return events.filter(e => `${e.name} ${e.description}`.toLowerCase().includes(q));
   }, [events, search]);
 
+  const { can } = usePermissions();
   const onNew = () => { setActive(null); setFormOpen(true); };
   const onEdit = (e: SchoolEventSimple) => { setActive(e); setFormOpen(true); };
   const onView = (e: SchoolEventSimple) => { setActive(e); setDetailOpen(true); };
@@ -84,7 +86,7 @@ export default function SchoolEvents() {
             </h1>
             <p className="text-muted-foreground mt-1">Registro de eventos da escola com fotos e descrição</p>
           </div>
-          <Button onClick={onNew}><Plus className="w-4 h-4" /> Novo Evento</Button>
+          <Button onClick={onNew} disabled={!can('events.create')}><Plus className="w-4 h-4" /> Novo Evento</Button>
         </header>
 
         <div className="relative">
@@ -107,8 +109,8 @@ export default function SchoolEvents() {
                 key={e.id}
                 event={e}
                 onView={() => onView(e)}
-                onEdit={() => onEdit(e)}
-                onDelete={() => onDelete(e)}
+                onEdit={can('events.edit') ? () => onEdit(e) : undefined}
+                onDelete={can('events.delete') ? () => onDelete(e) : undefined}
               />
             ))}
           </div>

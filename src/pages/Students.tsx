@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { assertActiveSchool } from '@/lib/schools/scope';
+import { usePermissions } from '@/contexts/PermissionsContext';
 import { useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import DashboardLayout from '@/components/DashboardLayout';
@@ -102,9 +103,15 @@ const Students = () => {
   const [searchParams] = useSearchParams();
   const classFromUrl = searchParams.get('class');
   const { userRole, user } = useAuth();
+  const { can } = usePermissions();
   const canViewGuardianPhone = userRole === 'admin' || userRole === 'direction';
-  // Professor não pode excluir alunos (também bloqueado por RLS no backend)
-  const canDeleteStudents = userRole === 'admin' || userRole === 'direction';
+  // Permissões configuráveis por escola (também aplicadas por RLS no backend)
+  const canDeleteStudents = can('students.delete');
+  const canCreateStudents = can('students.create');
+  const canEditStudents = can('students.edit');
+  const canCreateOccurrences = can('occurrences.create');
+  const canDeleteOccurrences = can('occurrences.delete');
+
   
   const [students, setStudents] = useState<Student[]>([]);
   const [classes, setClasses] = useState<ClassItem[]>([]);
@@ -614,6 +621,10 @@ const Students = () => {
   };
 
   const handleDeleteOccurrence = async (id: string) => {
+    if (!canDeleteOccurrences) {
+      toast.error('Acesso negado: seu perfil não tem permissão para excluir ocorrências.');
+      return;
+    }
     if (!confirm('Tem certeza que deseja excluir esta ocorrência?')) return;
 
     try {
@@ -658,7 +669,7 @@ const Students = () => {
 
   const handleDelete = async (id: string) => {
     if (!canDeleteStudents) {
-      toast.error('Acesso negado: apenas administração e direção podem excluir alunos.');
+      toast.error('Acesso negado: seu perfil não tem permissão para excluir alunos.');
       return;
     }
     if (!confirm('Tem certeza que deseja excluir este aluno?')) return;
@@ -855,7 +866,7 @@ const Students = () => {
             }
           }}>
             <DialogTrigger asChild>
-              <Button>
+              <Button disabled={!canCreateStudents && !editingStudent}>
                 <Plus className="w-4 h-4 mr-2" />
                 Adicionar Aluno
               </Button>
@@ -1323,9 +1334,11 @@ const Students = () => {
                     >
                       <FileText className="w-3 h-3" />
                     </Button>
+                    {canEditStudents && (
                     <Button variant="ghost" size="sm" onClick={() => handleEdit(student)}>
                       <Edit2 className="w-3 h-3" />
                     </Button>
+                    )}
                     {canDeleteStudents && (
                       <Button variant="ghost" size="sm" onClick={() => handleDelete(student.id)}>
                         <Trash2 className="w-3 h-3 text-destructive" />
@@ -1395,7 +1408,9 @@ const Students = () => {
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 mt-4">
+              {canCreateOccurrences && (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+
                 <Button
                   onClick={() => {
                     resetOccurrenceForm();
@@ -1425,6 +1440,8 @@ const Students = () => {
                   Conselho de Classe
                 </Button>
               </div>
+              )}
+
 
               {/* Conselho de Classe — separado das ocorrências gerais */}
               <div className="space-y-2">
@@ -1493,13 +1510,15 @@ const Students = () => {
                                 </p>
                               )}
                             </div>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleDeleteOccurrence(occurrence.id)}
-                            >
-                              <Trash2 className="w-3 h-3 text-destructive" />
-                            </Button>
+                            {canDeleteOccurrences && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleDeleteOccurrence(occurrence.id)}
+                              >
+                                <Trash2 className="w-3 h-3 text-destructive" />
+                              </Button>
+                            )}
                           </div>
                         </CardContent>
                       </Card>
