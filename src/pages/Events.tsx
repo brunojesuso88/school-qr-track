@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Plus, Search, ClipboardList } from 'lucide-react';
+import { usePermissions } from '@/contexts/PermissionsContext';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import EventCard from '@/components/events/EventCard';
@@ -62,6 +63,7 @@ export default function Events() {
     });
   }, [events, search, statusFilter]);
 
+  const { can } = usePermissions();
   const onNew = () => { setActive(null); setFormOpen(true); };
   const onEdit = (e: SchoolEvent) => { setActive(e); setFormOpen(true); };
   const onView = (e: SchoolEvent) => { setActive(e); setDetailOpen(true); };
@@ -144,7 +146,7 @@ export default function Events() {
             <h1 className="text-3xl font-bold flex items-center gap-2"><ClipboardList className="w-7 h-7 text-primary" /> Projetos</h1>
             <p className="text-muted-foreground mt-1">Registro inteligente de projetos e ações do plano escolar</p>
           </div>
-          <Button onClick={onNew}><Plus className="w-4 h-4" /> Novo Projeto</Button>
+          <Button onClick={onNew} disabled={!can('projects.create')}><Plus className="w-4 h-4" /> Novo Projeto</Button>
         </header>
 
         <EventMetrics events={events} />
@@ -175,7 +177,7 @@ export default function Events() {
           <div className="space-y-4">
             {filtered.map(e => (
               <EventCard key={e.id} event={e}
-                onView={() => onView(e)} onEdit={() => onEdit(e)} onExport={() => onExport(e)} onDelete={() => onDelete(e)} />
+                onView={() => onView(e)} onEdit={can('projects.edit') ? () => onEdit(e) : undefined} onExport={() => onExport(e)} onDelete={can('projects.delete') ? () => onDelete(e) : undefined} />
             ))}
           </div>
         )}
