@@ -1,112 +1,69 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useActiveSchoolId } from '@/contexts/SchoolContext';
-import { assertActiveSchool, scopeToSchool } from '@/lib/schools/scope';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { assertActiveSchool } from '@/lib/schools/scope';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
-import { Clock, Loader2, Check, Volume2 } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { CalendarDays, Check, ListFilter, Loader2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { useSchoolPreferences } from '@/hooks/useSchoolPreferences';
+import {
+  BIMESTER_LABELS,
+  isValidAcademicYear,
+  MAX_ACADEMIC_YEAR,
+  MIN_ACADEMIC_YEAR,
+  STUDENT_SORT_LABELS,
+  STUDENT_SORT_OPTIONS,
+  defaultSchoolPreferences,
+  type SchoolPreferences,
+} from '@/lib/settings/schoolPreferences';
 
-interface CutoffTimes {
-  morning: string;
-  afternoon: string;
-  evening: string;
-}
-
+/**
+ * Preferências gerais da escola ativa (por `school_id`, nunca globais).
+ * Horários limite por turno e sons de notificação não são mais expostos aqui;
+ * as chaves legadas (`cutoff_*`, `realtime_sound_enabled`) permanecem no banco.
+ */
 const GeneralSettings = () => {
   const activeSchoolId = useActiveSchoolId();
-  const [cutoffTimes, setCutoffTimes] = useState<CutoffTimes>({
-    morning: '08:00',
-    afternoon: '14:00',
-    evening: '20:00'
-  });
-  const [soundEnabled, setSoundEnabled] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const { preferences, loading, refetch } = useSchoolPreferences();
+  const [form, setForm] = useState<SchoolPreferences>(defaultSchoolPreferences);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    fetchSettings();
-  }, [activeSchoolId]);
-
-  const fetchSettings = async () => {
-    if (!activeSchoolId) {
-      setLoading(false);
-      return;
-    }
-    try {
-      const { data, error } = await scopeToSchool(
-        supabase
-          .from('settings')
-          .select('key, value')
-          .in('key', ['cutoff_morning', 'cutoff_afternoon', 'cutoff_evening', 'realtime_sound_enabled']),
-        activeSchoolId,
-      );
-
-      if (error) throw error;
-
-      if (data) {
-        const times = { ...cutoffTimes };
-        data.forEach(setting => {
-          if (setting.key === 'cutoff_morning') times.morning = setting.value as string;
-          if (setting.key === 'cutoff_afternoon') times.afternoon = setting.value as string;
-          if (setting.key === 'cutoff_evening') times.evening = setting.value as string;
-          if (setting.key === 'realtime_sound_enabled') {
-            setSoundEnabled(setting.value === true || setting.value === 'true');
-          }
-        });
-        setCutoffTimes(times);
-      }
-    } catch (error) {
-      console.error('Error fetching settings:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const saveSetting = async (key: string, value: string | boolean) => {
-    const { error } = await supabase
-      .from('settings')
-      .upsert(
-        {
-          school_id: assertActiveSchool(activeSchoolId),
-          key,
-          value: typeof value === 'string' ? JSON.stringify(value) : value,
-        },
-        { onConflict: 'school_id,key' },
-      );
-    
-    if (error) throw error;
-  };
+    setForm(preferences);
+  }, [preferences, activeSchoolId]);
 
   const handleSave = async () => {
+    if (!isValidAcademicYear(Number(form.academic_year))) {
+      toast.error(`Informe um ano letivo entre ${MIN_ACADEMIC_YEAR} e ${MAX_ACADEMIC_YEAR}.`);
+      return;
+    }
     setSaving(true);
     try {
-      await Promise.all([
-        saveSetting('cutoff_morning', cutoffTimes.morning),
-        saveSetting('cutoff_afternoon', cutoffTimes.afternoon),
-        saveSetting('cutoff_evening', cutoffTimes.evening)
-      ]);
+      const schoolId = assertActiveSchool(activeSchoolId);
+      const rows = [
+        { key: 'academic_year', value: Number(form.academic_year) },
+        { key: 'current_bimester', value: form.current_bimester },
+        { key: 'show_inactive_students', value: form.show_inactive_students },
+        { key: 'default_student_sort', value: form.default_student_sort },
+      ].map((r) => ({ school_id: schoolId, key: r.key, value: r.value as never }));
+
+      const { error } = await supabase
+        .from('settings')
+        .upsert(rows, { onConflict: 'school_id,key' });
+      if (error) throw error;
+
+      await refetch();
       toast.success('Configurações salvas com sucesso!');
     } catch (error) {
-      console.error('Error saving settings:', error);
+      console.error('Error saving school preferences:', error);
       toast.error('Erro ao salvar configurações');
     } finally {
       setSaving(false);
-    }
-  };
-
-  const handleSoundToggle = async (checked: boolean) => {
-    setSoundEnabled(checked);
-    try {
-      await saveSetting('realtime_sound_enabled', checked);
-      toast.success(checked ? 'Som de notificação ativado' : 'Som de notificação desativado');
-    } catch (error) {
-      console.error('Error saving sound setting:', error);
-      toast.error('Erro ao salvar configuração');
-      setSoundEnabled(!checked); // Revert on error
     }
   };
 
@@ -120,93 +77,109 @@ const GeneralSettings = () => {
 
   return (
     <div className="space-y-6">
+      <div>
+        <h2 className="text-lg font-semibold">Preferências gerais da escola</h2>
+        <p className="text-sm text-muted-foreground">
+          Contexto do período letivo e padrões de exibição, aplicados apenas à escola ativa.
+        </p>
+      </div>
+
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg flex items-center gap-2">
-            <Clock className="h-5 w-5 text-primary" />
-            Horário Limite por Turno
+          <CardTitle className="flex items-center gap-2 text-lg">
+            <CalendarDays className="h-5 w-5 text-primary" />
+            Período letivo
           </CardTitle>
+          <CardDescription>
+            Informação institucional exibida no painel inicial. Não altera notas, IRA nem frequência.
+          </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <p className="text-sm text-muted-foreground">
-            Defina o horário máximo para entrada dos alunos em cada turno. 
-            Após este horário, a presença será registrada como atraso.
-          </p>
-          
-          <div className="grid gap-4 sm:grid-cols-3">
-            <div className="space-y-2">
-              <Label htmlFor="morning">Turno Manhã</Label>
-              <Input
-                id="morning"
-                type="time"
-                value={cutoffTimes.morning}
-                onChange={(e) => setCutoffTimes(prev => ({ ...prev, morning: e.target.value }))}
-              />
-              <p className="text-xs text-muted-foreground">Padrão: 08:00</p>
-            </div>
-            
-            <div className="space-y-2">
-              <Label htmlFor="afternoon">Turno Tarde</Label>
-              <Input
-                id="afternoon"
-                type="time"
-                value={cutoffTimes.afternoon}
-                onChange={(e) => setCutoffTimes(prev => ({ ...prev, afternoon: e.target.value }))}
-              />
-              <p className="text-xs text-muted-foreground">Padrão: 14:00</p>
-            </div>
-            
-            <div className="space-y-2">
-              <Label htmlFor="evening">Turno Noite</Label>
-              <Input
-                id="evening"
-                type="time"
-                value={cutoffTimes.evening}
-                onChange={(e) => setCutoffTimes(prev => ({ ...prev, evening: e.target.value }))}
-              />
-              <p className="text-xs text-muted-foreground">Padrão: 20:00</p>
-            </div>
+        <CardContent className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor="academic-year">Ano letivo atual</Label>
+            <Input
+              id="academic-year"
+              type="number"
+              inputMode="numeric"
+              min={MIN_ACADEMIC_YEAR}
+              max={MAX_ACADEMIC_YEAR}
+              value={form.academic_year}
+              onChange={(e) => setForm((p) => ({ ...p, academic_year: Number(e.target.value) }))}
+            />
+            <p className="text-xs text-muted-foreground">
+              Entre {MIN_ACADEMIC_YEAR} e {MAX_ACADEMIC_YEAR}.
+            </p>
           </div>
-          
-          <Button onClick={handleSave} disabled={saving} className="mt-4">
-            {saving ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Salvando...
-              </>
-            ) : (
-              <>
-                <Check className="mr-2 h-4 w-4" />
-                Salvar Horários
-              </>
-            )}
-          </Button>
+
+          <div className="space-y-2">
+            <Label htmlFor="current-bimester">Bimestre atual</Label>
+            <Select
+              value={String(form.current_bimester)}
+              onValueChange={(v) =>
+                setForm((p) => ({ ...p, current_bimester: Number(v) as SchoolPreferences['current_bimester'] }))
+              }
+            >
+              <SelectTrigger id="current-bimester"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {([1, 2, 3, 4] as const).map((b) => (
+                  <SelectItem key={b} value={String(b)}>{BIMESTER_LABELS[b]}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">Contexto operacional da escola.</p>
+          </div>
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg flex items-center gap-2">
-            <Volume2 className="h-5 w-5 text-primary" />
-            Sons de Notificação
+          <CardTitle className="flex items-center gap-2 text-lg">
+            <ListFilter className="h-5 w-5 text-primary" />
+            Exibição e listagens
           </CardTitle>
+          <CardDescription>Padrões iniciais da tela Alunos — o usuário ainda pode trocar nos filtros.</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center justify-between">
+        <CardContent className="space-y-6">
+          <div className="flex items-center justify-between gap-4">
             <div className="space-y-0.5">
-              <Label htmlFor="sound-toggle">Som ao detectar novo registro</Label>
+              <Label htmlFor="show-inactive">Exibir alunos desistentes por padrão</Label>
               <p className="text-sm text-muted-foreground">
-                Tocar um som sutil quando outro funcionário registrar presença via Realtime
+                Quando desativado, a tela Alunos abre mostrando apenas alunos ativos.
               </p>
             </div>
-            <Switch 
-              id="sound-toggle"
-              checked={soundEnabled}
-              onCheckedChange={handleSoundToggle}
+            <Switch
+              id="show-inactive"
+              checked={form.show_inactive_students}
+              onCheckedChange={(checked) => setForm((p) => ({ ...p, show_inactive_students: checked }))}
             />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="default-sort">Ordenação padrão da lista de alunos</Label>
+            <Select
+              value={form.default_student_sort}
+              onValueChange={(v) =>
+                setForm((p) => ({ ...p, default_student_sort: v as SchoolPreferences['default_student_sort'] }))
+              }
+            >
+              <SelectTrigger id="default-sort" className="sm:w-72"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {STUDENT_SORT_OPTIONS.map((o) => (
+                  <SelectItem key={o} value={o}>{STUDENT_SORT_LABELS[o]}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         </CardContent>
       </Card>
+
+      <Button onClick={handleSave} disabled={saving || !activeSchoolId}>
+        {saving ? (
+          <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Salvando...</>
+        ) : (
+          <><Check className="mr-2 h-4 w-4" />Salvar configurações</>
+        )}
+      </Button>
     </div>
   );
 };
