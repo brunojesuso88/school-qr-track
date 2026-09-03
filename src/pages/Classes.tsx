@@ -17,6 +17,7 @@ import { classSeriesLabel, parseSeriesValue } from '@/lib/series';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { GradesImportDialog } from '@/components/grades/GradesImportDialog';
+import { usePermissions } from '@/contexts/PermissionsContext';
 import DailyClassAttendanceDialog from '@/components/attendance/DailyClassAttendanceDialog';
 import { localDateKey } from '@/lib/attendance/dailyStatus';
 import ClassSummaryDialog from '@/components/ClassSummaryDialog';
@@ -70,10 +71,13 @@ const Classes = () => {
   const activeSchoolId = useActiveSchoolId();
   const navigate = useNavigate();
   const { userRole } = useAuth();
+  const { can } = usePermissions();
   const canViewGuardianPhone = userRole === 'admin' || userRole === 'direction';
-  const canManageGrades = userRole === 'admin' || userRole === 'direction';
-  // Professor não pode excluir turmas (também bloqueado por RLS no backend)
-  const canDeleteClasses = userRole === 'admin' || userRole === 'direction';
+  // Permissões configuráveis por escola (também aplicadas por RLS no backend)
+  const canManageGrades = can('grades.manage') && can('classes.import_report_card');
+  const canDeleteClasses = can('classes.delete');
+  const canCreateClasses = can('classes.create');
+  const canEditClasses = can('classes.edit');
   const [classes, setClasses] = useState<ClassItem[]>([]);
   const [studentCounts, setStudentCounts] = useState<Record<string, number>>({});
   const [classesWithAttendance, setClassesWithAttendance] = useState<Set<string>>(new Set());
@@ -262,7 +266,7 @@ const Classes = () => {
 
   const handleDelete = async (id: string) => {
     if (!canDeleteClasses) {
-      toast.error('Acesso negado: apenas administração e direção podem excluir turmas.');
+      toast.error('Acesso negado: seu perfil não tem permissão para excluir turmas.');
       return;
     }
     if (!confirm('Tem certeza que deseja excluir esta turma?')) return;
@@ -376,7 +380,7 @@ const Classes = () => {
             }
           }}>
             <DialogTrigger asChild>
-              <Button>
+              <Button disabled={!canCreateClasses && !editingClass}>
                 <Plus className="w-4 h-4 mr-2" />
                 Nova Turma
               </Button>
@@ -618,10 +622,12 @@ const Classes = () => {
                   )}
 
                   <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
-                    <Button variant="outline" size="sm" className="flex-1" onClick={() => handleEdit(classItem)}>
-                      <Edit2 className="w-3 h-3 mr-1" />
-                      Editar
-                    </Button>
+                    {canEditClasses && (
+                      <Button variant="outline" size="sm" className="flex-1" onClick={() => handleEdit(classItem)}>
+                        <Edit2 className="w-3 h-3 mr-1" />
+                        Editar
+                      </Button>
+                    )}
                     {canDeleteClasses && (
                       <Button variant="ghost" size="sm" onClick={() => handleDelete(classItem.id)}>
                         <Trash2 className="w-3 h-3 text-destructive" />
