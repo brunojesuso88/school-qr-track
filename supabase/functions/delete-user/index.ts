@@ -88,10 +88,8 @@ Deno.serve(async (req) => {
       )
     }
 
-    // Create admin client with service role key
-    const adminClient = createClient(supabaseUrl, supabaseServiceKey, {
-      auth: { autoRefreshToken: false, persistSession: false }
-    })
+    // adminClient (service role) já criado acima
+
 
     // Delete user from auth (this will cascade to profiles and user_roles)
     const { error: deleteError } = await adminClient.auth.admin.deleteUser(userId)
