@@ -1,25 +1,45 @@
+import { useState } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import { usePermissions } from '@/contexts/PermissionsContext';
+import type { PermissionKey } from '@/lib/permissions/catalog';
+import { Loader2 } from 'lucide-react';
 
 interface AdminRouteProps {
   children: React.ReactNode;
+  /** Permissão escolar exigida para abrir a rota (bloqueia URL direta). */
+  permission?: PermissionKey;
 }
 
-const AdminRoute = ({ children }: AdminRouteProps) => {
-  const { user, loading, isDashboardUser, isStaffOnly, hasSchoolAccess, awaitingApproval, signOut } = useAuth();
-  const location = useLocation();
+const Dots = () => (
+  <div className="min-h-screen flex items-center justify-center bg-background">
+    <div className="flex items-center gap-2">
+      <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
+      <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
+      <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
+    </div>
+  </div>
+);
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="flex items-center gap-2">
-          <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
-          <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
-          <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
-        </div>
-      </div>
-    );
-  }
+const AdminRoute = ({ children, permission }: AdminRouteProps) => {
+  const {
+    user, loading, isDashboardUser, isStaffOnly, hasSchoolAccess, awaitingApproval,
+    refreshAccess, signOut,
+  } = useAuth();
+  const { can, loading: permissionsLoading } = usePermissions();
+  const location = useLocation();
+  const [rechecking, setRechecking] = useState(false);
+
+  const recheck = async () => {
+    setRechecking(true);
+    try {
+      await refreshAccess();
+    } finally {
+      setRechecking(false);
+    }
+  };
+
+  if (loading) return <Dots />;
 
   if (!user) {
     return <Navigate to="/auth" replace state={{ from: location }} />;
@@ -38,12 +58,22 @@ const AdminRoute = ({ children }: AdminRouteProps) => {
               ? 'Seu cadastro foi recebido e está aguardando aprovação da gestão da escola.'
               : 'Sua conta ainda não está vinculada a nenhuma escola. Solicite à gestão o link exclusivo de cadastro da sua escola.'}
           </p>
-          <button
-            className="text-sm text-primary underline"
-            onClick={() => { void signOut(); }}
-          >
-            Sair
-          </button>
+          <div className="flex flex-col items-center gap-2">
+            <button
+              className="inline-flex items-center gap-2 text-sm text-primary underline"
+              disabled={rechecking}
+              onClick={() => { void recheck(); }}
+            >
+              {rechecking && <Loader2 className="h-3 w-3 animate-spin" />}
+              Verificar acesso novamente
+            </button>
+            <button
+              className="text-sm text-muted-foreground underline"
+              onClick={() => { void signOut(); }}
+            >
+              Sair
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -57,6 +87,11 @@ const AdminRoute = ({ children }: AdminRouteProps) => {
   // Apenas usuários do dashboard (admin, direção, professor) podem acessar
   if (!isDashboardUser) {
     return <Navigate to="/auth" replace state={{ from: location }} />;
+  }
+
+  if (permission) {
+    if (permissionsLoading) return <Dots />;
+    if (!can(permission)) return <Navigate to="/dashboard" replace />;
   }
 
   return <>{children}</>;
