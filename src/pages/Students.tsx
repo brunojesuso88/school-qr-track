@@ -33,6 +33,8 @@ import { StudentMedalsStrip } from '@/components/students/AcademicMedal';
 import type { StudentMedal } from '@/lib/medals/compute';
 
 import { classOptionsForShift, hasMedals, isClassValidForShift } from '@/lib/students/filters';
+import { useSchoolPreferences } from '@/hooks/useSchoolPreferences';
+import { initialStudentStatusFilter, type StudentStatusFilter } from '@/lib/settings/schoolPreferences';
 import {
   CLASS_COUNCIL_TYPE,
   validateCouncilDraft,
@@ -136,7 +138,8 @@ const Students = () => {
   const [occurrenceMap, setOccurrenceMap] = useState<Map<string, string>>(new Map());
   const [councilMap, setCouncilMap] = useState<Map<string, string>>(new Map());
   const [absenceCountMap, setAbsenceCountMap] = useState<Map<string, number>>(new Map());
-  const [sortBy, setSortBy] = useState<'none' | 'absences-desc' | 'absences-asc' | 'ira-desc' | 'ira-asc'>('none');
+  const [sortBy, setSortBy] = useState<SortOption>('none');
+  const [filterStatus, setFilterStatus] = useState<StudentStatusFilter>('all');
   const [recomputingIra, setRecomputingIra] = useState(false);
 
 
@@ -748,8 +751,14 @@ const Students = () => {
     // "Alunos com ocorrência" ignora class_council (contabilizado no filtro próprio)
     const matchesOccurrence = !filterOccurrences || occurrenceMap.has(student.id);
     const matchesCouncil = !filterCouncil || councilMap.has(student.id);
-    return matchesSearch && matchesClass && matchesShift && matchesOccurrence && matchesCouncil;
+    // Preferência da escola define o valor inicial; o usuário pode trocar no filtro.
+    const studentStatus = student.status || 'active';
+    const matchesStatus = filterStatus === 'all' || studentStatus === filterStatus;
+    return matchesSearch && matchesClass && matchesShift && matchesOccurrence && matchesCouncil && matchesStatus;
   }).sort((a, b) => {
+    if (sortBy === 'name-asc') {
+      return a.full_name.localeCompare(b.full_name, 'pt-BR', { sensitivity: 'base' });
+    }
     if (sortBy === 'absences-desc' || sortBy === 'absences-asc') {
       const ca = absenceCountMap.get(a.id) || 0;
       const cb = absenceCountMap.get(b.id) || 0;
@@ -1171,12 +1180,23 @@ const Students = () => {
                   <SelectItem value="evening">Noite</SelectItem>
                 </SelectContent>
               </Select>
-              <Select value={sortBy} onValueChange={(v) => setSortBy(v as 'none' | 'absences-desc' | 'absences-asc' | 'ira-desc' | 'ira-asc')}>
+              <Select value={filterStatus} onValueChange={(v) => setFilterStatus(v as StudentStatusFilter)}>
+                <SelectTrigger className="w-full sm:w-40">
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos os status</SelectItem>
+                  <SelectItem value="active">Ativos</SelectItem>
+                  <SelectItem value="inactive">Desistentes</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={sortBy} onValueChange={(v) => setSortBy(v as SortOption)}>
                 <SelectTrigger className="w-full sm:w-48">
                   <SelectValue placeholder="Ordenar por" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">Sem ordenação</SelectItem>
+                  <SelectItem value="name-asc">Nome A–Z</SelectItem>
                   <SelectItem value="absences-desc">Mais faltas primeiro</SelectItem>
                   <SelectItem value="absences-asc">Menos faltas primeiro</SelectItem>
                   <SelectItem value="ira-desc">Maior IRA primeiro</SelectItem>
