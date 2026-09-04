@@ -33,7 +33,7 @@ import {
 import { parseGradePageLocal } from '@/lib/gradePageLocal/parseGradePageLocal';
 import { reconcileLocalWithAi } from '@/lib/gradePageLocal/reconcile';
 import {
-  manualConfirmationBlockers, rowsForManualLocalConfirmation, shouldValidateWithAi,
+  manualConfirmationBlockers, rowsForManualLocalConfirmation,
 } from './gradesManualConfirm';
 import { LocalContextStudent, LocalExpectedSubject } from '@/lib/gradePageLocal/types';
 import { CatalogSubject, buildEffectiveSubjectMatrix } from '@/lib/gradePageLocal/effectiveMatrix';
@@ -55,6 +55,23 @@ import {
   CONFLICT_LABELS, DetectedStudent, FieldDecision, RegistrationDecision,
   defaultRegistrationDecision, formatDate,
 } from './gradesConflicts';
+import {
+  assertPersistedStudent, PersistedStudentMemory, recallPersistedStudent, rememberPersistedStudent,
+  StudentScopeRow,
+} from '@/lib/gradeImport/persistedStudent';
+import { describeSaveError } from '@/lib/gradeImport/saveError';
+import { decideAiFallback, readingOriginLabel, readingUsedAi } from '@/lib/gradeImport/aiPolicy';
+import { contextCacheKey, ImportContextCache } from '@/lib/gradeImport/contextCache';
+import { formatReadingMetrics, resolveWeeklyClassesForUpsert, summarizeReadingMetrics } from '@/lib/gradeImport/readingMetrics';
+
+/** Contexto estático (matriz, catálogo, mapeamento) em cache por escola+turma+matriz durante a sessão do navegador. */
+interface StaticImportContext {
+  expected: { id: string; name: string; weekly_classes: number }[];
+  matrixItems: Awaited<ReturnType<typeof fetchCurriculumMatrix>>;
+  catalog: CatalogSubject[];
+  series: string | null;
+}
+const staticContextCache = new ImportContextCache<StaticImportContext>();
 
 interface ParsedSubject {
   normalized_name: string;
@@ -282,6 +299,10 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
   useEffect(() => { sessionRef.current = session; }, [session]);
   /** Páginas ignoradas por não conterem nenhuma disciplina (diagnóstico não bloqueante). */
   const [skippedPages, setSkippedPages] = useState<number[]>([]);
+  /** Páginas em que a IA foi efetivamente chamada nesta sessão (métrica local). */
+  const [aiPages, setAiPages] = useState(0);
+  /** Identidade do PDF (código/nome) → student_id GRAVADO: páginas seguintes do mesmo aluno reutilizam o ID. */
+  const persistedStudentsRef = useRef<PersistedStudentMemory>(new Map());
 
   const reset = useCallback(() => {
     setStep('select');
@@ -303,6 +324,8 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
     setOtherClassMatch(null);
     setMovingStudent(false);
     setSavedTotal(0);
+    setAiPages(0);
+    persistedStudentsRef.current = new Map();
     setAutoAccept(false);
     setAutoRules(DEFAULT_AUTO_ACCEPT_RULES);
     setAutoApprovedPage(null);
@@ -390,46 +413,58 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
     setContextBlock(null);
     setClassStudents(students.map((s) => ({ id: s.id, full_name: s.full_name })));
 
-    let expected: { id: string; name: string; weekly_classes: number }[] = [];
-    if (classItem.mapping_class_id) {
-      const { data: subjData } = await supabase
-        .from('mapping_class_subjects')
-        .select('id, subject_name, weekly_classes')
-        .eq('school_id', assertActiveSchool(activeSchoolId))
-        .eq('class_id', classItem.mapping_class_id);
-      expected = (subjData || []).map((s: { id: string; subject_name: string; weekly_classes: number }) => ({
-        id: s.id, name: s.subject_name, weekly_classes: s.weekly_classes,
-      }));
-    }
-    setExpectedSubjects(expected);
     localStudentsRef.current = students.map((s) => ({
       id: s.id, full_name: s.full_name, student_id: s.student_id,
       school_code: s.school_code, birth_date: s.birth_date,
       mother_name: s.mother_name, father_name: s.father_name,
     }));
-    // Matriz efetiva de âncoras: mapeamento da turma + disciplinas já importadas + catálogo da série.
-    const [{ data: gradeSubj }, { data: classRow }] = await Promise.all([
-      supabase.from('grade_subjects').select('name, weekly_classes').eq('school_id', assertActiveSchool(activeSchoolId)).eq('class_id', classItem.id).eq('legacy_excluded', false),
-      supabase.from('classes').select('series').eq('school_id', assertActiveSchool(activeSchoolId)).eq('id', classItem.id).maybeSingle(),
-    ]);
-    const series = (classRow as { series?: string | null } | null)?.series ?? null;
-    const { data: catalog } = await supabase
-      .from('mapping_global_subjects')
-      .select('name, abbreviation, aliases, series, default_weekly_classes')
-      .eq('school_id', assertActiveSchool(activeSchoolId));
-    // Matriz curricular OFICIAL da série tem prioridade máxima como âncora.
-    const parsedSeries = parseSeriesValue(series);
-    if (!parsedSeries) {
-      throw new Error('Defina a série da turma e aplique a matriz curricular oficial antes de importar o boletim.');
+
+    // Contexto ESTÁTICO (mapeamento, matriz oficial, catálogo) — cache em memória por
+    // escola + turma + matriz. Alunos e disciplinas já importadas são sempre relidos.
+    const schoolId = assertActiveSchool(activeSchoolId);
+    const classMatrix = await resolveClassMatrix(classItem.id, schoolId);
+    const cacheKey = contextCacheKey({ schoolId, classId: classItem.id, matrixId: classMatrix.id });
+    let staticCtx = staticContextCache.get(cacheKey);
+    if (!staticCtx) {
+      let expected: { id: string; name: string; weekly_classes: number }[] = [];
+      if (classItem.mapping_class_id) {
+        const { data: subjData } = await supabase
+          .from('mapping_class_subjects')
+          .select('id, subject_name, weekly_classes')
+          .eq('school_id', schoolId)
+          .eq('class_id', classItem.mapping_class_id);
+        expected = (subjData || []).map((s: { id: string; subject_name: string; weekly_classes: number }) => ({
+          id: s.id, name: s.subject_name, weekly_classes: s.weekly_classes,
+        }));
+      }
+      const [{ data: classRow }, { data: catalog }] = await Promise.all([
+        supabase.from('classes').select('series').eq('school_id', schoolId).eq('id', classItem.id).maybeSingle(),
+        supabase.from('mapping_global_subjects')
+          .select('name, abbreviation, aliases, series, default_weekly_classes')
+          .eq('school_id', schoolId),
+      ]);
+      const series = (classRow as { series?: string | null } | null)?.series ?? null;
+      // Matriz curricular OFICIAL da série tem prioridade máxima como âncora.
+      const parsedSeries = parseSeriesValue(series);
+      if (!parsedSeries) {
+        throw new Error('Defina a série da turma e aplique a matriz curricular oficial antes de importar o boletim.');
+      }
+      const matrixItems = await fetchCurriculumMatrix(parsedSeries, activeSchoolId, classMatrix.id).catch(() => []);
+      if (matrixItems.length === 0) {
+        throw new Error(
+          'A matriz curricular vinculada a esta turma não tem disciplinas para esta série. ' +
+          'Cadastre os componentes em Disciplinas — Matriz Curricular (ou vincule outra matriz) e sincronize a turma antes de importar o boletim.',
+        );
+      }
+      staticCtx = { expected, matrixItems, catalog: (catalog || []) as CatalogSubject[], series };
+      staticContextCache.set(cacheKey, staticCtx);
     }
-    const classMatrix = await resolveClassMatrix(classItem.id, assertActiveSchool(activeSchoolId));
-    const matrixItems = await fetchCurriculumMatrix(parsedSeries, activeSchoolId, classMatrix.id).catch(() => []);
-    if (matrixItems.length === 0) {
-      throw new Error(
-        'A matriz curricular vinculada a esta turma não tem disciplinas para esta série. ' +
-        'Cadastre os componentes em Disciplinas — Matriz Curricular (ou vincule outra matriz) e sincronize a turma antes de importar o boletim.',
-      );
-    }
+    const { expected, matrixItems, catalog, series } = staticCtx;
+    setExpectedSubjects(expected);
+    // Disciplinas já importadas mudam a cada página confirmada: nunca vão para o cache.
+    const { data: gradeSubj } = await supabase
+      .from('grade_subjects').select('name, weekly_classes')
+      .eq('school_id', schoolId).eq('class_id', classItem.id).eq('legacy_excluded', false);
     matrixIraRef.current = {
       includeByKey: new Map<string, boolean>(
         matrixItems.map((m): [string, boolean] => [
@@ -442,7 +477,7 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
       matrix: official,
       mapping: expected.map((s) => ({ name: s.name, weekly_classes: s.weekly_classes })),
       imported: (gradeSubj || []) as { name: string; weekly_classes: number | null }[],
-      catalog: (catalog || []) as CatalogSubject[],
+      catalog,
       series,
     });
     return { students, expected, className };
@@ -556,7 +591,25 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
     setRows((p.rows || []).map((r) => ({ ...r, flags: r.flags || [], source: r.source ?? 'import' })));
     setEditing(false);
     setConflictStrategy('keep');
-    const detected = p.detected;
+    let detected = p.detected;
+    // Boletim multipágina: página seguinte do MESMO aluno (mesmo código/nome) sem match
+    // automático reutiliza o ID já gravado nesta sessão — nunca um rematch textual.
+    if (!detected.student_id) {
+      const recalled = recallPersistedStudent(persistedStudentsRef.current, detected);
+      const known = recalled ? localStudentsRef.current.find((s) => s.id === recalled) : undefined;
+      if (recalled && known) {
+        detected = {
+          ...detected,
+          student_id: recalled,
+          matched_name: known.full_name,
+          status: 'matched',
+          conflicts: detected.conflicts.filter((c) => c !== 'not_in_class' && c !== 'ambiguous_match'),
+        };
+        p = { ...p, detected, notes: [...(p.notes || []), 'Aluno reconhecido pela página anterior deste boletim.'] };
+        setPreview(p);
+      }
+    }
+    // A sugestão automática apenas PRÉ-SELECIONA o campo da UI; a gravação usa só a seleção.
     setPageAction(detected.student_id ? 'link' : null);
     setLinkStudentId(detected.student_id ?? null);
     // Professor/funcionário não altera Código, nascimento e filiação: mantém sempre o cadastro.
@@ -654,12 +707,14 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
       // disciplina são puladas até chegar na próxima página com conteúdo real.
       for (;;) {
       let local: Awaited<ReturnType<typeof readPageLocally>> = null;
+      let localError = false;
       if (readingMode !== 'ai_only') {
         try {
           local = await readPageLocally(page);
         } catch (e) {
           console.error('Leitura local falhou, seguindo com IA:', e);
           local = null;
+          localError = true;
         }
       }
       if (cancelledRef.current) return;
@@ -672,11 +727,13 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
         continue;
       }
 
-      // Caminho 100% local: leitura AUTORITATIVA (sem risco real) dispensa a IA.
-      const localOk = Boolean(local?.preview && local.ok);
+      // Política CENTRAL: toda chamada à IA passa por decideAiFallback (testável).
       const localAuthoritative = Boolean(local?.authoritative);
-      const useAi = shouldValidateWithAi({ mode: readingMode, localOk, localAuthoritative });
-      if (!useAi && local?.preview) {
+      const decision = decideAiFallback(
+        local ? { ok: local.ok, authoritative: local.authoritative, preview: local.preview, validation: local.validation, reading: local.preview?.reading ?? null } : null,
+        { mode: readingMode, hasLocalDocument: pdfDocRef.current != null, localError },
+      );
+      if (!decision.useAi && local?.preview) {
         const localPreview = local.preview as unknown as PagePreview;
         if (localPreview.reading) {
           localPreview.reading = {
@@ -689,6 +746,8 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
         await applyPreview(localPreview);
         return;
       }
+      console.info(`[boletim] página ${page}: IA acionada (${decision.reason})`, decision.details);
+      setAiPages((prev) => prev + 1);
 
       const { data, error: fnError } = await supabase.functions.invoke('parse-grade-page', {
         body: { action: 'page', session_id: sessionId, page_number: page },
@@ -1226,7 +1285,21 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
           }];
         }
       }
-      if (!studentId) throw new Error('Selecione o aluno correspondente antes de salvar a página.');
+      // FONTE ÚNICA: o aluno escolhido na UI (ou recém-criado). Validado no banco por
+      // id + escola + turma, sem rematch textual. `detected.student_id` é só sugestão.
+      const schoolId = assertActiveSchool(activeSchoolId);
+      const scope = await assertPersistedStudent(
+        { pageAction, linkStudentId: targetStudentId, createdStudentId: pageAction === 'create' ? studentId : null },
+        { schoolId, classNames: [effectiveNameRef.current || effectiveName || classItem.name, classItem.name] },
+        async (id): Promise<StudentScopeRow | null> => {
+          const { data, error: lookupError } = await supabase
+            .from('students').select('id, class, school_id').eq('id', id).maybeSingle();
+          if (lookupError) throw lookupError;
+          return (data as StudentScopeRow | null) ?? null;
+        },
+      );
+      if (scope.ok === false) throw new Error(scope.message);
+      studentId = scope.studentId;
 
       // Períodos e disciplinas desta página
       const periodPayload = preview.periods
@@ -1249,22 +1322,24 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
         (periodRows || []).forEach((p: { id: string; normalized_label: string }) => periodIdByNorm.set(p.normalized_label, p.id));
       }
 
-      const { data: existingSubjects } = await supabase
+      const { data: existingSubjects, error: existingError } = await supabase
         .from('grade_subjects')
-        .select('id, name, normalized_name, slot_index, include_in_ira, custom_ira_weight, legacy_excluded')
-        .eq('school_id', assertActiveSchool(activeSchoolId))
+        .select('id, name, normalized_name, slot_index, include_in_ira, custom_ira_weight, legacy_excluded, weekly_classes')
+        .eq('school_id', schoolId)
         .eq('class_id', classItem.id);
+      if (existingError) throw existingError;
       type ExistingSubjectRow = {
         id: string; name: string; normalized_name: string; slot_index: number | null;
         include_in_ira: boolean; custom_ira_weight: number | null; legacy_excluded: boolean | null;
+        weekly_classes: number | null;
       };
       const existingRows = (existingSubjects || []) as ExistingSubjectRow[];
       // Cada ocorrência (slot) da mesma disciplina é uma linha própria de grade_subjects.
       const slotOf = (s: { slot_index?: number | null }) => s.slot_index ?? 1;
-      const existingByNorm = new Map<string, { include_in_ira: boolean; custom_ira_weight: number | null }>();
+      const existingByNorm = new Map<string, { include_in_ira: boolean; custom_ira_weight: number | null; weekly_classes: number | null }>();
       existingRows.forEach((s) =>
         existingByNorm.set(`${s.normalized_name}#${slotOf(s)}`, {
-          include_in_ira: s.include_in_ira, custom_ira_weight: s.custom_ira_weight,
+          include_in_ira: s.include_in_ira, custom_ira_weight: s.custom_ira_weight, weekly_classes: s.weekly_classes,
         }));
       // Reuso canônico: CHL/CNS/ETT são apenas aliases; nunca criam novos grade_subjects.
       const activeByCanonical = new Map<string, ExistingSubjectRow>();
@@ -1293,7 +1368,11 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
         // aponta para o mesmo grade_subject do nome canônico.
         subjectNormRedirect.set(`${canonicalSubjectKey(s.name)}#${slot}`, targetKey);
         const previous = existingByNorm.get(targetKey);
-        const weekly = expected?.weekly_classes ?? s.weekly_classes ?? null;
+        // Regravação nunca rebaixa a carga já informada (prévia da IA vem sem carga).
+        const weekly = resolveWeeklyClassesForUpsert(
+          expected?.weekly_classes ?? s.weekly_classes ?? null,
+          previous?.weekly_classes,
+        );
         if (seenNorms.has(targetKey)) return;
         seenNorms.add(targetKey);
         subjectPayload.push({
@@ -1442,6 +1521,8 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
       }).eq('id', session.id);
       setSession(updated);
       setSavedTotal((prev) => prev + finalPayload.length);
+      // Páginas seguintes do mesmo aluno (mesmo código/nome no PDF) reutilizam este ID.
+      persistedStudentsRef.current = rememberPersistedStudent(persistedStudentsRef.current, detected, studentId);
       toast.success(
         mode === 'auto'
           ? `Página ${preview.page} aprovada automaticamente: ${finalPayload.length} nota(s) gravada(s).`
@@ -1462,10 +1543,12 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
       await advance(updated);
 
     } catch (e) {
-      console.error(e);
-      setError(e instanceof Error ? e.message : 'Erro ao gravar a página.');
+      console.error('Falha ao gravar a página do boletim:', e);
+      // Erros do banco chegam como objeto simples (não `Error`): nunca engolir o texto real.
+      const described = describeSaveError(e);
+      setError(described.message);
       setStep('page');
-      toast.error('Não foi possível salvar esta página.');
+      toast.error(described.staleClient ? 'Atualize a página para continuar a importação.' : 'Não foi possível salvar esta página.');
     }
   };
 
@@ -1728,16 +1811,11 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
               {preview.reading && (
                 <div className="flex items-center gap-1 flex-wrap">
                   <Badge
-                    variant={preview.reading.mode === 'local' ? 'outline' : 'secondary'}
+                    variant={readingUsedAi(preview.reading) ? 'secondary' : 'outline'}
                     className="text-[10px]"
+                    title={(preview.reading.reasons || []).join(', ') || undefined}
                   >
-                    {preview.reading.mode === 'local'
-                      ? 'Leitura local'
-                      : preview.reading.mode === 'local_validated'
-                        ? 'Leitura local + validação IA'
-                        : preview.reading.mode === 'ai_fallback'
-                          ? 'Leitura por IA (fallback)'
-                          : preview.reading.escalated ? 'Validação adicional aplicada' : 'Lida em modo rápido'}
+                    {readingOriginLabel(preview.reading)}
                   </Badge>
                   {preview.reading.duration_ms != null && (
                     <span className="text-[10px] text-muted-foreground">{preview.reading.duration_ms}ms</span>
@@ -2152,12 +2230,14 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
             <p className="text-xs text-muted-foreground">
               Nenhuma gravação adicional foi feita. As notas já aparecem na aba “Notas” de cada aluno.
             </p>
-            {localTimings.length > 0 && (
-              <p className="text-xs text-muted-foreground">
-                Leitura local: {localSolvedPages} página(s) resolvida(s) sem IA ·
-                {' '}tempo médio {Math.round(localTimings.reduce((a, b) => a + b, 0) / localTimings.length)}ms por página.
-              </p>
-            )}
+            <p className="text-xs text-muted-foreground" data-testid="reading-metrics">
+              {formatReadingMetrics(summarizeReadingMetrics({
+                localPages: localSolvedPages,
+                aiPages,
+                ignoredPages: (session?.ignored_pages ?? 0),
+                timingsMs: localTimings,
+              }))}
+            </p>
             {skippedPages.length > 0 && (
               <p className="text-xs text-muted-foreground">
                 Página(s) sem nenhuma disciplina ignorada(s): {skippedPages.join(', ')}. Nada foi gravado por causa delas.
