@@ -8,12 +8,18 @@
 import { supabase } from '@/integrations/supabase/client';
 import { HighSchoolSeries } from '@/lib/series';
 
+/** Modo de cálculo do IRA da matriz. */
+export type IraMatrixMode = 'weighted_weekly' | 'arithmetic';
+
 export interface CurriculumMatrixRecord {
   id: string;
   school_id: string;
   name: string;
   description: string | null;
   is_original: boolean;
+  /** Matriz de sistema (semeada pelo banco), ex. `integral`. Não pode ser excluída. */
+  system_key: string | null;
+  ira_calculation_mode: IraMatrixMode;
   /** Total de componentes (todas as séries). */
   components: number;
 }
@@ -23,8 +29,11 @@ export interface MatrixComponentRow {
   matrix_id: string;
   subject_id: string;
   series: HighSchoolSeries;
-  weekly_classes: number;
+  /** `null` quando a matriz não usa carga semanal (IRA aritmético). */
+  weekly_classes: number | null;
   include_in_ira: boolean;
+  /** Ocorrência do componente na série (1 = única/primeira). */
+  slot_index: number;
   name: string;
   abbreviation: string | null;
   aliases: string[];
@@ -35,8 +44,9 @@ interface RawComponent {
   matrix_id: string;
   subject_id: string;
   series: string;
-  weekly_classes: number;
+  weekly_classes: number | null;
   include_in_ira: boolean;
+  slot_index: number | null;
   mapping_global_subjects: { name: string; abbreviation: string | null; aliases: string[] | null } | null;
 }
 
@@ -44,8 +54,9 @@ const rpcClient = supabase as unknown as {
   rpc: (fn: string, args?: Record<string, unknown>) => Promise<{ data: unknown; error: { message: string } | null }>;
 };
 
-/** Chave de identidade de um componente dentro de uma matriz. */
-export const componentKey = (c: { subject_id: string; series: string }) => `${c.subject_id}::${c.series}`;
+/** Chave de identidade de um componente dentro de uma matriz (inclui a ocorrência). */
+export const componentKey = (c: { subject_id: string; series: string; slot_index?: number | null }) =>
+  `${c.subject_id}::${c.series}::${c.slot_index ?? 1}`;
 
 /**
  * PURO: componentes de outra matriz que podem ser importados sem duplicar.
