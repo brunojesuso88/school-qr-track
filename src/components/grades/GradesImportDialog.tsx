@@ -591,7 +591,25 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
     setRows((p.rows || []).map((r) => ({ ...r, flags: r.flags || [], source: r.source ?? 'import' })));
     setEditing(false);
     setConflictStrategy('keep');
-    const detected = p.detected;
+    let detected = p.detected;
+    // Boletim multipágina: página seguinte do MESMO aluno (mesmo código/nome) sem match
+    // automático reutiliza o ID já gravado nesta sessão — nunca um rematch textual.
+    if (!detected.student_id) {
+      const recalled = recallPersistedStudent(persistedStudentsRef.current, detected);
+      const known = recalled ? localStudentsRef.current.find((s) => s.id === recalled) : undefined;
+      if (recalled && known) {
+        detected = {
+          ...detected,
+          student_id: recalled,
+          matched_name: known.full_name,
+          status: 'matched',
+          conflicts: detected.conflicts.filter((c) => c !== 'not_in_class' && c !== 'ambiguous_match'),
+        };
+        p = { ...p, detected, notes: [...(p.notes || []), 'Aluno reconhecido pela página anterior deste boletim.'] };
+        setPreview(p);
+      }
+    }
+    // A sugestão automática apenas PRÉ-SELECIONA o campo da UI; a gravação usa só a seleção.
     setPageAction(detected.student_id ? 'link' : null);
     setLinkStudentId(detected.student_id ?? null);
     // Professor/funcionário não altera Código, nascimento e filiação: mantém sempre o cadastro.
