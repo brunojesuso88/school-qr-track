@@ -85,7 +85,7 @@ export async function fetchSchoolMatrices(schoolId: string | null | undefined): 
   const [matrixRes, countRes] = await Promise.all([
     supabase
       .from('curriculum_matrices')
-      .select('id, school_id, name, description, is_original')
+      .select('id, school_id, name, description, is_original, system_key, ira_calculation_mode')
       .eq('school_id', schoolId),
     supabase
       .from('curriculum_matrix_subjects')
