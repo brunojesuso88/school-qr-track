@@ -507,7 +507,9 @@ const SubjectsContent = () => {
                     <CardTitle className="text-base">{o.label}</CardTitle>
                     <CardDescription className="flex flex-wrap items-center gap-2 mt-1">
                       <Badge variant="secondary">{bySeries.length} componentes</Badge>
-                      <Badge variant="outline">{matrixWeeklyTotal(bySeries)} aulas/semana (total real)</Badge>
+                      {!arithmeticIra && (
+                        <Badge variant="outline">{matrixWeeklyTotal(bySeries)} aulas/semana (total real)</Badge>
+                      )}
                     </CardDescription>
                   </div>
                   {canEdit && matrixId && (
