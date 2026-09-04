@@ -38,16 +38,19 @@ const subj = (id: string, name: string) => ({
   include_in_ira: true, custom_ira_weight: null, sort_order: 1,
 });
 
-const grade = (subjectId: string, value: number) => ({
-  id: `g-${subjectId}`, student_id: 'aluno', grade_subject_id: subjectId,
+const grade = (studentId: string, subjectId: string, value: number) => ({
+  id: `g-${studentId}-${subjectId}`, student_id: studentId, grade_subject_id: subjectId,
   grade_period_id: 'p1', value, raw_text: null, confidence: null,
   flags: [] as string[], source: 'test',
 });
 
-const classData = (matrixWeeklyByKey: Record<string, number>): ClassGradesData => ({
+const classData = (
+  matrixWeeklyByKey: Record<string, number>,
+  studentId = 'aluno',
+): ClassGradesData => ({
   subjects: [subj('pt', 'LINGUA PORTUGUESA'), subj('ef', 'EDUCACAO FISICA')],
   periods: [P1],
-  grades: [grade('pt', 5), grade('ef', 10)],
+  grades: [grade(studentId, 'pt', 5), grade(studentId, 'ef', 10)],
   settings: {
     id: 's1', class_id: 'c1', ira_period_id: null, ira_period_ids: ['p1'],
     use_final_grade: false, scale_max: 10,
@@ -96,7 +99,7 @@ describe('carga semanal por matriz da turma', () => {
   it('medalhas (disputa por série) seguem a matriz de cada turma', () => {
     const medals = computeMedals([
       { studentId: 'aluno', series: '1', data: classData(byClass.get('turmaA')!) },
-      { studentId: 'rival', series: '1', data: classData(byClass.get('turmaB')!) },
+      { studentId: 'rival', series: '1', data: classData(byClass.get('turmaB')!, 'rival') },
     ]);
     // Linguagens = Português + Ed. Física. Na turma B os pesos favorecem a nota 10.
     const linguagensRival = (medals['rival'] ?? []).find((m) => m.areaId === 'linguagens');
@@ -108,7 +111,7 @@ describe('carga semanal por matriz da turma', () => {
   it('com a MESMA matriz nas duas turmas a medalha passa a ser compartilhada', () => {
     const medals = computeMedals([
       { studentId: 'aluno', series: '1', data: classData(byClass.get('turmaA')!) },
-      { studentId: 'rival', series: '1', data: classData(byClass.get('turmaLegado')!) },
+      { studentId: 'rival', series: '1', data: classData(byClass.get('turmaLegado')!, 'rival') },
     ]);
     expect((medals['aluno'] ?? []).find((m) => m.areaId === 'linguagens')?.shared).toBe(true);
     expect((medals['rival'] ?? []).find((m) => m.areaId === 'linguagens')?.shared).toBe(true);
