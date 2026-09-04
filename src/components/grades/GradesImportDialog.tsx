@@ -1543,10 +1543,12 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
       await advance(updated);
 
     } catch (e) {
-      console.error(e);
-      setError(e instanceof Error ? e.message : 'Erro ao gravar a página.');
+      console.error('Falha ao gravar a página do boletim:', e);
+      // Erros do banco chegam como objeto simples (não `Error`): nunca engolir o texto real.
+      const described = describeSaveError(e);
+      setError(described.message);
       setStep('page');
-      toast.error('Não foi possível salvar esta página.');
+      toast.error(described.staleClient ? 'Atualize a página para continuar a importação.' : 'Não foi possível salvar esta página.');
     }
   };
 
