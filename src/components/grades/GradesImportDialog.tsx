@@ -457,6 +457,8 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
     const schoolId = assertActiveSchool(activeSchoolId);
     const classMatrix = await resolveClassMatrix(classItem.id, schoolId);
     const cacheKey = contextCacheKey({ schoolId, classId: classItem.id, matrixId: classMatrix.id });
+    // Cache de destinos SEMPRE atrelado a escola + turma + matriz efetiva da turma.
+    targetScopeRef.current = targetCacheKey({ schoolId, classId: classItem.id, matrixId: classMatrix.id });
     let staticCtx = staticContextCache.get(cacheKey);
     if (!staticCtx) {
       let expected: { id: string; name: string; weekly_classes: number }[] = [];
