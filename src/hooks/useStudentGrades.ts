@@ -69,7 +69,7 @@ export interface ClassGradesData {
    * Modo de cálculo do IRA da MATRIZ atribuída à turma. `arithmetic` (Matriz
    * Integral) ignora carga semanal e peso personalizado: todo componente pesa 1.
    */
-  iraCalculationMode: IraCalculationMode;
+  iraCalculationMode?: IraCalculationMode;
 }
 
 const emptyData: ClassGradesData = {

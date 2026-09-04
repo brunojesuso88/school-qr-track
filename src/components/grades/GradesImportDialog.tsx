@@ -434,8 +434,10 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
     ]);
     matrixIraRef.current = {
       mode: (classMatrix.id ? modeByMatrix[classMatrix.id] : undefined) ?? DEFAULT_IRA_MODE,
-      includeByKey: new Map(
-        matrixItems.map((m) => [`${canonicalSubjectKey(m.name)}#${m.slot_index ?? 1}`, m.include_in_ira]),
+      includeByKey: new Map<string, boolean>(
+        matrixItems.map((m): [string, boolean] => [
+          `${canonicalSubjectKey(m.name)}#${m.slot_index ?? 1}`, m.include_in_ira,
+        ]),
       ),
     };
     const official = matrixToExpectedSubjects(matrixItems);
