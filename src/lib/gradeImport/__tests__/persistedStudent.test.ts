@@ -42,7 +42,7 @@ describe('resolvePersistedStudentId — o ID da UI é a fonte única', () => {
   it('C) ID de aluno de outra turma bloqueia a gravação', async () => {
     const check = await assertPersistedStudent({ pageAction: 'link', linkStudentId: 'stu-other-class' }, expected, lookup);
     expect(check.ok).toBe(false);
-    if (!check.ok) {
+    if (check.ok === false) {
       expect(check.code).toBe('other_class');
       expect(check.message).toContain('26JMM-100');
     }
@@ -51,7 +51,7 @@ describe('resolvePersistedStudentId — o ID da UI é a fonte única', () => {
   it('D) ID de aluno de outra escola bloqueia a gravação (isolamento multi-escola)', async () => {
     const check = await assertPersistedStudent({ pageAction: 'link', linkStudentId: 'stu-other-school' }, expected, lookup);
     expect(check.ok).toBe(false);
-    if (!check.ok) expect(check.code).toBe('other_school');
+    if (check.ok === false) expect(check.code).toBe('other_school');
   });
 
   it('E) mesmo aluno nas páginas 1 e 3 grava no mesmo ID', async () => {
@@ -82,10 +82,10 @@ describe('resolvePersistedStudentId — o ID da UI é a fonte única', () => {
   it('G) regressão: aluno inexistente continua bloqueado', async () => {
     const check = await assertPersistedStudent({ pageAction: 'link', linkStudentId: 'nao-existe' }, expected, lookup);
     expect(check.ok).toBe(false);
-    if (!check.ok) expect(check.code).toBe('not_found');
+    if (check.ok === false) expect(check.code).toBe('not_found');
     const none = await assertPersistedStudent({ pageAction: 'link', linkStudentId: null }, expected, lookup);
     expect(none.ok).toBe(false);
-    if (!none.ok) expect(none.code).toBe('missing_selection');
+    if (none.ok === false) expect(none.code).toBe('missing_selection');
   });
 
   it('ação "create" usa o ID recém-criado; "ignore" nunca grava', () => {

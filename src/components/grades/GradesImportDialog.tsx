@@ -1298,7 +1298,7 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
           return (data as StudentScopeRow | null) ?? null;
         },
       );
-      if (!scope.ok) throw new Error(scope.message);
+      if (scope.ok === false) throw new Error(scope.message);
       studentId = scope.studentId;
 
       // Períodos e disciplinas desta página
