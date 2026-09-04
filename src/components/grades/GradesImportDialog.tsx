@@ -1410,6 +1410,27 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
       if (scope.ok === false) throw new Error(scope.message);
       studentId = scope.studentId;
 
+      // Destinos da turma (disciplinas e períodos já existentes) vêm do cache em
+      // memória, atrelado a escola + turma + matriz: um SELECT por sessão, não por página.
+      const targetScope = targetScopeRef.current
+        ?? targetCacheKey({ schoolId, classId: classItem.id, matrixId: null });
+      await targetCacheRef.current.ensure(targetScope, async () => {
+        const [subjectsRes, periodsRes] = await Promise.all([
+          supabase.from('grade_subjects')
+            .select('id, name, normalized_name, slot_index, include_in_ira, custom_ira_weight, legacy_excluded, weekly_classes')
+            .eq('school_id', schoolId).eq('class_id', classItem.id),
+          supabase.from('grade_periods')
+            .select('id, normalized_label')
+            .eq('school_id', schoolId).eq('class_id', classItem.id),
+        ]);
+        if (subjectsRes.error) throw subjectsRes.error;
+        if (periodsRes.error) throw periodsRes.error;
+        return {
+          subjects: (subjectsRes.data || []) as TargetSubjectRow[],
+          periods: (periodsRes.data || []) as { id: string; normalized_label: string }[],
+        };
+      });
+
       // Períodos e disciplinas desta página
       const periodPayload = preview.periods
         .filter((p) => columnIsPeriod(p.label, p.kind))
@@ -1421,28 +1442,22 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
         kind: 'period',
         sort_order: p.sort_order,
       }));
-      const periodIdByNorm = new Map<string, string>();
+      const periodIdByNorm = targetCacheRef.current.periodIdMap(targetScope);
       if (periodPayload.length > 0) {
         const { data: periodRows, error: periodError } = await supabase
           .from('grade_periods')
           .upsert(periodPayload, { onConflict: 'class_id,normalized_label' })
           .select('id, normalized_label');
         if (periodError) throw periodError;
-        (periodRows || []).forEach((p: { id: string; normalized_label: string }) => periodIdByNorm.set(p.normalized_label, p.id));
+        (periodRows || []).forEach((p: { id: string; normalized_label: string }) => {
+          periodIdByNorm.set(p.normalized_label, p.id);
+          targetCacheRef.current.putPeriod(targetScope, p);
+        });
       }
 
-      const { data: existingSubjects, error: existingError } = await supabase
-        .from('grade_subjects')
-        .select('id, name, normalized_name, slot_index, include_in_ira, custom_ira_weight, legacy_excluded, weekly_classes')
-        .eq('school_id', schoolId)
-        .eq('class_id', classItem.id);
-      if (existingError) throw existingError;
-      type ExistingSubjectRow = {
-        id: string; name: string; normalized_name: string; slot_index: number | null;
-        include_in_ira: boolean; custom_ira_weight: number | null; legacy_excluded: boolean | null;
-        weekly_classes: number | null;
-      };
-      const existingRows = (existingSubjects || []) as ExistingSubjectRow[];
+      type ExistingSubjectRow = TargetSubjectRow;
+      const existingRows = targetCacheRef.current.subjectRows(targetScope);
+
       // Cada ocorrência (slot) da mesma disciplina é uma linha própria de grade_subjects.
       const slotOf = (s: { slot_index?: number | null }) => s.slot_index ?? 1;
       const existingByNorm = new Map<string, { include_in_ira: boolean; custom_ira_weight: number | null; weekly_classes: number | null }>();
