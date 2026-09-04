@@ -1241,7 +1241,9 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
       }
       const subjectIdForRow = (subjectName: string) => {
         const norm = normalize(subjectName);
-        return subjectIdByNorm.get(subjectNormRedirect.get(norm) ?? norm);
+        const canonical = canonicalSubjectKey(subjectName);
+        const target = subjectNormRedirect.get(norm) ?? subjectNormRedirect.get(canonical) ?? norm;
+        return subjectIdByNorm.get(target);
       };
 
 
