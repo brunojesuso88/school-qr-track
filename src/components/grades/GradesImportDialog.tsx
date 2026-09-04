@@ -754,6 +754,9 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
     console.info(note);
   }, []);
 
+  /** Ponteiro para `processPage` (usado na continuação após falha de página). */
+  const processPageRef = useRef<((sessionId: string, page: number) => Promise<void>) | null>(null);
+
   /** Processa UMA página: local primeiro, IA como validadora/fallback. */
   const processPage = useCallback(async (sessionId: string, pageNumber: number) => {
     setError(null);
@@ -879,7 +882,7 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
         const nextPending = pending.find((p) => p !== currentPage);
         if (reprocessingRef.current && nextPending != null) {
           toast.error(`Página ${currentPage}: ${failure.message}`);
-          await processPage(sessionId, nextPending);
+          await processPageRef.current?.(sessionId, nextPending);
           return;
         }
         if (isLastPage || reprocessingRef.current) {
@@ -891,10 +894,12 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
         }
       }
       toast.error(`Página ${currentPage} não pôde ser lida (${failure.message}). Ela ficará para reprocessar no final.`);
-      await processPage(sessionId, currentPage + 1);
+      await processPageRef.current?.(sessionId, currentPage + 1);
     }
   }, [applyPreview, persistPreview, takeLocalReading, schedulePrefetch, readingMode, skipPageWithoutSubjects, finishSession, onImported]);
 
+
+  useEffect(() => { processPageRef.current = processPage; }, [processPage]);
 
   /** Sessão em aberto para esta turma (retomada). */
   useEffect(() => {
