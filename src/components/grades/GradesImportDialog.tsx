@@ -1334,6 +1334,16 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
   };
 
   const advance = useCallback(async (updated: SessionState) => {
+    // Rodada de reprocessamento: segue apenas pelas páginas que falharam.
+    if (reprocessingRef.current) {
+      const next = failureQueueRef.current.pendingPages()[0];
+      setPendingFailures(failureQueueRef.current.list());
+      if (next != null) { await processPage(updated.id, next); return; }
+      reprocessingRef.current = false;
+      setStep('summary');
+      onImported?.();
+      return;
+    }
     if (updated.current_page >= updated.total_pages) {
       await supabase.from('grade_import_sessions')
         .update({ status: 'completed', pdf_base64: null })
@@ -1685,6 +1695,8 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
           console.error('Falha ao marcar IRA como desatualizado:', staleErr);
         }
       }
+      failureQueueRef.current.resolve(preview.page);
+      setPendingFailures(failureQueueRef.current.list());
       await advance(updated);
 
     } catch (e) {
@@ -1711,6 +1723,8 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
     await supabase.from('grade_import_sessions').update({ ignored_pages: updated.ignored_pages }).eq('id', session.id);
     setSession(updated);
     toast.info(`Página ${preview.page} ignorada — nada foi gravado.`);
+    failureQueueRef.current.resolve(preview.page);
+    setPendingFailures(failureQueueRef.current.list());
     await advance(updated);
   };
 
