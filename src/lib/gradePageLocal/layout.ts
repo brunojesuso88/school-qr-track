@@ -356,6 +356,9 @@ export function buildCells(lines: TokenLine[], grid: GridLayout, anchors: Subjec
     }
   }
 
+  // Última linha da página: pendente reconhecido pela matriz entra vazio (null).
+  flushPending();
+
   return {
     cells, subjects, ambiguousCells, droppedAbsenceTokens, orphanTokens, orphanGradeTokens,
     anchoredSubjects, mergedSubjectLines,
