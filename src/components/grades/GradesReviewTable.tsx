@@ -85,7 +85,7 @@ export const GradesReviewTable = ({
       </thead>
       <tbody>
         {rows.map((row, index) => {
-          const key = `${row.student_id}||${row.subject}||${row.period}`;
+          const key = `${row.student_id}||${row.subject}#${row.slot_index ?? 1}||${row.period}`;
           const hasConflict = row.student_id ? conflictKeys.has(key) : false;
           // Divergência resolvida (valor atual == 2ª leitura) não pinta a linha nem exibe alerta.
           const staleDivergence = row.flags.includes('reconciliation_divergence')
