@@ -1267,7 +1267,7 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
       const payload = academicRows
         .filter((r) => !r.flags.includes('invalid_value'))
         .map((row) => {
-          const subjectId = subjectIdForRow(row.subject);
+          const subjectId = subjectIdForRow(row.subject, row.slot_index);
           const periodId = periodIdByNorm.get(normalize(row.period));
           if (!subjectId || !periodId) return null;
           return {
@@ -1280,7 +1280,7 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
             confidence: row.confidence,
             flags: row.flags,
             source: row.source === 'manual' ? 'manual' : 'import',
-            conflictKey: `${studentId}||${row.subject}||${row.period}`,
+            conflictKey: gradeConflictKey(studentId as string, row.subject, row.slot_index, row.period),
           };
         })
         .filter(Boolean) as (Record<string, unknown> & { conflictKey: string })[];
