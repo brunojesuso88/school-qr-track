@@ -2,7 +2,7 @@
  * Reconciliação LOCAL × IA. A IA é validadora: nunca sobrescreve a leitura local.
  * Divergência => flag `reconciliation_divergence`, valor local visível e valor da IA em `second_pass_value`.
  */
-import { isEmptyMarker, normalizeText } from './normalize';
+import { canonicalSubjectKey, isEmptyMarker, normalizeText } from './normalize';
 import { sameGradeValue, stripReconciliationFlags } from './gradeCompare';
 
 export interface ReconcilePolicy {
@@ -32,7 +32,13 @@ interface AnyPreview {
 
 const sameValue = sameGradeValue;
 
-const cellKey = (r: AnyRow) => `${normalizeText(r.subject)}||${normalizeText(r.period)}`;
+/**
+ * Chave de célula por IDENTIDADE de disciplina (não pelo texto exibido).
+ * `canonicalSubjectKey` colapsa apenas os eixos CHL/CNS/ETT dos Aprofundamentos,
+ * então `APROFUNDAMENTO IF - CNS - I` (IA) casa com `APROFUNDAMENTO IF - I` (local).
+ * `I` e `II` permanecem disciplinas distintas.
+ */
+const cellKey = (r: AnyRow) => `${canonicalSubjectKey(r.subject)}||${normalizeText(r.period)}`;
 
 /** Célula da IA sem nota: vazio, `—`, `null`. Nunca representa uma nota. */
 const isEmptyAiCell = (r: AnyRow) => {

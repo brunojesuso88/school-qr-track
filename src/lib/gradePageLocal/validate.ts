@@ -5,7 +5,7 @@
  * (ex.: disciplina da matriz sem nota no boletim). Somente bloqueantes impedem
  * que a leitura local seja considerada AUTORITATIVA.
  */
-import { normalizeText } from './normalize';
+import { canonicalSubjectKey, normalizeText } from './normalize';
 import { buildSubjectAnchors, matchSubjectAnchor } from './subjectAnchors';
 import { GridLayout, LocalCell, LocalExpectedSubject, LocalValidation, TextToken } from './types';
 
@@ -132,7 +132,7 @@ export function validateLocalPage(input: ValidateInput): LocalValidation {
   const seen = new Map<string, string | null>();
   let conflictingDuplicates = 0;
   cells.forEach((c) => {
-    const key = `${normalizeText(c.subject)}||${normalizeText(c.period)}`;
+    const key = `${canonicalSubjectKey(c.subject)}||${normalizeText(c.period)}`;
     if (seen.has(key)) { if (seen.get(key) !== c.raw_value) conflictingDuplicates++; }
     else seen.set(key, c.raw_value);
   });

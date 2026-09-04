@@ -230,7 +230,6 @@ export function buildCells(lines: TokenLine[], grid: GridLayout, anchors: Subjec
     const line = lines[i];
     const subjectTokens = line.tokens.filter((t) => t.x + t.w / 2 < grid.subjectColumnEnd);
     const subjectName = subjectTokens.map((t) => t.text.trim()).filter(Boolean).join(' ').trim();
-    if (!subjectName || !isSubjectLabel(subjectName)) { pending = null; continue; }
 
     const valueTokens = line.tokens.filter((t) => t.x + t.w / 2 >= grid.subjectColumnEnd);
     // Linha de dados só é considerada se houver token DENTRO da grade (nota ou falta).
@@ -241,17 +240,38 @@ export function buildCells(lines: TokenLine[], grid: GridLayout, anchors: Subjec
         || grid.ignoredColumns.some((a) => center >= a.start && center < a.end);
     });
 
-    // Fusão segura: nome quebrado em duas linhas verticalmente próximas na coluna de disciplinas.
-    const mergeable = pending
-      && Math.abs(pending.y - line.y) <= Math.max(pending.height, line.height) * 2.2;
-    const mergedName = mergeable ? `${pending!.text} ${subjectName}`.replace(/\s+/g, ' ').trim() : null;
+    // Proximidade vertical com o nome pendente (nome longo quebrado em duas linhas).
+    const nearPending = Boolean(pending)
+      && Math.abs(pending!.y - line.y) <= Math.max(pending!.height, line.height) * 2.2;
 
     let rowName = subjectName;
-    if (mergedName && anchors.length > 0) {
-      const plain = matchSubjectAnchor(subjectName, anchors);
-      const merged = matchSubjectAnchor(mergedName, anchors);
-      if (!plain && merged) { rowName = mergedName; mergedSubjectLines++; }
+    let mergedName: string | null = null;
+
+    if (!subjectName || !isSubjectLabel(subjectName)) {
+      // Continuidade determinística: fragmento curto (`I`, `II`) ou linha só com valores.
+      // Exige nome pendente próximo E âncora curricular INEQUÍVOCA da matriz da turma.
+      if (!nearPending || !insideGrid || anchors.length === 0) { pending = null; continue; }
+      const candidate = subjectName
+        ? `${pending!.text} ${subjectName}`.replace(/\s+/g, ' ').trim()
+        : pending!.text;
+      const match = matchSubjectAnchor(candidate, anchors);
+      const unequivocal = match
+        && (match.kind === 'exact' || match.kind === 'alias' || match.kind === 'abbreviation');
+      if (!unequivocal) { pending = null; continue; }
+      rowName = candidate;
+      mergedSubjectLines++;
+    } else {
+      // Fusão segura: nome quebrado em duas linhas verticalmente próximas na coluna de disciplinas.
+      mergedName = nearPending
+        ? `${pending!.text} ${subjectName}`.replace(/\s+/g, ' ').trim()
+        : null;
+      if (mergedName && anchors.length > 0) {
+        const plain = matchSubjectAnchor(subjectName, anchors);
+        const merged = matchSubjectAnchor(mergedName, anchors);
+        if (!plain && merged) { rowName = mergedName; mergedSubjectLines++; }
+      }
     }
+
 
     if (!insideGrid) {
       // Linha real de disciplina sem nenhuma nota lançada: só entra se a âncora for reconhecida.
