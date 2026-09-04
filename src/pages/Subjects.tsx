@@ -15,14 +15,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ScrollArea } from "@/components/ui/scroll-area";
 import DashboardLayout from "@/components/DashboardLayout";
 import { useToast } from "@/hooks/use-toast";
-import { useAuth } from "@/contexts/AuthContext";
+import { usePermissions } from "@/contexts/PermissionsContext";
 import { useActiveSchoolId, useSchoolScopeKey } from "@/contexts/SchoolContext";
 import { supabase } from "@/integrations/supabase/client";
 import { CLASS_SERIES_OPTIONS, HighSchoolSeries, classSeriesLabel, parseSeriesValue } from "@/lib/series";
 import { matrixWeeklyTotal } from "@/lib/curriculumMatrixCore";
 import {
-  CurriculumMatrixRecord, MatrixComponentRow, createCurriculumMatrix, ensureCatalogSubject,
-  fetchMatrixComponents, fetchSchoolMatrices, importMatrixComponents,
+  CurriculumMatrixRecord, MatrixComponentRow, countClassesUsingMatrix, createCurriculumMatrix,
+  ensureCatalogSubject, fetchMatrixComponents, fetchSchoolMatrices, importMatrixComponents,
 } from "@/lib/curriculumMatrices";
 import { humanizeCurriculumError, syncClassCurriculum } from "@/lib/classCurriculum/sync";
 
@@ -38,10 +38,11 @@ interface ClassOption {
 
 const SubjectsContent = () => {
   const { toast } = useToast();
-  const { userRole } = useAuth();
+  const { can } = usePermissions();
   const activeSchoolId = useActiveSchoolId();
   const schoolScopeKey = useSchoolScopeKey();
-  const canEdit = userRole === "admin" || userRole === "direction";
+  /** Fonte autoritativa continua o banco/RLS: aqui apenas espelhamos `subjects.manage`. */
+  const canEdit = can("subjects.manage");
 
   const [loading, setLoading] = useState(true);
   const [matrices, setMatrices] = useState<CurriculumMatrixRecord[]>([]);
@@ -151,7 +152,10 @@ const SubjectsContent = () => {
           include_in_ira: form.ira,
         });
         if (error) throw error;
-        toast({ title: "Componente adicionado à matriz" });
+        toast({
+          title: "Componente adicionado à matriz",
+          description: "Sincronize as turmas desta matriz para que a disciplina apareça nas notas e no IRA.",
+        });
       } else if (editing) {
         const [matrixRes, catalogRes] = await Promise.all([
           supabase.from("curriculum_matrix_subjects")
@@ -168,7 +172,11 @@ const SubjectsContent = () => {
         ]);
         if (matrixRes.error) throw matrixRes.error;
         if (catalogRes.error) throw catalogRes.error;
-        toast({ title: "Matriz curricular atualizada" });
+        toast({
+          title: "Matriz curricular atualizada",
+          description: "As turmas vinculadas ficaram com o IRA marcado como desatualizado. " +
+            "Sincronize-as quando quiser aplicar a mudança.",
+        });
       }
       setEditing(null);
       setCreatingComponent(false);
@@ -196,7 +204,8 @@ const SubjectsContent = () => {
       if (error) throw error;
       toast({
         title: `${item.name} removida da matriz`,
-        description: "As notas já lançadas nas turmas continuam preservadas no histórico.",
+        description: "As notas já lançadas continuam preservadas. Sincronize as turmas desta matriz " +
+          "para atualizar as disciplinas e o IRA.",
       });
       await Promise.all([loadComponents(), loadMatrices()]);
     } catch (error: unknown) {
@@ -242,6 +251,15 @@ const SubjectsContent = () => {
     if (!activeSchoolId || !activeMatrix || activeMatrix.is_original) return;
     setSaving(true);
     try {
+      const linked = await countClassesUsingMatrix(activeMatrix.id, activeSchoolId);
+      if (linked > 0) {
+        toast({
+          title: "Matriz em uso por turmas",
+          description: `${linked} turma(s) usam esta matriz. Sincronize essas turmas com outra matriz antes de excluí-la.`,
+          variant: "destructive",
+        });
+        return;
+      }
       const { error } = await supabase
         .from("curriculum_matrices")
         .delete()
@@ -317,10 +335,8 @@ const SubjectsContent = () => {
 
   /* ------------------------------ sincronizar com turmas -------------------------- */
 
-  const openSync = async () => {
+  const loadClasses = useCallback(async () => {
     if (!activeSchoolId) return;
-    setClassSelection(new Set());
-    setSyncOpen(true);
     const { data, error } = await supabase
       .from("classes")
       .select("id, name, series, curriculum_matrix_id")
@@ -332,6 +348,13 @@ const SubjectsContent = () => {
     }
     setClasses(((data ?? []) as { id: string; name: string; series: string | null; curriculum_matrix_id: string | null }[])
       .map((c) => ({ ...c, series: parseSeriesValue(c.series) })));
+  }, [activeSchoolId, toast]);
+
+  const openSync = async () => {
+    if (!activeSchoolId) return;
+    setClassSelection(new Set());
+    setSyncOpen(true);
+    await loadClasses();
   };
 
   const handleSyncClasses = async () => {
@@ -371,8 +394,13 @@ const SubjectsContent = () => {
       description: failures.length > 0 ? failures.join(" · ") : "Notas já lançadas foram preservadas.",
       variant: failures.length > 0 ? "destructive" : undefined,
     });
-    if (failures.length === 0) setSyncOpen(false);
-    await openSync();
+    if (failures.length === 0) {
+      setSyncOpen(false);
+      setClassSelection(new Set());
+    }
+    // Recarrega a lista de turmas SEM reabrir o diálogo.
+    await loadClasses();
+    await loadMatrices();
   };
 
   if (loading) {
@@ -555,7 +583,9 @@ const SubjectsContent = () => {
           <DialogHeader>
             <DialogTitle>{creatingComponent ? "Novo componente" : editing?.name}</DialogTitle>
             <DialogDescription>
-              {classSeriesLabel(series)} · {activeMatrix?.name}
+              {classSeriesLabel(series)} · {activeMatrix?.name}. Nome, abreviação e nomes reconhecidos
+              no boletim são a identidade da disciplina em toda a escola (valem para todas as matrizes);
+              carga semanal e participação no IRA são configurações desta matriz nesta série.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
@@ -567,24 +597,24 @@ const SubjectsContent = () => {
               </div>
             )}
             <div className="space-y-2">
-              <Label htmlFor="abbr">Abreviação</Label>
+              <Label htmlFor="abbr">Abreviação (vale para toda a escola)</Label>
               <Input id="abbr" value={form.abbreviation}
                 onChange={(e) => setForm((f) => ({ ...f, abbreviation: e.target.value }))} />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="aliases">Nomes reconhecidos no boletim (um por linha)</Label>
+              <Label htmlFor="aliases">Nomes reconhecidos no boletim (um por linha · valem para toda a escola)</Label>
               <Textarea id="aliases" rows={5} value={form.aliases}
                 onChange={(e) => setForm((f) => ({ ...f, aliases: e.target.value }))} />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="weekly">Carga semanal nesta série</Label>
+              <Label htmlFor="weekly">Carga semanal nesta série (somente nesta matriz)</Label>
               <Input id="weekly" type="number" min={1} value={form.weekly}
                 onChange={(e) => setForm((f) => ({ ...f, weekly: e.target.value }))} />
             </div>
             <div className="flex items-center gap-2">
               <Checkbox id="ira" checked={form.ira}
                 onCheckedChange={(v) => setForm((f) => ({ ...f, ira: v === true }))} />
-              <Label htmlFor="ira" className="cursor-pointer">Participa do IRA</Label>
+              <Label htmlFor="ira" className="cursor-pointer">Participa do IRA (somente nesta matriz)</Label>
             </div>
           </div>
           <DialogFooter>
