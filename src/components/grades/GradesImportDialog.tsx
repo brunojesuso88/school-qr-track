@@ -759,16 +759,23 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
     setError(null);
     setStep('processing');
     setPreview(null);
+    lastLocalPreviewRef.current = null;
+    /** Página realmente em curso (o laço pode avançar sobre páginas sem disciplina). */
+    let currentPage = pageNumber;
     try {
       let page = pageNumber;
       // Um mesmo aluno pode ocupar várias páginas: páginas de continuação sem
       // disciplina são puladas até chegar na próxima página com conteúdo real.
       for (;;) {
-      let local: Awaited<ReturnType<typeof readPageLocally>> = null;
+      currentPage = page;
+      // Pré-leitura das próximas páginas já roda enquanto esta é processada.
+      schedulePrefetch(page - 1);
+      let local: LocalReadResult = null;
       let localError = false;
       if (readingMode !== 'ai_only') {
         try {
-          local = await readPageLocally(page);
+          local = await takeLocalReading(page);
+          lastLocalPreviewRef.current = local?.preview ?? null;
         } catch (e) {
           console.error('Leitura local falhou, seguindo com IA:', e);
           local = null;
@@ -779,11 +786,14 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
 
       if (local?.skipPage.skip) {
         await skipPageWithoutSubjects(sessionId, page, local.skipPage.note ?? `Página ${page} ignorada: nenhuma disciplina encontrada`);
+        failureQueueRef.current.resolve(page);
+        setPendingFailures(failureQueueRef.current.list());
         const totalPages = sessionRef.current?.total_pages ?? pdfDocRef.current?.numPages ?? page;
         if (page >= totalPages) { await finishSession(sessionId); return; }
         page += 1;
         continue;
       }
+
 
       // Política CENTRAL: toda chamada à IA passa por decideAiFallback (testável).
       const localAuthoritative = Boolean(local?.authoritative);
