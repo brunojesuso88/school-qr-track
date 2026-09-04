@@ -1180,46 +1180,53 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
         .eq('school_id', assertActiveSchool(activeSchoolId))
         .eq('class_id', classItem.id);
       type ExistingSubjectRow = {
-        id: string; name: string; normalized_name: string;
+        id: string; name: string; normalized_name: string; slot_index: number | null;
         include_in_ira: boolean; custom_ira_weight: number | null; legacy_excluded: boolean | null;
       };
       const existingRows = (existingSubjects || []) as ExistingSubjectRow[];
+      // Cada ocorrência (slot) da mesma disciplina é uma linha própria de grade_subjects.
+      const slotOf = (s: { slot_index?: number | null }) => s.slot_index ?? 1;
       const existingByNorm = new Map<string, { include_in_ira: boolean; custom_ira_weight: number | null }>();
       existingRows.forEach((s) =>
-        existingByNorm.set(s.normalized_name, { include_in_ira: s.include_in_ira, custom_ira_weight: s.custom_ira_weight }));
+        existingByNorm.set(`${s.normalized_name}#${slotOf(s)}`, {
+          include_in_ira: s.include_in_ira, custom_ira_weight: s.custom_ira_weight,
+        }));
       // Reuso canônico: CHL/CNS/ETT são apenas aliases; nunca criam novos grade_subjects.
       const activeByCanonical = new Map<string, ExistingSubjectRow>();
       existingRows
         .filter((s) => !s.legacy_excluded)
         .forEach((s) => {
-          const key = canonicalSubjectKey(s.name);
+          const key = `${canonicalSubjectKey(s.name)}#${slotOf(s)}`;
           const current = activeByCanonical.get(key);
-          if (!current || normalize(s.name) === key) activeByCanonical.set(key, s);
+          if (!current || normalize(s.name) === canonicalSubjectKey(s.name)) activeByCanonical.set(key, s);
         });
 
-      /** normalized_name lido do PDF -> normalized_name efetivamente gravado. */
+      /** `normalized_name#slot` lido do PDF -> `normalized_name#slot` efetivamente gravado. */
       const subjectNormRedirect = new Map<string, string>();
       const subjectPayload: Record<string, unknown>[] = [];
       const seenNorms = new Set<string>();
       preview.subjects.forEach((s) => {
         const expected = s.matched_expected ? expectedSubjects.find((e) => e.name === s.matched_expected) : undefined;
+        const slot = s.slot_index ?? 1;
         const readNorm = s.normalized_name || normalize(s.name);
-        const canonicalMatch = activeByCanonical.get(canonicalSubjectKey(s.name));
+        const canonicalMatch = activeByCanonical.get(`${canonicalSubjectKey(s.name)}#${slot}`);
         const name = canonicalMatch?.name ?? s.name;
         const normalized_name = canonicalMatch?.normalized_name ?? readNorm;
-        subjectNormRedirect.set(readNorm, normalized_name);
+        const targetKey = `${normalized_name}#${slot}`;
+        subjectNormRedirect.set(`${readNorm}#${slot}`, targetKey);
         // Identidade canônica também redireciona: linha lida com eixo (CNS/CHL/ETT)
         // aponta para o mesmo grade_subject do nome canônico.
-        subjectNormRedirect.set(canonicalSubjectKey(s.name), normalized_name);
-        const previous = existingByNorm.get(normalized_name);
+        subjectNormRedirect.set(`${canonicalSubjectKey(s.name)}#${slot}`, targetKey);
+        const previous = existingByNorm.get(targetKey);
         const weekly = expected?.weekly_classes ?? s.weekly_classes ?? null;
-        if (seenNorms.has(normalized_name)) return;
-        seenNorms.add(normalized_name);
+        if (seenNorms.has(targetKey)) return;
+        seenNorms.add(targetKey);
         subjectPayload.push({
           school_id: assertActiveSchool(activeSchoolId),
           class_id: classItem.id,
           name,
           normalized_name,
+          slot_index: slot,
           mapping_class_subject_id: expected?.id ?? null,
           weekly_classes: weekly,
           include_in_ira: previous?.include_in_ira ?? (weekly === 1 || weekly === 2 || weekly === 4),
@@ -1231,10 +1238,11 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
       if (subjectPayload.length > 0) {
         const { data: subjectRows, error: subjectError } = await supabase
           .from('grade_subjects')
-          .upsert(subjectPayload as never, { onConflict: 'class_id,normalized_name' })
-          .select('id, normalized_name');
+          .upsert(subjectPayload as never, { onConflict: 'class_id,normalized_name,slot_index' })
+          .select('id, normalized_name, slot_index');
         if (subjectError) throw subjectError;
-        (subjectRows || []).forEach((s: { id: string; normalized_name: string }) => subjectIdByNorm.set(s.normalized_name, s.id));
+        (subjectRows || []).forEach((s: { id: string; normalized_name: string; slot_index: number | null }) =>
+          subjectIdByNorm.set(`${s.normalized_name}#${slotOf(s)}`, s.id));
       }
       if (preview.subjects.length > 0 && subjectIdByNorm.size === 0) {
         throw new Error(
@@ -1242,9 +1250,10 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
           'da turma em Disciplinas — Matriz Curricular antes de importar o boletim.',
         );
       }
-      const subjectIdForRow = (subjectName: string) => {
-        const norm = normalize(subjectName);
-        const canonical = canonicalSubjectKey(subjectName);
+      const subjectIdForRow = (subjectName: string, slotIndex?: number | null) => {
+        const slot = slotIndex ?? 1;
+        const norm = `${normalize(subjectName)}#${slot}`;
+        const canonical = `${canonicalSubjectKey(subjectName)}#${slot}`;
         const target = subjectNormRedirect.get(norm) ?? subjectNormRedirect.get(canonical) ?? norm;
         return subjectIdByNorm.get(target);
       };
