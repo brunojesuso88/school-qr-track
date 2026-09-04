@@ -63,6 +63,9 @@ import { describeSaveError } from '@/lib/gradeImport/saveError';
 import { decideAiFallback, readingOriginLabel, readingUsedAi } from '@/lib/gradeImport/aiPolicy';
 import { contextCacheKey, ImportContextCache } from '@/lib/gradeImport/contextCache';
 import { formatReadingMetrics, resolveWeeklyClassesForUpsert, summarizeReadingMetrics } from '@/lib/gradeImport/readingMetrics';
+import { ImportTargetCache, targetCacheKey, type TargetSubjectRow } from '@/lib/gradeImport/targetCache';
+import { LocalPrefetchQueue } from '@/lib/gradeImport/prefetchQueue';
+import { formatPageFailures, PageFailure, PageFailureQueue } from '@/lib/gradeImport/failureQueue';
 
 /** Contexto estático (matriz, catálogo, mapeamento) em cache por escola+turma+matriz durante a sessão do navegador. */
 interface StaticImportContext {
