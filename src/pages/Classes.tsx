@@ -350,7 +350,7 @@ const Classes = () => {
   const handleDownloadAbsentStudents = async (className: string) => {
     const todayDisplay = format(new Date(), "dd 'de' MMMM 'de' yyyy", { locale: ptBR });
     try {
-      const result = await exportAbsentStudents(className, todayDisplay, activeSchoolId);
+      const result = await exportAbsentStudents(className, activeSchoolId);
       if (result.status === 'empty') {
         toast.info('Nenhum aluno faltoso nesta turma hoje');
         return;

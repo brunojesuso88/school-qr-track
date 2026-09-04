@@ -6,7 +6,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
-import { Loader2, CheckCircle2, XCircle, ClipboardList, FileCheck } from 'lucide-react';
+import { Loader2, CheckCircle2, XCircle, ClipboardList } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import {
@@ -105,8 +105,8 @@ const DailyClassAttendanceDialog = ({ open, onOpenChange, className, shift, onSa
 
   const counts = countMarks(students, attendance);
   const presentCount = counts.present;
-  const justifiedCount = counts.justified;
   const absentCount = counts.absent;
+
 
   const handleSave = async () => {
     setSaving(true);
@@ -132,7 +132,7 @@ const DailyClassAttendanceDialog = ({ open, onOpenChange, className, shift, onSa
       if (closeErr) throw closeErr;
 
       toast.success(
-        `Frequência de ${className} registrada (${presentCount}P / ${absentCount}A / ${justifiedCount}J)`,
+        `Frequência de ${className} registrada (${presentCount}P / ${absentCount}A)`,
       );
       onSaved?.();
       onOpenChange(false);
@@ -160,9 +160,6 @@ const DailyClassAttendanceDialog = ({ open, onOpenChange, className, shift, onSa
           </span>
           <span className="flex items-center gap-1 text-destructive">
             <XCircle className="w-4 h-4" /> {absentCount} ausentes
-          </span>
-          <span className="flex items-center gap-1 text-amber-600">
-            <FileCheck className="w-4 h-4" /> {justifiedCount} justificados
           </span>
         </div>
 
@@ -203,17 +200,8 @@ const DailyClassAttendanceDialog = ({ open, onOpenChange, className, shift, onSa
                     >
                       <XCircle className="w-3.5 h-3.5 mr-1" />A
                     </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant={status === 'justified' ? 'secondary' : 'outline'}
-                      aria-pressed={status === 'justified'}
-                      title="Justificado"
-                      onClick={() => setStatus(student.id, 'justified')}
-                    >
-                      <FileCheck className="w-3.5 h-3.5 mr-1" />J
-                    </Button>
                   </div>
+
                 </div>
               );
             })
