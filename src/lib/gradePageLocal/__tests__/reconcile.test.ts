@@ -64,38 +64,53 @@ describe('reconcileLocalWithAi', () => {
     expect(extra?.flags).toContain('reconciliation_divergence');
   });
 
-  it('Aprofundamento IF com eixo (CNS) casa com o nome canônico e não vira "somente a IA"', () => {
-    const local = {
-      rows: [
-        {
-          subject: 'APROFUNDAMENTO IF - I', period: '1º Período',
-          raw_value: '8,00', value: 8, flags: [], source: 'local',
-        },
-      ],
-      notes: [], stats: {},
-      reading: { mode: 'local', escalated: false, reasons: [], local_score: 1, divergences: 0 },
-    };
-    const { preview, divergences } = reconcileLocalWithAi(local, {
-      rows: [{ subject: 'Aprofundamento IF - CNS - I', period: '1º Período', raw_value: '8,00', value: 8 }],
-    });
-    expect(divergences).toBe(0);
-    expect(preview.rows).toHaveLength(1);
-    expect(preview.rows[0].flags).toContain('reconciled_match');
+  /** Prévia local mínima com as notas informadas por período. */
+  const localWith = (subject: string, notas: [string, number][]) => ({
+    rows: notas.map(([raw, value], i) => ({
+      subject, period: `${i + 1}º Período`, raw_value: raw, value, flags: [], source: 'local',
+    })),
+    notes: [], stats: {},
+    reading: { mode: 'local', escalated: false, reasons: [], local_score: 1, divergences: 0 },
   });
 
-  it('Aprofundamento I e II seguem disciplinas distintas', () => {
-    const local = {
+  it('captura da auditoria: 8,00 e 7,50 em APROFUNDAMENTO IF - CNS - I casam com o canônico', () => {
+    const local = localWith('APROFUNDAMENTO IF - I', [['8,00', 8], ['7,50', 7.5]]);
+    const { preview, divergences, aiOnlyNumericIgnored } = reconcileLocalWithAi(local, {
       rows: [
-        {
-          subject: 'APROFUNDAMENTO IF - I', period: '1º Período',
-          raw_value: '8,00', value: 8, flags: [], source: 'local',
-        },
+        { subject: 'APROFUNDAMENTO IF - CNS - I', period: '1º Período', raw_value: '8,00', value: 8 },
+        { subject: 'APROFUNDAMENTO IF - CNS - I', period: '2º Período', raw_value: '7,50', value: 7.5 },
       ],
-      notes: [], stats: {},
-      reading: { mode: 'local', escalated: false, reasons: [], local_score: 1, divergences: 0 },
-    };
+    });
+    expect(divergences).toBe(0);
+    expect(preview.rows).toHaveLength(2);
+    expect(preview.rows[0].flags).toContain('reconciled_match');
+    expect(preview.rows[1].flags).toContain('reconciled_match');
+    expect(preview.rows.some((r) => r.source === 'ai')).toBe(false);
+    expect(aiOnlyNumericIgnored).toBe(0);
+  });
+
+  it.each([
+    ['CHL', 'I'], ['CNS', 'I'], ['ETT', 'I'],
+    ['CHL', 'II'], ['CNS', 'II'], ['ETT', 'II'],
+  ])('eixo %s - %s casa com o canônico correspondente', (eixo, ordem) => {
+    const local = localWith(`APROFUNDAMENTO IF - ${ordem}`, [['8,00', 8], ['7,50', 7.5]]);
+    const { preview, divergences, aiOnlyNumericIgnored } = reconcileLocalWithAi(local, {
+      rows: [
+        { subject: `Aprofundamento IF - ${eixo} - ${ordem}`, period: '1º Período', raw_value: '8,00', value: 8 },
+        { subject: `Aprofundamento IF - ${eixo} - ${ordem}`, period: '2º Período', raw_value: '7,50', value: 7.5 },
+      ],
+    });
+    expect(divergences).toBe(0);
+    expect(aiOnlyNumericIgnored).toBe(0);
+    expect(preview.rows).toHaveLength(2);
+    expect(preview.rows.every((r) => (r.flags ?? []).includes('reconciled_match'))).toBe(true);
+    expect(preview.rows.some((r) => r.source === 'ai')).toBe(false);
+  });
+
+  it.each(['CHL', 'CNS', 'ETT'])('%s - II nunca casa com o canônico I', (eixo) => {
+    const local = localWith('APROFUNDAMENTO IF - I', [['8,00', 8]]);
     const { preview, divergences } = reconcileLocalWithAi(local, {
-      rows: [{ subject: 'Aprofundamento IF - CNS - II', period: '1º Período', raw_value: '9,00', value: 9 }],
+      rows: [{ subject: `Aprofundamento IF - ${eixo} - II`, period: '1º Período', raw_value: '9,00', value: 9 }],
     });
     expect(divergences).toBe(1);
     expect(preview.rows).toHaveLength(2);
