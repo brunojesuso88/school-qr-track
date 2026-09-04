@@ -45,8 +45,6 @@ export function computeAreaIra(
   const result = calculateIraMultiPeriod(
     buildIraInputs(scoped, studentId, periods.map((p) => p.id)),
     toPeriodRefs(periods),
-    // O modo é da MATRIZ da turma: medalha nunca recai no ponderado por engano.
-    { mode: data.iraCalculationMode ?? DEFAULT_IRA_MODE },
   );
   const hasData =
     result.status === 'ok' &&
