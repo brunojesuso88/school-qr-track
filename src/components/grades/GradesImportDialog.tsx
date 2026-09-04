@@ -992,6 +992,10 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
       };
       sessionRef.current = newSession;
       setSession(newSession);
+      // Pré-leitura sempre atrelada à sessão: nunca reaproveita páginas de outro documento.
+      prefetchRef.current.setScope(newSession.id);
+      failureQueueRef.current.clear();
+      setPendingFailures([]);
       await supabase.from('grade_import_sessions')
         .update({ auto_accept: autoAccept, auto_accept_rules: autoRules as never })
         .eq('id', newSession.id);
@@ -1018,6 +1022,7 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
       const next = (pages || []).find((p: { status: string }) => !['confirmed', 'ignored'].includes(p.status));
       sessionRef.current = target;
       setSession(target);
+      prefetchRef.current.setScope(target.id);
       setResumable(null);
       if (!next) { setStep('summary'); return; }
       await processPage(target.id, next.page_number);
