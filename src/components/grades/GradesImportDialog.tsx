@@ -252,6 +252,8 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
   const [applyingLocalReading, setApplyingLocalReading] = useState(false);
   const [autoApprovedPage, setAutoApprovedPage] = useState<number | null>(null);
   const autoRunRef = useRef<string | null>(null);
+  /** Página já resolvida automaticamente pela exceção de aluno não identificado. */
+  const autoStudentRef = useRef<string | null>(null);
   const [readingMode, setReadingMode] = useState<ReadingMode>('local_ai');
   const pdfDocRef = useRef<LocalPdfDocument | null>(null);
   const localStudentsRef = useRef<LocalContextStudent[]>([]);
@@ -283,6 +285,7 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
     setAutoRules(DEFAULT_AUTO_ACCEPT_RULES);
     setAutoApprovedPage(null);
     autoRunRef.current = null;
+    autoStudentRef.current = null;
     cancelledRef.current = false;
     closePdfDocument(pdfDocRef.current);
     pdfDocRef.current = null;
@@ -880,6 +883,47 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
     [autoEval.reasons],
   );
 
+  /**
+   * Exceção: aluno não identificado pode ser vinculado/criado automaticamente.
+   * Jamais vale com aluno ambíguo/homônimo na turma.
+   */
+  const unmatchedExceptionActive = Boolean(
+    autoAccept
+    && autoRules.auto_create_or_link_unmatched_student
+    && preview
+    && !preview.detected.conflicts.includes('ambiguous_match')
+    && !preview.detected.conflicts.includes('duplicate_link'),
+  );
+
+  /**
+   * Resolução automática do aluno da página quando a exceção está ativa:
+   * move o candidato único de outra turma, vincula o sugerido ou cria pelo boletim.
+   * Erros reais de nota continuam bloqueando (nada é gravado aqui).
+   */
+  useEffect(() => {
+    if (step !== 'page' || !preview || !session) return;
+    if (!unmatchedExceptionActive) return;
+    if (!autoEval.eligible || canConfirmPage) return;
+    if (invalidCount > 0 || manualBlockers.length > 0) return;
+    const key = `${session.id}:${preview.page}`;
+    if (autoStudentRef.current === key) return;
+    autoStudentRef.current = key;
+    if (otherClassMatch) {
+      if (!movingStudent) void handleMoveStudentToClass();
+      return;
+    }
+    if (preview.detected.student_id) {
+      setPageAction('link');
+      setLinkStudentId(preview.detected.student_id);
+      return;
+    }
+    setPageAction('create');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    step, preview, session, unmatchedExceptionActive, autoEval.eligible, canConfirmPage,
+    invalidCount, manualBlockers.length, otherClassMatch, movingStudent,
+  ]);
+
   /** Ação contextual: adota a leitura local do boletim e retoma o fluxo automático. */
   const handleUseLocalReading = async () => {
     setApplyingLocalReading(true);
@@ -1080,6 +1124,20 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
           .single();
         if (createError) throw createError;
         studentId = created.id;
+        // Contexto local passa a conhecer o aluno recém-criado (páginas seguintes).
+        setClassStudents((prev) =>
+          prev.some((s) => s.id === created.id) ? prev : [...prev, { id: created.id, full_name: detected.pdf_name }]);
+        if (!localStudentsRef.current.some((s) => s.id === created.id)) {
+          localStudentsRef.current = [...localStudentsRef.current, {
+            id: created.id,
+            full_name: detected.pdf_name,
+            student_id: `${initials}-${effectiveName || classItem.name}-${shiftCode}`,
+            school_code: sanitizeSchoolCodeForStorage(detected.pdf_code),
+            birth_date: detected.pdf_birth_date,
+            mother_name: detected.pdf_mother_name,
+            father_name: detected.pdf_father_name,
+          }];
+        }
       }
       if (!studentId) throw new Error('Selecione o aluno correspondente antes de salvar a página.');
 
@@ -1676,7 +1734,27 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
                       </p>
                     </div>
                   </div>
+                  <div className="flex items-start gap-2">
+                    <Switch
+                      id="rule-unmatched-student"
+                      className="mt-0.5"
+                      checked={autoRules.auto_create_or_link_unmatched_student}
+                      onCheckedChange={(v) => handleToggleRule('auto_create_or_link_unmatched_student', v)}
+                    />
+                    <div>
+                      <Label htmlFor="rule-unmatched-student" className="text-xs font-medium">
+                        Aluno não identificado — vincular ou cadastrar automaticamente pelo boletim
+                      </Label>
+                      <p className="text-[11px] text-muted-foreground">
+                        Quando o aluno da página não estiver na turma, o sistema vincula o candidato único
+                        (movendo-o para esta turma, se estiver em outra) ou cria o cadastro com os dados do boletim.
+                        Nunca vale para aluno ambíguo ou homônimo, e notas inválidas, fora da escala ou com
+                        divergência continuam bloqueando a página.
+                      </p>
+                    </div>
+                  </div>
                 </div>
+
               )}
 
               {autoAccept && autoEval.appliedExceptions.length > 0 && (

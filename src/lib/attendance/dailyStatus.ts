@@ -106,11 +106,13 @@ export function summarizeDaily(rows: DailyClassRow[]): DailySummary {
  * Frequência > Frequência diária — mesma fonte de verdade).
  * ------------------------------------------------------------------ */
 
-export type AttendanceMark = 'present' | 'absent' | 'justified';
+/** Contrato da chamada diária: apenas Presente ou Ausente. */
+export type AttendanceMark = 'present' | 'absent';
 
 /**
- * Estado inicial da chamada: todos presentes por padrão, preservando
- * registros já existentes (inclusive "justified").
+ * Estado inicial da chamada: todos presentes por padrão.
+ * Registros legados `justified` são exibidos como Ausente (histórico é preservado
+ * no banco; ao salvar de novo a chamada passa a gravar `absent`).
  */
 export function mergeExistingStatuses(
   students: { id: string }[],
@@ -120,7 +122,7 @@ export function mergeExistingStatuses(
   const out: Record<string, AttendanceMark> = {};
   for (const s of students) {
     const current = map.get(s.id);
-    out[s.id] = current === 'absent' ? 'absent' : current === 'justified' ? 'justified' : 'present';
+    out[s.id] = current === 'absent' || current === 'justified' ? 'absent' : 'present';
   }
   return out;
 }
@@ -128,15 +130,13 @@ export function mergeExistingStatuses(
 export function countMarks(students: { id: string }[], marks: Record<string, AttendanceMark>) {
   let present = 0;
   let absent = 0;
-  let justified = 0;
   for (const s of students) {
-    const m = marks[s.id] ?? 'present';
-    if (m === 'absent') absent++;
-    else if (m === 'justified') justified++;
+    if ((marks[s.id] ?? 'present') === 'absent') absent++;
     else present++;
   }
-  return { present, absent, justified, total: students.length };
+  return { present, absent, total: students.length };
 }
+
 
 /** Linhas de `attendance` (unicidade lógica student_id + date). */
 export function buildAttendanceRecords(
@@ -162,7 +162,7 @@ export function buildClosureRow(
   className: string,
   dateKey: string,
   shift: string | null,
-  counts: { present: number; absent: number; justified: number; total: number },
+  counts: { present: number; absent: number; total: number },
   closedBy: string | null,
   updatedAt: string,
   schoolId: string,
@@ -174,7 +174,8 @@ export function buildClosureRow(
     shift: shift ?? null,
     student_count: counts.total,
     present_count: counts.present,
-    absent_count: counts.absent + counts.justified,
+    absent_count: counts.absent,
+
     closed_by: closedBy,
     updated_at: updatedAt,
   };

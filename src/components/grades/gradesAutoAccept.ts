@@ -13,6 +13,12 @@ export interface AutoAcceptRules {
   use_local_on_reconciliation: boolean;
   /** Nota já salva divergente da nota do PDF deixa de bloquear e o PDF substitui a existente. */
   use_pdf_grade_on_existing_conflict: boolean;
+  /**
+   * Aluno não identificado na turma deixa de bloquear: vincula automaticamente quando
+   * existe candidato único (inclusive em outra turma, movendo-o) ou cria o cadastro
+   * a partir do boletim. Nunca vale para aluno ambíguo/homônimo.
+   */
+  auto_create_or_link_unmatched_student: boolean;
 }
 
 export const DEFAULT_AUTO_ACCEPT_RULES: AutoAcceptRules = {
@@ -20,6 +26,7 @@ export const DEFAULT_AUTO_ACCEPT_RULES: AutoAcceptRules = {
   accept_unique_fuzzy: false,
   use_local_on_reconciliation: false,
   use_pdf_grade_on_existing_conflict: false,
+  auto_create_or_link_unmatched_student: false,
 };
 
 /** Lê as regras persistidas na sessão de forma tolerante a sessões antigas. */
@@ -30,6 +37,7 @@ export const parseAutoAcceptRules = (value: unknown): AutoAcceptRules => {
     accept_unique_fuzzy: raw.accept_unique_fuzzy === true,
     use_local_on_reconciliation: raw.use_local_on_reconciliation === true,
     use_pdf_grade_on_existing_conflict: raw.use_pdf_grade_on_existing_conflict === true,
+    auto_create_or_link_unmatched_student: raw.auto_create_or_link_unmatched_student === true,
   };
 };
 
@@ -187,6 +195,10 @@ export const evaluateAutoAccept = (input: AutoAcceptInput): AutoAcceptResult => 
   const appliedCodes: string[] = [];
   const registryExceptionOn = rules.use_pdf_registry && canUsePdfRegistry;
   const fuzzyExceptionOn = rules.accept_unique_fuzzy;
+  /** Exceção do aluno não identificado: jamais vale com ambiguidade/homônimo. */
+  const ambiguousStudent = detected.conflicts.includes('ambiguous_match')
+    || detected.conflicts.includes('duplicate_link');
+  const unmatchedExceptionOn = rules.auto_create_or_link_unmatched_student && !ambiguousStudent;
 
   if (classDecisionPending) reasons.push('Turma do PDF diferente da turma selecionada');
   if (otherClassMatch) reasons.push('Aluno encontrado em outra turma');
@@ -278,7 +290,31 @@ export const evaluateAutoAccept = (input: AutoAcceptInput): AutoAcceptResult => 
     critical(detected.pdf_father_name, detected.current?.father_name ?? null, 'nome do pai');
   }
 
-  const unique = [...new Set(reasons)];
+  /**
+   * Exceção do aluno não identificado: remove apenas os bloqueios de identificação
+   * do aluno. Qualquer outro bloqueio (nota inválida, divergência, turma diferente)
+   * continua exigindo confirmação manual.
+   */
+  const STUDENT_IDENTITY_REASONS = [
+    'Aluno da página ainda não vinculado automaticamente',
+    'Aluno não identificado na turma',
+    'Conflitos de aluno pendentes',
+    'Aluno encontrado em outra turma',
+  ];
+  let effectiveReasons = reasons;
+  const identityBlocked = detected.status === 'unmatched' || otherClassMatch || !linkedStudentId;
+  if (unmatchedExceptionOn && identityBlocked) {
+    const removed = reasons.filter((r) => STUDENT_IDENTITY_REASONS.includes(r));
+    if (removed.length > 0) {
+      effectiveReasons = reasons.filter((r) => !STUDENT_IDENTITY_REASONS.includes(r));
+      applied.push(otherClassMatch
+        ? 'Aluno de outra turma movido e vinculado automaticamente'
+        : 'Aluno não identificado vinculado/criado automaticamente');
+      appliedCodes.push('auto_student_link');
+    }
+  }
+
+  const unique = [...new Set(effectiveReasons)];
   return {
     eligible: unique.length === 0,
     reasons: unique,

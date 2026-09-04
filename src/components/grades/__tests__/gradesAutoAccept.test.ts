@@ -176,8 +176,65 @@ describe('nota existente divergente da nota do PDF', () => {
     });
     expect(rules).toEqual({
       use_pdf_registry: true, accept_unique_fuzzy: true,
-      use_local_on_reconciliation: true, use_pdf_grade_on_existing_conflict: false,
+      use_local_on_reconciliation: true, auto_create_or_link_unmatched_student: false, use_pdf_grade_on_existing_conflict: false,
     });
   });
 });
 
+
+describe('exceção: aluno não identificado vinculado/criado automaticamente', () => {
+  const baseDetected = {
+    status: 'unmatched' as const,
+    student_id: null,
+    match_score: 0,
+    conflicts: [] as string[],
+    pdf_name: 'ALUNO NOVO',
+    pdf_code: null,
+    pdf_birth_date: null,
+    pdf_mother_name: null,
+    pdf_father_name: null,
+    current: null,
+  } as never;
+
+  const run = (overrides: Record<string, unknown>) => evaluateAutoAccept({
+    detected: baseDetected,
+    rows: [],
+    classDecisionPending: false,
+    pageHasExistingGrades: false,
+    linkedStudentId: null,
+    suggestedStudentId: null,
+    regDecision: null,
+    rules: { ...DEFAULT_AUTO_ACCEPT_RULES, auto_create_or_link_unmatched_student: true },
+    ...overrides,
+  } as never);
+
+  it('desbloqueia a página e registra a exceção aplicada', () => {
+    const res = run({});
+    expect(res.eligible).toBe(true);
+    expect(res.appliedExceptionCodes).toContain('auto_student_link');
+  });
+
+  it('desbloqueia aluno localizado em outra turma (candidato único)', () => {
+    const res = run({ otherClassMatch: true });
+    expect(res.eligible).toBe(true);
+    expect(res.appliedExceptions.join(' ')).toMatch(/outra turma/i);
+  });
+
+  it('nunca vale para aluno ambíguo ou homônimo', () => {
+    const res = run({ detected: { ...(baseDetected as never as object), conflicts: ['ambiguous_match'] } });
+    expect(res.eligible).toBe(false);
+    expect(res.reasons).toContain('Aluno ambíguo ou homônimo na turma');
+  });
+
+  it('mantém bloqueio de nota inválida', () => {
+    const res = run({ rows: [{ subject: 'Mat', period: '1º Período', value: null, flags: ['invalid_value'] }] });
+    expect(res.eligible).toBe(false);
+    expect(res.reasons).toContain('Nota inválida na página');
+  });
+
+  it('sem a exceção, aluno não identificado continua bloqueando', () => {
+    const res = run({ rules: DEFAULT_AUTO_ACCEPT_RULES });
+    expect(res.eligible).toBe(false);
+    expect(res.reasons).toContain('Aluno não identificado na turma');
+  });
+});

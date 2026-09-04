@@ -81,7 +81,7 @@ const DailyAttendancePanel = () => {
   const handleDownloadAbsentStudents = async (name: string) => {
     const todayDisplay = format(today, "dd 'de' MMMM 'de' yyyy", { locale: ptBR });
     try {
-      const result = await exportAbsentStudents(name, todayDisplay, activeSchoolId, today);
+      const result = await exportAbsentStudents(name, activeSchoolId, today);
       if (result.status === 'empty') {
         toast.info('Nenhum aluno faltoso nesta turma hoje');
         return;

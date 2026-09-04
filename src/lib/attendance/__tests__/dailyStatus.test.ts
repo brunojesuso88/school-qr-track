@@ -104,17 +104,17 @@ import {
 describe('persistência canônica compartilhada (Turmas e Frequência diária)', () => {
   const list = [{ id: 's1' }, { id: 's2' }, { id: 's3' }];
 
-  it('inicia todos como presentes preservando registros existentes', () => {
+  it('inicia todos como presentes e trata registro legado justificado como ausente', () => {
     const marks = mergeExistingStatuses(list, [
       { student_id: 's2', status: 'justified' },
       { student_id: 's3', status: 'absent' },
     ]);
-    expect(marks).toEqual({ s1: 'present', s2: 'justified', s3: 'absent' });
+    expect(marks).toEqual({ s1: 'present', s2: 'absent', s3: 'absent' });
   });
 
-  it('conta presentes/ausentes/justificados', () => {
-    const marks: Record<string, AttendanceMark> = { s2: 'justified', s3: 'absent' };
-    expect(countMarks(list, marks)).toEqual({ present: 1, absent: 1, justified: 1, total: 3 });
+  it('conta apenas presentes e ausentes', () => {
+    const marks: Record<string, AttendanceMark> = { s2: 'absent', s3: 'absent' };
+    expect(countMarks(list, marks)).toEqual({ present: 1, absent: 2, total: 3 });
   });
 
   it('gera uma única linha por aluno+data com data local e responsável', () => {
@@ -127,8 +127,9 @@ describe('persistência canônica compartilhada (Turmas e Frequência diária)',
   });
 
   it('gera fechamento turma+data (usado pelos dois pontos de entrada)', () => {
-    const counts = countMarks(list, { s2: 'justified', s3: 'absent' });
+    const counts = countMarks(list, { s2: 'absent', s3: 'absent' });
     const row = buildClosureRow('26RMM101', '2026-08-31', 'morning', counts, 'u1', 'ts', 'esc-1');
+
     expect(row).toEqual({
       school_id: 'esc-1',
       class_name: '26RMM101',
