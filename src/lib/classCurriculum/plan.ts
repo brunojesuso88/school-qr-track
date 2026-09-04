@@ -17,6 +17,8 @@ export interface ExistingGradeSubject {
   name: string;
   weekly_classes: number | null;
   include_in_ira: boolean;
+  /** Ocorrência do componente na turma (1 = única/primeira). */
+  slot_index?: number | null;
   legacy_excluded?: boolean | null;
   mapping_class_subject_id?: string | null;
   sort_order?: number | null;
@@ -38,7 +40,8 @@ export interface ClassCurriculumPlan {
   gradeCreate: {
     name: string;
     normalized_name: string;
-    weekly_classes: number;
+    slot_index: number;
+    weekly_classes: number | null;
     include_in_ira: true;
     legacy_excluded: false;
     sort_order: number;
@@ -47,7 +50,8 @@ export interface ClassCurriculumPlan {
     id: string;
     name: string;
     normalized_name: string;
-    weekly_classes: number;
+    slot_index: number;
+    weekly_classes: number | null;
     include_in_ira: boolean;
     legacy_excluded: false;
     sort_order: number;
@@ -100,8 +104,11 @@ export function planClassCurriculumSync(input: {
   manageMapping?: boolean;
 }): ClassCurriculumPlan {
   // Ordem oficial única: alfabética (pt-BR) pelo nome da matriz — a mesma usada
-  // por `fetchCurriculumMatrix`. `sort_order` recebe exatamente este índice.
-  const matrix = [...input.matrix].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+  // por `fetchCurriculumMatrix`. Ocorrências (slots) do mesmo componente ficam
+  // lado a lado, na ordem do slot. `sort_order` recebe exatamente este índice.
+  const matrix = [...input.matrix].sort(
+    (a, b) => a.name.localeCompare(b.name, 'pt-BR') || (a.slot_index ?? 1) - (b.slot_index ?? 1),
+  );
   const mappingSubjects = input.mappingSubjects ?? [];
   const gradeSubjects = input.gradeSubjects ?? [];
   const manageMapping = input.manageMapping ?? true;
@@ -119,29 +126,34 @@ export function planClassCurriculumSync(input: {
   matrix.forEach((item, index) => {
     const keys = matrixKeys(item);
     const normalizedName = normalizeText(item.name);
+    const slot = item.slot_index ?? 1;
 
-    // --- mapping_class_subjects ---
-    if (manageMapping) {
+    // --- mapping_class_subjects (camada auxiliar: só a 1ª ocorrência) ---
+    if (manageMapping && slot === 1) {
       const mappingMatches = mappingSubjects.filter((m) => keys.includes(canonicalSubjectKey(m.subject_name)));
       if (mappingMatches.length === 0) {
-        plan.mappingCreate.push({ subject_name: item.name, weekly_classes: item.weekly_classes });
+        plan.mappingCreate.push({ subject_name: item.name, weekly_classes: item.weekly_classes ?? 1 });
       } else {
         const chosen = pickTarget(mappingMatches.map((m) => ({ ...m, name: m.subject_name })), item.name);
-        if ((chosen.weekly_classes ?? null) !== item.weekly_classes) {
-          plan.mappingUpdate.push({ id: chosen.id, weekly_classes: item.weekly_classes });
+        const expected = item.weekly_classes ?? null;
+        if (expected != null && (chosen.weekly_classes ?? null) !== expected) {
+          plan.mappingUpdate.push({ id: chosen.id, weekly_classes: expected });
         }
       }
     }
 
-    // --- grade_subjects (agrupados por identidade canônica) ---
+    // --- grade_subjects (identidade canônica + ocorrência/slot) ---
     const gradeMatches = gradeSubjects.filter(
-      (g) => !usedGradeIds.has(g.id) && !isArchived(g) && keys.includes(canonicalSubjectKey(g.name)),
+      (g) => !usedGradeIds.has(g.id) && !isArchived(g)
+        && (g.slot_index ?? 1) === slot
+        && keys.includes(canonicalSubjectKey(g.name)),
     );
     if (gradeMatches.length === 0) {
       plan.gradeCreate.push({
         name: item.name,
         normalized_name: normalizedName,
-        weekly_classes: item.weekly_classes,
+        slot_index: slot,
+        weekly_classes: item.weekly_classes ?? null,
         include_in_ira: true,
         legacy_excluded: false,
         sort_order: index,
@@ -168,7 +180,8 @@ export function planClassCurriculumSync(input: {
     const target = {
       name: item.name,
       normalized_name: normalizedName,
-      weekly_classes: item.weekly_classes,
+      slot_index: slot,
+      weekly_classes: item.weekly_classes ?? null,
       include_in_ira: item.include_in_ira ? true : chosen.include_in_ira,
       legacy_excluded: false as const,
       sort_order: index,
@@ -177,6 +190,7 @@ export function planClassCurriculumSync(input: {
       chosen.name !== target.name ||
       (chosen.weekly_classes ?? null) !== target.weekly_classes ||
       chosen.include_in_ira !== target.include_in_ira ||
+      (chosen.slot_index ?? 1) !== slot ||
       Boolean(chosen.legacy_excluded) !== false ||
       (chosen.sort_order ?? -1) !== target.sort_order;
     if (changed) {

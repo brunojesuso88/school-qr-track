@@ -38,7 +38,8 @@ describe('etapas EJA como série/etapa canônica', () => {
     expect(classSeriesLabel('eja2')).toBe('2ª Etapa EJA');
     expect(seriesShortLabel('eja1')).toBe('1ª Etapa EJA');
     expect(seriesShortLabel('1')).toBe('1º ano');
-    expect(CLASS_SERIES_OPTIONS.map((o) => o.value)).toEqual(['1', '2', '3', 'eja1', 'eja2']);
+    expect(CLASS_SERIES_OPTIONS.map((o) => o.value))
+      .toEqual(['1', '2', '3', 'eja1', 'eja2', 'ept1', 'eve2', 'sec2', 'eve3', 'sec3']);
   });
 
   it('normalizeSeriesList e seriesListMatches suportam EJA', () => {

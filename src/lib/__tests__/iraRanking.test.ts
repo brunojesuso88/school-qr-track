@@ -104,10 +104,11 @@ describe('exportação da classificação do IRA', () => {
     expect(classSeriesLabel(null)).toBe('Série não definida');
   });
 
-  it('expõe as opções de série/etapa do cadastro (regulares + EJA)', () => {
+  it('expõe as opções de série/etapa do cadastro (regulares + EJA + Integral)', () => {
     expect(CLASS_SERIES_OPTIONS.map((o) => o.label)).toEqual([
       '1º ano do Ensino Médio', '2º ano do Ensino Médio', '3º ano do Ensino Médio',
       '1ª Etapa EJA', '2ª Etapa EJA',
+      '1º ano EPT', '2º ano EVE', '2º ano SEC', '3º ano EVE', '3º ano SEC',
     ]);
     expect(classSeriesLabel('1')).toBe('1º ano do Ensino Médio');
   });

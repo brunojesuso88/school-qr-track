@@ -15,6 +15,8 @@ export interface ReconcilePolicy {
 
 interface AnyRow {
   subject: string;
+  /** Ocorrência da disciplina na página (Integral pode repetir o componente). */
+  slot_index?: number;
   period: string;
   raw_value: string | null;
   value: number | null;
@@ -36,9 +38,11 @@ const sameValue = sameGradeValue;
  * Chave de célula por IDENTIDADE de disciplina (não pelo texto exibido).
  * `canonicalSubjectKey` colapsa apenas os eixos CHL/CNS/ETT dos Aprofundamentos,
  * então `APROFUNDAMENTO IF - CNS - I` (IA) casa com `APROFUNDAMENTO IF - I` (local).
- * `I` e `II` permanecem disciplinas distintas.
+ * `I` e `II` permanecem disciplinas distintas. O slot separa ocorrências repetidas
+ * da MESMA disciplina na página (Matriz Integral).
  */
-const cellKey = (r: AnyRow) => `${canonicalSubjectKey(r.subject)}||${normalizeText(r.period)}`;
+const cellKey = (r: AnyRow) =>
+  `${canonicalSubjectKey(r.subject)}#${r.slot_index ?? 1}||${normalizeText(r.period)}`;
 
 /** Célula da IA sem nota: vazio, `—`, `null`. Nunca representa uma nota. */
 const isEmptyAiCell = (r: AnyRow) => {

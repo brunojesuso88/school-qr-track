@@ -56,6 +56,12 @@ export interface LocalHeader {
 
 export interface LocalCell {
   subject: string;
+  /**
+   * Ocorrência da disciplina na página (1 = primeira). Boletins do Integral podem
+   * trazer a MESMA disciplina duas vezes na mesma etapa: cada ocorrência é um slot
+   * distinto e nunca é fundida com a outra.
+   */
+  slot: number;
   period: string;
   period_kind: string;
   raw_value: string | null;
@@ -72,6 +78,8 @@ export interface LocalExpectedSubject {
   /** Nome canônico da disciplina na matriz da turma/catálogo. */
   name: string;
   weekly_classes?: number | null;
+  /** Ocorrência (slot) do componente na matriz da turma — 1 quando não há duplicata. */
+  slot_index?: number;
   /** Nomes equivalentes como aparecem no boletim em PDF. */
   aliases?: string[];
   abbreviation?: string | null;

@@ -222,9 +222,11 @@ export type Database = {
           created_by: string | null
           description: string | null
           id: string
+          ira_calculation_mode: string
           is_original: boolean
           name: string
           school_id: string
+          system_key: string | null
           updated_at: string
         }
         Insert: {
@@ -232,9 +234,11 @@ export type Database = {
           created_by?: string | null
           description?: string | null
           id?: string
+          ira_calculation_mode?: string
           is_original?: boolean
           name: string
           school_id: string
+          system_key?: string | null
           updated_at?: string
         }
         Update: {
@@ -242,9 +246,11 @@ export type Database = {
           created_by?: string | null
           description?: string | null
           id?: string
+          ira_calculation_mode?: string
           is_original?: boolean
           name?: string
           school_id?: string
+          system_key?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -265,9 +271,11 @@ export type Database = {
           matrix_id: string
           school_id: string
           series: string
+          slot_index: number
+          sort_order: number
           subject_id: string
           updated_at: string
-          weekly_classes: number
+          weekly_classes: number | null
         }
         Insert: {
           created_at?: string
@@ -276,9 +284,11 @@ export type Database = {
           matrix_id: string
           school_id: string
           series: string
+          slot_index?: number
+          sort_order?: number
           subject_id: string
           updated_at?: string
-          weekly_classes: number
+          weekly_classes?: number | null
         }
         Update: {
           created_at?: string
@@ -287,9 +297,11 @@ export type Database = {
           matrix_id?: string
           school_id?: string
           series?: string
+          slot_index?: number
+          sort_order?: number
           subject_id?: string
           updated_at?: string
-          weekly_classes?: number
+          weekly_classes?: number | null
         }
         Relationships: [
           {
@@ -713,6 +725,7 @@ export type Database = {
           name: string
           normalized_name: string
           school_id: string
+          slot_index: number
           sort_order: number
           updated_at: string
           weekly_classes: number | null
@@ -728,6 +741,7 @@ export type Database = {
           name: string
           normalized_name: string
           school_id: string
+          slot_index?: number
           sort_order?: number
           updated_at?: string
           weekly_classes?: number | null
@@ -743,6 +757,7 @@ export type Database = {
           name?: string
           normalized_name?: string
           school_id?: string
+          slot_index?: number
           sort_order?: number
           updated_at?: string
           weekly_classes?: number | null
@@ -2773,6 +2788,10 @@ export type Database = {
       repair_school_curricula: { Args: never; Returns: Json }
       resolve_registration_link: { Args: { _token: string }; Returns: Json }
       seed_school_curriculum: { Args: { _school_id: string }; Returns: string }
+      seed_school_integral_matrix: {
+        Args: { _school_id: string }
+        Returns: string
+      }
       seed_school_permissions: {
         Args: { _school_id: string }
         Returns: undefined

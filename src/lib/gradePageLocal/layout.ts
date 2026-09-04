@@ -1,7 +1,7 @@
 /** Reconstrução da grade do boletim a partir de tokens + coordenadas. Determinístico, sem IA. */
 import {
-  classifyPeriodLabel, isAbsenceLabel, isEmptyMarker, isGradeLabel, looksLikeGradeToken,
-  isIgnoredPeriodKind, normalizeText, parseGradeToken, periodRank,
+  canonicalSubjectKey, classifyPeriodLabel, isAbsenceLabel, isEmptyMarker, isGradeLabel,
+  looksLikeGradeToken, isIgnoredPeriodKind, normalizeText, parseGradeToken, periodRank,
 } from './normalize';
 import { GridLayout, LocalCell, TextToken, TokenLine } from './types';
 import { AnchorMatch, SubjectAnchor, anchorConfidence, matchSubjectAnchor } from './subjectAnchors';
@@ -205,6 +205,19 @@ export function buildCells(lines: TokenLine[], grid: GridLayout, anchors: Subjec
   const firstDataLine = (grid.subHeaderLineIndex ?? grid.headerLineIndex) + 1;
 
   /**
+   * Ocorrência (slot) por identidade canônica: a 1ª linha da disciplina na página é
+   * o slot 1, a 2ª linha da MESMA disciplina é o slot 2 e assim por diante. Duplicatas
+   * intencionais do boletim nunca são fundidas.
+   */
+  const slotCount = new Map<string, number>();
+  const nextSlot = (name: string) => {
+    const key = canonicalSubjectKey(name) || normalizeText(name);
+    const slot = (slotCount.get(key) ?? 0) + 1;
+    slotCount.set(key, slot);
+    return slot;
+  };
+
+  /**
    * Nome de disciplina pendente: linha de texto ainda não fechada.
    * `match` != null => já reconhecida na matriz, mas a materialização vazia é DIFERIDA:
    * a próxima linha ainda pode trazer as notas dela (nome quebrado antes das notas).
@@ -215,9 +228,11 @@ export function buildCells(lines: TokenLine[], grid: GridLayout, anchors: Subjec
   const pushAnchoredRow = (name: string, match: AnchorMatch) => {
     anchoredSubjects.push(match.anchor.canonical);
     subjects.push(match.anchor.canonical);
+    const slot = nextSlot(match.anchor.canonical);
     for (const column of grid.columns) {
       cells.push({
         subject: match.anchor.canonical,
+        slot,
         period: column.label,
         period_kind: column.kind,
         raw_value: null,
@@ -336,6 +351,7 @@ export function buildCells(lines: TokenLine[], grid: GridLayout, anchors: Subjec
     const rowAnchor = anchors.length > 0 ? matchSubjectAnchor(rowName, anchors) : null;
     const canonicalName = rowAnchor?.anchor.canonical ?? rowName;
     subjects.push(canonicalName);
+    const rowSlot = nextSlot(canonicalName);
     for (const column of grid.columns) {
       const entry = byColumn.get(column.label);
       const distinct = [...new Set((entry?.texts ?? []).filter((t) => !isEmptyMarker(t)))];
@@ -345,6 +361,7 @@ export function buildCells(lines: TokenLine[], grid: GridLayout, anchors: Subjec
       if (ambiguous) ambiguousCells++;
       cells.push({
         subject: canonicalName,
+        slot: rowSlot,
         period: column.label,
         period_kind: column.kind,
         raw_value: rawValue,

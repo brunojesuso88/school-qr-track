@@ -25,7 +25,10 @@ export interface LocalPagePreview {
     pdf_father_name: string | null;
   };
   detected: Record<string, unknown>;
-  subjects: { normalized_name: string; name: string; weekly_classes: number | null; matched_expected: string | null; sort_order: number }[];
+  subjects: {
+    normalized_name: string; name: string; slot_index: number;
+    weekly_classes: number | null; matched_expected: string | null; sort_order: number;
+  }[];
   periods: { normalized_label: string; label: string; kind: string; sort_order: number }[];
   rows: Record<string, unknown>[];
   stats: {
@@ -113,14 +116,18 @@ export function parseGradePageLocal(tokens: TextToken[], context: LocalParseCont
   const linked = status === 'unmatched' ? null : matched;
   const ambiguous = matchStatus === 'ambiguous';
 
-  const subjectOrder = new Map<string, number>();
-  built.subjects.forEach((s) => {
-    const norm = normalizeText(s);
-    if (!subjectOrder.has(norm)) subjectOrder.set(norm, subjectOrder.size);
+  // Identidade da disciplina na página = nome canônico + slot (ocorrência).
+  const subjectOrder = new Map<string, { norm: string; name: string; slot: number; order: number }>();
+  built.cells.forEach((cell) => {
+    const norm = normalizeText(cell.subject);
+    const slot = cell.slot ?? 1;
+    const key = `${norm}::${slot}`;
+    if (!subjectOrder.has(key)) {
+      subjectOrder.set(key, { norm, name: cell.subject, slot, order: subjectOrder.size });
+    }
   });
 
-  const subjects = [...subjectOrder.entries()].map(([norm, order]) => {
-    const name = built.subjects.find((s) => normalizeText(s) === norm) ?? norm;
+  const subjects = [...subjectOrder.values()].map(({ norm, name, slot, order }) => {
     // Identidade canônica via âncoras (nome, aliases, abreviação); fallback: semelhança simples.
     const anchorMatch = matchSubjectAnchor(name, anchors);
     let matchedExpected: string | null = anchorMatch?.anchor.canonical ?? null;
@@ -138,6 +145,7 @@ export function parseGradePageLocal(tokens: TextToken[], context: LocalParseCont
     return {
       normalized_name: norm,
       name,
+      slot_index: slot,
       weekly_classes: expected?.weekly_classes ?? null,
       matched_expected: expected ? expected.name : null,
       sort_order: order,
@@ -167,6 +175,7 @@ export function parseGradePageLocal(tokens: TextToken[], context: LocalParseCont
       student_code: header.student_code,
       class_code: header.class_code,
       subject: cell.subject,
+      slot_index: cell.slot ?? 1,
       period: cell.period,
       period_kind: cell.period_kind,
       raw_value: cell.raw_value,
@@ -185,6 +194,8 @@ export function parseGradePageLocal(tokens: TextToken[], context: LocalParseCont
   }).sort((a, b) => {
     const bySubject = String(a.subject).localeCompare(String(b.subject), 'pt-BR');
     if (bySubject !== 0) return bySubject;
+    const bySlot = Number(a.slot_index ?? 1) - Number(b.slot_index ?? 1);
+    if (bySlot !== 0) return bySlot;
     return periodRank(a.period) - periodRank(b.period);
   });
 
