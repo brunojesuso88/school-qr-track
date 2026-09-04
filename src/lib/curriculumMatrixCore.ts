@@ -14,8 +14,8 @@ export interface CurriculumMatrixItem {
   /** `null` em matrizes sem carga semanal (ex. Matriz Integral, IRA aritmético). */
   weekly_classes: number | null;
   include_in_ira: boolean;
-  /** Ocorrência do componente na série (1 = única/primeira). */
-  slot_index: number;
+  /** Ocorrência do componente na série (1 = única/primeira; ausente equivale a 1). */
+  slot_index?: number;
   name: string;
   abbreviation: string | null;
   aliases: string[];
