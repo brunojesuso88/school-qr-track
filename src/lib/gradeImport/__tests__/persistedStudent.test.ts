@@ -102,8 +102,9 @@ describe('resolvePersistedStudentId — o ID da UI é a fonte única', () => {
     expect(bad.ok).toBe(false);
   });
 
-  it('chave de identidade prioriza o código e cai para o nome normalizado', () => {
-    expect(studentIdentityKey({ pdf_code: '0012.345', pdf_name: 'X' })).toBe('code:0012345');
+  it('chave de identidade prioriza o código (zeros à esquerda ignorados só na chave) e cai para o nome normalizado', () => {
+    expect(studentIdentityKey({ pdf_code: '0012.345', pdf_name: 'X' })).toBe('code:12345');
+    expect(studentIdentityKey({ pdf_code: '12345', pdf_name: 'Y' })).toBe(studentIdentityKey({ pdf_code: '0012345', pdf_name: 'Z' }));
     expect(studentIdentityKey({ pdf_code: null, pdf_name: '  José  da SILVA ' })).toBe('name:jose da silva');
     expect(studentIdentityKey({ pdf_code: null, pdf_name: '' })).toBeNull();
   });
