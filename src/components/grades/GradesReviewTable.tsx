@@ -10,6 +10,8 @@ export interface ReviewRow {
   student_code?: string | null;
   class_code?: string | null;
   subject: string;
+  /** Ocorrência da disciplina na etapa (1 = primeira; ausente equivale a 1). */
+  slot_index?: number | null;
   period: string;
   period_kind?: string | null;
   raw_value: string | null;
