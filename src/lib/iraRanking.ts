@@ -15,7 +15,10 @@ import {
   computeIraForStudent, fetchGradesPaged, resolveIraPeriods,
 } from '@/hooks/useStudentGrades';
 import { formatIra } from '@/lib/ira';
-import { HighSchoolSeries, parseSeriesValue } from '@/lib/series';
+import {
+  HighSchoolSeries, parseSeriesValue,
+  classSeriesLabel as classSeriesLabelFn, parseSeriesValue as parseSeriesValueFn,
+} from '@/lib/series';
 import { fetchMatrixWeeklyByClass } from '@/lib/curriculumMatrixWeekly';
 import mascotAsset from '@/assets/ira-ranking-mascote.jpg';
 
