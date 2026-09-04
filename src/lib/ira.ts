@@ -69,12 +69,14 @@ export interface IraPeriodValue {
   missing: boolean;
 }
 
+export type IraWeightSource = 'auto' | 'custom' | 'none' | 'arithmetic';
+
 export interface IraLine {
   subjectId: string;
   name: string;
   weeklyClasses: number | null;
   weight: number | null;
-  weightSource: 'auto' | 'custom' | 'none';
+  weightSource: IraWeightSource;
   /** Notas dos períodos selecionados. */
   periodValues: IraPeriodValue[];
   /** Média aritmética dos períodos selecionados (nota representativa). */
@@ -106,6 +108,8 @@ export interface IraResult {
   missingGradeCount: number;
   /** Nota representativa por disciplina (subjectId -> média). */
   periodAverages: Record<string, number | null>;
+  /** Modo de cálculo efetivamente aplicado. */
+  mode: IraCalculationMode;
 }
 
 /** Peso automático a partir da carga semanal. `null` quando a carga não é 1, 2 ou 4. */
@@ -118,10 +122,18 @@ export function isAutoWeightEligible(weeklyClasses: number | null | undefined): 
   return weightForWeeklyClasses(weeklyClasses) !== null;
 }
 
-export function resolveWeight(subject: Pick<IraSubjectInput, 'weeklyClasses' | 'customWeight'>): {
+/**
+ * Peso da disciplina conforme o modo. No modo aritmético o peso é SEMPRE 1
+ * (carga semanal e peso personalizado são ignorados por definição).
+ */
+export function resolveWeight(
+  subject: Pick<IraSubjectInput, 'weeklyClasses' | 'customWeight'>,
+  mode: IraCalculationMode = DEFAULT_IRA_MODE,
+): {
   weight: number | null;
-  source: 'auto' | 'custom' | 'none';
+  source: IraWeightSource;
 } {
+  if (mode === 'arithmetic') return { weight: 1, source: 'arithmetic' };
   const auto = weightForWeeklyClasses(subject.weeklyClasses);
   if (auto !== null) return { weight: auto, source: 'auto' };
   if (subject.customWeight != null && subject.customWeight > 0) {
@@ -133,6 +145,8 @@ export function resolveWeight(subject: Pick<IraSubjectInput, 'weeklyClasses' | '
 export interface CalculateIraOptions {
   /** Motivo específico quando não há configuração (mensagem exibida no card). */
   notConfiguredReason?: string;
+  /** Modo de cálculo da matriz da turma (padrão: ponderado pela carga semanal). */
+  mode?: IraCalculationMode;
 }
 
 /**
@@ -145,9 +159,10 @@ export function calculateIraMultiPeriod(
   options: CalculateIraOptions = {},
 ): IraResult {
   const periods = selectedPeriods ?? [];
+  const mode: IraCalculationMode = options.mode ?? DEFAULT_IRA_MODE;
 
   const lines: IraLine[] = subjects.map((subject) => {
-    const { weight, source } = resolveWeight(subject);
+    const { weight, source } = resolveWeight(subject, mode);
     let eligible = true;
     let reason: string | undefined;
 
