@@ -76,7 +76,12 @@ export interface LocalParseResult {
   authoritative: boolean;
   validation: LocalValidation;
   preview: LocalPagePreview | null;
+  /** Disciplinas reconhecidas na página (0 = página de continuação/cabeçalho). */
+  subjectCount: number;
+  /** Página sem nenhuma disciplina reconhecida: ignorar em silêncio (sem IA). */
+  skipPage: SkipPageDecision;
 }
+
 
 /** Matching em camadas (código → nome exato → semelhança única). Ambiguidade nunca é aceita. */
 function matchStudent(name: string, code: string | null, students: LocalContextStudent[]) {
