@@ -272,13 +272,20 @@ const Classes = () => {
     if (!confirm('Tem certeza que deseja excluir esta turma?')) return;
 
     try {
-      const { error } = await supabase.from('classes').delete().eq('id', id);
+      const { error, count } = await supabase
+        .from('classes')
+        .delete({ count: 'exact' })
+        .eq('id', id);
       if (error) throw error;
+      if (!count) {
+        toast.error('Não foi possível excluir: seu perfil não tem permissão nesta escola.');
+        return;
+      }
       toast.success('Turma excluída');
       fetchClasses();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error deleting class:', error);
-      toast.error('Falha ao excluir turma');
+      toast.error(error?.message ? `Falha ao excluir turma: ${error.message}` : 'Falha ao excluir turma');
     }
   };
 
