@@ -12,6 +12,7 @@ import { isLocalAuthoritative, validateLocalPage } from './validate';
 import {
   LocalContextStudent, LocalParseContext, LocalValidation, TextToken,
 } from './types';
+import { decideSkipPageWithoutSubjects, SkipPageDecision } from './emptyPage';
 
 export interface LocalPagePreview {
   page: number;
@@ -99,7 +100,13 @@ export function parseGradePageLocal(tokens: TextToken[], context: LocalParseCont
       tokens, grid: null, cells: [], subjects: [], expectedSubjects: context.expectedSubjects,
       ambiguousCells: 0, orphanTokens: 0, orphanGradeTokens: 0, studentName: null, matchScore: 0,
     });
-    return { ok: false, confident: false, authoritative: false, validation, preview: null };
+    return {
+      ok: false, confident: false, authoritative: false, validation, preview: null,
+      subjectCount: 0,
+      skipPage: decideSkipPageWithoutSubjects({
+        page: context.page, tokens, subjectCount: 0, gridDetected: false,
+      }),
+    };
   }
 
   const header = extractHeader(lines, grid.headerLineIndex);
@@ -289,5 +296,13 @@ export function parseGradePageLocal(tokens: TextToken[], context: LocalParseCont
     authoritative,
     validation,
     preview,
+    subjectCount: subjects.length,
+    skipPage: decideSkipPageWithoutSubjects({
+      page: context.page,
+      tokens,
+      subjectCount: subjects.length,
+      gridDetected: true,
+      orphanGradeTokens: built.orphanGradeTokens,
+    }),
   };
 }
