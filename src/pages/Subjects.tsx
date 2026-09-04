@@ -18,7 +18,7 @@ import { useToast } from "@/hooks/use-toast";
 import { usePermissions } from "@/contexts/PermissionsContext";
 import { useActiveSchoolId, useSchoolScopeKey } from "@/contexts/SchoolContext";
 import { supabase } from "@/integrations/supabase/client";
-import { CLASS_SERIES_OPTIONS, HighSchoolSeries, classSeriesLabel, parseSeriesValue } from "@/lib/series";
+import { CLASS_SERIES_OPTIONS, HighSchoolSeries, classSeriesLabel, parseSeriesValue, seriesShortLabel } from "@/lib/series";
 import { matrixWeeklyTotal } from "@/lib/curriculumMatrixCore";
 import {
   CurriculumMatrixRecord, MatrixComponentRow, countClassesUsingMatrix, createCurriculumMatrix,
@@ -476,9 +476,9 @@ const SubjectsContent = () => {
       </Card>
 
       <Tabs value={series} onValueChange={(v) => setSeries(v as HighSchoolSeries)}>
-        <TabsList>
+        <TabsList className="flex h-auto w-full flex-wrap justify-start gap-1">
           {CLASS_SERIES_OPTIONS.map((o) => (
-            <TabsTrigger key={o.value} value={o.value}>{o.value}º ano</TabsTrigger>
+            <TabsTrigger key={o.value} value={o.value}>{seriesShortLabel(o.value)}</TabsTrigger>
           ))}
         </TabsList>
 
@@ -705,7 +705,7 @@ const SubjectsContent = () => {
                         })}
                       />
                       <span className="flex-1">{row.name}</span>
-                      <Badge variant="outline" className="text-[10px]">{row.series}º ano</Badge>
+                      <Badge variant="outline" className="text-[10px]">{seriesShortLabel(parseSeriesValue(row.series))}</Badge>
                       <Badge variant="secondary" className="text-[10px]">{row.weekly_classes} aulas</Badge>
                     </label>
                   ))}
@@ -755,7 +755,7 @@ const SubjectsContent = () => {
                   />
                   <span className="flex-1">{c.name}</span>
                   <Badge variant="outline" className="text-[10px]">
-                    {c.series ? `${c.series}º ano` : "sem série"}
+                    {seriesShortLabel(c.series)}
                   </Badge>
                   {c.curriculum_matrix_id === matrixId && (
                     <Badge variant="secondary" className="text-[10px]">vinculada</Badge>
