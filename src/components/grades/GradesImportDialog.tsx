@@ -413,46 +413,58 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
     setContextBlock(null);
     setClassStudents(students.map((s) => ({ id: s.id, full_name: s.full_name })));
 
-    let expected: { id: string; name: string; weekly_classes: number }[] = [];
-    if (classItem.mapping_class_id) {
-      const { data: subjData } = await supabase
-        .from('mapping_class_subjects')
-        .select('id, subject_name, weekly_classes')
-        .eq('school_id', assertActiveSchool(activeSchoolId))
-        .eq('class_id', classItem.mapping_class_id);
-      expected = (subjData || []).map((s: { id: string; subject_name: string; weekly_classes: number }) => ({
-        id: s.id, name: s.subject_name, weekly_classes: s.weekly_classes,
-      }));
-    }
-    setExpectedSubjects(expected);
     localStudentsRef.current = students.map((s) => ({
       id: s.id, full_name: s.full_name, student_id: s.student_id,
       school_code: s.school_code, birth_date: s.birth_date,
       mother_name: s.mother_name, father_name: s.father_name,
     }));
-    // Matriz efetiva de âncoras: mapeamento da turma + disciplinas já importadas + catálogo da série.
-    const [{ data: gradeSubj }, { data: classRow }] = await Promise.all([
-      supabase.from('grade_subjects').select('name, weekly_classes').eq('school_id', assertActiveSchool(activeSchoolId)).eq('class_id', classItem.id).eq('legacy_excluded', false),
-      supabase.from('classes').select('series').eq('school_id', assertActiveSchool(activeSchoolId)).eq('id', classItem.id).maybeSingle(),
-    ]);
-    const series = (classRow as { series?: string | null } | null)?.series ?? null;
-    const { data: catalog } = await supabase
-      .from('mapping_global_subjects')
-      .select('name, abbreviation, aliases, series, default_weekly_classes')
-      .eq('school_id', assertActiveSchool(activeSchoolId));
-    // Matriz curricular OFICIAL da série tem prioridade máxima como âncora.
-    const parsedSeries = parseSeriesValue(series);
-    if (!parsedSeries) {
-      throw new Error('Defina a série da turma e aplique a matriz curricular oficial antes de importar o boletim.');
+
+    // Contexto ESTÁTICO (mapeamento, matriz oficial, catálogo) — cache em memória por
+    // escola + turma + matriz. Alunos e disciplinas já importadas são sempre relidos.
+    const schoolId = assertActiveSchool(activeSchoolId);
+    const classMatrix = await resolveClassMatrix(classItem.id, schoolId);
+    const cacheKey = contextCacheKey({ schoolId, classId: classItem.id, matrixId: classMatrix.id });
+    let staticCtx = staticContextCache.get(cacheKey);
+    if (!staticCtx) {
+      let expected: { id: string; name: string; weekly_classes: number }[] = [];
+      if (classItem.mapping_class_id) {
+        const { data: subjData } = await supabase
+          .from('mapping_class_subjects')
+          .select('id, subject_name, weekly_classes')
+          .eq('school_id', schoolId)
+          .eq('class_id', classItem.mapping_class_id);
+        expected = (subjData || []).map((s: { id: string; subject_name: string; weekly_classes: number }) => ({
+          id: s.id, name: s.subject_name, weekly_classes: s.weekly_classes,
+        }));
+      }
+      const [{ data: classRow }, { data: catalog }] = await Promise.all([
+        supabase.from('classes').select('series').eq('school_id', schoolId).eq('id', classItem.id).maybeSingle(),
+        supabase.from('mapping_global_subjects')
+          .select('name, abbreviation, aliases, series, default_weekly_classes')
+          .eq('school_id', schoolId),
+      ]);
+      const series = (classRow as { series?: string | null } | null)?.series ?? null;
+      // Matriz curricular OFICIAL da série tem prioridade máxima como âncora.
+      const parsedSeries = parseSeriesValue(series);
+      if (!parsedSeries) {
+        throw new Error('Defina a série da turma e aplique a matriz curricular oficial antes de importar o boletim.');
+      }
+      const matrixItems = await fetchCurriculumMatrix(parsedSeries, activeSchoolId, classMatrix.id).catch(() => []);
+      if (matrixItems.length === 0) {
+        throw new Error(
+          'A matriz curricular vinculada a esta turma não tem disciplinas para esta série. ' +
+          'Cadastre os componentes em Disciplinas — Matriz Curricular (ou vincule outra matriz) e sincronize a turma antes de importar o boletim.',
+        );
+      }
+      staticCtx = { expected, matrixItems, catalog: (catalog || []) as CatalogSubject[], series };
+      staticContextCache.set(cacheKey, staticCtx);
     }
-    const classMatrix = await resolveClassMatrix(classItem.id, assertActiveSchool(activeSchoolId));
-    const matrixItems = await fetchCurriculumMatrix(parsedSeries, activeSchoolId, classMatrix.id).catch(() => []);
-    if (matrixItems.length === 0) {
-      throw new Error(
-        'A matriz curricular vinculada a esta turma não tem disciplinas para esta série. ' +
-        'Cadastre os componentes em Disciplinas — Matriz Curricular (ou vincule outra matriz) e sincronize a turma antes de importar o boletim.',
-      );
-    }
+    const { expected, matrixItems, catalog, series } = staticCtx;
+    setExpectedSubjects(expected);
+    // Disciplinas já importadas mudam a cada página confirmada: nunca vão para o cache.
+    const { data: gradeSubj } = await supabase
+      .from('grade_subjects').select('name, weekly_classes')
+      .eq('school_id', schoolId).eq('class_id', classItem.id).eq('legacy_excluded', false);
     matrixIraRef.current = {
       includeByKey: new Map<string, boolean>(
         matrixItems.map((m): [string, boolean] => [
@@ -465,7 +477,7 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
       matrix: official,
       mapping: expected.map((s) => ({ name: s.name, weekly_classes: s.weekly_classes })),
       imported: (gradeSubj || []) as { name: string; weekly_classes: number | null }[],
-      catalog: (catalog || []) as CatalogSubject[],
+      catalog,
       series,
     });
     return { students, expected, className };
