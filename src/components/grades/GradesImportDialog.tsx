@@ -1368,7 +1368,11 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
         // aponta para o mesmo grade_subject do nome canônico.
         subjectNormRedirect.set(`${canonicalSubjectKey(s.name)}#${slot}`, targetKey);
         const previous = existingByNorm.get(targetKey);
-        const weekly = expected?.weekly_classes ?? s.weekly_classes ?? null;
+        // Regravação nunca rebaixa a carga já informada (prévia da IA vem sem carga).
+        const weekly = resolveWeeklyClassesForUpsert(
+          expected?.weekly_classes ?? s.weekly_classes ?? null,
+          previous?.weekly_classes,
+        );
         if (seenNorms.has(targetKey)) return;
         seenNorms.add(targetKey);
         subjectPayload.push({
