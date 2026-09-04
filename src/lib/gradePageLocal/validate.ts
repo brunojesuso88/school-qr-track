@@ -5,7 +5,7 @@
  * (ex.: disciplina da matriz sem nota no boletim). Somente bloqueantes impedem
  * que a leitura local seja considerada AUTORITATIVA.
  */
-import { normalizeText } from './normalize';
+import { canonicalSubjectKey, normalizeText } from './normalize';
 import { buildSubjectAnchors, matchSubjectAnchor } from './subjectAnchors';
 import { GridLayout, LocalCell, LocalExpectedSubject, LocalValidation, TextToken } from './types';
 
