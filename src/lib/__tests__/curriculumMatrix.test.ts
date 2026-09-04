@@ -94,8 +94,8 @@ describe('normalização dos Aprofundamentos', () => {
   const CANON_I = canonicalSubjectKey('APROFUNDAMENTO IF - I');
   const CANON_II = canonicalSubjectKey('APROFUNDAMENTO IF - II');
 
-  it('CHL/CNS/ETT são ignorados para resolver I e II', () => {
-    ['CHL', 'CNS', 'ETT'].forEach((axis) => {
+  it('CHL/CNS/ETT/SEA são ignorados para resolver I e II', () => {
+    ['CHL', 'CNS', 'ETT', 'SEA'].forEach((axis) => {
       expect(canonicalSubjectKey(`APROFUNDAMENTO IF - ${axis} - I`)).toBe(CANON_I);
       expect(canonicalSubjectKey(`APROFUNDAMENTO IF ${axis} I`)).toBe(CANON_I);
       expect(canonicalSubjectKey(`APROFUNDAMENTO IF - ${axis}-II`)).toBe(CANON_II);
