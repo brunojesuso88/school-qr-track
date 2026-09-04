@@ -1176,7 +1176,7 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
 
       const { data: existingSubjects } = await supabase
         .from('grade_subjects')
-        .select('id, name, normalized_name, include_in_ira, custom_ira_weight, legacy_excluded')
+        .select('id, name, normalized_name, slot_index, include_in_ira, custom_ira_weight, legacy_excluded')
         .eq('school_id', assertActiveSchool(activeSchoolId))
         .eq('class_id', classItem.id);
       type ExistingSubjectRow = {
