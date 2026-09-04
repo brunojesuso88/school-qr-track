@@ -58,10 +58,20 @@ import {
 interface ParsedSubject {
   normalized_name: string;
   name: string;
+  /** Ocorrência da disciplina na etapa (1 = primeira; Matriz Integral pode repetir). */
+  slot_index?: number | null;
   weekly_classes: number | null;
   matched_expected: string | null;
   sort_order: number;
 }
+
+/** Identidade de uma nota na conferência: aluno + disciplina + ocorrência + período. */
+const gradeConflictKey = (
+  studentId: string,
+  subject: string,
+  slotIndex: number | null | undefined,
+  period: string,
+) => `${studentId}||${subject}#${slotIndex ?? 1}||${period}`;
 
 interface ParsedPeriod {
   normalized_label: string;
