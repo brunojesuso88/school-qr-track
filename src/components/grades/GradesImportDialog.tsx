@@ -282,6 +282,11 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
   const localExpectedRef = useRef<LocalExpectedSubject[]>([]);
   const [localTimings, setLocalTimings] = useState<number[]>([]);
   const [localSolvedPages, setLocalSolvedPages] = useState(0);
+  /** Espelho da sessão para uso dentro do laço de páginas (sem depender do render). */
+  const sessionRef = useRef<SessionState | null>(null);
+  useEffect(() => { sessionRef.current = session; }, [session]);
+  /** Páginas ignoradas por não conterem nenhuma disciplina (diagnóstico não bloqueante). */
+  const [skippedPages, setSkippedPages] = useState<number[]>([]);
 
   const reset = useCallback(() => {
     setStep('select');
@@ -315,6 +320,7 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
     localExpectedRef.current = [];
     setLocalTimings([]);
     setLocalSolvedPages(0);
+    setSkippedPages([]);
     if (fileInputRef.current) fileInputRef.current.value = '';
   }, []);
 
@@ -616,22 +622,61 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
     return result;
   }, []);
 
+  /** Encerra a sessão (todas as páginas resolvidas). */
+  const finishSession = useCallback(async (sessionId: string) => {
+    await supabase.from('grade_import_sessions')
+      .update({ status: 'completed', pdf_base64: null })
+      .eq('id', sessionId);
+    setStep('summary');
+    onImported?.();
+  }, [onImported]);
+
+  /**
+   * Página sem nenhuma disciplina reconhecida: ignorada em silêncio.
+   * Nada é gravado (disciplina, nota, conflito, placeholder), a IA não é acionada
+   * e o IRA não é marcado como desatualizado por causa dela.
+   */
+  const skipPageWithoutSubjects = useCallback(async (sessionId: string, pageNumber: number, note: string) => {
+    await supabase.from('grade_import_session_pages')
+      .update({ status: 'ignored', error: note })
+      .eq('session_id', sessionId).eq('page_number', pageNumber);
+    const ignored = (sessionRef.current?.ignored_pages ?? 0) + 1;
+    await supabase.from('grade_import_sessions')
+      .update({ ignored_pages: ignored, current_page: pageNumber })
+      .eq('id', sessionId);
+    setSession((prev) => (prev ? { ...prev, ignored_pages: ignored, current_page: pageNumber } : prev));
+    setSkippedPages((prev) => [...prev, pageNumber]);
+    console.info(note);
+  }, []);
+
   /** Processa UMA página: local primeiro, IA como validadora/fallback. */
   const processPage = useCallback(async (sessionId: string, pageNumber: number) => {
     setError(null);
     setStep('processing');
     setPreview(null);
     try {
+      let page = pageNumber;
+      // Um mesmo aluno pode ocupar várias páginas: páginas de continuação sem
+      // disciplina são puladas até chegar na próxima página com conteúdo real.
+      for (;;) {
       let local: Awaited<ReturnType<typeof readPageLocally>> = null;
       if (readingMode !== 'ai_only') {
         try {
-          local = await readPageLocally(pageNumber);
+          local = await readPageLocally(page);
         } catch (e) {
           console.error('Leitura local falhou, seguindo com IA:', e);
           local = null;
         }
       }
       if (cancelledRef.current) return;
+
+      if (local?.skipPage.skip) {
+        await skipPageWithoutSubjects(sessionId, page, local.skipPage.note ?? `Página ${page} ignorada: nenhuma disciplina encontrada`);
+        const totalPages = sessionRef.current?.total_pages ?? pdfDocRef.current?.numPages ?? page;
+        if (page >= totalPages) { await finishSession(sessionId); return; }
+        page += 1;
+        continue;
+      }
 
       // Caminho 100% local: leitura AUTORITATIVA (sem risco real) dispensa a IA.
       const localOk = Boolean(local?.preview && local.ok);
@@ -644,15 +689,15 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
             ...localPreview.reading, mode: 'local', authority: 'authoritative', ai_used: false,
           };
         }
-        await persistPreview(sessionId, pageNumber, localPreview);
+        await persistPreview(sessionId, page, localPreview);
         setLocalSolvedPages((prev) => prev + 1);
-        setSession((prev) => (prev ? { ...prev, current_page: pageNumber } : prev));
+        setSession((prev) => (prev ? { ...prev, current_page: page } : prev));
         await applyPreview(localPreview);
         return;
       }
 
       const { data, error: fnError } = await supabase.functions.invoke('parse-grade-page', {
-        body: { action: 'page', session_id: sessionId, page_number: pageNumber },
+        body: { action: 'page', session_id: sessionId, page_number: page },
       });
       if (fnError) throw new Error(fnError.message);
       if (!data?.success) throw new Error(data?.error || 'Falha ao ler a página.');
@@ -679,7 +724,7 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
               }
             : merged.reading,
         };
-        await persistPreview(sessionId, pageNumber, finalPreview);
+        await persistPreview(sessionId, page, finalPreview);
       } else if (finalPreview.reading) {
         finalPreview = {
           ...finalPreview,
@@ -688,14 +733,16 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
         };
       }
 
-      setSession((prev) => (prev ? { ...prev, current_page: pageNumber } : prev));
+      setSession((prev) => (prev ? { ...prev, current_page: page } : prev));
       await applyPreview(finalPreview);
+      return;
+      }
     } catch (e) {
       console.error(e);
       setError(e instanceof Error ? e.message : 'Erro ao ler a página.');
       setStep('failed');
     }
-  }, [applyPreview, persistPreview, readPageLocally, readingMode]);
+  }, [applyPreview, persistPreview, readPageLocally, readingMode, skipPageWithoutSubjects, finishSession]);
 
   /** Sessão em aberto para esta turma (retomada). */
   useEffect(() => {
