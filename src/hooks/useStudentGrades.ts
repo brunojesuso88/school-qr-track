@@ -220,8 +220,12 @@ async function fetchClassGrades(
   }
 
   // Fonte de verdade da carga semanal quando não há vínculo de mapeamento.
-  const series = parseSeriesValue((classRes.data as { series: string | null } | null)?.series ?? null);
-  const matrixWeeklyByKey = await fetchMatrixWeeklyByKey([series], schoolId);
+  const classInfo = classRes.data as { series: string | null; curriculum_matrix_id?: string | null } | null;
+  const series = parseSeriesValue(classInfo?.series ?? null);
+  // Carga/participação vêm da matriz efetivamente atribuída à turma.
+  const matrixWeeklyByKey = await fetchMatrixWeeklyByKey(
+    [series], schoolId, classInfo?.curriculum_matrix_id ? [classInfo.curriculum_matrix_id] : undefined,
+  );
 
   return {
     subjects,
