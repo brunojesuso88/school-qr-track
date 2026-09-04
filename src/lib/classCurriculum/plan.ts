@@ -5,6 +5,7 @@
 import { canonicalSubjectKey } from '@/lib/gradePageLocal/normalize';
 import { normalizeText } from '@/lib/gradePageLocal/normalize';
 import { CurriculumMatrixItem } from '@/lib/curriculumMatrixCore';
+import { hasWeeklyLoad } from '@/lib/ira';
 
 export interface ExistingMappingSubject {
   id: string;
@@ -129,16 +130,16 @@ export function planClassCurriculumSync(input: {
     const slot = item.slot_index ?? 1;
 
     // --- mapping_class_subjects (camada auxiliar: só a 1ª ocorrência) ---
-    // Componentes sem carga semanal (matrizes de média aritmética, ex.: Integral)
+    // Componentes com carga "não informada" (0 ou null — caso da Matriz Integral)
     // NÃO passam pela camada auxiliar `mapping_class_subjects`: inventar carga 1
     // criaria uma carga acadêmica fictícia.
-    if (manageMapping && slot === 1 && item.weekly_classes != null) {
+    if (manageMapping && slot === 1 && hasWeeklyLoad(item.weekly_classes)) {
       const mappingMatches = mappingSubjects.filter((m) => keys.includes(canonicalSubjectKey(m.subject_name)));
       if (mappingMatches.length === 0) {
         plan.mappingCreate.push({ subject_name: item.name, weekly_classes: item.weekly_classes });
       } else {
         const chosen = pickTarget(mappingMatches.map((m) => ({ ...m, name: m.subject_name })), item.name);
-        const expected = item.weekly_classes ?? null;
+        const expected = hasWeeklyLoad(item.weekly_classes) ? (item.weekly_classes as number) : null;
         if (expected != null && (chosen.weekly_classes ?? null) !== expected) {
           plan.mappingUpdate.push({ id: chosen.id, weekly_classes: expected });
         }
