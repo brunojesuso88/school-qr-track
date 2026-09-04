@@ -858,7 +858,7 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
   /** Contagem ATUAL de divergências (reflete correções manuais), não o valor gravado na prévia. */
   const currentDivergenceCount = useMemo(() => analyzeDivergences(rows).divergences.length, [rows]);
   const pageHasConflicts = useMemo(
-    () => rows.some((r) => targetStudentId && conflictKeys.has(`${targetStudentId}||${r.subject}||${r.period}`)),
+    () => rows.some((r) => targetStudentId && conflictKeys.has(gradeConflictKey(targetStudentId, r.subject, r.slot_index, r.period))),
     [rows, conflictKeys, targetStudentId],
   );
 
