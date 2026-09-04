@@ -245,6 +245,7 @@ export function buildCells(lines: TokenLine[], grid: GridLayout, anchors: Subjec
       && Math.abs(pending!.y - line.y) <= Math.max(pending!.height, line.height) * 2.2;
 
     let rowName = subjectName;
+    let mergedName: string | null = null;
 
     if (!subjectName || !isSubjectLabel(subjectName)) {
       // Continuidade determinística: fragmento curto (`I`, `II`) ou linha só com valores.
