@@ -2168,6 +2168,12 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
                 {' '}tempo médio {Math.round(localTimings.reduce((a, b) => a + b, 0) / localTimings.length)}ms por página.
               </p>
             )}
+            {skippedPages.length > 0 && (
+              <p className="text-xs text-muted-foreground">
+                Página(s) sem nenhuma disciplina ignorada(s): {skippedPages.join(', ')}. Nada foi gravado por causa delas.
+              </p>
+            )}
+
           </div>
         )}
 
