@@ -41,8 +41,6 @@ import { fetchCurriculumMatrix, matrixToExpectedSubjects } from '@/lib/curriculu
 import { markIraStale } from '@/lib/iraSnapshot/recompute';
 import { resolveClassMatrix } from '@/lib/classCurriculum/sync';
 import { useActiveSchoolId } from '@/contexts/SchoolContext';
-import { DEFAULT_IRA_MODE, IraCalculationMode } from '@/lib/ira';
-import { fetchIraModeByMatrixId } from '@/lib/iraModes';
 import { resolveIncludeInIra } from '@/lib/classCurriculum/includeInIra';
 import { assertActiveSchool } from '@/lib/schools/scope';
 import { parseSeriesValue } from '@/lib/series';
@@ -272,13 +270,10 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
   const pdfDocRef = useRef<LocalPdfDocument | null>(null);
   const localStudentsRef = useRef<LocalContextStudent[]>([]);
   /**
-   * Modo de IRA e participação por componente definidos pela MATRIZ da turma.
-   * Usados ao criar `grade_subjects`: matrizes de média aritmética (Integral) não
-   * têm carga semanal, então a regra 1/2/4 não pode decidir nada nelas.
+   * Participação no IRA por componente definida pela MATRIZ da turma.
+   * Usada ao criar `grade_subjects` (a decisão da matriz vem antes da regra 1/2/4).
    */
-  const matrixIraRef = useRef<{ mode: IraCalculationMode; includeByKey: Map<string, boolean> }>(
-    { mode: DEFAULT_IRA_MODE, includeByKey: new Map() },
-  );
+  const matrixIraRef = useRef<{ includeByKey: Map<string, boolean> }>({ includeByKey: new Map() });
   const localExpectedRef = useRef<LocalExpectedSubject[]>([]);
   const [localTimings, setLocalTimings] = useState<number[]>([]);
   const [localSolvedPages, setLocalSolvedPages] = useState(0);
@@ -435,11 +430,7 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
         'Cadastre os componentes em Disciplinas — Matriz Curricular (ou vincule outra matriz) e sincronize a turma antes de importar o boletim.',
       );
     }
-    const [modeByMatrix] = await Promise.all([
-      fetchIraModeByMatrixId([classMatrix.id], assertActiveSchool(activeSchoolId)),
-    ]);
     matrixIraRef.current = {
-      mode: (classMatrix.id ? modeByMatrix[classMatrix.id] : undefined) ?? DEFAULT_IRA_MODE,
       includeByKey: new Map<string, boolean>(
         matrixItems.map((m): [string, boolean] => [
           `${canonicalSubjectKey(m.name)}#${m.slot_index ?? 1}`, m.include_in_ira,
@@ -1316,7 +1307,6 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
           include_in_ira: resolveIncludeInIra({
             previous: previous?.include_in_ira,
             matrixIncludeInIra: matrixIraRef.current.includeByKey.get(`${canonicalSubjectKey(name)}#${slot}`),
-            mode: matrixIraRef.current.mode,
             weeklyClasses: weekly,
           }),
           custom_ira_weight: previous?.custom_ira_weight ?? null,
