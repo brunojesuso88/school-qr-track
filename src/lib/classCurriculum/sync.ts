@@ -12,7 +12,7 @@ import { CurriculumMatrixItem } from '@/lib/curriculumMatrixCore';
 import {
   ClassCurriculumPlan, ExistingGradeSubject, ExistingMappingSubject, isPlanInSync, planClassCurriculumSync,
 } from '@/lib/classCurriculum/plan';
-import { assignMatrixToClass, fetchOriginalMatrixId } from '@/lib/curriculumMatrices';
+import { assertMatrixInSchool, assignMatrixToClass, fetchOriginalMatrixId } from '@/lib/curriculumMatrices';
 
 export * from '@/lib/classCurriculum/plan';
 
@@ -224,8 +224,19 @@ export async function syncClassCurriculum(
   const parsed = parseSeriesValue(series);
   if (!parsed) throw new Error('Série da turma inválida — selecione 1º, 2º ou 3º ano do Ensino Médio.');
 
-  // Troca de matriz (quando solicitada) antes de planejar: RPC valida escola e audita.
-  if (options.matrixId) await assignMatrixToClass(classId, options.matrixId);
+  // Troca de matriz: valida ANTES de alterar/auditar o vínculo da turma. Uma matriz
+  // vazia (ou sem componentes para a série) nunca substitui a matriz anterior.
+  if (options.matrixId) {
+    await assertMatrixInSchool(options.matrixId, options.schoolId);
+    const candidate = await fetchCurriculumMatrix(parsed, options.schoolId, options.matrixId);
+    if (candidate.length === 0) {
+      throw new Error(
+        'A matriz curricular escolhida não tem componentes para esta série. ' +
+        'Cadastre as disciplinas dessa série antes de vinculá-la à turma — o vínculo atual foi mantido.',
+      );
+    }
+    await assignMatrixToClass(classId, options.matrixId);
+  }
 
   if (options.persistSeries !== false) {
     const { error } = await supabase.from('classes').update({ series: parsed }).eq('id', classId);

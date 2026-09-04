@@ -209,17 +209,25 @@ export interface CatalogSubjectRecord {
   name: string;
   abbreviation: string | null;
   aliases: string[];
+  /** Séries em que a disciplina existe no catálogo da escola. */
+  series: string[];
 }
+
+/** PURO: união idempotente de séries — nunca remove uma série já cadastrada. */
+export const mergeSubjectSeries = (current: string[] | null | undefined, added: string) =>
+  [...new Set([...(current ?? []), added])].filter(Boolean).sort();
 
 /** Catálogo de disciplinas da escola (identidade canônica de nome/abreviação/aliases). */
 export async function fetchSchoolSubjectCatalog(schoolId: string): Promise<CatalogSubjectRecord[]> {
   const { data, error } = await supabase
     .from('mapping_global_subjects')
-    .select('id, name, abbreviation, aliases')
+    .select('id, name, abbreviation, aliases, series')
     .eq('school_id', schoolId);
   if (error) throw error;
-  return ((data ?? []) as { id: string; name: string; abbreviation: string | null; aliases: string[] | null }[])
-    .map((s) => ({ ...s, aliases: s.aliases ?? [] }))
+  return ((data ?? []) as {
+    id: string; name: string; abbreviation: string | null; aliases: string[] | null; series: string[] | null;
+  }[])
+    .map((s) => ({ ...s, aliases: s.aliases ?? [], series: s.series ?? [] }))
     .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
 }
 
@@ -239,11 +247,17 @@ export async function ensureCatalogSubject(input: {
 
   if (existing) {
     const aliases = [...new Set([...(existing.aliases ?? []), ...(input.aliases ?? [])])].filter(Boolean);
+    // Séries são acumulativas: a disciplina passa a valer também na nova série,
+    // sem remover as séries já cadastradas. `default_weekly_classes` permanece
+    // apenas como fallback canônico da escola e NÃO é sobrescrito por uma
+    // matriz personalizada (a carga real fica em `curriculum_matrix_subjects`).
+    const series = mergeSubjectSeries(existing.series, input.series);
     const { error } = await supabase
       .from('mapping_global_subjects')
       .update({
         abbreviation: input.abbreviation?.trim() ? input.abbreviation.trim() : existing.abbreviation,
         aliases,
+        series,
       })
       .eq('id', existing.id)
       .eq('school_id', input.schoolId);
@@ -275,6 +289,17 @@ export async function assignMatrixToClass(classId: string, matrixId: string): Pr
     _matrix_id: matrixId,
   });
   if (error) throw new Error(error.message);
+}
+
+/** Quantas turmas da escola estão vinculadas a esta matriz (bloqueia exclusão). */
+export async function countClassesUsingMatrix(matrixId: string, schoolId: string): Promise<number> {
+  const { count, error } = await supabase
+    .from('classes')
+    .select('id', { count: 'exact', head: true })
+    .eq('school_id', schoolId)
+    .eq('curriculum_matrix_id', matrixId);
+  if (error) throw error;
+  return count ?? 0;
 }
 
 /** Reparo idempotente da Matriz Original em todas as escolas (apenas admin global). */
