@@ -1521,6 +1521,8 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
       }).eq('id', session.id);
       setSession(updated);
       setSavedTotal((prev) => prev + finalPayload.length);
+      // Páginas seguintes do mesmo aluno (mesmo código/nome no PDF) reutilizam este ID.
+      persistedStudentsRef.current = rememberPersistedStudent(persistedStudentsRef.current, detected, studentId);
       toast.success(
         mode === 'auto'
           ? `Página ${preview.page} aprovada automaticamente: ${finalPayload.length} nota(s) gravada(s).`
