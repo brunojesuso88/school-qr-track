@@ -812,8 +812,11 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
         setLocalSolvedPages((prev) => prev + 1);
         setSession((prev) => (prev ? { ...prev, current_page: page } : prev));
         await applyPreview(localPreview);
+        // Enquanto o usuário confere esta página, as próximas já são lidas localmente.
+        schedulePrefetch(page);
         return;
       }
+
       console.info(`[boletim] página ${page}: IA acionada (${decision.reason})`, decision.details);
       setAiPages((prev) => prev + 1);
 
