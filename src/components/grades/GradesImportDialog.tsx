@@ -306,6 +306,28 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
   const [aiPages, setAiPages] = useState(0);
   /** Identidade do PDF (código/nome) → student_id GRAVADO: páginas seguintes do mesmo aluno reutilizam o ID. */
   const persistedStudentsRef = useRef<PersistedStudentMemory>(new Map());
+  /** Destinos (grade_subjects/grade_periods) da turma em memória: um SELECT por sessão. */
+  const targetCacheRef = useRef<ImportTargetCache>(new ImportTargetCache());
+  /** Escopo obrigatório do cache de destinos: escola + turma + matriz. */
+  const targetScopeRef = useRef<string | null>(null);
+  /** Páginas que falharam na leitura e serão reprocessadas ao final (sem abortar a sessão). */
+  const failureQueueRef = useRef<PageFailureQueue>(new PageFailureQueue());
+  const [pendingFailures, setPendingFailures] = useState<PageFailure[]>([]);
+  /** Estamos na rodada final de reprocessamento das páginas que falharam. */
+  const reprocessingRef = useRef(false);
+  /** Última leitura local disponível da página em processamento (reaproveitada no retry). */
+  const lastLocalPreviewRef = useRef<unknown | null>(null);
+  /** Ponteiro para a leitura local atual (usada pela fila de pré-leitura). */
+  const readPageLocallyRef = useRef<((page: number) => Promise<unknown>) | null>(null);
+  /** Pré-leitura local das próximas páginas, em segundo plano e com concorrência limitada. */
+  const prefetchRef = useRef<LocalPrefetchQueue<{ result: unknown }>>(
+    new LocalPrefetchQueue<{ result: unknown }>({
+      read: async (page) => ({ result: (await readPageLocallyRef.current?.(page)) ?? null }),
+      maxConcurrency: 2,
+      lookahead: 2,
+    }),
+  );
+  const [reusedPrefetchPages, setReusedPrefetchPages] = useState(0);
 
   const reset = useCallback(() => {
     setStep('select');
