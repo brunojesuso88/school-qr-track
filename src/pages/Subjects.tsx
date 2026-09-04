@@ -252,7 +252,7 @@ const SubjectsContent = () => {
   };
 
   const handleDeleteMatrix = async () => {
-    if (!activeSchoolId || !activeMatrix || activeMatrix.is_original) return;
+    if (!activeSchoolId || !activeMatrix || matrixProtected) return;
     setSaving(true);
     try {
       const linked = await countClassesUsingMatrix(activeMatrix.id, activeSchoolId);
