@@ -13,7 +13,7 @@ import {
 import { computeMedals, MedalStudentInput } from '@/lib/medals/compute';
 import { parseSeriesValue } from '@/lib/series';
 import { isPeriodKind, periodRank } from '@/lib/gradePageLocal/normalize';
-import { fetchMatrixWeeklyByKey } from '@/lib/curriculumMatrixWeekly';
+import { fetchMatrixWeeklyByClass } from '@/lib/curriculumMatrixWeekly';
 import { IraSnapshotRow, SnapshotBuildInput, buildSnapshotRows, isDropout } from './core';
 import { NO_ACTIVE_SCHOOL_MESSAGE, assertActiveSchool } from '@/lib/schools/scope';
 
@@ -68,10 +68,12 @@ export async function recomputeIraScope(
   // a disputa por série NUNCA cruza escolas.
   const { data: classRows, error: classErr } = await supabase
     .from('classes')
-    .select('id, name, series')
+    .select('id, name, series, curriculum_matrix_id')
     .eq('school_id', schoolId);
   if (classErr) throw classErr;
-  const all = (classRows || []) as { id: string; name: string; series: string | null }[];
+  const all = (classRows || []) as {
+    id: string; name: string; series: string | null; curriculum_matrix_id: string | null;
+  }[];
 
   const requestedNorm = new Set(classNames.map(norm));
   const requested = all.filter((c) => requestedNorm.has(norm(c.name)));
@@ -127,8 +129,11 @@ export async function recomputeIraScope(
     });
   }
 
-  const matrixWeeklyByKey = await fetchMatrixWeeklyByKey(
-    scopeClasses.map((c) => parseSeriesValue(c.series)),
+  // Snapshots e medalhas são persistidos: a carga vem da matriz de CADA turma.
+  const weeklyByClass = await fetchMatrixWeeklyByClass(
+    scopeClasses.map((c) => ({
+      id: c.id, series: parseSeriesValue(c.series), curriculum_matrix_id: c.curriculum_matrix_id,
+    })),
     schoolId,
   );
 
@@ -141,7 +146,7 @@ export async function recomputeIraScope(
       grades: grades.filter((g) => classSubjectIds.has(g.grade_subject_id)),
       settings: settings.find((s) => s.class_id === classId) ?? null,
       currentWeeklyClasses,
-      matrixWeeklyByKey,
+      matrixWeeklyByKey: weeklyByClass.get(classId) ?? {},
     });
   });
 

@@ -5,7 +5,7 @@ import {
   ClassGradesData, GradePeriodRow, GradeSubjectRow, IraSettingsRow, StudentGradeRow,
   computeIraForStudent, fetchGradesPaged,
 } from './useStudentGrades';
-import { fetchMatrixWeeklyByKey } from '@/lib/curriculumMatrixWeekly';
+import { fetchMatrixWeeklyByClass } from '@/lib/curriculumMatrixWeekly';
 import { parseSeriesValue } from '@/lib/series';
 import { useActiveSchoolId } from '@/contexts/SchoolContext';
 
@@ -47,10 +47,12 @@ export function useStudentsIra(students: { id: string; class: string }[]) {
         // ou turma inexistente) em vez de silenciar.
         const { data: classRows, error: classErr } = await supabase
           .from('classes')
-          .select('id, name, series')
+          .select('id, name, series, curriculum_matrix_id')
           .eq('school_id', activeSchoolId);
         if (classErr) throw classErr;
-        const all = (classRows || []) as { id: string; name: string; series: string | null }[];
+        const all = (classRows || []) as {
+          id: string; name: string; series: string | null; curriculum_matrix_id: string | null;
+        }[];
         const norm = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
         const byExact = new Map<string, string[]>();
         const byNorm = new Map<string, string[]>();
@@ -111,8 +113,13 @@ export function useStudentsIra(students: { id: string; class: string }[]) {
           });
         }
 
-        const matrixWeeklyByKey = await fetchMatrixWeeklyByKey(
-          all.filter((c) => classIds.includes(c.id)).map((c) => parseSeriesValue(c.series)),
+        // Cada turma usa a carga da SUA matriz curricular (nunca um mapa compartilhado).
+        const weeklyByClass = await fetchMatrixWeeklyByClass(
+          all.filter((c) => classIds.includes(c.id)).map((c) => ({
+            id: c.id,
+            series: parseSeriesValue(c.series),
+            curriculum_matrix_id: c.curriculum_matrix_id,
+          })),
           activeSchoolId,
         );
 
@@ -126,7 +133,7 @@ export function useStudentsIra(students: { id: string; class: string }[]) {
             grades: grades.filter((g) => classSubjectIds.has(g.grade_subject_id)),
             settings: settings.find((s) => s.class_id === classId) ?? null,
             currentWeeklyClasses,
-            matrixWeeklyByKey,
+            matrixWeeklyByKey: weeklyByClass.get(classId) ?? {},
           });
         });
 

@@ -9,6 +9,7 @@
  */
 import { supabase } from '@/integrations/supabase/client';
 import { canonicalSubjectKey } from '@/lib/gradePageLocal/normalize';
+import { fetchOriginalMatrixId } from '@/lib/curriculumMatrices';
 
 export interface MatrixWeeklyRow {
   series: string;
@@ -67,3 +68,99 @@ export async function fetchMatrixWeeklyByKey(
     }));
   return buildMatrixWeeklyByKey(rows);
 }
+
+/* ------------------------------------------------------------------ *
+ * Carga semanal POR TURMA: cada turma usa a matriz que lhe foi
+ * atribuída (`classes.curriculum_matrix_id`). Nunca compartilhamos um
+ * único mapa escolar entre turmas — duas turmas da mesma série podem
+ * usar matrizes diferentes, com cargas diferentes.
+ * ------------------------------------------------------------------ */
+
+export interface ClassMatrixRef {
+  id: string;
+  series: string | null;
+  curriculum_matrix_id: string | null;
+}
+
+export interface MatrixWeeklyScopedRow extends MatrixWeeklyRow {
+  matrix_id: string;
+}
+
+/**
+ * PURO: mapa de carga semanal por turma, agrupado por (matriz, série).
+ * `originalMatrixId` cobre dados legados sem matriz atribuída — nunca mistura matrizes.
+ */
+export function buildMatrixWeeklyByClass(
+  classes: ClassMatrixRef[],
+  rows: MatrixWeeklyScopedRow[],
+  originalMatrixId: string | null,
+): Map<string, Record<string, number>> {
+  const byGroup = new Map<string, MatrixWeeklyScopedRow[]>();
+  rows.forEach((r) => {
+    const key = `${r.matrix_id}::${r.series}`;
+    byGroup.set(key, [...(byGroup.get(key) ?? []), r]);
+  });
+
+  const cache = new Map<string, Record<string, number>>();
+  const out = new Map<string, Record<string, number>>();
+  classes.forEach((c) => {
+    const series = c.series;
+    const matrixId = c.curriculum_matrix_id ?? originalMatrixId;
+    if (!series || !matrixId) { out.set(c.id, {}); return; }
+    const key = `${matrixId}::${series}`;
+    if (!cache.has(key)) cache.set(key, buildMatrixWeeklyByKey(byGroup.get(key) ?? []));
+    out.set(c.id, cache.get(key)!);
+  });
+  return out;
+}
+
+/**
+ * Carga semanal da matriz de CADA turma (uma única consulta agrupada por matriz+série).
+ * A série recebida em `classes[].series` deve estar já normalizada ('1' | '2' | '3').
+ */
+export async function fetchMatrixWeeklyByClass(
+  classes: ClassMatrixRef[],
+  schoolId: string | null | undefined,
+): Promise<Map<string, Record<string, number>>> {
+  if (!schoolId || classes.length === 0) return new Map();
+
+  const needsOriginal = classes.some((c) => !c.curriculum_matrix_id && c.series);
+  const originalMatrixId = needsOriginal ? await fetchOriginalMatrixId(schoolId) : null;
+
+  const matrixIds = [...new Set(
+    classes.map((c) => c.curriculum_matrix_id ?? originalMatrixId).filter(Boolean) as string[],
+  )];
+  const seriesList = [...new Set(classes.map((c) => c.series).filter(Boolean) as string[])];
+  if (matrixIds.length === 0 || seriesList.length === 0) {
+    return new Map(classes.map((c) => [c.id, {} as Record<string, number>]));
+  }
+
+  const { data, error } = await supabase
+    .from('curriculum_matrix_subjects')
+    .select('matrix_id, series, weekly_classes, mapping_global_subjects(name, aliases)')
+    .eq('school_id', schoolId)
+    .in('matrix_id', matrixIds)
+    .in('series', seriesList);
+  if (error) {
+    console.error('Falha ao carregar carga semanal por turma:', error);
+    return new Map(classes.map((c) => [c.id, {} as Record<string, number>]));
+  }
+
+  const rows = ((data ?? []) as unknown as {
+    matrix_id: string;
+    series: string;
+    weekly_classes: number;
+    mapping_global_subjects: { name: string; aliases: string[] | null } | null;
+  }[])
+    .filter((r) => r.mapping_global_subjects)
+    .map((r) => ({
+      matrix_id: r.matrix_id,
+      series: r.series,
+      weekly_classes: r.weekly_classes,
+      name: r.mapping_global_subjects!.name,
+      aliases: r.mapping_global_subjects!.aliases,
+    }));
+
+  return buildMatrixWeeklyByClass(classes, rows, originalMatrixId);
+}
+

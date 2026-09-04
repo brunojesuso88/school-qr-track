@@ -7,7 +7,7 @@ import {
 import { computeMedals, MedalStudentInput, StudentMedal } from '@/lib/medals/compute';
 import { parseSeriesValue } from '@/lib/series';
 import { isPeriodKind, periodRank } from '@/lib/gradePageLocal/normalize';
-import { fetchMatrixWeeklyByKey } from '@/lib/curriculumMatrixWeekly';
+import { fetchMatrixWeeklyByClass } from '@/lib/curriculumMatrixWeekly';
 import { useActiveSchoolId } from '@/contexts/SchoolContext';
 
 const norm = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
@@ -41,10 +41,12 @@ export function useStudentMedals(visible: { id: string; class: string }[]) {
       try {
         const { data: classRows, error: classErr } = await supabase
           .from('classes')
-          .select('id, name, series')
+          .select('id, name, series, curriculum_matrix_id')
           .eq('school_id', activeSchoolId);
         if (classErr) throw classErr;
-        const all = (classRows || []) as { id: string; name: string; series: string | null }[];
+        const all = (classRows || []) as {
+          id: string; name: string; series: string | null; curriculum_matrix_id: string | null;
+        }[];
 
         // Séries envolvidas pelos alunos visíveis
         const visibleNorm = new Set(classNames.map(norm));
@@ -100,7 +102,12 @@ export function useStudentMedals(visible: { id: string; class: string }[]) {
           });
         }
 
-        const matrixWeeklyByKey = await fetchMatrixWeeklyByKey([...seriesInScope], activeSchoolId);
+        const weeklyByClass = await fetchMatrixWeeklyByClass(
+          scopeClasses.map((c) => ({
+            id: c.id, series: parseSeriesValue(c.series), curriculum_matrix_id: c.curriculum_matrix_id,
+          })),
+          activeSchoolId,
+        );
 
         const dataByClass = new Map<string, ClassGradesData>();
         classIds.forEach((classId) => {
@@ -111,7 +118,7 @@ export function useStudentMedals(visible: { id: string; class: string }[]) {
             grades: grades.filter((g) => classSubjectIds.has(g.grade_subject_id)),
             settings: settings.find((s) => s.class_id === classId) ?? null,
             currentWeeklyClasses,
-            matrixWeeklyByKey,
+            matrixWeeklyByKey: weeklyByClass.get(classId) ?? {},
           });
         });
 
