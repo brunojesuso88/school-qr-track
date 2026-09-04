@@ -178,6 +178,13 @@ export async function createCurriculumMatrix(input: {
   if (!name) throw new Error('Informe o nome da matriz curricular.');
   if (input.copyFromMatrixId) await assertMatrixInSchool(input.copyFromMatrixId, input.schoolId);
 
+  // Cópia herda o modo de cálculo do IRA da matriz de origem (ex. Integral = aritmético).
+  let mode: IraMatrixMode = 'weighted_weekly';
+  if (input.copyFromMatrixId) {
+    const all = await fetchSchoolMatrices(input.schoolId);
+    mode = all.find((m) => m.id === input.copyFromMatrixId)?.ira_calculation_mode ?? 'weighted_weekly';
+  }
+
   const { data, error } = await supabase
     .from('curriculum_matrices')
     .insert({
@@ -185,6 +192,7 @@ export async function createCurriculumMatrix(input: {
       name,
       description: input.description?.trim() ? input.description.trim() : null,
       is_original: false,
+      ira_calculation_mode: mode,
     })
     .select('id')
     .single();
