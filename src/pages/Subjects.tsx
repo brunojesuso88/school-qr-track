@@ -18,7 +18,8 @@ import { useToast } from "@/hooks/use-toast";
 import { usePermissions } from "@/contexts/PermissionsContext";
 import { useActiveSchoolId, useSchoolScopeKey } from "@/contexts/SchoolContext";
 import { supabase } from "@/integrations/supabase/client";
-import { CLASS_SERIES_OPTIONS, HighSchoolSeries, classSeriesLabel, parseSeriesValue, seriesShortLabel } from "@/lib/series";
+import { CLASS_SERIES_OPTIONS, HighSchoolSeries, classSeriesLabel, parseSeriesValue, seriesShortLabel, seriesSortIndex } from "@/lib/series";
+import { IRA_MODE_LABELS } from "@/lib/ira";
 import { matrixWeeklyTotal } from "@/lib/curriculumMatrixCore";
 import {
   CurriculumMatrixRecord, MatrixComponentRow, countClassesUsingMatrix, createCurriculumMatrix,
@@ -103,6 +104,24 @@ const SubjectsContent = () => {
   useEffect(() => { loadComponents(); }, [loadComponents]);
 
   const bySeries = useMemo(() => items.filter((i) => i.series === series), [items, series]);
+
+  /**
+   * Abas = SOMENTE as séries/etapas presentes nesta matriz (Original: 1/2/3/EJA;
+   * Integral: EPT/EVE/SEC). Nunca as 10 opções globais.
+   */
+  const matrixSeriesOptions = useMemo(() => {
+    const present = new Set(items.map((i) => i.series));
+    return CLASS_SERIES_OPTIONS.filter((o) => present.has(o.value))
+      .sort((a, b) => seriesSortIndex(a.value) - seriesSortIndex(b.value));
+  }, [items]);
+
+  // Aba selecionada sempre existente na matriz atual.
+  useEffect(() => {
+    if (matrixSeriesOptions.length === 0) return;
+    if (!matrixSeriesOptions.some((o) => o.value === series)) {
+      setSeries(matrixSeriesOptions[0].value);
+    }
+  }, [matrixSeriesOptions, series]);
 
   /* ---------------------------------- componentes --------------------------------- */
 
@@ -487,10 +506,13 @@ const SubjectsContent = () => {
                 </Badge>
               )}
               <Badge variant="outline">
-                {arithmeticIra
-                  ? "IRA por média simples (todas as disciplinas pesam igual)"
-                  : "IRA ponderado pela carga semanal"}
+                {IRA_MODE_LABELS[arithmeticIra ? "arithmetic" : "weighted_weekly"]}
               </Badge>
+              {arithmeticIra && (
+                <span className="text-xs">
+                  Todas as disciplinas pesam igual; a carga semanal não se aplica.
+                </span>
+              )}
               {activeMatrix.description && <span className="text-xs">{activeMatrix.description}</span>}
             </CardDescription>
           )}
@@ -499,12 +521,12 @@ const SubjectsContent = () => {
 
       <Tabs value={series} onValueChange={(v) => setSeries(v as HighSchoolSeries)}>
         <TabsList className="flex h-auto w-full flex-wrap justify-start gap-1">
-          {CLASS_SERIES_OPTIONS.map((o) => (
+          {matrixSeriesOptions.map((o) => (
             <TabsTrigger key={o.value} value={o.value}>{seriesShortLabel(o.value)}</TabsTrigger>
           ))}
         </TabsList>
 
-        {CLASS_SERIES_OPTIONS.map((o) => (
+        {matrixSeriesOptions.map((o) => (
           <TabsContent key={o.value} value={o.value} className="mt-4">
             <Card>
               <CardHeader>
@@ -553,7 +575,9 @@ const SubjectsContent = () => {
                               )}
                             </div>
                           </TableCell>
-                          <TableCell className="text-center">{item.weekly_classes ?? "—"}</TableCell>
+                          <TableCell className="text-center">
+                            {item.weekly_classes ?? (arithmeticIra ? "Não se aplica" : "—")}
+                          </TableCell>
                           <TableCell className="text-center">
                             {item.include_in_ira
                               ? <Badge variant="secondary">Sim</Badge>

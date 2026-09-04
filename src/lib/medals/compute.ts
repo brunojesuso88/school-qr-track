@@ -4,7 +4,7 @@
  * Reutiliza o MESMO motor do IRA (`calculateIraMultiPeriod`) apenas restringindo
  * o conjunto de disciplinas à área. Não altera o IRA global nem persiste nada.
  */
-import { calculateIraMultiPeriod, IraResult } from '@/lib/ira';
+import { DEFAULT_IRA_MODE, calculateIraMultiPeriod, IraResult } from '@/lib/ira';
 import {
   ClassGradesData,
   buildIraInputs,
@@ -45,6 +45,8 @@ export function computeAreaIra(
   const result = calculateIraMultiPeriod(
     buildIraInputs(scoped, studentId, periods.map((p) => p.id)),
     toPeriodRefs(periods),
+    // O modo é da MATRIZ da turma: medalha nunca recai no ponderado por engano.
+    { mode: data.iraCalculationMode ?? DEFAULT_IRA_MODE },
   );
   const hasData =
     result.status === 'ok' &&
