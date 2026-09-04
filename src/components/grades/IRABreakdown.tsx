@@ -1,4 +1,4 @@
-import { IRA_MODE_LABELS, IraResult, describePeriods, formatGrade, formatIra } from '@/lib/ira';
+import { IRA_MODE_LABEL, IraResult, describePeriods, formatGrade, formatIra } from '@/lib/ira';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 
@@ -10,18 +10,12 @@ export const IRABreakdown = ({ ira }: IRABreakdownProps) => {
   const eligible = ira.lines.filter((l) => l.eligible);
   const excluded = ira.lines.filter((l) => !l.eligible);
   const periods = ira.selectedPeriods;
-  const arithmetic = ira.mode === 'arithmetic';
 
   return (
     <div className="space-y-4">
       <div className="text-xs text-muted-foreground">
         <div className="mb-1">
-          <Badge variant="outline">{IRA_MODE_LABELS[ira.mode]}</Badge>
-          {arithmetic && (
-            <span className="ml-2">
-              Todas as disciplinas pesam 1 — a carga semanal não se aplica nesta matriz.
-            </span>
-          )}
+          <Badge variant="outline">{IRA_MODE_LABEL}</Badge>
         </div>
         Notas usadas no IRA: <strong>{describePeriods(periods)}</strong>
         {periods.length > 1 && ' — a nota de cada disciplina é a média aritmética desses períodos'}
@@ -43,7 +37,7 @@ export const IRABreakdown = ({ ira }: IRABreakdownProps) => {
                   <th key={p.id} className="py-2 pr-2 whitespace-nowrap">{p.label}</th>
                 ))}
                 <th className="py-2 pr-2">Nota usada</th>
-                <th className="py-2 pr-2">{arithmetic ? 'Peso (média simples)' : 'Peso'}</th>
+                <th className="py-2 pr-2">Peso</th>
                 <th className="py-2 pr-2">Nota × Peso</th>
                 <th className="py-2">Contribuição</th>
               </tr>
@@ -117,9 +111,6 @@ export const IRABreakdown = ({ ira }: IRABreakdownProps) => {
       )}
 
       <p className="text-xs text-muted-foreground">
-        {arithmetic
-          ? 'Média aritmética simples: soma das notas das disciplinas dividida pela quantidade de disciplinas. '
-          : ''}
         Regra do IRA: a nota de cada disciplina é a média dos períodos selecionados e períodos sem nota entram com 0,00.
         A aba “Notas” continua mostrando a verdade do boletim (“—” quando não informado).
       </p>
