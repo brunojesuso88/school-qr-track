@@ -63,4 +63,41 @@ describe('reconcileLocalWithAi', () => {
     expect(extra?.source).toBe('ai');
     expect(extra?.flags).toContain('reconciliation_divergence');
   });
+
+  it('Aprofundamento IF com eixo (CNS) casa com o nome canônico e não vira "somente a IA"', () => {
+    const local = {
+      rows: [
+        {
+          subject: 'APROFUNDAMENTO IF - I', period: '1º Período',
+          raw_value: '8,00', value: 8, flags: [], source: 'local',
+        },
+      ],
+      notes: [], stats: {},
+      reading: { mode: 'local', escalated: false, reasons: [], local_score: 1, divergences: 0 },
+    };
+    const { preview, divergences } = reconcileLocalWithAi(local, {
+      rows: [{ subject: 'Aprofundamento IF - CNS - I', period: '1º Período', raw_value: '8,00', value: 8 }],
+    });
+    expect(divergences).toBe(0);
+    expect(preview.rows).toHaveLength(1);
+    expect(preview.rows[0].flags).toContain('reconciled_match');
+  });
+
+  it('Aprofundamento I e II seguem disciplinas distintas', () => {
+    const local = {
+      rows: [
+        {
+          subject: 'APROFUNDAMENTO IF - I', period: '1º Período',
+          raw_value: '8,00', value: 8, flags: [], source: 'local',
+        },
+      ],
+      notes: [], stats: {},
+      reading: { mode: 'local', escalated: false, reasons: [], local_score: 1, divergences: 0 },
+    };
+    const { preview, divergences } = reconcileLocalWithAi(local, {
+      rows: [{ subject: 'Aprofundamento IF - CNS - II', period: '1º Período', raw_value: '9,00', value: 9 }],
+    });
+    expect(divergences).toBe(1);
+    expect(preview.rows).toHaveLength(2);
+  });
 });
