@@ -364,6 +364,14 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
     setLocalTimings([]);
     setLocalSolvedPages(0);
     setSkippedPages([]);
+    targetCacheRef.current.reset(null);
+    targetScopeRef.current = null;
+    failureQueueRef.current.clear();
+    setPendingFailures([]);
+    reprocessingRef.current = false;
+    lastLocalPreviewRef.current = null;
+    prefetchRef.current.setScope(null);
+    setReusedPrefetchPages(0);
     if (fileInputRef.current) fileInputRef.current.value = '';
   }, []);
 
