@@ -98,9 +98,20 @@ export async function fetchSchoolMatrices(schoolId: string | null | undefined): 
   ((countRes.data ?? []) as { matrix_id: string }[]).forEach((r) => {
     counts.set(r.matrix_id, (counts.get(r.matrix_id) ?? 0) + 1);
   });
-  return ((matrixRes.data ?? []) as Omit<CurriculumMatrixRecord, 'components'>[])
-    .map((m) => ({ ...m, components: counts.get(m.id) ?? 0 }))
-    .sort((a, b) => Number(b.is_original) - Number(a.is_original) || a.name.localeCompare(b.name, 'pt-BR'));
+  return ((matrixRes.data ?? []) as unknown as (Omit<CurriculumMatrixRecord, 'components' | 'ira_calculation_mode'> & {
+    ira_calculation_mode: string | null;
+  })[])
+    .map((m) => ({
+      ...m,
+      system_key: m.system_key ?? null,
+      ira_calculation_mode: (m.ira_calculation_mode === 'arithmetic' ? 'arithmetic' : 'weighted_weekly') as IraMatrixMode,
+      components: counts.get(m.id) ?? 0,
+    }))
+    // Matriz Original primeiro, depois as matrizes de sistema (Integral), depois as demais.
+    .sort((a, b) =>
+      Number(b.is_original) - Number(a.is_original)
+      || Number(Boolean(b.system_key)) - Number(Boolean(a.system_key))
+      || a.name.localeCompare(b.name, 'pt-BR'));
 }
 
 /** UUID da Matriz Original da escola (semeada pelo banco). */
