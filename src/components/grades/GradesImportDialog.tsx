@@ -1811,16 +1811,11 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
               {preview.reading && (
                 <div className="flex items-center gap-1 flex-wrap">
                   <Badge
-                    variant={preview.reading.mode === 'local' ? 'outline' : 'secondary'}
+                    variant={readingUsedAi(preview.reading) ? 'secondary' : 'outline'}
                     className="text-[10px]"
+                    title={(preview.reading.reasons || []).join(', ') || undefined}
                   >
-                    {preview.reading.mode === 'local'
-                      ? 'Leitura local'
-                      : preview.reading.mode === 'local_validated'
-                        ? 'Leitura local + validação IA'
-                        : preview.reading.mode === 'ai_fallback'
-                          ? 'Leitura por IA (fallback)'
-                          : preview.reading.escalated ? 'Validação adicional aplicada' : 'Lida em modo rápido'}
+                    {readingOriginLabel(preview.reading)}
                   </Badge>
                   {preview.reading.duration_ms != null && (
                     <span className="text-[10px] text-muted-foreground">{preview.reading.duration_ms}ms</span>
