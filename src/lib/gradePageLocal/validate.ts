@@ -132,7 +132,7 @@ export function validateLocalPage(input: ValidateInput): LocalValidation {
   const seen = new Map<string, string | null>();
   let conflictingDuplicates = 0;
   cells.forEach((c) => {
-    const key = `${normalizeText(c.subject)}||${normalizeText(c.period)}`;
+    const key = `${canonicalSubjectKey(c.subject)}||${normalizeText(c.period)}`;
     if (seen.has(key)) { if (seen.get(key) !== c.raw_value) conflictingDuplicates++; }
     else seen.set(key, c.raw_value);
   });
