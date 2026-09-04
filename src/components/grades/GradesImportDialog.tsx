@@ -1322,22 +1322,24 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
         (periodRows || []).forEach((p: { id: string; normalized_label: string }) => periodIdByNorm.set(p.normalized_label, p.id));
       }
 
-      const { data: existingSubjects } = await supabase
+      const { data: existingSubjects, error: existingError } = await supabase
         .from('grade_subjects')
-        .select('id, name, normalized_name, slot_index, include_in_ira, custom_ira_weight, legacy_excluded')
-        .eq('school_id', assertActiveSchool(activeSchoolId))
+        .select('id, name, normalized_name, slot_index, include_in_ira, custom_ira_weight, legacy_excluded, weekly_classes')
+        .eq('school_id', schoolId)
         .eq('class_id', classItem.id);
+      if (existingError) throw existingError;
       type ExistingSubjectRow = {
         id: string; name: string; normalized_name: string; slot_index: number | null;
         include_in_ira: boolean; custom_ira_weight: number | null; legacy_excluded: boolean | null;
+        weekly_classes: number | null;
       };
       const existingRows = (existingSubjects || []) as ExistingSubjectRow[];
       // Cada ocorrência (slot) da mesma disciplina é uma linha própria de grade_subjects.
       const slotOf = (s: { slot_index?: number | null }) => s.slot_index ?? 1;
-      const existingByNorm = new Map<string, { include_in_ira: boolean; custom_ira_weight: number | null }>();
+      const existingByNorm = new Map<string, { include_in_ira: boolean; custom_ira_weight: number | null; weekly_classes: number | null }>();
       existingRows.forEach((s) =>
         existingByNorm.set(`${s.normalized_name}#${slotOf(s)}`, {
-          include_in_ira: s.include_in_ira, custom_ira_weight: s.custom_ira_weight,
+          include_in_ira: s.include_in_ira, custom_ira_weight: s.custom_ira_weight, weekly_classes: s.weekly_classes,
         }));
       // Reuso canônico: CHL/CNS/ETT são apenas aliases; nunca criam novos grade_subjects.
       const activeByCanonical = new Map<string, ExistingSubjectRow>();
