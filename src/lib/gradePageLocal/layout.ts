@@ -230,6 +230,15 @@ export function buildCells(lines: TokenLine[], grid: GridLayout, anchors: Subjec
     }
   };
 
+  /**
+   * Fecha o pendente sem consumo: se ele já era uma disciplina reconhecida da matriz,
+   * entra como linha vazia (null em todos os períodos). Nunca herda notas de outra linha.
+   */
+  const flushPending = () => {
+    if (pending?.match) pushAnchoredRow(pending.text, pending.match);
+    pending = null;
+  };
+
   for (let i = firstDataLine; i < lines.length; i++) {
     const line = lines[i];
     const subjectTokens = line.tokens.filter((t) => t.x + t.w / 2 < grid.subjectColumnEnd);
