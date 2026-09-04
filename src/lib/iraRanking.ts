@@ -16,7 +16,7 @@ import {
 } from '@/hooks/useStudentGrades';
 import { formatIra } from '@/lib/ira';
 import { HighSchoolSeries, parseSeriesValue } from '@/lib/series';
-import { fetchMatrixWeeklyByKey } from '@/lib/curriculumMatrixWeekly';
+import { fetchMatrixWeeklyByClass } from '@/lib/curriculumMatrixWeekly';
 import mascotAsset from '@/assets/ira-ranking-mascote.jpg';
 
 export const RANKING_LIMIT = 15;
@@ -124,11 +124,13 @@ export async function buildIraRanking(classIds: string[], schoolId: string | nul
 
   const { data: classRows, error: classErr } = await supabase
     .from('classes')
-    .select('id, name, series')
+    .select('id, name, series, curriculum_matrix_id')
     .eq('school_id', schoolId)
     .in('id', classIds);
   if (classErr) throw classErr;
-  const classes = (classRows || []) as { id: string; name: string; series: string | null }[];
+  const classes = (classRows || []) as {
+    id: string; name: string; series: string | null; curriculum_matrix_id: string | null;
+  }[];
   const classNames = classes.map((c) => c.name);
 
   const [studentsRes, subjRes, perRes, settingsRes] = await Promise.all([
@@ -167,7 +169,13 @@ export async function buildIraRanking(classIds: string[], schoolId: string | nul
   });
   const classNameById = new Map(classes.map((c) => [c.id, c.name]));
 
-  const matrixWeeklyByKey = await fetchMatrixWeeklyByKey(classes.map((c) => parseSeriesValue(c.series)), schoolId);
+  // Turmas em matrizes diferentes recebem pesos diferentes: mapa por turma.
+  const weeklyByClass = await fetchMatrixWeeklyByClass(
+    classes.map((c) => ({
+      id: c.id, series: parseSeriesValue(c.series), curriculum_matrix_id: c.curriculum_matrix_id,
+    })),
+    schoolId,
+  );
 
   const dataByClass = new Map<string, ClassGradesData>();
   classIds.forEach((classId) => {
@@ -178,7 +186,7 @@ export async function buildIraRanking(classIds: string[], schoolId: string | nul
       grades: grades.filter((g) => ids.has(g.grade_subject_id)),
       settings: settings.find((s) => s.class_id === classId) ?? null,
       currentWeeklyClasses,
-      matrixWeeklyByKey,
+      matrixWeeklyByKey: weeklyByClass.get(classId) ?? {},
     });
   });
 

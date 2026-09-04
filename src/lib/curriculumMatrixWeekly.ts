@@ -9,6 +9,7 @@
  */
 import { supabase } from '@/integrations/supabase/client';
 import { canonicalSubjectKey } from '@/lib/gradePageLocal/normalize';
+import { fetchOriginalMatrixId } from '@/lib/curriculumMatrices';
 
 export interface MatrixWeeklyRow {
   series: string;
