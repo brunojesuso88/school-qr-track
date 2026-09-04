@@ -59,10 +59,13 @@ export function buildEffectiveSubjectMatrix({
     origin: 'matrix' | 'mapping' | 'grade' | 'catalog',
     aliases: string[] = [],
     abbreviation: string | null = null,
+    slot = 1,
   ) => {
     const clean = String(name ?? '').trim();
-    const key = normalizeText(clean);
-    if (!clean || !key) return;
+    const norm = normalizeText(clean);
+    if (!clean || !norm) return;
+    // Ocorrências (slots) do MESMO componente são entradas distintas da matriz efetiva.
+    const key = `${norm}#${slot}`;
     const existing = result.get(key);
     if (existing) {
       existing.weekly_classes = existing.weekly_classes ?? (weekly ?? null);
@@ -72,13 +75,14 @@ export function buildEffectiveSubjectMatrix({
       return;
     }
     result.set(key, {
-      name: clean, weekly_classes: weekly ?? null, aliases: [...aliases],
+      name: clean, weekly_classes: weekly ?? null, slot_index: slot, aliases: [...aliases],
       abbreviation, origin: [origin],
     });
   };
 
   // 1) Matriz oficial da série: identidade e carga de referência.
-  matrix.forEach((s) => add(s.name, s.weekly_classes, 'matrix', s.aliases ?? [], s.abbreviation ?? null));
+  matrix.forEach((s) =>
+    add(s.name, s.weekly_classes, 'matrix', s.aliases ?? [], s.abbreviation ?? null, s.slot_index ?? 1));
   mapping.forEach((s) => add(s.name, s.weekly_classes, 'mapping'));
   imported.forEach((s) => add(s.name, s.weekly_classes, 'grade'));
   // Catálogo só amplia a matriz quando a série está definida (herança determinística).
