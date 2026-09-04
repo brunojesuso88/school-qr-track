@@ -192,7 +192,7 @@ async function fetchClassGrades(
     supabase.from('grade_subjects').select('*').eq('school_id', schoolId).eq('class_id', classId).eq('legacy_excluded', false).order('sort_order'),
     supabase.from('grade_periods').select('*').eq('school_id', schoolId).eq('class_id', classId).order('sort_order'),
     supabase.from('ira_settings').select('*').eq('school_id', schoolId).eq('class_id', classId).maybeSingle(),
-    supabase.from('classes').select('series').eq('school_id', schoolId).eq('id', classId).maybeSingle(),
+    supabase.from('classes').select('series, curriculum_matrix_id').eq('school_id', schoolId).eq('id', classId).maybeSingle(),
   ]);
 
   const subjects = (subjectsRes.data || []) as unknown as GradeSubjectRow[];
