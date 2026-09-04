@@ -1205,6 +1205,9 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
         const name = canonicalMatch?.name ?? s.name;
         const normalized_name = canonicalMatch?.normalized_name ?? readNorm;
         subjectNormRedirect.set(readNorm, normalized_name);
+        // Identidade canônica também redireciona: linha lida com eixo (CNS/CHL/ETT)
+        // aponta para o mesmo grade_subject do nome canônico.
+        subjectNormRedirect.set(canonicalSubjectKey(s.name), normalized_name);
         const previous = existingByNorm.get(normalized_name);
         const weekly = expected?.weekly_classes ?? s.weekly_classes ?? null;
         if (seenNorms.has(normalized_name)) return;
