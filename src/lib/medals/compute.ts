@@ -4,7 +4,7 @@
  * Reutiliza o MESMO motor do IRA (`calculateIraMultiPeriod`) apenas restringindo
  * o conjunto de disciplinas à área. Não altera o IRA global nem persiste nada.
  */
-import { DEFAULT_IRA_MODE, calculateIraMultiPeriod, IraResult } from '@/lib/ira';
+import { calculateIraMultiPeriod, IraResult } from '@/lib/ira';
 import {
   ClassGradesData,
   buildIraInputs,

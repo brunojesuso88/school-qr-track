@@ -8,8 +8,6 @@ import { computeMedals, MedalStudentInput, StudentMedal } from '@/lib/medals/com
 import { parseSeriesValue } from '@/lib/series';
 import { isPeriodKind, periodRank } from '@/lib/gradePageLocal/normalize';
 import { fetchMatrixWeeklyByClass } from '@/lib/curriculumMatrixWeekly';
-import { fetchIraModeByClass } from '@/lib/iraModes';
-import { DEFAULT_IRA_MODE } from '@/lib/ira';
 import { useActiveSchoolId } from '@/contexts/SchoolContext';
 
 const norm = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
@@ -110,10 +108,6 @@ export function useStudentMedals(visible: { id: string; class: string }[]) {
           })),
           activeSchoolId,
         );
-        const modeByClass = await fetchIraModeByClass(
-          scopeClasses.map((c) => ({ id: c.id, curriculum_matrix_id: c.curriculum_matrix_id })),
-          activeSchoolId,
-        );
 
         const dataByClass = new Map<string, ClassGradesData>();
         classIds.forEach((classId) => {
@@ -125,7 +119,6 @@ export function useStudentMedals(visible: { id: string; class: string }[]) {
             settings: settings.find((s) => s.class_id === classId) ?? null,
             currentWeeklyClasses,
             matrixWeeklyByKey: weeklyByClass.get(classId) ?? {},
-            iraCalculationMode: modeByClass.get(classId) ?? DEFAULT_IRA_MODE,
           });
         });
 

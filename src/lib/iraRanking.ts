@@ -20,8 +20,6 @@ import {
   classSeriesLabel as classSeriesLabelFn, parseSeriesValue as parseSeriesValueFn,
 } from '@/lib/series';
 import { fetchMatrixWeeklyByClass } from '@/lib/curriculumMatrixWeekly';
-import { fetchIraModeByClass } from '@/lib/iraModes';
-import { DEFAULT_IRA_MODE } from '@/lib/ira';
 import mascotAsset from '@/assets/ira-ranking-mascote.jpg';
 
 export const RANKING_LIMIT = 15;
@@ -192,10 +190,6 @@ export async function buildIraRanking(classIds: string[], schoolId: string | nul
   );
 
   // Modo de cálculo (ponderado x aritmético) da matriz de CADA turma.
-  const modeByClass = await fetchIraModeByClass(
-    classes.map((c) => ({ id: c.id, curriculum_matrix_id: c.curriculum_matrix_id })),
-    schoolId,
-  );
 
   const dataByClass = new Map<string, ClassGradesData>();
   classIds.forEach((classId) => {
@@ -207,7 +201,6 @@ export async function buildIraRanking(classIds: string[], schoolId: string | nul
       settings: settings.find((s) => s.class_id === classId) ?? null,
       currentWeeklyClasses,
       matrixWeeklyByKey: weeklyByClass.get(classId) ?? {},
-      iraCalculationMode: modeByClass.get(classId) ?? DEFAULT_IRA_MODE,
     });
   });
 
