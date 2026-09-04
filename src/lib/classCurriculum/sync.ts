@@ -10,8 +10,9 @@ import { HighSchoolSeries, parseSeriesValue } from '@/lib/series';
 import { fetchCurriculumMatrix } from '@/lib/curriculumMatrix';
 import { CurriculumMatrixItem } from '@/lib/curriculumMatrixCore';
 import {
-  ClassCurriculumPlan, ExistingGradeSubject, ExistingMappingSubject, planClassCurriculumSync,
+  ClassCurriculumPlan, ExistingGradeSubject, ExistingMappingSubject, isPlanInSync, planClassCurriculumSync,
 } from '@/lib/classCurriculum/plan';
+import { assignMatrixToClass, fetchOriginalMatrixId } from '@/lib/curriculumMatrices';
 
 export * from '@/lib/classCurriculum/plan';
 
@@ -20,7 +21,14 @@ export interface ClassCurriculumState {
   matrix: CurriculumMatrixItem[];
   mappingClassId: string | null;
   plan: ClassCurriculumPlan;
+  /** Matriz curricular atribuída à turma (UUID) e seu nome, quando existir. */
+  matrixId: string | null;
+  matrixName: string | null;
 }
+
+/** `true` quando a turma tem matriz com componentes e está alinhada com ela. */
+export const isClassCurriculumReady = (state: ClassCurriculumState | null) =>
+  Boolean(state && state.matrix.length > 0 && isPlanInSync(state.plan));
 
 /** Cliente destipado apenas para RPCs recém-criadas (types.ts é gerado). */
 const rpcClient = supabase as unknown as {
@@ -61,9 +69,36 @@ export async function fetchSubjectIdsWithGrades(subjectIds: string[], schoolId: 
   return found;
 }
 
+/**
+ * Matriz curricular efetiva da turma: a atribuída em `classes.curriculum_matrix_id`
+ * ou, na ausência dela, a Matriz Original da escola.
+ */
+export async function resolveClassMatrix(
+  classId: string,
+  schoolId: string,
+): Promise<{ id: string | null; name: string | null }> {
+  const { data, error } = await supabase
+    .from('classes')
+    .select('curriculum_matrix_id, curriculum_matrices(id, name)')
+    .eq('school_id', schoolId)
+    .eq('id', classId)
+    .maybeSingle();
+  if (error) throw error;
+  const row = data as unknown as {
+    curriculum_matrix_id: string | null;
+    curriculum_matrices: { id: string; name: string } | null;
+  } | null;
+  if (row?.curriculum_matrix_id) {
+    return { id: row.curriculum_matrix_id, name: row.curriculum_matrices?.name ?? null };
+  }
+  const original = await fetchOriginalMatrixId(schoolId);
+  return { id: original, name: original ? 'Matriz Original' : null };
+}
+
 async function loadState(classId: string, series: HighSchoolSeries, schoolId: string): Promise<ClassCurriculumState> {
+  const activeMatrix = await resolveClassMatrix(classId, schoolId);
   const [matrix, classRow, gradeRes] = await Promise.all([
-    fetchCurriculumMatrix(series, schoolId),
+    fetchCurriculumMatrix(series, schoolId, activeMatrix.id),
     supabase.from('classes').select('id, mapping_class_id').eq('school_id', schoolId).eq('id', classId).maybeSingle(),
     supabase
       .from('grade_subjects')
@@ -97,6 +132,8 @@ async function loadState(classId: string, series: HighSchoolSeries, schoolId: st
   return {
     series,
     matrix,
+    matrixId: activeMatrix.id,
+    matrixName: activeMatrix.name,
     mappingClassId,
     // Sem `mapping_class_id` a camada auxiliar é ignorada por completo: nada de
     // mappingCreate/mappingUpdate pendentes travando o gate de importação.
@@ -182,10 +219,13 @@ async function consolidateDuplicate(
 export async function syncClassCurriculum(
   classId: string,
   series: string,
-  options: { persistSeries?: boolean; schoolId: string },
+  options: { persistSeries?: boolean; schoolId: string; matrixId?: string | null },
 ): Promise<SyncResult> {
   const parsed = parseSeriesValue(series);
   if (!parsed) throw new Error('Série da turma inválida — selecione 1º, 2º ou 3º ano do Ensino Médio.');
+
+  // Troca de matriz (quando solicitada) antes de planejar: RPC valida escola e audita.
+  if (options.matrixId) await assignMatrixToClass(classId, options.matrixId);
 
   if (options.persistSeries !== false) {
     const { error } = await supabase.from('classes').update({ series: parsed }).eq('id', classId);
@@ -194,6 +234,16 @@ export async function syncClassCurriculum(
 
   const state = await loadState(classId, parsed, options.schoolId);
   const { plan, mappingClassId } = state;
+
+  // Sem componentes na matriz não existe destino válido: nunca seguir em silêncio.
+  if (state.matrix.length === 0) {
+    throw new Error(
+      state.matrixId
+        ? 'A matriz curricular vinculada a esta turma não tem componentes para esta série. ' +
+          'Adicione as disciplinas em Disciplinas — Matriz Curricular ou vincule outra matriz antes de importar o boletim.'
+        : 'Esta turma não tem matriz curricular vinculada. Vincule uma matriz em Disciplinas — Matriz Curricular antes de importar o boletim.',
+    );
+  }
 
   // 0) Consolidação de nomenclaturas equivalentes ANTES de qualquer renomeação,
   //    para nunca colidir com UNIQUE(class_id, normalized_name).
