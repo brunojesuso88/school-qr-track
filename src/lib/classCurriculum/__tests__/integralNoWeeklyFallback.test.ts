@@ -69,23 +69,21 @@ describe('componentes da Integral sem carga semanal', () => {
 });
 
 describe('participação no IRA ao importar boletim', () => {
-  it('matriz aritmética inclui o componente mesmo sem carga', () => {
-    expect(resolveIncludeInIra({ mode: 'arithmetic', weeklyClasses: null })).toBe(true);
+  it('regra 1/2/4 é a MESMA para toda matriz (Integral inclusive)', () => {
+    expect(resolveIncludeInIra({ weeklyClasses: 4 })).toBe(true);
+    expect(resolveIncludeInIra({ weeklyClasses: 3 })).toBe(false);
+    expect(resolveIncludeInIra({ weeklyClasses: null })).toBe(false);
+    // Carga 0 da Matriz Integral = "não informada": não entra automaticamente.
+    expect(resolveIncludeInIra({ weeklyClasses: 0 })).toBe(false);
   });
 
-  it('matriz ponderada mantém a regra 1/2/4', () => {
-    expect(resolveIncludeInIra({ mode: 'weighted_weekly', weeklyClasses: 4 })).toBe(true);
-    expect(resolveIncludeInIra({ mode: 'weighted_weekly', weeklyClasses: 3 })).toBe(false);
-    expect(resolveIncludeInIra({ mode: 'weighted_weekly', weeklyClasses: null })).toBe(false);
-  });
-
-  it('definição da matriz vence a regra de carga', () => {
-    expect(resolveIncludeInIra({ mode: 'weighted_weekly', matrixIncludeInIra: false, weeklyClasses: 4 })).toBe(false);
-    expect(resolveIncludeInIra({ mode: 'weighted_weekly', matrixIncludeInIra: true, weeklyClasses: 3 })).toBe(true);
+  it('definição da matriz vence a regra de carga (Integral semeia participando)', () => {
+    expect(resolveIncludeInIra({ matrixIncludeInIra: false, weeklyClasses: 4 })).toBe(false);
+    expect(resolveIncludeInIra({ matrixIncludeInIra: true, weeklyClasses: 0 })).toBe(true);
   });
 
   it('escolha já registrada pelo usuário nunca é sobrescrita', () => {
-    expect(resolveIncludeInIra({ previous: false, mode: 'arithmetic', weeklyClasses: null })).toBe(false);
-    expect(resolveIncludeInIra({ previous: true, mode: 'weighted_weekly', weeklyClasses: 3 })).toBe(true);
+    expect(resolveIncludeInIra({ previous: false, matrixIncludeInIra: true, weeklyClasses: 0 })).toBe(false);
+    expect(resolveIncludeInIra({ previous: true, weeklyClasses: 3 })).toBe(true);
   });
 });
