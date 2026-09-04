@@ -5,9 +5,16 @@
  *    períodos selecionados (1 ou mais). Nota ausente em um período selecionado
  *    entra como 0,00 APENAS no cálculo (o boletim continua com "—").
  * 2) IRA = Σ(nota_representativa × peso) / Σ(peso).
- * Peso automático = carga semanal quando ela é 1, 2 ou 4 aulas.
- * Cargas diferentes (3, 5, 6...) são inelegíveis até o administrador
- * definir explicitamente um "peso personalizado".
+ *
+ * Modos de cálculo (definidos pela MATRIZ CURRICULAR da turma):
+ * - `weighted_weekly` (padrão — Matriz Original e matrizes existentes):
+ *   peso automático = carga semanal quando ela é 1, 2 ou 4 aulas. Cargas
+ *   diferentes (3, 5, 6...) são inelegíveis até o administrador definir
+ *   explicitamente um "peso personalizado".
+ * - `arithmetic` (Matriz Integral): média aritmética simples — TODO componente
+ *   marcado para o IRA pesa exatamente 1, independentemente de carga semanal,
+ *   peso personalizado ou disciplina. Componentes repetidos (slots) contam
+ *   separadamente.
  *
  * Função pura e determinística: mesmas entradas => mesmo resultado.
  */
@@ -15,6 +22,20 @@
 export const AUTO_WEIGHTS = [1, 2, 4] as const;
 
 export type IraStatus = 'ok' | 'no_subjects' | 'no_grades' | 'not_configured';
+
+/** Modo de cálculo do IRA, persistido em `curriculum_matrices.ira_calculation_mode`. */
+export type IraCalculationMode = 'weighted_weekly' | 'arithmetic';
+
+export const DEFAULT_IRA_MODE: IraCalculationMode = 'weighted_weekly';
+
+export const IRA_MODE_LABELS: Record<IraCalculationMode, string> = {
+  weighted_weekly: 'IRA: média ponderada pela carga semanal (1/2/4)',
+  arithmetic: 'IRA: média aritmética simples',
+};
+
+/** Normaliza qualquer valor lido do banco para um modo válido. */
+export const parseIraMode = (value: unknown): IraCalculationMode =>
+  value === 'arithmetic' ? 'arithmetic' : 'weighted_weekly';
 
 /** Origem do valor usado no cálculo. */
 export type IraValueSource = 'reported' | 'missing_as_zero';
