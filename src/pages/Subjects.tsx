@@ -19,7 +19,7 @@ import { usePermissions } from "@/contexts/PermissionsContext";
 import { useActiveSchoolId, useSchoolScopeKey } from "@/contexts/SchoolContext";
 import { supabase } from "@/integrations/supabase/client";
 import { CLASS_SERIES_OPTIONS, HighSchoolSeries, classSeriesLabel, parseSeriesValue, seriesShortLabel, seriesSortIndex } from "@/lib/series";
-import { IRA_MODE_LABELS } from "@/lib/ira";
+import { IRA_MODE_LABEL } from "@/lib/ira";
 import { matrixWeeklyTotal } from "@/lib/curriculumMatrixCore";
 import {
   CurriculumMatrixRecord, MatrixComponentRow, countClassesUsingMatrix, createCurriculumMatrix,
@@ -73,8 +73,6 @@ const SubjectsContent = () => {
   const [classSelection, setClassSelection] = useState<Set<string>>(new Set());
 
   const activeMatrix = useMemo(() => matrices.find((m) => m.id === matrixId) ?? null, [matrices, matrixId]);
-  /** Matrizes de média simples (ex.: Matriz Integral) não usam carga semanal no IRA. */
-  const arithmeticIra = activeMatrix?.ira_calculation_mode === "arithmetic";
   /** Matriz Original e matrizes padrão do sistema não podem ser excluídas. */
   const matrixProtected = !!activeMatrix && (activeMatrix.is_original || !!activeMatrix.system_key);
 
@@ -140,20 +138,15 @@ const SubjectsContent = () => {
   const openCreateComponent = () => {
     setEditing(null);
     setCreatingComponent(true);
-    setForm({ name: "", abbreviation: "", aliases: "", weekly: arithmeticIra ? "" : "1", ira: true });
+    setForm({ name: "", abbreviation: "", aliases: "", weekly: "0", ira: true });
   };
 
   const handleSaveComponent = async () => {
     if (!activeSchoolId || !matrixId) return;
-    // Em matrizes de média simples a carga semanal é opcional (não entra no IRA).
-    const blankWeekly = form.weekly.trim() === "";
-    const weekly = blankWeekly ? null : Number(form.weekly);
-    if (weekly !== null && (!Number.isFinite(weekly) || weekly < 1)) {
-      toast({ title: "Carga semanal deve ser maior que zero", variant: "destructive" });
-      return;
-    }
-    if (weekly === null && !arithmeticIra) {
-      toast({ title: "Informe a carga semanal desta série", variant: "destructive" });
+    // Carga semanal 0 é válida e significa "não informada" (não entra no IRA).
+    const weekly = form.weekly.trim() === "" ? 0 : Number(form.weekly);
+    if (!Number.isFinite(weekly) || weekly < 0 || !Number.isInteger(weekly)) {
+      toast({ title: "Carga semanal deve ser 0 (não informada) ou um número positivo", variant: "destructive" });
       return;
     }
     if (creatingComponent && !form.name.trim()) {
@@ -170,7 +163,7 @@ const SubjectsContent = () => {
           abbreviation: form.abbreviation,
           aliases,
           series,
-          weeklyClasses: weekly ?? 1,
+          weeklyClasses: weekly > 0 ? weekly : 1,
         });
         const { error } = await supabase.from("curriculum_matrix_subjects").insert({
           school_id: activeSchoolId,
@@ -505,14 +498,7 @@ const SubjectsContent = () => {
                   <Lock className="h-3 w-3" /> Matriz padrão do sistema (protegida)
                 </Badge>
               )}
-              <Badge variant="outline">
-                {IRA_MODE_LABELS[arithmeticIra ? "arithmetic" : "weighted_weekly"]}
-              </Badge>
-              {arithmeticIra && (
-                <span className="text-xs">
-                  Todas as disciplinas pesam igual; a carga semanal não se aplica.
-                </span>
-              )}
+              <Badge variant="outline">{IRA_MODE_LABEL}</Badge>
               {activeMatrix.description && <span className="text-xs">{activeMatrix.description}</span>}
             </CardDescription>
           )}
@@ -535,9 +521,7 @@ const SubjectsContent = () => {
                     <CardTitle className="text-base">{o.label}</CardTitle>
                     <CardDescription className="flex flex-wrap items-center gap-2 mt-1">
                       <Badge variant="secondary">{bySeries.length} componentes</Badge>
-                      {!arithmeticIra && (
-                        <Badge variant="outline">{matrixWeeklyTotal(bySeries)} aulas/semana (total real)</Badge>
-                      )}
+                      <Badge variant="outline">{matrixWeeklyTotal(bySeries)} aulas/semana (total real)</Badge>
                     </CardDescription>
                   </div>
                   {canEdit && matrixId && (
@@ -576,7 +560,9 @@ const SubjectsContent = () => {
                             </div>
                           </TableCell>
                           <TableCell className="text-center">
-                            {item.weekly_classes ?? (arithmeticIra ? "Não se aplica" : "—")}
+                            {item.weekly_classes == null || item.weekly_classes === 0
+                              ? "0 (não informada)"
+                              : item.weekly_classes}
                           </TableCell>
                           <TableCell className="text-center">
                             {item.include_in_ira
@@ -661,11 +647,10 @@ const SubjectsContent = () => {
             </div>
             <div className="space-y-2">
               <Label htmlFor="weekly">
-                Carga semanal nesta série (somente nesta matriz)
-                {arithmeticIra ? " — opcional, não afeta o IRA desta matriz" : ""}
+                Carga semanal nesta série (somente nesta matriz) — use 0 quando não informada
               </Label>
-              <Input id="weekly" type="number" min={1} value={form.weekly}
-                placeholder={arithmeticIra ? "Deixe em branco se não se aplica" : undefined}
+              <Input id="weekly" type="number" min={0} value={form.weekly}
+                placeholder="0 = não informada" 
                 onChange={(e) => setForm((f) => ({ ...f, weekly: e.target.value }))} />
             </div>
             <div className="flex items-center gap-2">

@@ -22,7 +22,8 @@ export interface MatrixWeeklyRow {
 export function buildMatrixWeeklyByKey(rows: MatrixWeeklyRow[]): Record<string, number> {
   const out: Record<string, number> = {};
   rows.forEach((r) => {
-    if (r.weekly_classes == null) return;
+    // Carga 0 = "não informada": não serve de fallback.
+    if (r.weekly_classes == null || r.weekly_classes <= 0) return;
     [r.name, ...(r.aliases ?? [])].forEach((n) => {
       const key = canonicalSubjectKey(n);
       if (key && out[key] == null) out[key] = r.weekly_classes;

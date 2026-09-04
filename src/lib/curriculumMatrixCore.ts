@@ -4,6 +4,7 @@
 import { HighSchoolSeries } from '@/lib/series';
 import { canonicalSubjectKey } from '@/lib/gradePageLocal/normalize';
 import { LocalExpectedSubject } from '@/lib/gradePageLocal/types';
+import { hasWeeklyLoad } from '@/lib/ira';
 
 export interface CurriculumMatrixItem {
   id: string;
@@ -67,7 +68,8 @@ export function findMatrixWeeklyDivergences(
   for (const row of existing ?? []) {
     const key = canonicalSubjectKey(row.subject_name);
     const item = matrix.find((m) => [m.name, ...(m.aliases ?? [])].some((k) => canonicalSubjectKey(k) === key));
-    if (!item || item.weekly_classes == null) continue;
+    // Carga 0/nula na matriz = "não informada": nunca é divergência.
+    if (!item || !hasWeeklyLoad(item.weekly_classes)) continue;
     if ((row.weekly_classes ?? null) !== item.weekly_classes) {
       out.push({ name: row.subject_name, current: row.weekly_classes ?? null, expected: item.weekly_classes });
     }

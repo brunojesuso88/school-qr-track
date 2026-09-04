@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import {
-  DEFAULT_IRA_MODE, IraCalculationMode, calculateIraMultiPeriod,
+  calculateIraMultiPeriod,
   IraPeriodRef, IraResult, IraSubjectInput,
 } from '@/lib/ira';
-import { fetchIraModeByMatrixId } from '@/lib/iraModes';
 import { canonicalSubjectKey, isPeriodKind, periodRank } from '@/lib/gradePageLocal/normalize';
 import { fetchMatrixWeeklyByKey } from '@/lib/curriculumMatrixWeekly';
 import { parseSeriesValue } from '@/lib/series';
@@ -65,11 +64,6 @@ export interface ClassGradesData {
    * sem isso a disciplina ficava sem peso e desaparecia silenciosamente do IRA.
    */
   matrixWeeklyByKey?: Record<string, number>;
-  /**
-   * Modo de cálculo do IRA da MATRIZ atribuída à turma. `arithmetic` (Matriz
-   * Integral) ignora carga semanal e peso personalizado: todo componente pesa 1.
-   */
-  iraCalculationMode?: IraCalculationMode;
 }
 
 const emptyData: ClassGradesData = {
@@ -79,7 +73,6 @@ const emptyData: ClassGradesData = {
   settings: null,
   currentWeeklyClasses: {},
   matrixWeeklyByKey: {},
-  iraCalculationMode: DEFAULT_IRA_MODE,
 };
 
 /**
@@ -144,7 +137,6 @@ export function computeIraForStudent(data: ClassGradesData, studentId: string): 
     buildIraInputs(data, studentId, periods.map((p) => p.id)),
     toPeriodRefs(periods),
     {
-      mode: data.iraCalculationMode ?? DEFAULT_IRA_MODE,
       notConfiguredReason: data.settings
         ? 'Nenhum período válido selecionado em Configurações → IRA para esta turma'
         : 'Esta turma ainda não tem configuração de IRA (Configurações → IRA)',
@@ -235,14 +227,7 @@ async function fetchClassGrades(
   const series = parseSeriesValue(classInfo?.series ?? null);
   // Carga/participação vêm da matriz efetivamente atribuída à turma.
   const matrixIds = classInfo?.curriculum_matrix_id ? [classInfo.curriculum_matrix_id] : undefined;
-  const [matrixWeeklyByKey, modeByMatrix] = await Promise.all([
-    fetchMatrixWeeklyByKey([series], schoolId, matrixIds),
-    fetchIraModeByMatrixId(matrixIds ?? [], schoolId),
-  ]);
-  // Sem matriz atribuída (ou matriz inacessível) o padrão é o ponderado histórico.
-  const iraCalculationMode: IraCalculationMode =
-    (classInfo?.curriculum_matrix_id ? modeByMatrix[classInfo.curriculum_matrix_id] : undefined)
-    ?? DEFAULT_IRA_MODE;
+  const matrixWeeklyByKey = await fetchMatrixWeeklyByKey([series], schoolId, matrixIds);
 
   return {
     subjects,
@@ -251,7 +236,6 @@ async function fetchClassGrades(
     settings: (settingsRes.data as unknown as IraSettingsRow) ?? null,
     currentWeeklyClasses,
     matrixWeeklyByKey,
-    iraCalculationMode,
   };
 }
 

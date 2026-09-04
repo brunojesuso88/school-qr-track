@@ -9,8 +9,9 @@
  * sem acentos, pontuação preservada). Não são "corrigidos": variações de OCR/espaço
  * são tratadas por normalização/alias no parser, nunca alterando o canônico.
  *
- * Carga semanal NÃO foi fornecida e NÃO se aplica ao IRA desta matriz
- * (`ira_calculation_mode = 'arithmetic'`): cada componente pesa 1.
+ * Carga semanal NÃO foi fornecida pela escola: os componentes são semeados com
+ * `weekly_classes = 0` ("não informada"). O IRA é o MESMO da Matriz Original —
+ * componentes com carga 0 ficam de fora do cálculo até a carga ser informada.
  *
  * Serve de referência documental e de base para os testes. A fonte da verdade em
  * tempo de execução é sempre o banco (`fetchCurriculumMatrix`).

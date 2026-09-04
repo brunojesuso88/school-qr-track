@@ -8,9 +8,6 @@
 import { supabase } from '@/integrations/supabase/client';
 import { HighSchoolSeries } from '@/lib/series';
 
-/** Modo de cálculo do IRA da matriz. */
-export type IraMatrixMode = 'weighted_weekly' | 'arithmetic';
-
 export interface CurriculumMatrixRecord {
   id: string;
   school_id: string;
@@ -19,7 +16,6 @@ export interface CurriculumMatrixRecord {
   is_original: boolean;
   /** Matriz de sistema (semeada pelo banco), ex. `integral`. Não pode ser excluída. */
   system_key: string | null;
-  ira_calculation_mode: IraMatrixMode;
   /** Total de componentes (todas as séries). */
   components: number;
 }
@@ -85,7 +81,7 @@ export async function fetchSchoolMatrices(schoolId: string | null | undefined): 
   const [matrixRes, countRes] = await Promise.all([
     supabase
       .from('curriculum_matrices')
-      .select('id, school_id, name, description, is_original, system_key, ira_calculation_mode')
+      .select('id, school_id, name, description, is_original, system_key')
       .eq('school_id', schoolId),
     supabase
       .from('curriculum_matrix_subjects')
@@ -98,13 +94,10 @@ export async function fetchSchoolMatrices(schoolId: string | null | undefined): 
   ((countRes.data ?? []) as { matrix_id: string }[]).forEach((r) => {
     counts.set(r.matrix_id, (counts.get(r.matrix_id) ?? 0) + 1);
   });
-  return ((matrixRes.data ?? []) as unknown as (Omit<CurriculumMatrixRecord, 'components' | 'ira_calculation_mode'> & {
-    ira_calculation_mode: string | null;
-  })[])
+  return ((matrixRes.data ?? []) as unknown as Omit<CurriculumMatrixRecord, 'components'>[])
     .map((m) => ({
       ...m,
       system_key: m.system_key ?? null,
-      ira_calculation_mode: (m.ira_calculation_mode === 'arithmetic' ? 'arithmetic' : 'weighted_weekly') as IraMatrixMode,
       components: counts.get(m.id) ?? 0,
     }))
     // Matriz Original primeiro, depois as matrizes de sistema (Integral), depois as demais.
@@ -178,13 +171,6 @@ export async function createCurriculumMatrix(input: {
   if (!name) throw new Error('Informe o nome da matriz curricular.');
   if (input.copyFromMatrixId) await assertMatrixInSchool(input.copyFromMatrixId, input.schoolId);
 
-  // Cópia herda o modo de cálculo do IRA da matriz de origem (ex. Integral = aritmético).
-  let mode: IraMatrixMode = 'weighted_weekly';
-  if (input.copyFromMatrixId) {
-    const all = await fetchSchoolMatrices(input.schoolId);
-    mode = all.find((m) => m.id === input.copyFromMatrixId)?.ira_calculation_mode ?? 'weighted_weekly';
-  }
-
   const { data, error } = await supabase
     .from('curriculum_matrices')
     .insert({
@@ -192,7 +178,6 @@ export async function createCurriculumMatrix(input: {
       name,
       description: input.description?.trim() ? input.description.trim() : null,
       is_original: false,
-      ira_calculation_mode: mode,
     })
     .select('id')
     .single();
@@ -342,4 +327,55 @@ export async function repairSchoolCurricula(): Promise<{ schools: number; compon
   const { data, error } = await rpcClient.rpc('repair_school_curricula');
   if (error) throw new Error(error.message);
   return (data ?? { schools: 0, components_created: 0 }) as { schools: number; components_created: number };
+}
+
+/**
+ * PURO: decide qual matriz aplicar a uma turma nova a partir das matrizes da
+ * escola ativa que TÊM componentes para a série escolhida.
+ *
+ * - exatamente uma => aplicada por padrão (`autoApply`);
+ * - mais de uma => o usuário escolhe (nunca escolhemos em silêncio);
+ * - nenhuma => aviso não destrutivo, criação da turma segue liberada.
+ */
+export function selectMatrixForSeries(
+  matrices: CurriculumMatrixRecord[],
+  componentCountByMatrixId: Record<string, number>,
+): { candidates: CurriculumMatrixRecord[]; matrixId: string | null; autoApply: boolean; needsChoice: boolean } {
+  const candidates = matrices.filter((m) => (componentCountByMatrixId[m.id] ?? 0) > 0);
+  if (candidates.length === 1) {
+    return { candidates, matrixId: candidates[0].id, autoApply: true, needsChoice: false };
+  }
+  return { candidates, matrixId: null, autoApply: false, needsChoice: candidates.length > 1 };
+}
+
+/** Quantos componentes cada matriz da escola ativa tem para a série informada. */
+export async function fetchMatrixComponentCountsBySeries(
+  schoolId: string | null | undefined,
+  series: HighSchoolSeries | null,
+): Promise<Record<string, number>> {
+  if (!schoolId || !series) return {};
+  const { data, error } = await supabase
+    .from('curriculum_matrix_subjects')
+    .select('matrix_id')
+    .eq('school_id', schoolId)
+    .eq('series', series);
+  if (error) throw error;
+  const out: Record<string, number> = {};
+  ((data ?? []) as { matrix_id: string }[]).forEach((r) => {
+    out[r.matrix_id] = (out[r.matrix_id] ?? 0) + 1;
+  });
+  return out;
+}
+
+/** Matrizes da escola ativa compatíveis com a série + sugestão de aplicação. */
+export async function fetchMatricesForSeries(
+  schoolId: string | null | undefined,
+  series: HighSchoolSeries | null,
+): Promise<{ candidates: CurriculumMatrixRecord[]; matrixId: string | null; autoApply: boolean; needsChoice: boolean }> {
+  if (!schoolId || !series) return { candidates: [], matrixId: null, autoApply: false, needsChoice: false };
+  const [matrices, counts] = await Promise.all([
+    fetchSchoolMatrices(schoolId),
+    fetchMatrixComponentCountsBySeries(schoolId, series),
+  ]);
+  return selectMatrixForSeries(matrices, counts);
 }

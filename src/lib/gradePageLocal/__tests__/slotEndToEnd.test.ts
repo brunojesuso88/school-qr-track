@@ -43,20 +43,19 @@ describe('slots do mesmo componente ponta a ponta', () => {
     expect(rows[1].value).toBe(6);
   });
 
-  it('IRA aritmético conta as duas ocorrências: 8 e 6 => 7,00', () => {
+  it('IRA conta as duas ocorrências com o MESMO algoritmo ponderado: 8 e 6 => 7,00', () => {
     const ira = calculateIraMultiPeriod(
       [
         {
-          subjectId: 'gs-slot-1', name: NAME, weeklyClasses: null, includeInIra: true,
+          subjectId: 'gs-slot-1', name: NAME, weeklyClasses: 1, includeInIra: true,
           customWeight: null, valuesByPeriod: { p1: 8 },
         },
         {
-          subjectId: 'gs-slot-2', name: NAME, weeklyClasses: null, includeInIra: true,
+          subjectId: 'gs-slot-2', name: NAME, weeklyClasses: 1, includeInIra: true,
           customWeight: null, valuesByPeriod: { p1: 6 },
         },
       ],
       [{ id: 'p1', label: '1º Período' }],
-      { mode: 'arithmetic' },
     );
     // Dois grade_subjects distintos (unique class_id + normalized_name + slot_index).
     expect(new Set(ira.lines.map((l) => l.subjectId)).size).toBe(2);
