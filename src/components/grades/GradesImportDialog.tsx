@@ -707,12 +707,14 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
       // disciplina são puladas até chegar na próxima página com conteúdo real.
       for (;;) {
       let local: Awaited<ReturnType<typeof readPageLocally>> = null;
+      let localError = false;
       if (readingMode !== 'ai_only') {
         try {
           local = await readPageLocally(page);
         } catch (e) {
           console.error('Leitura local falhou, seguindo com IA:', e);
           local = null;
+          localError = true;
         }
       }
       if (cancelledRef.current) return;
@@ -725,11 +727,13 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
         continue;
       }
 
-      // Caminho 100% local: leitura AUTORITATIVA (sem risco real) dispensa a IA.
-      const localOk = Boolean(local?.preview && local.ok);
+      // Política CENTRAL: toda chamada à IA passa por decideAiFallback (testável).
       const localAuthoritative = Boolean(local?.authoritative);
-      const useAi = shouldValidateWithAi({ mode: readingMode, localOk, localAuthoritative });
-      if (!useAi && local?.preview) {
+      const decision = decideAiFallback(
+        local ? { ok: local.ok, authoritative: local.authoritative, preview: local.preview, validation: local.validation, reading: local.preview?.reading ?? null } : null,
+        { mode: readingMode, hasLocalDocument: pdfDocRef.current != null, localError },
+      );
+      if (!decision.useAi && local?.preview) {
         const localPreview = local.preview as unknown as PagePreview;
         if (localPreview.reading) {
           localPreview.reading = {
@@ -742,6 +746,8 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
         await applyPreview(localPreview);
         return;
       }
+      console.info(`[boletim] página ${page}: IA acionada (${decision.reason})`, decision.details);
+      setAiPages((prev) => prev + 1);
 
       const { data, error: fnError } = await supabase.functions.invoke('parse-grade-page', {
         body: { action: 'page', session_id: sessionId, page_number: page },
