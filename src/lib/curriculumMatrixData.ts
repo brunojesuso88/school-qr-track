@@ -14,13 +14,8 @@ export interface OfficialMatrixSubject {
   weekly: Partial<Record<HighSchoolSeries, number>>;
 }
 
-export const APROFUNDAMENTO_AXES = ['CHL', 'CNS', 'ETT'] as const;
-
-const aprofundamentoAliases = (roman: 'I' | 'II') =>
-  APROFUNDAMENTO_AXES.flatMap((axis) => [
-    `APROFUNDAMENTO IF - ${axis} - ${roman}`,
-    `APROFUNDAMENTO IF ${axis} ${roman}`,
-  ]);
+export { APROFUNDAMENTO_AXES } from '@/lib/curriculum/aprofundamentoAxes';
+import { aprofundamentoAliases } from '@/lib/curriculum/aprofundamentoAxes';
 
 export const OFFICIAL_CURRICULUM_MATRIX: OfficialMatrixSubject[] = [
   { name: 'ARTE', abbreviation: 'ART', aliases: ['ARTES'], weekly: { '1': 2, '2': 1, '3': 1 } },
