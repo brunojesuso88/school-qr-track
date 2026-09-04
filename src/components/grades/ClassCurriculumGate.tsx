@@ -211,7 +211,7 @@ export const ClassCurriculumGate = ({ classId, onReadyChange, onSynced }: Props)
             {weeklyTotal} aulas/semana. {describePlan(state.plan)}.
           </p>
 
-          {(!inSync || matrixChanged) && !emptyMatrix && (
+          {(!inSync || matrixChanged) && (!emptyMatrix || matrixChanged) && (
             <div className="space-y-2">
               {state.plan.gradeCreate.length > 0 && (
                 <p className="text-[11px] text-muted-foreground">
