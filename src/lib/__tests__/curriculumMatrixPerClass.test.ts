@@ -98,8 +98,8 @@ describe('carga semanal por matriz da turma', () => {
       { studentId: 'aluno', series: '1', data: classData(byClass.get('turmaA')!) },
       { studentId: 'rival', series: '1', data: classData(byClass.get('turmaB')!) },
     ]);
-    const geralA = medalsA.get('aluno')?.find((m) => m.area === 'geral');
-    const geralRival = medalsA.get('rival')?.find((m) => m.area === 'geral');
+    const geralA = (medalsA['aluno'] ?? []).find((m) => m.area === 'geral');
+    const geralRival = (medalsA['rival'] ?? []).find((m) => m.area === 'geral');
     // O aluno da matriz com pesos favoráveis (turma B) fica à frente.
     expect(geralRival?.position).toBe(1);
     expect(geralA?.position).toBe(2);
