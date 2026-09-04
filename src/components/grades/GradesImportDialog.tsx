@@ -299,6 +299,10 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
   useEffect(() => { sessionRef.current = session; }, [session]);
   /** Páginas ignoradas por não conterem nenhuma disciplina (diagnóstico não bloqueante). */
   const [skippedPages, setSkippedPages] = useState<number[]>([]);
+  /** Páginas em que a IA foi efetivamente chamada nesta sessão (métrica local). */
+  const [aiPages, setAiPages] = useState(0);
+  /** Identidade do PDF (código/nome) → student_id GRAVADO: páginas seguintes do mesmo aluno reutilizam o ID. */
+  const persistedStudentsRef = useRef<PersistedStudentMemory>(new Map());
 
   const reset = useCallback(() => {
     setStep('select');
