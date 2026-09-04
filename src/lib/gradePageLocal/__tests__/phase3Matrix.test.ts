@@ -290,3 +290,19 @@ describe('Matriz oficial — Aprofundamento com eixo (CHL/CNS/ETT)', () => {
     expect(out.aiEmptyIgnored).toBe(0);
   });
 });
+
+describe('ocorrências duplicadas (Matriz Integral)', () => {
+  it('mantém cada ocorrência do mesmo componente como entrada própria', () => {
+    const result = buildEffectiveSubjectMatrix({
+      matrix: [
+        { name: 'PROJETO INTEGRADOR', weekly_classes: null, slot_index: 1 },
+        { name: 'PROJETO INTEGRADOR', weekly_classes: null, slot_index: 2 },
+      ],
+      mapping: [],
+      series: 'eve3',
+    });
+    const occurrences = result.filter((s) => s.name === 'PROJETO INTEGRADOR');
+    expect(occurrences).toHaveLength(2);
+    expect(occurrences.map((s) => s.slot_index)).toEqual([1, 2]);
+  });
+});
