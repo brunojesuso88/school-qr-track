@@ -859,14 +859,42 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
 
       setSession((prev) => (prev ? { ...prev, current_page: page } : prev));
       await applyPreview(finalPreview);
+      schedulePrefetch(page);
       return;
       }
     } catch (e) {
       console.error(e);
-      setError(e instanceof Error ? e.message : 'Erro ao ler a página.');
-      setStep('failed');
+      if (cancelledRef.current) return;
+      // Falha de leitura NÃO aborta a importação: a página entra na fila de
+      // reprocessamento e a sessão continua na página seguinte.
+      const failure = failureQueueRef.current.record({
+        page: currentPage, error: e, localPreview: lastLocalPreviewRef.current,
+      });
+      setPendingFailures(failureQueueRef.current.list());
+      const totalPages = sessionRef.current?.total_pages ?? pdfDocRef.current?.numPages ?? currentPage;
+      const isLastPage = currentPage >= totalPages;
+      const alreadyRetried = failure.attempts > 1;
+      if (isLastPage || alreadyRetried || reprocessingRef.current) {
+        const pending = failureQueueRef.current.pendingPages();
+        const nextPending = pending.find((p) => p !== currentPage);
+        if (reprocessingRef.current && nextPending != null) {
+          toast.error(`Página ${currentPage}: ${failure.message}`);
+          await processPage(sessionId, nextPending);
+          return;
+        }
+        if (isLastPage || reprocessingRef.current) {
+          reprocessingRef.current = false;
+          setError(failure.message);
+          setStep('summary');
+          onImported?.();
+          return;
+        }
+      }
+      toast.error(`Página ${currentPage} não pôde ser lida (${failure.message}). Ela ficará para reprocessar no final.`);
+      await processPage(sessionId, currentPage + 1);
     }
-  }, [applyPreview, persistPreview, readPageLocally, readingMode, skipPageWithoutSubjects, finishSession]);
+  }, [applyPreview, persistPreview, takeLocalReading, schedulePrefetch, readingMode, skipPageWithoutSubjects, finishSession, onImported]);
+
 
   /** Sessão em aberto para esta turma (retomada). */
   useEffect(() => {
