@@ -1285,7 +1285,21 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
           }];
         }
       }
-      if (!studentId) throw new Error('Selecione o aluno correspondente antes de salvar a página.');
+      // FONTE ÚNICA: o aluno escolhido na UI (ou recém-criado). Validado no banco por
+      // id + escola + turma, sem rematch textual. `detected.student_id` é só sugestão.
+      const schoolId = assertActiveSchool(activeSchoolId);
+      const scope = await assertPersistedStudent(
+        { pageAction, linkStudentId: targetStudentId, createdStudentId: pageAction === 'create' ? studentId : null },
+        { schoolId, classNames: [effectiveNameRef.current || effectiveName || classItem.name, classItem.name] },
+        async (id): Promise<StudentScopeRow | null> => {
+          const { data, error: lookupError } = await supabase
+            .from('students').select('id, class, school_id').eq('id', id).maybeSingle();
+          if (lookupError) throw lookupError;
+          return (data as StudentScopeRow | null) ?? null;
+        },
+      );
+      if (!scope.ok) throw new Error(scope.message);
+      studentId = scope.studentId;
 
       // Períodos e disciplinas desta página
       const periodPayload = preview.periods
