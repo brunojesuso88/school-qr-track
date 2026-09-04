@@ -644,6 +644,9 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
     await supabase.from('grade_import_sessions')
       .update({ ignored_pages: ignored, current_page: pageNumber })
       .eq('id', sessionId);
+    sessionRef.current = sessionRef.current
+      ? { ...sessionRef.current, ignored_pages: ignored, current_page: pageNumber }
+      : sessionRef.current;
     setSession((prev) => (prev ? { ...prev, ignored_pages: ignored, current_page: pageNumber } : prev));
     setSkippedPages((prev) => [...prev, pageNumber]);
     console.info(note);
@@ -833,6 +836,7 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
         auto_accept: autoAccept,
         auto_accept_rules: autoRules,
       };
+      sessionRef.current = newSession;
       setSession(newSession);
       await supabase.from('grade_import_sessions')
         .update({ auto_accept: autoAccept, auto_accept_rules: autoRules as never })
@@ -858,6 +862,7 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
         .eq('session_id', target.id)
         .order('page_number');
       const next = (pages || []).find((p: { status: string }) => !['confirmed', 'ignored'].includes(p.status));
+      sessionRef.current = target;
       setSession(target);
       setResumable(null);
       if (!next) { setStep('summary'); return; }
