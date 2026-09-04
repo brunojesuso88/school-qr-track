@@ -113,7 +113,7 @@ const SubjectsContent = () => {
       name: item.name,
       abbreviation: item.abbreviation ?? "",
       aliases: (item.aliases ?? []).join("\n"),
-      weekly: String(item.weekly_classes),
+      weekly: item.weekly_classes == null ? "" : String(item.weekly_classes),
       ira: item.include_in_ira,
     });
   };
@@ -121,14 +121,20 @@ const SubjectsContent = () => {
   const openCreateComponent = () => {
     setEditing(null);
     setCreatingComponent(true);
-    setForm({ name: "", abbreviation: "", aliases: "", weekly: "1", ira: true });
+    setForm({ name: "", abbreviation: "", aliases: "", weekly: arithmeticIra ? "" : "1", ira: true });
   };
 
   const handleSaveComponent = async () => {
     if (!activeSchoolId || !matrixId) return;
-    const weekly = Number(form.weekly);
-    if (!Number.isFinite(weekly) || weekly < 1) {
+    // Em matrizes de média simples a carga semanal é opcional (não entra no IRA).
+    const blankWeekly = form.weekly.trim() === "";
+    const weekly = blankWeekly ? null : Number(form.weekly);
+    if (weekly !== null && (!Number.isFinite(weekly) || weekly < 1)) {
       toast({ title: "Carga semanal deve ser maior que zero", variant: "destructive" });
+      return;
+    }
+    if (weekly === null && !arithmeticIra) {
+      toast({ title: "Informe a carga semanal desta série", variant: "destructive" });
       return;
     }
     if (creatingComponent && !form.name.trim()) {
@@ -145,7 +151,7 @@ const SubjectsContent = () => {
           abbreviation: form.abbreviation,
           aliases,
           series,
-          weeklyClasses: weekly,
+          weeklyClasses: weekly ?? 1,
         });
         const { error } = await supabase.from("curriculum_matrix_subjects").insert({
           school_id: activeSchoolId,
