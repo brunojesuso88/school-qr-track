@@ -324,6 +324,8 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
     setOtherClassMatch(null);
     setMovingStudent(false);
     setSavedTotal(0);
+    setAiPages(0);
+    persistedStudentsRef.current = new Map();
     setAutoAccept(false);
     setAutoRules(DEFAULT_AUTO_ACCEPT_RULES);
     setAutoApprovedPage(null);
