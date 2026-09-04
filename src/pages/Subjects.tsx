@@ -540,9 +540,14 @@ const SubjectsContent = () => {
                               {item.abbreviation && (
                                 <Badge variant="outline" className="font-mono text-xs">{item.abbreviation}</Badge>
                               )}
+                              {(item.slot_index ?? 1) > 1 && (
+                                <Badge variant="secondary" className="text-xs">
+                                  {item.slot_index}ª ocorrência
+                                </Badge>
+                              )}
                             </div>
                           </TableCell>
-                          <TableCell className="text-center">{item.weekly_classes}</TableCell>
+                          <TableCell className="text-center">{item.weekly_classes ?? "—"}</TableCell>
                           <TableCell className="text-center">
                             {item.include_in_ira
                               ? <Badge variant="secondary">Sim</Badge>
