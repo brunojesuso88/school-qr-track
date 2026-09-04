@@ -176,7 +176,7 @@ describe('nota existente divergente da nota do PDF', () => {
     });
     expect(rules).toEqual({
       use_pdf_registry: true, accept_unique_fuzzy: true,
-      use_local_on_reconciliation: true, use_pdf_grade_on_existing_conflict: false,
+      use_local_on_reconciliation: true, auto_create_or_link_unmatched_student: false, use_pdf_grade_on_existing_conflict: false,
     });
   });
 });
