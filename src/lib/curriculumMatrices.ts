@@ -206,7 +206,10 @@ export async function createCurriculumMatrix(input: {
 export async function importMatrixComponents(input: {
   schoolId: string;
   targetMatrixId: string;
-  components: { subject_id: string; series: string; weekly_classes: number; include_in_ira: boolean }[];
+  components: {
+    subject_id: string; series: string; weekly_classes: number | null;
+    include_in_ira: boolean; slot_index?: number | null;
+  }[];
 }): Promise<{ imported: number; skipped: number }> {
   await assertMatrixInSchool(input.targetMatrixId, input.schoolId);
   const target = await fetchMatrixComponents(input.targetMatrixId, input.schoolId);
@@ -220,6 +223,7 @@ export async function importMatrixComponents(input: {
         series: c.series,
         weekly_classes: c.weekly_classes,
         include_in_ira: c.include_in_ira,
+        slot_index: c.slot_index ?? 1,
       })),
     );
     if (error) throw error;
