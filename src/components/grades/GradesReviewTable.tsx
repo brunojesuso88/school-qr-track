@@ -10,6 +10,8 @@ export interface ReviewRow {
   student_code?: string | null;
   class_code?: string | null;
   subject: string;
+  /** Ocorrência da disciplina na etapa (1 = primeira; ausente equivale a 1). */
+  slot_index?: number | null;
   period: string;
   period_kind?: string | null;
   raw_value: string | null;
@@ -85,7 +87,7 @@ export const GradesReviewTable = ({
       </thead>
       <tbody>
         {rows.map((row, index) => {
-          const key = `${row.student_id}||${row.subject}||${row.period}`;
+          const key = `${row.student_id}||${row.subject}#${row.slot_index ?? 1}||${row.period}`;
           const hasConflict = row.student_id ? conflictKeys.has(key) : false;
           // Divergência resolvida (valor atual == 2ª leitura) não pinta a linha nem exibe alerta.
           const staleDivergence = row.flags.includes('reconciliation_divergence')

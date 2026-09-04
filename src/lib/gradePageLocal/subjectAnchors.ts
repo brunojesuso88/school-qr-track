@@ -15,6 +15,11 @@ export interface SubjectAnchor {
   /** Abreviação normalizada (igualdade exata apenas). */
   abbreviation: string | null;
   weekly_classes: number | null;
+  /**
+   * Quantas ocorrências (slots) deste componente a matriz da turma prevê.
+   * > 1 quando a etapa repete intencionalmente a mesma disciplina.
+   */
+  occurrences: number;
 }
 
 export type AnchorMatchKind = 'exact' | 'alias' | 'abbreviation' | 'contains' | 'similar';
@@ -64,6 +69,8 @@ export function buildSubjectAnchors(expected: LocalExpectedSubject[]): SubjectAn
       existing.keys = [...new Set([...existing.keys, ...aliasKeys])];
       existing.abbreviation = existing.abbreviation ?? (abbreviation || null);
       existing.weekly_classes = existing.weekly_classes ?? (item.weekly_classes ?? null);
+      // Ocorrências intencionais: a matriz repete o mesmo componente na etapa.
+      existing.occurrences = Math.max(existing.occurrences, item.slot_index ?? existing.occurrences + 1);
       continue;
     }
     byCanonical.set(key, {
@@ -71,6 +78,7 @@ export function buildSubjectAnchors(expected: LocalExpectedSubject[]): SubjectAn
       keys: [...new Set([key, ...aliasKeys])],
       abbreviation: abbreviation && abbreviation.length >= 2 ? abbreviation : null,
       weekly_classes: item.weekly_classes ?? null,
+      occurrences: Math.max(1, item.slot_index ?? 1),
     });
   }
   return [...byCanonical.values()];

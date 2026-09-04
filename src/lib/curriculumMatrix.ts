@@ -18,8 +18,9 @@ interface RawRow {
   matrix_id: string;
   subject_id: string;
   series: string;
-  weekly_classes: number;
+  weekly_classes: number | null;
   include_in_ira: boolean;
+  slot_index: number | null;
   mapping_global_subjects: {
     name: string; abbreviation: string | null; aliases: string[] | null;
   } | null;
@@ -39,7 +40,7 @@ export async function fetchCurriculumMatrix(
   if (!targetMatrix) return [];
   let query = supabase
     .from('curriculum_matrix_subjects')
-    .select('id, matrix_id, subject_id, series, weekly_classes, include_in_ira, mapping_global_subjects(name, abbreviation, aliases)')
+    .select('id, matrix_id, subject_id, series, weekly_classes, include_in_ira, slot_index, mapping_global_subjects(name, abbreviation, aliases)')
     .eq('school_id', schoolId)
     .eq('matrix_id', targetMatrix);
   if (series) query = query.eq('series', series);
@@ -54,9 +55,10 @@ export async function fetchCurriculumMatrix(
       series: r.series as HighSchoolSeries,
       weekly_classes: r.weekly_classes,
       include_in_ira: r.include_in_ira,
+      slot_index: r.slot_index ?? 1,
       name: r.mapping_global_subjects!.name,
       abbreviation: r.mapping_global_subjects!.abbreviation,
       aliases: r.mapping_global_subjects!.aliases ?? [],
     }))
-    .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+    .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR') || a.slot_index - b.slot_index);
 }

@@ -8,12 +8,18 @@
 import { supabase } from '@/integrations/supabase/client';
 import { HighSchoolSeries } from '@/lib/series';
 
+/** Modo de cálculo do IRA da matriz. */
+export type IraMatrixMode = 'weighted_weekly' | 'arithmetic';
+
 export interface CurriculumMatrixRecord {
   id: string;
   school_id: string;
   name: string;
   description: string | null;
   is_original: boolean;
+  /** Matriz de sistema (semeada pelo banco), ex. `integral`. Não pode ser excluída. */
+  system_key: string | null;
+  ira_calculation_mode: IraMatrixMode;
   /** Total de componentes (todas as séries). */
   components: number;
 }
@@ -23,8 +29,11 @@ export interface MatrixComponentRow {
   matrix_id: string;
   subject_id: string;
   series: HighSchoolSeries;
-  weekly_classes: number;
+  /** `null` quando a matriz não usa carga semanal (IRA aritmético). */
+  weekly_classes: number | null;
   include_in_ira: boolean;
+  /** Ocorrência do componente na série (1 = única/primeira). */
+  slot_index: number;
   name: string;
   abbreviation: string | null;
   aliases: string[];
@@ -35,8 +44,9 @@ interface RawComponent {
   matrix_id: string;
   subject_id: string;
   series: string;
-  weekly_classes: number;
+  weekly_classes: number | null;
   include_in_ira: boolean;
+  slot_index: number | null;
   mapping_global_subjects: { name: string; abbreviation: string | null; aliases: string[] | null } | null;
 }
 
@@ -44,8 +54,9 @@ const rpcClient = supabase as unknown as {
   rpc: (fn: string, args?: Record<string, unknown>) => Promise<{ data: unknown; error: { message: string } | null }>;
 };
 
-/** Chave de identidade de um componente dentro de uma matriz. */
-export const componentKey = (c: { subject_id: string; series: string }) => `${c.subject_id}::${c.series}`;
+/** Chave de identidade de um componente dentro de uma matriz (inclui a ocorrência). */
+export const componentKey = (c: { subject_id: string; series: string; slot_index?: number | null }) =>
+  `${c.subject_id}::${c.series}::${c.slot_index ?? 1}`;
 
 /**
  * PURO: componentes de outra matriz que podem ser importados sem duplicar.
@@ -74,7 +85,7 @@ export async function fetchSchoolMatrices(schoolId: string | null | undefined): 
   const [matrixRes, countRes] = await Promise.all([
     supabase
       .from('curriculum_matrices')
-      .select('id, school_id, name, description, is_original')
+      .select('id, school_id, name, description, is_original, system_key, ira_calculation_mode')
       .eq('school_id', schoolId),
     supabase
       .from('curriculum_matrix_subjects')
@@ -87,9 +98,20 @@ export async function fetchSchoolMatrices(schoolId: string | null | undefined): 
   ((countRes.data ?? []) as { matrix_id: string }[]).forEach((r) => {
     counts.set(r.matrix_id, (counts.get(r.matrix_id) ?? 0) + 1);
   });
-  return ((matrixRes.data ?? []) as Omit<CurriculumMatrixRecord, 'components'>[])
-    .map((m) => ({ ...m, components: counts.get(m.id) ?? 0 }))
-    .sort((a, b) => Number(b.is_original) - Number(a.is_original) || a.name.localeCompare(b.name, 'pt-BR'));
+  return ((matrixRes.data ?? []) as unknown as (Omit<CurriculumMatrixRecord, 'components' | 'ira_calculation_mode'> & {
+    ira_calculation_mode: string | null;
+  })[])
+    .map((m) => ({
+      ...m,
+      system_key: m.system_key ?? null,
+      ira_calculation_mode: (m.ira_calculation_mode === 'arithmetic' ? 'arithmetic' : 'weighted_weekly') as IraMatrixMode,
+      components: counts.get(m.id) ?? 0,
+    }))
+    // Matriz Original primeiro, depois as matrizes de sistema (Integral), depois as demais.
+    .sort((a, b) =>
+      Number(b.is_original) - Number(a.is_original)
+      || Number(Boolean(b.system_key)) - Number(Boolean(a.system_key))
+      || a.name.localeCompare(b.name, 'pt-BR'));
 }
 
 /** UUID da Matriz Original da escola (semeada pelo banco). */
@@ -112,7 +134,7 @@ export async function fetchMatrixComponents(
 ): Promise<MatrixComponentRow[]> {
   const { data, error } = await supabase
     .from('curriculum_matrix_subjects')
-    .select('id, matrix_id, subject_id, series, weekly_classes, include_in_ira, mapping_global_subjects(name, abbreviation, aliases)')
+    .select('id, matrix_id, subject_id, series, weekly_classes, include_in_ira, slot_index, mapping_global_subjects(name, abbreviation, aliases)')
     .eq('school_id', schoolId)
     .eq('matrix_id', matrixId);
   if (error) throw error;
@@ -125,11 +147,12 @@ export async function fetchMatrixComponents(
       series: r.series as HighSchoolSeries,
       weekly_classes: r.weekly_classes,
       include_in_ira: r.include_in_ira,
+      slot_index: r.slot_index ?? 1,
       name: r.mapping_global_subjects!.name,
       abbreviation: r.mapping_global_subjects!.abbreviation,
       aliases: r.mapping_global_subjects!.aliases ?? [],
     }))
-    .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+    .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR') || a.slot_index - b.slot_index);
 }
 
 /** Garante que a matriz informada pertence à escola ativa (bloqueio cross-school). */
@@ -155,6 +178,13 @@ export async function createCurriculumMatrix(input: {
   if (!name) throw new Error('Informe o nome da matriz curricular.');
   if (input.copyFromMatrixId) await assertMatrixInSchool(input.copyFromMatrixId, input.schoolId);
 
+  // Cópia herda o modo de cálculo do IRA da matriz de origem (ex. Integral = aritmético).
+  let mode: IraMatrixMode = 'weighted_weekly';
+  if (input.copyFromMatrixId) {
+    const all = await fetchSchoolMatrices(input.schoolId);
+    mode = all.find((m) => m.id === input.copyFromMatrixId)?.ira_calculation_mode ?? 'weighted_weekly';
+  }
+
   const { data, error } = await supabase
     .from('curriculum_matrices')
     .insert({
@@ -162,6 +192,7 @@ export async function createCurriculumMatrix(input: {
       name,
       description: input.description?.trim() ? input.description.trim() : null,
       is_original: false,
+      ira_calculation_mode: mode,
     })
     .select('id')
     .single();
@@ -183,7 +214,10 @@ export async function createCurriculumMatrix(input: {
 export async function importMatrixComponents(input: {
   schoolId: string;
   targetMatrixId: string;
-  components: { subject_id: string; series: string; weekly_classes: number; include_in_ira: boolean }[];
+  components: {
+    subject_id: string; series: string; weekly_classes: number | null;
+    include_in_ira: boolean; slot_index?: number | null;
+  }[];
 }): Promise<{ imported: number; skipped: number }> {
   await assertMatrixInSchool(input.targetMatrixId, input.schoolId);
   const target = await fetchMatrixComponents(input.targetMatrixId, input.schoolId);
@@ -197,6 +231,7 @@ export async function importMatrixComponents(input: {
         series: c.series,
         weekly_classes: c.weekly_classes,
         include_in_ira: c.include_in_ira,
+        slot_index: c.slot_index ?? 1,
       })),
     );
     if (error) throw error;

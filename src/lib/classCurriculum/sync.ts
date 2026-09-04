@@ -102,7 +102,7 @@ async function loadState(classId: string, series: HighSchoolSeries, schoolId: st
     supabase.from('classes').select('id, mapping_class_id').eq('school_id', schoolId).eq('id', classId).maybeSingle(),
     supabase
       .from('grade_subjects')
-      .select('id, name, weekly_classes, include_in_ira, legacy_excluded, mapping_class_subject_id, sort_order')
+      .select('id, name, weekly_classes, include_in_ira, slot_index, legacy_excluded, mapping_class_subject_id, sort_order')
       .eq('school_id', schoolId)
       .eq('class_id', classId),
   ]);

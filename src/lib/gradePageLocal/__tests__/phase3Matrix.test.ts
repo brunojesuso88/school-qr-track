@@ -193,11 +193,13 @@ describe('Fase 3 — reconciliação local × IA', () => {
 });
 
 describe('Fase 3 — série canônica 1/2/3 + etapas EJA', () => {
-  it('valor persistido é 1/2/3/eja1/eja2 com os rótulos oficiais', () => {
-    expect(CLASS_SERIES_OPTIONS.map((o) => o.value)).toEqual(['1', '2', '3', 'eja1', 'eja2']);
+  it('valor persistido é 1/2/3/eja1/eja2 + percursos Integral com os rótulos oficiais', () => {
+    expect(CLASS_SERIES_OPTIONS.map((o) => o.value))
+      .toEqual(['1', '2', '3', 'eja1', 'eja2', 'ept1', 'eve2', 'sec2', 'eve3', 'sec3']);
     expect(CLASS_SERIES_OPTIONS.map((o) => o.label)).toEqual([
       '1º ano do Ensino Médio', '2º ano do Ensino Médio', '3º ano do Ensino Médio',
       '1ª Etapa EJA', '2ª Etapa EJA',
+      '1º ano EPT', '2º ano EVE', '2º ano SEC', '3º ano EVE', '3º ano SEC',
     ]);
   });
 
@@ -286,5 +288,21 @@ describe('Matriz oficial — Aprofundamento com eixo (CHL/CNS/ETT)', () => {
     const out = reconcileLocalWithAi({ rows }, { rows: PERIODS.map((p) => localRow('APROFUNDAMENTO IF - I', p, '—', null)) });
     expect(out.divergences).toBe(0);
     expect(out.aiEmptyIgnored).toBe(0);
+  });
+});
+
+describe('ocorrências duplicadas (Matriz Integral)', () => {
+  it('mantém cada ocorrência do mesmo componente como entrada própria', () => {
+    const result = buildEffectiveSubjectMatrix({
+      matrix: [
+        { name: 'PROJETO INTEGRADOR', weekly_classes: null, slot_index: 1 },
+        { name: 'PROJETO INTEGRADOR', weekly_classes: null, slot_index: 2 },
+      ],
+      mapping: [],
+      series: 'eve3',
+    });
+    const occurrences = result.filter((s) => s.name === 'PROJETO INTEGRADOR');
+    expect(occurrences).toHaveLength(2);
+    expect(occurrences.map((s) => s.slot_index)).toEqual([1, 2]);
   });
 });

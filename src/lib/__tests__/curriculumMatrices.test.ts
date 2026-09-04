@@ -6,9 +6,11 @@ const comp = (subject_id: string, series: string, weekly_classes = 2) =>
   ({ subject_id, series, weekly_classes, include_in_ira: true });
 
 describe('matrizes curriculares nomeadas', () => {
-  it('identifica componente por disciplina + série (nunca por nome)', () => {
-    expect(componentKey(comp('s1', '1'))).toBe('s1::1');
+  it('identifica componente por disciplina + série + ocorrência (nunca por nome)', () => {
+    expect(componentKey(comp('s1', '1'))).toBe('s1::1::1');
     expect(componentKey(comp('s1', '2'))).not.toBe(componentKey(comp('s1', '1')));
+    // Ocorrências (slots) do mesmo componente na mesma série são distintas.
+    expect(componentKey({ ...comp('s1', '1'), slot_index: 2 })).not.toBe(componentKey(comp('s1', '1')));
   });
 
   it('importa componentes de outra matriz preservando série/carga/IRA', () => {

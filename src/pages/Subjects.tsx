@@ -72,6 +72,10 @@ const SubjectsContent = () => {
   const [classSelection, setClassSelection] = useState<Set<string>>(new Set());
 
   const activeMatrix = useMemo(() => matrices.find((m) => m.id === matrixId) ?? null, [matrices, matrixId]);
+  /** Matrizes de média simples (ex.: Matriz Integral) não usam carga semanal no IRA. */
+  const arithmeticIra = activeMatrix?.ira_calculation_mode === "arithmetic";
+  /** Matriz Original e matrizes padrão do sistema não podem ser excluídas. */
+  const matrixProtected = !!activeMatrix && (activeMatrix.is_original || !!activeMatrix.system_key);
 
   const loadMatrices = useCallback(async () => {
     if (!activeSchoolId) { setMatrices([]); setItems([]); setLoading(false); return; }
@@ -109,7 +113,7 @@ const SubjectsContent = () => {
       name: item.name,
       abbreviation: item.abbreviation ?? "",
       aliases: (item.aliases ?? []).join("\n"),
-      weekly: String(item.weekly_classes),
+      weekly: item.weekly_classes == null ? "" : String(item.weekly_classes),
       ira: item.include_in_ira,
     });
   };
@@ -117,14 +121,20 @@ const SubjectsContent = () => {
   const openCreateComponent = () => {
     setEditing(null);
     setCreatingComponent(true);
-    setForm({ name: "", abbreviation: "", aliases: "", weekly: "1", ira: true });
+    setForm({ name: "", abbreviation: "", aliases: "", weekly: arithmeticIra ? "" : "1", ira: true });
   };
 
   const handleSaveComponent = async () => {
     if (!activeSchoolId || !matrixId) return;
-    const weekly = Number(form.weekly);
-    if (!Number.isFinite(weekly) || weekly < 1) {
+    // Em matrizes de média simples a carga semanal é opcional (não entra no IRA).
+    const blankWeekly = form.weekly.trim() === "";
+    const weekly = blankWeekly ? null : Number(form.weekly);
+    if (weekly !== null && (!Number.isFinite(weekly) || weekly < 1)) {
       toast({ title: "Carga semanal deve ser maior que zero", variant: "destructive" });
+      return;
+    }
+    if (weekly === null && !arithmeticIra) {
+      toast({ title: "Informe a carga semanal desta série", variant: "destructive" });
       return;
     }
     if (creatingComponent && !form.name.trim()) {
@@ -141,7 +151,7 @@ const SubjectsContent = () => {
           abbreviation: form.abbreviation,
           aliases,
           series,
-          weeklyClasses: weekly,
+          weeklyClasses: weekly ?? 1,
         });
         const { error } = await supabase.from("curriculum_matrix_subjects").insert({
           school_id: activeSchoolId,
@@ -248,7 +258,7 @@ const SubjectsContent = () => {
   };
 
   const handleDeleteMatrix = async () => {
-    if (!activeSchoolId || !activeMatrix || activeMatrix.is_original) return;
+    if (!activeSchoolId || !activeMatrix || matrixProtected) return;
     setSaving(true);
     try {
       const linked = await countClassesUsingMatrix(activeMatrix.id, activeSchoolId);
@@ -437,7 +447,9 @@ const SubjectsContent = () => {
                 <SelectContent>
                   {matrices.map((m) => (
                     <SelectItem key={m.id} value={m.id}>
-                      {m.name}{m.is_original ? " (original)" : ""} · {m.components} componentes
+                      {m.name}
+                      {m.is_original ? " (original)" : m.system_key ? " (padrão do sistema)" : ""}
+                      {" · "}{m.components} componentes
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -454,7 +466,7 @@ const SubjectsContent = () => {
                 <Button size="sm" variant="outline" onClick={openSync} disabled={!matrixId}>
                   <RefreshCw className="h-4 w-4 mr-2" /> Sincronizar com turma(s)
                 </Button>
-                {activeMatrix && !activeMatrix.is_original && (
+                {activeMatrix && !matrixProtected && (
                   <Button size="sm" variant="ghost" className="text-destructive" onClick={handleDeleteMatrix} disabled={saving}>
                     <Trash2 className="h-4 w-4 mr-2" /> Excluir matriz
                   </Button>
@@ -469,6 +481,16 @@ const SubjectsContent = () => {
                   <Lock className="h-3 w-3" /> Matriz Original (protegida)
                 </Badge>
               )}
+              {!activeMatrix.is_original && activeMatrix.system_key && (
+                <Badge variant="secondary" className="gap-1">
+                  <Lock className="h-3 w-3" /> Matriz padrão do sistema (protegida)
+                </Badge>
+              )}
+              <Badge variant="outline">
+                {arithmeticIra
+                  ? "IRA por média simples (todas as disciplinas pesam igual)"
+                  : "IRA ponderado pela carga semanal"}
+              </Badge>
               {activeMatrix.description && <span className="text-xs">{activeMatrix.description}</span>}
             </CardDescription>
           )}
@@ -491,7 +513,9 @@ const SubjectsContent = () => {
                     <CardTitle className="text-base">{o.label}</CardTitle>
                     <CardDescription className="flex flex-wrap items-center gap-2 mt-1">
                       <Badge variant="secondary">{bySeries.length} componentes</Badge>
-                      <Badge variant="outline">{matrixWeeklyTotal(bySeries)} aulas/semana (total real)</Badge>
+                      {!arithmeticIra && (
+                        <Badge variant="outline">{matrixWeeklyTotal(bySeries)} aulas/semana (total real)</Badge>
+                      )}
                     </CardDescription>
                   </div>
                   {canEdit && matrixId && (
@@ -522,9 +546,14 @@ const SubjectsContent = () => {
                               {item.abbreviation && (
                                 <Badge variant="outline" className="font-mono text-xs">{item.abbreviation}</Badge>
                               )}
+                              {(item.slot_index ?? 1) > 1 && (
+                                <Badge variant="secondary" className="text-xs">
+                                  {item.slot_index}ª ocorrência
+                                </Badge>
+                              )}
                             </div>
                           </TableCell>
-                          <TableCell className="text-center">{item.weekly_classes}</TableCell>
+                          <TableCell className="text-center">{item.weekly_classes ?? "—"}</TableCell>
                           <TableCell className="text-center">
                             {item.include_in_ira
                               ? <Badge variant="secondary">Sim</Badge>
@@ -607,8 +636,12 @@ const SubjectsContent = () => {
                 onChange={(e) => setForm((f) => ({ ...f, aliases: e.target.value }))} />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="weekly">Carga semanal nesta série (somente nesta matriz)</Label>
+              <Label htmlFor="weekly">
+                Carga semanal nesta série (somente nesta matriz)
+                {arithmeticIra ? " — opcional, não afeta o IRA desta matriz" : ""}
+              </Label>
               <Input id="weekly" type="number" min={1} value={form.weekly}
+                placeholder={arithmeticIra ? "Deixe em branco se não se aplica" : undefined}
                 onChange={(e) => setForm((f) => ({ ...f, weekly: e.target.value }))} />
             </div>
             <div className="flex items-center gap-2">
