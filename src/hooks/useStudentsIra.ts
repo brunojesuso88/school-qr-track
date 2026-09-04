@@ -6,6 +6,8 @@ import {
   computeIraForStudent, fetchGradesPaged,
 } from './useStudentGrades';
 import { fetchMatrixWeeklyByClass } from '@/lib/curriculumMatrixWeekly';
+import { fetchIraModeByClass } from '@/lib/iraModes';
+import { DEFAULT_IRA_MODE } from '@/lib/ira';
 import { parseSeriesValue } from '@/lib/series';
 import { useActiveSchoolId } from '@/contexts/SchoolContext';
 
@@ -114,12 +116,18 @@ export function useStudentsIra(students: { id: string; class: string }[]) {
         }
 
         // Cada turma usa a carga da SUA matriz curricular (nunca um mapa compartilhado).
+        const scoped = all.filter((c) => classIds.includes(c.id));
         const weeklyByClass = await fetchMatrixWeeklyByClass(
-          all.filter((c) => classIds.includes(c.id)).map((c) => ({
+          scoped.map((c) => ({
             id: c.id,
             series: parseSeriesValue(c.series),
             curriculum_matrix_id: c.curriculum_matrix_id,
           })),
+          activeSchoolId,
+        );
+        // Modo do IRA da matriz de CADA turma (arithmetic na Matriz Integral).
+        const modeByClass = await fetchIraModeByClass(
+          scoped.map((c) => ({ id: c.id, curriculum_matrix_id: c.curriculum_matrix_id })),
           activeSchoolId,
         );
 
@@ -134,6 +142,7 @@ export function useStudentsIra(students: { id: string; class: string }[]) {
             settings: settings.find((s) => s.class_id === classId) ?? null,
             currentWeeklyClasses,
             matrixWeeklyByKey: weeklyByClass.get(classId) ?? {},
+            iraCalculationMode: modeByClass.get(classId) ?? DEFAULT_IRA_MODE,
           });
         });
 

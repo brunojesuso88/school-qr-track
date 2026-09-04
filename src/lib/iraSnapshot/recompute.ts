@@ -14,6 +14,8 @@ import { computeMedals, MedalStudentInput } from '@/lib/medals/compute';
 import { parseSeriesValue } from '@/lib/series';
 import { isPeriodKind, periodRank } from '@/lib/gradePageLocal/normalize';
 import { fetchMatrixWeeklyByClass } from '@/lib/curriculumMatrixWeekly';
+import { fetchIraModeByClass } from '@/lib/iraModes';
+import { DEFAULT_IRA_MODE } from '@/lib/ira';
 import { IraSnapshotRow, SnapshotBuildInput, buildSnapshotRows, isDropout } from './core';
 import { NO_ACTIVE_SCHOOL_MESSAGE, assertActiveSchool } from '@/lib/schools/scope';
 
@@ -137,6 +139,12 @@ export async function recomputeIraScope(
     schoolId,
   );
 
+  // Modo do IRA da matriz de CADA turma — snapshots/medalhas nunca usam o default por engano.
+  const modeByClass = await fetchIraModeByClass(
+    scopeClasses.map((c) => ({ id: c.id, curriculum_matrix_id: c.curriculum_matrix_id })),
+    schoolId,
+  );
+
   const dataByClass = new Map<string, ClassGradesData>();
   classIds.forEach((classId) => {
     const classSubjectIds = new Set(subjects.filter((s) => s.class_id === classId).map((s) => s.id));
@@ -147,6 +155,7 @@ export async function recomputeIraScope(
       settings: settings.find((s) => s.class_id === classId) ?? null,
       currentWeeklyClasses,
       matrixWeeklyByKey: weeklyByClass.get(classId) ?? {},
+      iraCalculationMode: modeByClass.get(classId) ?? DEFAULT_IRA_MODE,
     });
   });
 
