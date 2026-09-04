@@ -262,7 +262,7 @@ export function buildCells(lines: TokenLine[], grid: GridLayout, anchors: Subjec
       mergedSubjectLines++;
     } else {
       // Fusão segura: nome quebrado em duas linhas verticalmente próximas na coluna de disciplinas.
-      const mergedName = nearPending
+      mergedName = nearPending
         ? `${pending!.text} ${subjectName}`.replace(/\s+/g, ' ').trim()
         : null;
       if (mergedName && anchors.length > 0) {
