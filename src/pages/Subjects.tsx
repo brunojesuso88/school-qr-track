@@ -469,6 +469,16 @@ const SubjectsContent = () => {
                   <Lock className="h-3 w-3" /> Matriz Original (protegida)
                 </Badge>
               )}
+              {!activeMatrix.is_original && activeMatrix.system_key && (
+                <Badge variant="secondary" className="gap-1">
+                  <Lock className="h-3 w-3" /> Matriz padrão do sistema (protegida)
+                </Badge>
+              )}
+              <Badge variant="outline">
+                {arithmeticIra
+                  ? "IRA por média simples (todas as disciplinas pesam igual)"
+                  : "IRA ponderado pela carga semanal"}
+              </Badge>
               {activeMatrix.description && <span className="text-xs">{activeMatrix.description}</span>}
             </CardDescription>
           )}
