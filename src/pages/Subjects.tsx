@@ -441,7 +441,9 @@ const SubjectsContent = () => {
                 <SelectContent>
                   {matrices.map((m) => (
                     <SelectItem key={m.id} value={m.id}>
-                      {m.name}{m.is_original ? " (original)" : ""} · {m.components} componentes
+                      {m.name}
+                      {m.is_original ? " (original)" : m.system_key ? " (padrão do sistema)" : ""}
+                      {" · "}{m.components} componentes
                     </SelectItem>
                   ))}
                 </SelectContent>
