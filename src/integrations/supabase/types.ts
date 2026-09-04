@@ -222,7 +222,6 @@ export type Database = {
           created_by: string | null
           description: string | null
           id: string
-          ira_calculation_mode: string
           is_original: boolean
           name: string
           school_id: string
@@ -234,7 +233,6 @@ export type Database = {
           created_by?: string | null
           description?: string | null
           id?: string
-          ira_calculation_mode?: string
           is_original?: boolean
           name: string
           school_id: string
@@ -246,7 +244,6 @@ export type Database = {
           created_by?: string | null
           description?: string | null
           id?: string
-          ira_calculation_mode?: string
           is_original?: boolean
           name?: string
           school_id?: string
