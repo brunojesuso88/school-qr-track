@@ -2,7 +2,7 @@
  * Reconciliação LOCAL × IA. A IA é validadora: nunca sobrescreve a leitura local.
  * Divergência => flag `reconciliation_divergence`, valor local visível e valor da IA em `second_pass_value`.
  */
-import { isEmptyMarker, normalizeText } from './normalize';
+import { canonicalSubjectKey, isEmptyMarker, normalizeText } from './normalize';
 import { sameGradeValue, stripReconciliationFlags } from './gradeCompare';
 
 export interface ReconcilePolicy {
