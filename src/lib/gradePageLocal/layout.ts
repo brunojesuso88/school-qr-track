@@ -204,8 +204,12 @@ export function buildCells(lines: TokenLine[], grid: GridLayout, anchors: Subjec
 
   const firstDataLine = (grid.subHeaderLineIndex ?? grid.headerLineIndex) + 1;
 
-  /** Nome de disciplina pendente: linha só com texto que ainda não casou com âncora. */
-  let pending: { text: string; y: number; height: number } | null = null;
+  /**
+   * Nome de disciplina pendente: linha de texto ainda não fechada.
+   * `match` != null => já reconhecida na matriz, mas a materialização vazia é DIFERIDA:
+   * a próxima linha ainda pode trazer as notas dela (nome quebrado antes das notas).
+   */
+  let pending: { text: string; y: number; height: number; match: AnchorMatch | null } | null = null;
 
   /** Materializa a linha inteira vazia (uma célula null por período). */
   const pushAnchoredRow = (name: string, match: AnchorMatch) => {
@@ -224,6 +228,15 @@ export function buildCells(lines: TokenLine[], grid: GridLayout, anchors: Subjec
         anchored: true,
       });
     }
+  };
+
+  /**
+   * Fecha o pendente sem consumo: se ele já era uma disciplina reconhecida da matriz,
+   * entra como linha vazia (null em todos os períodos). Nunca herda notas de outra linha.
+   */
+  const flushPending = () => {
+    if (pending?.match) pushAnchoredRow(pending.text, pending.match);
+    pending = null;
   };
 
   for (let i = firstDataLine; i < lines.length; i++) {
@@ -245,45 +258,43 @@ export function buildCells(lines: TokenLine[], grid: GridLayout, anchors: Subjec
       && Math.abs(pending!.y - line.y) <= Math.max(pending!.height, line.height) * 2.2;
 
     let rowName = subjectName;
-    let mergedName: string | null = null;
+    let consumedPending = false;
 
     if (!subjectName || !isSubjectLabel(subjectName)) {
       // Continuidade determinística: fragmento curto (`I`, `II`) ou linha só com valores.
       // Exige nome pendente próximo E âncora curricular INEQUÍVOCA da matriz da turma.
-      if (!nearPending || !insideGrid || anchors.length === 0) { pending = null; continue; }
-      const candidate = subjectName
-        ? `${pending!.text} ${subjectName}`.replace(/\s+/g, ' ').trim()
-        : pending!.text;
-      const match = matchSubjectAnchor(candidate, anchors);
-      const unequivocal = match
-        && (match.kind === 'exact' || match.kind === 'alias' || match.kind === 'abbreviation');
-      if (!unequivocal) { pending = null; continue; }
-      rowName = candidate;
-      mergedSubjectLines++;
+      if (nearPending && insideGrid && anchors.length > 0) {
+        const candidate = subjectName
+          ? `${pending!.text} ${subjectName}`.replace(/\s+/g, ' ').trim()
+          : pending!.text;
+        const match = matchSubjectAnchor(candidate, anchors);
+        const unequivocal = match
+          && (match.kind === 'exact' || match.kind === 'alias' || match.kind === 'abbreviation');
+        if (unequivocal) { rowName = candidate; mergedSubjectLines++; consumedPending = true; }
+      }
+      // Sem âncora inequívoca a linha é descartada: números soltos NUNCA herdam disciplina.
+      if (!consumedPending) { flushPending(); continue; }
+      pending = null;
     } else {
       // Fusão segura: nome quebrado em duas linhas verticalmente próximas na coluna de disciplinas.
-      mergedName = nearPending
+      const mergedName = nearPending
         ? `${pending!.text} ${subjectName}`.replace(/\s+/g, ' ').trim()
         : null;
       if (mergedName && anchors.length > 0) {
         const plain = matchSubjectAnchor(subjectName, anchors);
         const merged = matchSubjectAnchor(mergedName, anchors);
-        if (!plain && merged) { rowName = mergedName; mergedSubjectLines++; }
+        if (!plain && merged) { rowName = mergedName; mergedSubjectLines++; consumedPending = true; }
       }
+      // Pendente anterior não continua nesta linha: fecha antes de seguir.
+      if (consumedPending) pending = null;
+      else flushPending();
     }
 
-
     if (!insideGrid) {
-      // Linha real de disciplina sem nenhuma nota lançada: só entra se a âncora for reconhecida.
-      if (anchors.length > 0) {
-        const direct = matchSubjectAnchor(subjectName, anchors);
-        if (direct) { pushAnchoredRow(subjectName, direct); pending = null; continue; }
-        if (mergedName) {
-          const merged = matchSubjectAnchor(mergedName, anchors);
-          if (merged) { mergedSubjectLines++; pushAnchoredRow(mergedName, merged); pending = null; continue; }
-        }
-      }
-      pending = { text: subjectName, y: line.y, height: line.height };
+      // Linha de disciplina sem nota nesta linha: reconhecimento pela matriz fica PENDENTE,
+      // porque as notas podem estar na linha seguinte (nome quebrado antes dos valores).
+      const match = anchors.length > 0 ? matchSubjectAnchor(rowName, anchors) : null;
+      pending = { text: rowName, y: line.y, height: line.height, match };
       continue;
     }
     pending = null;
@@ -344,6 +355,9 @@ export function buildCells(lines: TokenLine[], grid: GridLayout, anchors: Subjec
       });
     }
   }
+
+  // Última linha da página: pendente reconhecido pela matriz entra vazio (null).
+  flushPending();
 
   return {
     cells, subjects, ambiguousCells, droppedAbsenceTokens, orphanTokens, orphanGradeTokens,
