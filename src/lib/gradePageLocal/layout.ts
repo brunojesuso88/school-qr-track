@@ -204,8 +204,12 @@ export function buildCells(lines: TokenLine[], grid: GridLayout, anchors: Subjec
 
   const firstDataLine = (grid.subHeaderLineIndex ?? grid.headerLineIndex) + 1;
 
-  /** Nome de disciplina pendente: linha só com texto que ainda não casou com âncora. */
-  let pending: { text: string; y: number; height: number } | null = null;
+  /**
+   * Nome de disciplina pendente: linha de texto ainda não fechada.
+   * `match` != null => já reconhecida na matriz, mas a materialização vazia é DIFERIDA:
+   * a próxima linha ainda pode trazer as notas dela (nome quebrado antes das notas).
+   */
+  let pending: { text: string; y: number; height: number; match: AnchorMatch | null } | null = null;
 
   /** Materializa a linha inteira vazia (uma célula null por período). */
   const pushAnchoredRow = (name: string, match: AnchorMatch) => {
