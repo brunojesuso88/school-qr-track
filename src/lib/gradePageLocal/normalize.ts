@@ -1,4 +1,5 @@
 /** Normalização pt-BR e parsing de tokens de nota. Regras idênticas à Edge Function. */
+import { AXIS_WORD_REGEX } from '@/lib/curriculum/aprofundamentoAxes';
 
 export const normalizeText = (s: unknown) =>
   String(s ?? '')
