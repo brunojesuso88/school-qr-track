@@ -134,7 +134,7 @@ export async function fetchMatrixComponents(
 ): Promise<MatrixComponentRow[]> {
   const { data, error } = await supabase
     .from('curriculum_matrix_subjects')
-    .select('id, matrix_id, subject_id, series, weekly_classes, include_in_ira, mapping_global_subjects(name, abbreviation, aliases)')
+    .select('id, matrix_id, subject_id, series, weekly_classes, include_in_ira, slot_index, mapping_global_subjects(name, abbreviation, aliases)')
     .eq('school_id', schoolId)
     .eq('matrix_id', matrixId);
   if (error) throw error;
@@ -147,11 +147,12 @@ export async function fetchMatrixComponents(
       series: r.series as HighSchoolSeries,
       weekly_classes: r.weekly_classes,
       include_in_ira: r.include_in_ira,
+      slot_index: r.slot_index ?? 1,
       name: r.mapping_global_subjects!.name,
       abbreviation: r.mapping_global_subjects!.abbreviation,
       aliases: r.mapping_global_subjects!.aliases ?? [],
     }))
-    .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+    .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR') || a.slot_index - b.slot_index);
 }
 
 /** Garante que a matriz informada pertence à escola ativa (bloqueio cross-school). */
