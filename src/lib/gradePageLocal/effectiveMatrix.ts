@@ -94,8 +94,8 @@ export function buildEffectiveSubjectMatrix({
   for (const entry of catalog) {
     const aliases = (entry.aliases ?? []).map((a) => String(a).trim()).filter(Boolean);
     const candidateKeys = [normalizeText(entry.name), ...aliases.map((a) => normalizeText(a))];
-    for (const [key, subject] of result) {
-      if (!candidateKeys.includes(key)) continue;
+    for (const subject of result.values()) {
+      if (!candidateKeys.includes(normalizeText(subject.name))) continue;
       subject.aliases = [...new Set([...(subject.aliases ?? []), entry.name, ...aliases])]
         .filter((a) => normalizeText(a) !== normalizeText(subject.name));
       subject.abbreviation = subject.abbreviation ?? (entry.abbreviation || null);
