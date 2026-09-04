@@ -17,7 +17,7 @@ import { cn } from '@/lib/utils';
 import IraRankingExport from '@/components/settings/IraRankingExport';
 import { useAuth } from '@/contexts/AuthContext';
 import {
-  CLASS_SERIES_OPTIONS, HighSchoolSeries, classSeriesLabel, detectClassSeries, parseClassSeries,
+  CLASS_SERIES_OPTIONS, HighSchoolSeries, classSeriesLabel, detectClassSeries, parseSeriesValue,
 } from '@/lib/iraRanking';
 import { syncClassCurriculum } from '@/lib/classCurriculum/sync';
 
@@ -198,7 +198,7 @@ const IRASettings = () => {
    */
   const applySeriesMatrix = async () => {
     if (!selectedClass) return;
-    const series = parseClassSeries(selectedClass.series);
+    const series = parseSeriesValue(selectedClass.series);
     if (!series) {
       toast.error('Defina a série da turma antes de aplicar a matriz oficial.');
       return;
@@ -393,7 +393,7 @@ const IRASettings = () => {
                 Série da turma <span className="text-destructive">*</span>
               </Label>
               <Select
-                value={parseClassSeries(selectedClass.series) ?? undefined}
+                value={parseSeriesValue(selectedClass.series) ?? undefined}
                 onValueChange={(v) => saveSeries(v as HighSchoolSeries)}
                 disabled={!canEditSeries || savingSeries}
               >
@@ -407,14 +407,14 @@ const IRASettings = () => {
                 </SelectContent>
               </Select>
               <div className="flex flex-wrap items-center gap-2 text-xs">
-                {parseClassSeries(selectedClass.series) ? (
-                  <Badge variant="secondary">Série: {classSeriesLabel(parseClassSeries(selectedClass.series))}</Badge>
+                {parseSeriesValue(selectedClass.series) ? (
+                  <Badge variant="secondary">Série: {classSeriesLabel(parseSeriesValue(selectedClass.series))}</Badge>
                 ) : (
                   <Badge variant="outline" className="text-amber-600 border-amber-500">Série não definida</Badge>
                 )}
                 {savingSeries && <Loader2 className="w-3 h-3 animate-spin text-muted-foreground" />}
               </div>
-              {!parseClassSeries(selectedClass.series) && (
+              {!parseSeriesValue(selectedClass.series) && (
                 <p className="text-xs text-amber-600">
                   Turmas sem série não participam do Ranking do IRA.
                   {detectClassSeries(selectedClass.name)
@@ -427,7 +427,7 @@ const IRASettings = () => {
                   Apenas administração e direção podem alterar a série da turma.
                 </p>
               )}
-              {canEditSeries && parseClassSeries(selectedClass.series) && (
+              {canEditSeries && parseSeriesValue(selectedClass.series) && (
                 <div className="space-y-1 pt-1">
                   <Button size="sm" variant="outline" onClick={applySeriesMatrix} disabled={applyingMatrix}>
                     {applyingMatrix && <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" />}

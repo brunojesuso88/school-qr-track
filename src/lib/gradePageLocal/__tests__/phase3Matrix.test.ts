@@ -192,11 +192,12 @@ describe('Fase 3 — reconciliação local × IA', () => {
   });
 });
 
-describe('Fase 3 — série canônica 1/2/3', () => {
-  it('valor persistido é 1/2/3 e o rótulo é "Nº ano do Ensino Médio"', () => {
-    expect(CLASS_SERIES_OPTIONS.map((o) => o.value)).toEqual(['1', '2', '3']);
+describe('Fase 3 — série canônica 1/2/3 + etapas EJA', () => {
+  it('valor persistido é 1/2/3/eja1/eja2 com os rótulos oficiais', () => {
+    expect(CLASS_SERIES_OPTIONS.map((o) => o.value)).toEqual(['1', '2', '3', 'eja1', 'eja2']);
     expect(CLASS_SERIES_OPTIONS.map((o) => o.label)).toEqual([
       '1º ano do Ensino Médio', '2º ano do Ensino Médio', '3º ano do Ensino Médio',
+      '1ª Etapa EJA', '2ª Etapa EJA',
     ]);
   });
 
