@@ -479,11 +479,14 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
   const loadPageConflicts = useCallback(async (studentId: string | null, p: PagePreview) => {
     if (!classItem || !studentId) { setConflictKeys(new Set()); setIdenticalKeys(new Set()); return; }
     const [subjRes, perRes] = await Promise.all([
-      supabase.from('grade_subjects').select('id, normalized_name').eq('school_id', assertActiveSchool(activeSchoolId)).eq('class_id', classItem.id),
+      supabase.from('grade_subjects').select('id, normalized_name, slot_index').eq('school_id', assertActiveSchool(activeSchoolId)).eq('class_id', classItem.id),
       supabase.from('grade_periods').select('id, normalized_label').eq('school_id', assertActiveSchool(activeSchoolId)).eq('class_id', classItem.id),
     ]);
-    const subjById = new Map<string, string>();
-    (subjRes.data || []).forEach((s: { id: string; normalized_name: string }) => subjById.set(s.id, s.normalized_name));
+    // A ocorrência (slot) faz parte da identidade: a mesma disciplina pode aparecer
+    // duas vezes na etapa (Matriz Integral) e cada ocorrência tem notas próprias.
+    const subjById = new Map<string, { norm: string; slot: number }>();
+    (subjRes.data || []).forEach((s: { id: string; normalized_name: string; slot_index: number | null }) =>
+      subjById.set(s.id, { norm: s.normalized_name, slot: s.slot_index ?? 1 }));
     const perById = new Map<string, string>();
     (perRes.data || []).forEach((x: { id: string; normalized_label: string }) => perById.set(x.id, x.normalized_label));
     if (subjById.size === 0 || perById.size === 0) { setConflictKeys(new Set()); setIdenticalKeys(new Set()); return; }
@@ -493,23 +496,23 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
       .eq('school_id', assertActiveSchool(activeSchoolId))
       .eq('student_id', studentId);
 
-    // Valores lidos do PDF por chave (aluno + disciplina + período)
+    // Valores lidos do PDF por chave (aluno + disciplina + ocorrência + período)
     const pdfByKey = new Map<string, number | null>();
     (p.rows || []).forEach((r) => {
       if ((r.flags || []).includes('invalid_value')) return;
-      pdfByKey.set(`${studentId}||${r.subject}||${r.period}`, r.value ?? null);
+      pdfByKey.set(gradeConflictKey(studentId, r.subject, r.slot_index, r.period), r.value ?? null);
     });
 
     const divergent = new Set<string>();
     const identical = new Set<string>();
     (data || []).forEach((g: { student_id: string; grade_subject_id: string; grade_period_id: string; value: number | null }) => {
-      const subjNorm = subjById.get(g.grade_subject_id);
+      const subj = subjById.get(g.grade_subject_id);
       const perNorm = perById.get(g.grade_period_id);
-      if (!subjNorm || !perNorm) return;
-      const subject = p.subjects.find((s) => s.normalized_name === subjNorm);
+      if (!subj || !perNorm) return;
+      const subject = p.subjects.find((s) => s.normalized_name === subj.norm && (s.slot_index ?? 1) === subj.slot);
       const period = p.periods.find((x) => x.normalized_label === perNorm);
       if (!subject || !period) return;
-      const key = `${g.student_id}||${subject.name}||${period.label}`;
+      const key = gradeConflictKey(g.student_id, subject.name, subj.slot, period.label);
       if (!pdfByKey.has(key)) return; // a página não trouxe essa combinação
       if (sameGradeValue(g.value ?? null, pdfByKey.get(key) ?? null)) identical.add(key);
       else divergent.add(key);
