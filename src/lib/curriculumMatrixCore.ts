@@ -7,6 +7,8 @@ import { LocalExpectedSubject } from '@/lib/gradePageLocal/types';
 
 export interface CurriculumMatrixItem {
   id: string;
+  /** Matriz curricular nomeada a que o componente pertence. */
+  matrix_id?: string;
   subject_id: string;
   series: HighSchoolSeries;
   weekly_classes: number;

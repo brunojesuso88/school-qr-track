@@ -149,6 +149,7 @@ export type Database = {
       classes: {
         Row: {
           created_at: string | null
+          curriculum_matrix_id: string | null
           description: string | null
           id: string
           location: string
@@ -163,6 +164,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string | null
+          curriculum_matrix_id?: string | null
           description?: string | null
           id?: string
           location?: string
@@ -177,6 +179,7 @@ export type Database = {
         }
         Update: {
           created_at?: string | null
+          curriculum_matrix_id?: string | null
           description?: string | null
           id?: string
           location?: string
@@ -190,6 +193,13 @@ export type Database = {
           updated_at?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "classes_curriculum_matrix_id_fkey"
+            columns: ["curriculum_matrix_id"]
+            isOneToOne: false
+            referencedRelation: "curriculum_matrices"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "classes_mapping_class_id_fkey"
             columns: ["mapping_class_id"]
@@ -206,11 +216,53 @@ export type Database = {
           },
         ]
       }
+      curriculum_matrices: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          description: string | null
+          id: string
+          is_original: boolean
+          name: string
+          school_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          is_original?: boolean
+          name: string
+          school_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          is_original?: boolean
+          name?: string
+          school_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "curriculum_matrices_school_id_fkey"
+            columns: ["school_id"]
+            isOneToOne: false
+            referencedRelation: "schools"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       curriculum_matrix_subjects: {
         Row: {
           created_at: string
           id: string
           include_in_ira: boolean
+          matrix_id: string
           school_id: string
           series: string
           subject_id: string
@@ -221,6 +273,7 @@ export type Database = {
           created_at?: string
           id?: string
           include_in_ira?: boolean
+          matrix_id: string
           school_id: string
           series: string
           subject_id: string
@@ -231,6 +284,7 @@ export type Database = {
           created_at?: string
           id?: string
           include_in_ira?: boolean
+          matrix_id?: string
           school_id?: string
           series?: string
           subject_id?: string
@@ -238,6 +292,13 @@ export type Database = {
           weekly_classes?: number
         }
         Relationships: [
+          {
+            foreignKeyName: "curriculum_matrix_subjects_matrix_id_fkey"
+            columns: ["matrix_id"]
+            isOneToOne: false
+            referencedRelation: "curriculum_matrices"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "curriculum_matrix_subjects_school_id_fkey"
             columns: ["school_id"]
@@ -2705,9 +2766,15 @@ export type Database = {
         Returns: number
       }
       normalize_subject_key: { Args: { _name: string }; Returns: string }
+      repair_school_curricula: { Args: never; Returns: Json }
       resolve_registration_link: { Args: { _token: string }; Returns: Json }
+      seed_school_curriculum: { Args: { _school_id: string }; Returns: string }
       seed_school_permissions: {
         Args: { _school_id: string }
+        Returns: undefined
+      }
+      set_class_curriculum_matrix: {
+        Args: { _class_id: string; _matrix_id: string }
         Returns: undefined
       }
       storage_path_school_id: { Args: { _name: string }; Returns: string }
