@@ -701,6 +701,29 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
     return result;
   }, []);
 
+  type LocalReadResult = Awaited<ReturnType<typeof readPageLocally>>;
+  // A fila de pré-leitura sempre chama a versão atual do leitor local.
+  useEffect(() => {
+    readPageLocallyRef.current = readPageLocally as (page: number) => Promise<unknown>;
+  }, [readPageLocally]);
+
+  /** Consome a página: reaproveita a pré-leitura quando pronta, senão lê agora. */
+  const takeLocalReading = useCallback(async (page: number): Promise<LocalReadResult> => {
+    const taken = await prefetchRef.current.take(page);
+    if (taken.reused) setReusedPrefetchPages((prev) => prev + 1);
+    return (taken.value?.result ?? null) as LocalReadResult;
+  }, []);
+
+  /** Agenda a pré-leitura local das próximas páginas (nunca chama IA nem grava nada). */
+  const schedulePrefetch = useCallback((currentPage: number) => {
+    const doc = pdfDocRef.current;
+    if (!doc || readingMode === 'ai_only') return;
+    const total = sessionRef.current?.total_pages ?? doc.numPages;
+    prefetchRef.current.prune(currentPage);
+    prefetchRef.current.schedule(currentPage, total);
+  }, [readingMode]);
+
+
   /** Encerra a sessão (todas as páginas resolvidas). */
   const finishSession = useCallback(async (sessionId: string) => {
     await supabase.from('grade_import_sessions')
