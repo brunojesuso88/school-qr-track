@@ -32,7 +32,13 @@ interface AnyPreview {
 
 const sameValue = sameGradeValue;
 
-const cellKey = (r: AnyRow) => `${normalizeText(r.subject)}||${normalizeText(r.period)}`;
+/**
+ * Chave de célula por IDENTIDADE de disciplina (não pelo texto exibido).
+ * `canonicalSubjectKey` colapsa apenas os eixos CHL/CNS/ETT dos Aprofundamentos,
+ * então `APROFUNDAMENTO IF - CNS - I` (IA) casa com `APROFUNDAMENTO IF - I` (local).
+ * `I` e `II` permanecem disciplinas distintas.
+ */
+const cellKey = (r: AnyRow) => `${canonicalSubjectKey(r.subject)}||${normalizeText(r.period)}`;
 
 /** Célula da IA sem nota: vazio, `—`, `null`. Nunca representa uma nota. */
 const isEmptyAiCell = (r: AnyRow) => {
