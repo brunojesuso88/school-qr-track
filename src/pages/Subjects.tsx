@@ -458,7 +458,7 @@ const SubjectsContent = () => {
                 <Button size="sm" variant="outline" onClick={openSync} disabled={!matrixId}>
                   <RefreshCw className="h-4 w-4 mr-2" /> Sincronizar com turma(s)
                 </Button>
-                {activeMatrix && !activeMatrix.is_original && (
+                {activeMatrix && !matrixProtected && (
                   <Button size="sm" variant="ghost" className="text-destructive" onClick={handleDeleteMatrix} disabled={saving}>
                     <Trash2 className="h-4 w-4 mr-2" /> Excluir matriz
                   </Button>
