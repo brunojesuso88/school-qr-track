@@ -2674,6 +2674,10 @@ export type Database = {
         Returns: boolean
       }
       current_user_school_ids: { Args: never; Returns: string[] }
+      ensure_aprofundamento_axis_aliases: {
+        Args: { _school_id?: string }
+        Returns: number
+      }
       get_active_certificate_students: {
         Args: { _on_date: string }
         Returns: {

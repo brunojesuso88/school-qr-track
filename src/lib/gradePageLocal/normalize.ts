@@ -1,4 +1,5 @@
 /** Normalização pt-BR e parsing de tokens de nota. Regras idênticas à Edge Function. */
+import { AXIS_WORD_REGEX } from '@/lib/curriculum/aprofundamentoAxes';
 
 export const normalizeText = (s: unknown) =>
   String(s ?? '')
@@ -48,15 +49,16 @@ export const isGradeLabel = (label: string) => /^nota/.test(normalizeText(label)
  * Identidade canônica de disciplina.
  *
  * Regra ESPECÍFICA dos Aprofundamentos: no boletim eles aparecem com o eixo
- * (`CHL`, `CNS`, `ETT`) no meio do nome, mas o catálogo só possui duas disciplinas
- * canônicas — `APROFUNDAMENTO IF - I` e `APROFUNDAMENTO IF - II`. O eixo é ignorado
- * APENAS nesse caso; nenhum outro nome do sistema perde CHL/CNS/ETT.
+ * (`CHL`, `CNS`, `ETT`, `SEA` — ver `curriculum/aprofundamentoAxes`) no meio do nome,
+ * mas o catálogo só possui duas disciplinas canônicas — `APROFUNDAMENTO IF - I` e
+ * `APROFUNDAMENTO IF - II`. O eixo é ignorado APENAS nesse caso; nenhum outro nome
+ * do sistema perde CHL/CNS/ETT/SEA.
  */
 export function canonicalSubjectKey(text: unknown): string {
   const norm = normalizeText(text);
   const m = norm.match(/^aprofundamento\s+if\b(.*)$/);
   if (!m) return norm;
-  const rest = m[1].replace(/\b(chl|cns|ett)\b/g, ' ').replace(/\s+/g, ' ').trim();
+  const rest = m[1].replace(new RegExp(AXIS_WORD_REGEX.source, 'g'), ' ').replace(/\s+/g, ' ').trim();
   const roman = rest.match(/^(i|ii)$/);
   return roman ? `aprofundamento if ${roman[1]}` : norm;
 }
