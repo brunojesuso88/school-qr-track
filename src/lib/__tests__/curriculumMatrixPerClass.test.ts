@@ -93,16 +93,25 @@ describe('carga semanal por matriz da turma', () => {
     expect(iraA.value).not.toBe(iraB.value);
   });
 
-  it('medalhas/ranking também mudam com a matriz da turma', () => {
-    const medalsA = computeMedals([
+  it('medalhas (disputa por série) seguem a matriz de cada turma', () => {
+    const medals = computeMedals([
       { studentId: 'aluno', series: '1', data: classData(byClass.get('turmaA')!) },
       { studentId: 'rival', series: '1', data: classData(byClass.get('turmaB')!) },
     ]);
-    const geralA = (medalsA['aluno'] ?? []).find((m) => m.area === 'geral');
-    const geralRival = (medalsA['rival'] ?? []).find((m) => m.area === 'geral');
-    // O aluno da matriz com pesos favoráveis (turma B) fica à frente.
-    expect(geralRival?.position).toBe(1);
-    expect(geralA?.position).toBe(2);
+    // Linguagens = Português + Ed. Física. Na turma B os pesos favorecem a nota 10.
+    const linguagensRival = (medals['rival'] ?? []).find((m) => m.areaId === 'linguagens');
+    const linguagensAluno = (medals['aluno'] ?? []).find((m) => m.areaId === 'linguagens');
+    expect(linguagensRival?.value).toBeCloseTo(9, 2);
+    expect(linguagensAluno).toBeUndefined();
+  });
+
+  it('com a MESMA matriz nas duas turmas a medalha passa a ser compartilhada', () => {
+    const medals = computeMedals([
+      { studentId: 'aluno', series: '1', data: classData(byClass.get('turmaA')!) },
+      { studentId: 'rival', series: '1', data: classData(byClass.get('turmaLegado')!) },
+    ]);
+    expect((medals['aluno'] ?? []).find((m) => m.areaId === 'linguagens')?.shared).toBe(true);
+    expect((medals['rival'] ?? []).find((m) => m.areaId === 'linguagens')?.shared).toBe(true);
   });
 });
 
