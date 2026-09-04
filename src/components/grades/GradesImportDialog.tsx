@@ -1517,15 +1517,36 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
         });
       });
       const subjectIdByNorm = new Map<string, string>();
+      // Disciplinas já conhecidas da turma continuam válidas para as linhas desta página.
+      existingRows.filter((s) => !s.legacy_excluded).forEach((s) =>
+        subjectIdByNorm.set(`${s.normalized_name}#${slotOf(s)}`, s.id));
       if (subjectPayload.length > 0) {
         const { data: subjectRows, error: subjectError } = await supabase
           .from('grade_subjects')
           .upsert(subjectPayload as never, { onConflict: 'class_id,normalized_name,slot_index' })
           .select('id, normalized_name, slot_index');
         if (subjectError) throw subjectError;
-        (subjectRows || []).forEach((s: { id: string; normalized_name: string; slot_index: number | null }) =>
-          subjectIdByNorm.set(`${s.normalized_name}#${slotOf(s)}`, s.id));
+        const payloadByKey = new Map(subjectPayload.map((p) => [
+          `${String(p.normalized_name)}#${Number(p.slot_index ?? 1)}`, p,
+        ]));
+        (subjectRows || []).forEach((s: { id: string; normalized_name: string; slot_index: number | null }) => {
+          const key = `${s.normalized_name}#${slotOf(s)}`;
+          subjectIdByNorm.set(key, s.id);
+          const payload = payloadByKey.get(key);
+          // Cache de destinos atualizado na hora: a próxima página não relê o banco.
+          targetCacheRef.current.putSubject(targetScope, {
+            id: s.id,
+            name: String(payload?.name ?? s.normalized_name),
+            normalized_name: s.normalized_name,
+            slot_index: s.slot_index,
+            include_in_ira: Boolean(payload?.include_in_ira),
+            custom_ira_weight: (payload?.custom_ira_weight as number | null) ?? null,
+            legacy_excluded: false,
+            weekly_classes: (payload?.weekly_classes as number | null) ?? null,
+          });
+        });
       }
+
       if (preview.subjects.length > 0 && subjectIdByNorm.size === 0) {
         throw new Error(
           'Nenhuma disciplina de destino foi encontrada para esta turma. Sincronize a matriz curricular ' +
