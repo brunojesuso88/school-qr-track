@@ -55,6 +55,23 @@ import {
   CONFLICT_LABELS, DetectedStudent, FieldDecision, RegistrationDecision,
   defaultRegistrationDecision, formatDate,
 } from './gradesConflicts';
+import {
+  assertPersistedStudent, PersistedStudentMemory, recallPersistedStudent, rememberPersistedStudent,
+  StudentScopeRow,
+} from '@/lib/gradeImport/persistedStudent';
+import { describeSaveError } from '@/lib/gradeImport/saveError';
+import { decideAiFallback, readingOriginLabel, readingUsedAi } from '@/lib/gradeImport/aiPolicy';
+import { contextCacheKey, ImportContextCache } from '@/lib/gradeImport/contextCache';
+import { formatReadingMetrics, resolveWeeklyClassesForUpsert, summarizeReadingMetrics } from '@/lib/gradeImport/readingMetrics';
+
+/** Contexto estático (matriz, catálogo, mapeamento) em cache por escola+turma+matriz durante a sessão do navegador. */
+interface StaticImportContext {
+  expected: { id: string; name: string; weekly_classes: number }[];
+  matrixItems: Awaited<ReturnType<typeof fetchCurriculumMatrix>>;
+  catalog: CatalogSubject[];
+  series: string | null;
+}
+const staticContextCache = new ImportContextCache<StaticImportContext>();
 
 interface ParsedSubject {
   normalized_name: string;
