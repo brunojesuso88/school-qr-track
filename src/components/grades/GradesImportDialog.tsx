@@ -39,6 +39,7 @@ import { LocalContextStudent, LocalExpectedSubject } from '@/lib/gradePageLocal/
 import { CatalogSubject, buildEffectiveSubjectMatrix } from '@/lib/gradePageLocal/effectiveMatrix';
 import { fetchCurriculumMatrix, matrixToExpectedSubjects } from '@/lib/curriculumMatrix';
 import { markIraStale } from '@/lib/iraSnapshot/recompute';
+import { resolveClassMatrix } from '@/lib/classCurriculum/sync';
 import { useActiveSchoolId } from '@/contexts/SchoolContext';
 import { assertActiveSchool } from '@/lib/schools/scope';
 import { parseSeriesValue } from '@/lib/series';
@@ -399,7 +400,15 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
     if (!parsedSeries) {
       throw new Error('Defina a série da turma e aplique a matriz curricular oficial antes de importar o boletim.');
     }
-    const official = matrixToExpectedSubjects(await fetchCurriculumMatrix(parsedSeries, activeSchoolId).catch(() => []));
+    const classMatrix = await resolveClassMatrix(classItem.id, assertActiveSchool(activeSchoolId));
+    const matrixItems = await fetchCurriculumMatrix(parsedSeries, activeSchoolId, classMatrix.id).catch(() => []);
+    if (matrixItems.length === 0) {
+      throw new Error(
+        'A matriz curricular vinculada a esta turma não tem disciplinas para esta série. ' +
+        'Cadastre os componentes em Disciplinas — Matriz Curricular (ou vincule outra matriz) e sincronize a turma antes de importar o boletim.',
+      );
+    }
+    const official = matrixToExpectedSubjects(matrixItems);
     localExpectedRef.current = buildEffectiveSubjectMatrix({
       matrix: official,
       mapping: expected.map((s) => ({ name: s.name, weekly_classes: s.weekly_classes })),
@@ -1220,6 +1229,12 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
           .select('id, normalized_name');
         if (subjectError) throw subjectError;
         (subjectRows || []).forEach((s: { id: string; normalized_name: string }) => subjectIdByNorm.set(s.normalized_name, s.id));
+      }
+      if (preview.subjects.length > 0 && subjectIdByNorm.size === 0) {
+        throw new Error(
+          'Nenhuma disciplina de destino foi encontrada para esta turma. Sincronize a matriz curricular ' +
+          'da turma em Disciplinas — Matriz Curricular antes de importar o boletim.',
+        );
       }
       const subjectIdForRow = (subjectName: string) => {
         const norm = normalize(subjectName);

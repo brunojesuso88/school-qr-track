@@ -12,9 +12,10 @@ import { AlertTriangle, CheckCircle2, Loader2, RefreshCw } from 'lucide-react';
 import { CLASS_SERIES_OPTIONS, HighSchoolSeries, classSeriesLabel, parseSeriesValue } from '@/lib/series';
 import { matrixWeeklyTotal } from '@/lib/curriculumMatrixCore';
 import {
-  ClassCurriculumState, describePlan, humanizeCurriculumError, inspectClassCurriculum, isPlanInSync,
-  syncClassCurriculum,
+  ClassCurriculumState, describePlan, humanizeCurriculumError, inspectClassCurriculum,
+  isClassCurriculumReady, syncClassCurriculum,
 } from '@/lib/classCurriculum/sync';
+import { CurriculumMatrixRecord, fetchSchoolMatrices } from '@/lib/curriculumMatrices';
 import { NO_ACTIVE_SCHOOL_MESSAGE } from '@/lib/schools/scope';
 
 
@@ -35,6 +36,8 @@ export const ClassCurriculumGate = ({ classId, onReadyChange, onSynced }: Props)
   const [syncing, setSyncing] = useState(false);
   const [series, setSeries] = useState<HighSchoolSeries | ''>('');
   const [state, setState] = useState<ClassCurriculumState | null>(null);
+  const [matrices, setMatrices] = useState<CurriculumMatrixRecord[]>([]);
+  const [selectedMatrix, setSelectedMatrix] = useState<string>('');
 
   const load = useCallback(async () => {
     if (!activeSchoolId) {
@@ -55,9 +58,11 @@ export const ClassCurriculumGate = ({ classId, onReadyChange, onSynced }: Props)
       if (error) throw error;
       const parsed = parseSeriesValue((data as { series?: string | null } | null)?.series ?? null);
       setSeries(parsed ?? '');
+      setMatrices(await fetchSchoolMatrices(activeSchoolId));
       const next = parsed ? await inspectClassCurriculum(classId, parsed, activeSchoolId) : null;
       setState(next);
-      onReadyChange(Boolean(next && isPlanInSync(next.plan)));
+      setSelectedMatrix(next?.matrixId ?? '');
+      onReadyChange(isClassCurriculumReady(next));
     } catch (e) {
       toast.error(humanizeCurriculumError(e));
       onReadyChange(false);
@@ -90,9 +95,13 @@ export const ClassCurriculumGate = ({ classId, onReadyChange, onSynced }: Props)
     if (!series) return;
     setSyncing(true);
     try {
-      const result = await syncClassCurriculum(classId, series, { schoolId: assertActiveSchool(activeSchoolId) });
+      const result = await syncClassCurriculum(classId, series, {
+        schoolId: assertActiveSchool(activeSchoolId),
+        matrixId: selectedMatrix && selectedMatrix !== state?.matrixId ? selectedMatrix : null,
+      });
       setState(result);
-      onReadyChange(isPlanInSync(result.plan));
+      setSelectedMatrix(result.matrixId ?? '');
+      onReadyChange(isClassCurriculumReady(result));
       const c = result.applied;
       toast.success(
         `Matriz do ${classSeriesLabel(series)} aplicada: ${c.created} criada(s), ${c.reused} reaproveitada(s), ` +
@@ -118,7 +127,9 @@ export const ClassCurriculumGate = ({ classId, onReadyChange, onSynced }: Props)
     );
   }
 
-  const inSync = Boolean(state && isPlanInSync(state.plan));
+  const inSync = isClassCurriculumReady(state);
+  const emptyMatrix = Boolean(state && state.matrix.length === 0);
+  const matrixChanged = Boolean(selectedMatrix && state?.matrixId && selectedMatrix !== state.matrixId);
   const weeklyTotal = state ? matrixWeeklyTotal(state.matrix) : 0;
 
   return (
@@ -147,6 +158,41 @@ export const ClassCurriculumGate = ({ classId, onReadyChange, onSynced }: Props)
         </SelectContent>
       </Select>
 
+      {matrices.length > 0 && (
+        <div className="space-y-1">
+          <Label className="text-[11px] text-muted-foreground">Matriz curricular vinculada à turma</Label>
+          <Select value={selectedMatrix} onValueChange={setSelectedMatrix} disabled={syncing}>
+            <SelectTrigger className="h-8 text-xs w-full sm:w-[320px]">
+              <SelectValue placeholder="Selecione a matriz curricular" />
+            </SelectTrigger>
+            <SelectContent>
+              {matrices.map((m) => (
+                <SelectItem key={m.id} value={m.id}>
+                  {m.name}{m.is_original ? ' (original)' : ''} · {m.components} componentes
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {matrixChanged && (
+            <p className="text-[11px] text-amber-600">
+              A troca de matriz é aplicada ao sincronizar. As notas já lançadas são preservadas.
+            </p>
+          )}
+        </div>
+      )}
+
+      {emptyMatrix && (
+        <Alert variant="destructive">
+          <AlertTriangle className="w-4 h-4" />
+          <AlertTitle className="text-sm">Matriz curricular sem disciplinas</AlertTitle>
+          <AlertDescription className="text-xs">
+            A matriz vinculada a esta turma não tem componentes para {classSeriesLabel(state?.series ?? null)}.
+            Cadastre as disciplinas em <strong>Disciplinas — Matriz Curricular</strong> ou vincule outra matriz
+            aqui. O boletim não pode ser importado sem disciplinas de destino.
+          </AlertDescription>
+        </Alert>
+      )}
+
       {!series && (
         <Alert>
           <AlertTriangle className="w-4 h-4" />
@@ -165,7 +211,7 @@ export const ClassCurriculumGate = ({ classId, onReadyChange, onSynced }: Props)
             {weeklyTotal} aulas/semana. {describePlan(state.plan)}.
           </p>
 
-          {!inSync && (
+          {(!inSync || matrixChanged) && (!emptyMatrix || matrixChanged) && (
             <div className="space-y-2">
               {state.plan.gradeCreate.length > 0 && (
                 <p className="text-[11px] text-muted-foreground">

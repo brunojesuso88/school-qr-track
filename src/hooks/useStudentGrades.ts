@@ -192,7 +192,7 @@ async function fetchClassGrades(
     supabase.from('grade_subjects').select('*').eq('school_id', schoolId).eq('class_id', classId).eq('legacy_excluded', false).order('sort_order'),
     supabase.from('grade_periods').select('*').eq('school_id', schoolId).eq('class_id', classId).order('sort_order'),
     supabase.from('ira_settings').select('*').eq('school_id', schoolId).eq('class_id', classId).maybeSingle(),
-    supabase.from('classes').select('series').eq('school_id', schoolId).eq('id', classId).maybeSingle(),
+    supabase.from('classes').select('series, curriculum_matrix_id').eq('school_id', schoolId).eq('id', classId).maybeSingle(),
   ]);
 
   const subjects = (subjectsRes.data || []) as unknown as GradeSubjectRow[];
@@ -220,8 +220,12 @@ async function fetchClassGrades(
   }
 
   // Fonte de verdade da carga semanal quando não há vínculo de mapeamento.
-  const series = parseSeriesValue((classRes.data as { series: string | null } | null)?.series ?? null);
-  const matrixWeeklyByKey = await fetchMatrixWeeklyByKey([series], schoolId);
+  const classInfo = classRes.data as { series: string | null; curriculum_matrix_id?: string | null } | null;
+  const series = parseSeriesValue(classInfo?.series ?? null);
+  // Carga/participação vêm da matriz efetivamente atribuída à turma.
+  const matrixWeeklyByKey = await fetchMatrixWeeklyByKey(
+    [series], schoolId, classInfo?.curriculum_matrix_id ? [classInfo.curriculum_matrix_id] : undefined,
+  );
 
   return {
     subjects,

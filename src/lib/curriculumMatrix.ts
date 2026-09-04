@@ -9,11 +9,13 @@
 import { supabase } from '@/integrations/supabase/client';
 import { HighSchoolSeries } from '@/lib/series';
 import { CurriculumMatrixItem } from '@/lib/curriculumMatrixCore';
+import { fetchOriginalMatrixId } from '@/lib/curriculumMatrices';
 
 export * from '@/lib/curriculumMatrixCore';
 
 interface RawRow {
   id: string;
+  matrix_id: string;
   subject_id: string;
   series: string;
   weekly_classes: number;
@@ -23,16 +25,23 @@ interface RawRow {
   } | null;
 }
 
-/** Carrega a matriz oficial (opcionalmente de uma série), ordenada por nome. */
+/**
+ * Carrega a matriz curricular (opcionalmente de uma série), ordenada por nome.
+ * `matrixId` restringe a uma matriz nomeada da escola; sem ele, lê a Matriz Original.
+ */
 export async function fetchCurriculumMatrix(
   series: HighSchoolSeries | undefined,
   schoolId: string | null | undefined,
+  matrixId?: string | null,
 ): Promise<CurriculumMatrixItem[]> {
   if (!schoolId) return [];
+  const targetMatrix = matrixId ?? (await fetchOriginalMatrixId(schoolId));
+  if (!targetMatrix) return [];
   let query = supabase
     .from('curriculum_matrix_subjects')
-    .select('id, subject_id, series, weekly_classes, include_in_ira, mapping_global_subjects(name, abbreviation, aliases)')
-    .eq('school_id', schoolId);
+    .select('id, matrix_id, subject_id, series, weekly_classes, include_in_ira, mapping_global_subjects(name, abbreviation, aliases)')
+    .eq('school_id', schoolId)
+    .eq('matrix_id', targetMatrix);
   if (series) query = query.eq('series', series);
   const { data, error } = await query;
   if (error) throw error;
@@ -40,6 +49,7 @@ export async function fetchCurriculumMatrix(
     .filter((r) => r.mapping_global_subjects)
     .map((r) => ({
       id: r.id,
+      matrix_id: r.matrix_id,
       subject_id: r.subject_id,
       series: r.series as HighSchoolSeries,
       weekly_classes: r.weekly_classes,

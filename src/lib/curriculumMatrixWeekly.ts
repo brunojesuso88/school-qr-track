@@ -34,14 +34,18 @@ export function buildMatrixWeeklyByKey(rows: MatrixWeeklyRow[]): Record<string, 
 export async function fetchMatrixWeeklyByKey(
   series: (string | null | undefined)[],
   schoolId: string | null | undefined,
+  matrixIds?: (string | null | undefined)[],
 ): Promise<Record<string, number>> {
   const list = [...new Set(series.filter(Boolean) as string[])];
   if (list.length === 0 || !schoolId) return {};
-  const { data, error } = await supabase
+  const matrices = [...new Set((matrixIds ?? []).filter(Boolean) as string[])];
+  let query = supabase
     .from('curriculum_matrix_subjects')
-    .select('series, weekly_classes, mapping_global_subjects(name, aliases)')
+    .select('series, weekly_classes, matrix_id, curriculum_matrices(is_original), mapping_global_subjects(name, aliases)')
     .eq('school_id', schoolId)
     .in('series', list);
+  if (matrices.length > 0) query = query.in('matrix_id', matrices);
+  const { data, error } = await query;
   if (error) {
     console.error('Falha ao carregar carga semanal da matriz curricular:', error);
     return {};
@@ -49,9 +53,12 @@ export async function fetchMatrixWeeklyByKey(
   const rows = ((data ?? []) as unknown as {
     series: string;
     weekly_classes: number;
+    curriculum_matrices: { is_original: boolean } | null;
     mapping_global_subjects: { name: string; aliases: string[] | null } | null;
   }[])
     .filter((r) => r.mapping_global_subjects)
+    // Sem filtro explícito de matriz, a Matriz Original tem prioridade (primeira vence).
+    .sort((a, b) => Number(b.curriculum_matrices?.is_original) - Number(a.curriculum_matrices?.is_original))
     .map((r) => ({
       series: r.series,
       weekly_classes: r.weekly_classes,
