@@ -72,6 +72,10 @@ const SubjectsContent = () => {
   const [classSelection, setClassSelection] = useState<Set<string>>(new Set());
 
   const activeMatrix = useMemo(() => matrices.find((m) => m.id === matrixId) ?? null, [matrices, matrixId]);
+  /** Matrizes de média simples (ex.: Matriz Integral) não usam carga semanal no IRA. */
+  const arithmeticIra = activeMatrix?.ira_calculation_mode === "arithmetic";
+  /** Matriz Original e matrizes padrão do sistema não podem ser excluídas. */
+  const matrixProtected = !!activeMatrix && (activeMatrix.is_original || !!activeMatrix.system_key);
 
   const loadMatrices = useCallback(async () => {
     if (!activeSchoolId) { setMatrices([]); setItems([]); setLoading(false); return; }
