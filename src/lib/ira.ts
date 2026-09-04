@@ -245,6 +245,7 @@ export function calculateIraMultiPeriod(
       selectedPeriods: periods,
       missingGradeCount: 0,
       periodAverages,
+      mode,
     };
   }
 
@@ -259,6 +260,7 @@ export function calculateIraMultiPeriod(
       selectedPeriods: periods,
       missingGradeCount,
       periodAverages,
+      mode,
     };
   }
 
@@ -277,6 +279,7 @@ export function calculateIraMultiPeriod(
       selectedPeriods: periods,
       missingGradeCount,
       periodAverages,
+      mode,
     };
   }
 
@@ -289,6 +292,7 @@ export function calculateIraMultiPeriod(
     selectedPeriods: periods,
     missingGradeCount,
     periodAverages,
+    mode,
   };
 }
 
