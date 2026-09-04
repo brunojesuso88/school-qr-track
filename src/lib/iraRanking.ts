@@ -25,6 +25,12 @@ export const RANKING_LIMIT = 15;
 export type { HighSchoolSeries } from '@/lib/series';
 export { CLASS_SERIES_OPTIONS, classSeriesLabel, parseSeriesValue, normalizeSeriesList, seriesListMatches } from '@/lib/series';
 
+/**
+ * DECISÃO DE NEGÓCIO: a classificação (ranking) do IRA continua sendo por SÉRIE
+ * REGULAR (1º/2º/3º ano). As etapas EJA existem como etapa curricular (matriz,
+ * notas, IRA individual e medalhas), mas não entram no ranking por série —
+ * `parseClassSeries` simplesmente as ignora, sem gerar erro.
+ */
 export const HIGH_SCHOOL_SERIES: { value: HighSchoolSeries; label: string }[] = [
   { value: '1', label: '1ª Série do Ensino Médio' },
   { value: '2', label: '2ª Série do Ensino Médio' },
@@ -32,19 +38,21 @@ export const HIGH_SCHOOL_SERIES: { value: HighSchoolSeries; label: string }[] = 
 ];
 
 export const seriesLabel = (s: HighSchoolSeries) =>
-  HIGH_SCHOOL_SERIES.find((o) => o.value === s)!.label;
+  HIGH_SCHOOL_SERIES.find((o) => o.value === s)?.label ?? classSeriesLabelFn(s);
 
-/** Normaliza o valor persistido em `classes.series` para o tipo da série. */
+/** Normaliza o valor persistido em `classes.series` para uma série REGULAR. */
 export const parseClassSeries = (value: string | null | undefined): HighSchoolSeries | null =>
   value === '1' || value === '2' || value === '3' ? value : null;
 
 /**
  * Detecta a série do Ensino Médio pelo nome da turma (fallback seguro).
  * Retorna `null` quando não há indicação clara ou quando há indicação ambígua
- * (mais de uma série citada no mesmo nome).
+ * (mais de uma série citada no mesmo nome). Nomes com EJA/etapa são resolvidos
+ * por `parseSeriesValue`, jamais como série regular.
  */
 export function detectClassSeries(className: string): HighSchoolSeries | null {
   const n = className.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  if (/\beja\b/.test(n) || /etapa/.test(n)) return parseSeriesValueFn(className);
   const found = new Set<HighSchoolSeries>();
   const re = /(^|[^0-9])([123])\s*(a|o|º|ª|\.)?\s*(serie|ser|ano|em)?\b/g;
   let m: RegExpExecArray | null;
@@ -60,6 +68,7 @@ export function detectClassSeries(className: string): HighSchoolSeries | null {
   }
   return [...found][0];
 }
+
 
 /** Código do aluno apenas com dígitos (sem pontos, vírgulas, traços ou espaços). */
 export const formatStudentCode = (code: string | null) => {
