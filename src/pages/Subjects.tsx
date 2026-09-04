@@ -636,8 +636,12 @@ const SubjectsContent = () => {
                 onChange={(e) => setForm((f) => ({ ...f, aliases: e.target.value }))} />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="weekly">Carga semanal nesta série (somente nesta matriz)</Label>
+              <Label htmlFor="weekly">
+                Carga semanal nesta série (somente nesta matriz)
+                {arithmeticIra ? " — opcional, não afeta o IRA desta matriz" : ""}
+              </Label>
               <Input id="weekly" type="number" min={1} value={form.weekly}
+                placeholder={arithmeticIra ? "Deixe em branco se não se aplica" : undefined}
                 onChange={(e) => setForm((f) => ({ ...f, weekly: e.target.value }))} />
             </div>
             <div className="flex items-center gap-2">
