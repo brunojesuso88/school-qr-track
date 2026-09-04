@@ -8,12 +8,15 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { toast } from 'sonner';
 import { Plus, Edit2, Trash2, GraduationCap, Search, Users, Loader2, AlertCircle, CheckCircle2, ImagePlus, CalendarIcon, Download, BookOpen } from 'lucide-react';
 import { classSchema } from '@/lib/validations';
-import { classSeriesLabel, parseSeriesValue } from '@/lib/series';
+import { CLASS_SERIES_GROUPS, HighSchoolSeries, classSeriesLabel, parseSeriesValue } from '@/lib/series';
+import { CurriculumMatrixRecord, fetchMatricesForSeries } from '@/lib/curriculumMatrices';
+import { syncClassCurriculum } from '@/lib/classCurriculum/sync';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { GradesImportDialog } from '@/components/grades/GradesImportDialog';
@@ -103,7 +106,40 @@ const Classes = () => {
     description: '',
     photo_url: '' as string | null,
     location: 'sede' as 'sede' | 'salas_fora',
+    series: '' as HighSchoolSeries | '',
   });
+
+  /**
+   * Matriz curricular aplicável à série escolhida (somente da ESCOLA ATIVA).
+   * Uma única compatível => aplicada por padrão; várias => o usuário escolhe;
+   * nenhuma => aviso, sem bloquear a criação da turma.
+   */
+  const [matrixCandidates, setMatrixCandidates] = useState<CurriculumMatrixRecord[]>([]);
+  const [matrixNeedsChoice, setMatrixNeedsChoice] = useState(false);
+  const [matrixLoading, setMatrixLoading] = useState(false);
+  const [selectedMatrixId, setSelectedMatrixId] = useState<string | null>(null);
+  const [applyMatrix, setApplyMatrix] = useState(true);
+
+  useEffect(() => {
+    const series = parseSeriesValue(formData.series || null);
+    if (!isDialogOpen || editingClass || !series || !activeSchoolId) {
+      setMatrixCandidates([]); setMatrixNeedsChoice(false); setSelectedMatrixId(null);
+      return;
+    }
+    let alive = true;
+    setMatrixLoading(true);
+    fetchMatricesForSeries(activeSchoolId, series)
+      .then((r) => {
+        if (!alive) return;
+        setMatrixCandidates(r.candidates);
+        setMatrixNeedsChoice(r.needsChoice);
+        setSelectedMatrixId(r.matrixId);
+        setApplyMatrix(r.candidates.length > 0);
+      })
+      .catch(() => { if (alive) { setMatrixCandidates([]); setSelectedMatrixId(null); } })
+      .finally(() => { if (alive) setMatrixLoading(false); });
+    return () => { alive = false; };
+  }, [formData.series, isDialogOpen, editingClass, activeSchoolId]);
 
   useEffect(() => {
     fetchClasses();
@@ -217,7 +253,8 @@ const Classes = () => {
         if (error) throw error;
         toast.success('Turma atualizada com sucesso');
       } else {
-        const { error } = await supabase
+        const series = parseSeriesValue(formData.series || null);
+        const { data: created, error } = await supabase
           .from('classes')
           .insert({
             school_id: assertActiveSchool(activeSchoolId),
@@ -225,10 +262,29 @@ const Classes = () => {
             shift: validationData.shift,
             description: validationData.description,
             location: formData.location,
-          });
+            ...(series ? { series } : {}),
+          })
+          .select('id')
+          .single();
 
         if (error) throw error;
         toast.success('Turma criada com sucesso');
+
+        // Aplica a matriz pelo MESMO fluxo usado em turmas existentes.
+        if (series && applyMatrix && selectedMatrixId) {
+          try {
+            await syncClassCurriculum((created as { id: string }).id, series, {
+              schoolId: assertActiveSchool(activeSchoolId),
+              matrixId: selectedMatrixId,
+            });
+            const name = matrixCandidates.find((m) => m.id === selectedMatrixId)?.name;
+            toast.success(name ? `Matriz aplicada: ${name}` : 'Matriz curricular aplicada à turma');
+          } catch (matrixError: any) {
+            toast.error(matrixError?.message
+              ? `Turma criada, mas a matriz não foi aplicada: ${matrixError.message}`
+              : 'Turma criada, mas a matriz não foi aplicada');
+          }
+        }
       }
 
       setIsDialogOpen(false);
@@ -253,6 +309,7 @@ const Classes = () => {
       description: classItem.description || '',
       photo_url: classItem.photo_url || null,
       location: (classItem.location === 'salas_fora' ? 'salas_fora' : 'sede'),
+      series: (parseSeriesValue(classItem.series) ?? '') as HighSchoolSeries | '',
     });
     // Load existing photo preview
     if (classItem.photo_url) {
@@ -296,7 +353,12 @@ const Classes = () => {
       description: '',
       photo_url: null,
       location: 'sede',
+      series: '',
     });
+    setMatrixCandidates([]);
+    setMatrixNeedsChoice(false);
+    setSelectedMatrixId(null);
+    setApplyMatrix(true);
     setPhotoPreview(null);
   };
 
@@ -426,6 +488,73 @@ const Classes = () => {
                     </SelectContent>
                   </Select>
                 </div>
+                <div className="space-y-2">
+                  <Label htmlFor="series">Série / etapa</Label>
+                  <Select
+                    value={formData.series || undefined}
+                    onValueChange={(value) => setFormData({ ...formData, series: value as HighSchoolSeries })}
+                  >
+                    <SelectTrigger id="series">
+                      <SelectValue placeholder="Selecione a série ou etapa" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {CLASS_SERIES_GROUPS.map((group) => (
+                        <SelectGroup key={group.label}>
+                          <SelectLabel>{group.label}</SelectLabel>
+                          {group.values.map((v) => (
+                            <SelectItem key={v} value={v}>{classSeriesLabel(v)}</SelectItem>
+                          ))}
+                        </SelectGroup>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                {!editingClass && formData.series && (
+                  <div className="space-y-2 rounded-md border p-3">
+                    {matrixLoading ? (
+                      <p className="text-xs text-muted-foreground flex items-center gap-2">
+                        <Loader2 className="w-3 h-3 animate-spin" /> Procurando matriz curricular…
+                      </p>
+                    ) : matrixCandidates.length === 0 ? (
+                      <p className="text-xs text-muted-foreground">
+                        Nenhuma matriz correspondente encontrada para esta série. A turma será criada normalmente.
+                      </p>
+                    ) : (
+                      <>
+                        <div className="flex items-start gap-2">
+                          <Checkbox
+                            id="apply-matrix"
+                            checked={applyMatrix}
+                            onCheckedChange={(v) => setApplyMatrix(v === true)}
+                          />
+                          <Label htmlFor="apply-matrix" className="cursor-pointer text-sm font-normal">
+                            Aplicar matriz curricular correspondente
+                          </Label>
+                        </div>
+                        {matrixNeedsChoice ? (
+                          <Select
+                            value={selectedMatrixId ?? undefined}
+                            onValueChange={(v) => setSelectedMatrixId(v)}
+                            disabled={!applyMatrix}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Escolha qual matriz aplicar" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {matrixCandidates.map((m) => (
+                                <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        ) : (
+                          <p className="text-xs text-muted-foreground">
+                            Matriz encontrada: <strong>{matrixCandidates[0].name}</strong>
+                          </p>
+                        )}
+                      </>
+                    )}
+                  </div>
+                )}
                 <div className="space-y-2">
                   <Label htmlFor="description">Descrição (opcional)</Label>
                   <Input
