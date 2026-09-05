@@ -28,7 +28,12 @@ import {
   digitsOnly, findGlobalMatch, nameTokens, pickClassName, sameNormalizedName,
   sanitizeSchoolCodeForStorage,
 } from '@/lib/gradePageLocal/studentMatch';
-import { decideStudentResolution, resolveBeforeCreate } from '@/lib/gradeImport/autoStudentResolution';
+import {
+  decideStudentResolution, resolveBeforeCreate, StudentResolutionDecision,
+} from '@/lib/gradeImport/autoStudentResolution';
+import {
+  applyResolvedStudentToDetected, RegistrationLockState, shouldStartRegistration, stripRegistryRowFlags,
+} from '@/lib/gradeImport/registrationResolution';
 
 import {
   closePdfDocument, extractPageTokens, LocalPdfDocument, openPdfDocument,
@@ -291,8 +296,9 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
   const [applyingLocalReading, setApplyingLocalReading] = useState(false);
   const [autoApprovedPage, setAutoApprovedPage] = useState<number | null>(null);
   const autoRunRef = useRef<string | null>(null);
-  /** Página já resolvida automaticamente pela exceção de aluno não identificado. */
-  const autoStudentRef = useRef<string | null>(null);
+  /** Lock da resolução cadastral automática por página (liberado em falha p/ retry). */
+  const autoStudentRef = useRef<RegistrationLockState>({ key: null, phase: 'idle' });
+  const [resolvingRegistration, setResolvingRegistration] = useState(false);
   const [readingMode, setReadingMode] = useState<ReadingMode>('local_ai');
   const pdfDocRef = useRef<LocalPdfDocument | null>(null);
   const localStudentsRef = useRef<LocalContextStudent[]>([]);
@@ -365,7 +371,7 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
     setAutoRules(DEFAULT_AUTO_ACCEPT_RULES);
     setAutoApprovedPage(null);
     autoRunRef.current = null;
-    autoStudentRef.current = null;
+    autoStudentRef.current = { key: null, phase: 'idle' };
     cancelledRef.current = false;
     closePdfDocument(pdfDocRef.current);
     pdfDocRef.current = null;
@@ -1213,28 +1219,189 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
   }), [unmatchedExceptionActive, preview, otherClassMatch]);
 
   /**
-   * Aplica a resolução automática (nada é gravado no acadêmico aqui):
-   * move o candidato único de outra turma, vincula o sugerido ou marca "cadastrar".
+   * Adota o aluno resolvido: cabeçalho, seleção da UI e contexto local passam a
+   * apontar para ele, e os conflitos da página são RECALCULADOS para esse aluno.
+   * Somente conflitos cadastrais são removidos — nota inválida/divergência ficam.
+   */
+  const adoptResolvedStudent = useCallback(async (
+    p: PagePreview,
+    identity: { studentId: string; fullName: string; schoolCode?: string | null },
+  ) => {
+    const detected = applyResolvedStudentToDetected(p.detected, {
+      studentId: identity.studentId, fullName: identity.fullName,
+    });
+    const nextPreview: PagePreview = { ...p, detected };
+    setPreview(nextPreview);
+    setRows((prev) => stripRegistryRowFlags(prev));
+    setPageAction('link');
+    setLinkStudentId(identity.studentId);
+    setOtherClassMatch(null);
+    setClassStudents((prev) => prev.some((s) => s.id === identity.studentId)
+      ? prev
+      : [...prev, { id: identity.studentId, full_name: identity.fullName }]);
+    if (!localStudentsRef.current.some((s) => s.id === identity.studentId)) {
+      localStudentsRef.current = [...localStudentsRef.current, {
+        id: identity.studentId,
+        full_name: identity.fullName,
+        school_code: identity.schoolCode ?? null,
+      } as LocalContextStudent];
+    }
+    await loadPageConflicts(identity.studentId, nextPreview);
+  }, [loadPageConflicts]);
+
+  /** Move o aluno para esta turma DENTRO da escola ativa, com auditoria. */
+  const moveStudentToActiveClass = useCallback(async (
+    student: { id: string; full_name: string; class?: string | null },
+    userId: string | null,
+  ) => {
+    const schoolId = assertActiveSchool(activeSchoolId);
+    const target = effectiveNameRef.current || effectiveName || classItem?.name || '';
+    if (!target || student.class === target) return;
+    const { error: moveError } = await supabase
+      .from('students').update({ class: target })
+      .eq('id', student.id).eq('school_id', schoolId);
+    if (moveError) throw moveError;
+    await supabase.from('audit_logs').insert({
+      user_id: userId,
+      action: 'UPDATE',
+      table_name: 'students',
+      record_id: student.id,
+      old_data: { class: student.class ?? null } as never,
+      new_data: { class: target, reason: 'Aluno localizado em outra turma durante importação de boletim' } as never,
+    });
+  }, [activeSchoolId, effectiveName, classItem]);
+
+  /**
+   * Executa a resolução CADASTRAL agora — cria/vincula/move o aluno SEM gravar
+   * nenhuma nota. A página continua bloqueada por problemas acadêmicos, mas o
+   * aluno já aparece cadastrado/vinculado na tela.
+   */
+  const resolveStudentRegistrationNow = useCallback(async (
+    p: PagePreview,
+    decision: StudentResolutionDecision,
+  ) => {
+    if (!classItem) return;
+    const schoolId = assertActiveSchool(activeSchoolId);
+    const detected = p.detected;
+    const { data: userData } = await supabase.auth.getUser();
+    const userId = userData?.user?.id ?? null;
+
+    if (decision.action === 'link' && decision.studentId) {
+      const known = localStudentsRef.current.find((s) => s.id === decision.studentId)
+        ?? classStudents.find((s) => s.id === decision.studentId);
+      await adoptResolvedStudent(p, {
+        studentId: decision.studentId,
+        fullName: known?.full_name ?? detected.pdf_name,
+        schoolCode: (known as LocalContextStudent | undefined)?.school_code ?? null,
+      });
+      return;
+    }
+
+    if (decision.action === 'move' && decision.studentId) {
+      const candidate = otherClassMatch && otherClassMatch.id === decision.studentId ? otherClassMatch : null;
+      if (!candidate) return;
+      await moveStudentToActiveClass(candidate, userId);
+      await adoptResolvedStudent(p, { studentId: candidate.id, fullName: candidate.full_name });
+      toast.success(`${candidate.full_name} vinculado a esta turma.`);
+      return;
+    }
+
+    if (decision.action !== 'create') return;
+
+    // Reconsulta DEFENSIVA por identidade forte (código completo, depois nome
+    // normalizado exato) na escola ativa: nunca duplica um aluno já cadastrado.
+    const code = digitsOnly(detected.pdf_code);
+    const tokens = nameTokens(detected.pdf_name);
+    const filters = [
+      code ? `school_code.ilike.%${code}%` : null,
+      tokens.length > 0 ? `full_name.ilike.%${tokens[0]}%` : null,
+    ].filter(Boolean) as string[];
+    let existing: { id: string; full_name: string; class: string; school_code: string | null }[] = [];
+    if (filters.length > 0) {
+      const existingRes = await supabase
+        .from('students')
+        .select('id, full_name, class, school_code')
+        .eq('school_id', schoolId)
+        .or(filters.join(','))
+        .limit(200);
+      if (existingRes.error) throw existingRes.error;
+      existing = (existingRes.data || []) as typeof existing;
+    }
+    const guard = resolveBeforeCreate(
+      { name: detected.pdf_name, code: detected.pdf_code },
+      existing,
+      { sameCode: (a, b) => Boolean(digitsOnly(a)) && digitsOnly(a) === digitsOnly(b), sameName: sameNormalizedName },
+    );
+    if (guard.action === 'manual') {
+      throw new Error('Há mais de um aluno com essa identidade na escola. Escolha o aluno correto na lista antes de continuar.');
+    }
+    if (guard.action === 'link' && guard.studentId) {
+      const found = existing.find((s) => s.id === guard.studentId)!;
+      await moveStudentToActiveClass(found, userId);
+      await adoptResolvedStudent(p, {
+        studentId: found.id, fullName: found.full_name, schoolCode: found.school_code,
+      });
+      return;
+    }
+
+    const shiftCode = classItem.shift === 'morning' ? 'M' : classItem.shift === 'afternoon' ? 'T' : 'N';
+    const initials = detected.pdf_name.trim().split(/\s+/).filter(Boolean).map((x) => x[0].toUpperCase()).join('');
+    const className = effectiveNameRef.current || effectiveName || classItem.name;
+    const { data: created, error: createError } = await supabase
+      .from('students')
+      .insert({
+        school_id: schoolId,
+        full_name: detected.pdf_name,
+        student_id: `${initials}-${className}-${shiftCode}`,
+        class: className,
+        shift: classItem.shift as never,
+        qr_code: `STU-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`,
+        school_code: sanitizeSchoolCodeForStorage(detected.pdf_code),
+        birth_date: detected.pdf_birth_date,
+        mother_name: detected.pdf_mother_name,
+        father_name: detected.pdf_father_name,
+        created_by: userId,
+      })
+      .select('id')
+      .single();
+    if (createError) throw createError;
+    await adoptResolvedStudent(p, {
+      studentId: created.id,
+      fullName: detected.pdf_name,
+      schoolCode: sanitizeSchoolCodeForStorage(detected.pdf_code),
+    });
+    toast.success(`${detected.pdf_name} cadastrado nesta turma pelo boletim.`);
+    onImported?.();
+  }, [activeSchoolId, classItem, classStudents, effectiveName, otherClassMatch, adoptResolvedStudent, moveStudentToActiveClass, onImported]);
+
+  /**
+   * Dispara a resolução cadastral IMEDIATAMENTE (independe de a página poder ser
+   * gravada). Lock por página evita concorrência e é liberado em falha.
    */
   useEffect(() => {
     if (step !== 'page' || !preview || !session) return;
     if (studentResolution.action === 'manual') return;
     if (linkStudentId) return;
     const key = `${session.id}:${preview.page}`;
-    if (autoStudentRef.current === key) return;
-    autoStudentRef.current = key;
-    if (studentResolution.action === 'move') {
-      if (!movingStudent) void handleMoveStudentToClass();
-      return;
-    }
-    if (studentResolution.action === 'link') {
-      setPageAction('link');
-      setLinkStudentId(studentResolution.studentId);
-      return;
-    }
-    setPageAction('create');
+    if (!shouldStartRegistration(autoStudentRef.current, key)) return;
+    autoStudentRef.current = { key, phase: 'running' };
+    const target = preview;
+    setResolvingRegistration(true);
+    void (async () => {
+      try {
+        await resolveStudentRegistrationNow(target, studentResolution);
+        autoStudentRef.current = { key, phase: 'resolved' };
+      } catch (e) {
+        console.error('Resolução cadastral automática falhou:', e);
+        autoStudentRef.current = { key, phase: 'failed' };
+        toast.error(e instanceof Error ? e.message : 'Não foi possível resolver o cadastro do aluno.');
+      } finally {
+        setResolvingRegistration(false);
+      }
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step, preview, session, studentResolution, linkStudentId, movingStudent]);
+  }, [step, preview, session, studentResolution, linkStudentId]);
+
 
 
   /** Ação contextual: adota a leitura local do boletim e retoma o fluxo automático. */
@@ -2421,6 +2588,9 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
                   onClick={() => { setPageAction('create'); setLinkStudentId(null); }}>
                   Cadastrar novo aluno
                 </Button>
+                {resolvingRegistration && (
+                  <span className="text-[11px] text-muted-foreground">Resolvendo o cadastro do aluno...</span>
+                )}
                 {preview.detected.status !== 'unmatched' && (
                   <span className="text-[11px] text-muted-foreground">
                     Sugestão do sistema: {preview.detected.matched_name} ({(preview.detected.match_score * 100).toFixed(0)}%)
