@@ -111,34 +111,55 @@ export interface StudentIdentityLike {
 
 /** Chave de identidade do aluno no PDF: código (dígitos) tem prioridade; senão nome normalizado. */
 export const studentIdentityKey = (identity: StudentIdentityLike | null | undefined): string | null => {
-  if (!identity) return null;
+  const keys = studentIdentityKeys(identity);
+  return keys.length > 0 ? keys[0] : null;
+};
+
+/**
+ * TODAS as chaves seguras de identidade da página: código (dígitos) e nome
+ * normalizado completo. Boletins multipágina podem trazer o código apenas na
+ * primeira página, então a memória precisa de aliases para reencontrar o aluno.
+ */
+export const studentIdentityKeys = (identity: StudentIdentityLike | null | undefined): string[] => {
+  if (!identity) return [];
+  const keys: string[] = [];
   const code = digitsOnly(identity.pdf_code);
-  if (code) return `code:${code}`;
+  if (code) keys.push(`code:${code}`);
   const name = normalizeText(identity.pdf_name);
-  return name ? `name:${name}` : null;
+  if (name) keys.push(`name:${name}`);
+  return keys;
 };
 
 export type PersistedStudentMemory = ReadonlyMap<string, string>;
 
-/** Registra o ID efetivamente gravado para a identidade da página (imutável). */
+/** Registra o ID gravado sob TODAS as chaves de identidade da página (imutável). */
 export const rememberPersistedStudent = (
   memory: PersistedStudentMemory,
   identity: StudentIdentityLike | null | undefined,
   studentId: string | null,
 ): PersistedStudentMemory => {
-  const key = studentIdentityKey(identity);
+  const keys = studentIdentityKeys(identity);
   const id = clean(studentId);
-  if (!key || !id) return memory;
+  if (keys.length === 0 || !id) return memory;
   const next = new Map(memory);
-  next.set(key, id);
+  keys.forEach((key) => next.set(key, id));
   return next;
 };
 
-/** Recupera o ID gravado em página anterior do mesmo aluno (ou null). */
+/**
+ * Recupera o ID gravado em página anterior do mesmo aluno.
+ * Se as chaves da página apontarem para IDs DIFERENTES, devolve null: a escolha
+ * volta a ser manual em vez de adivinhar.
+ */
 export const recallPersistedStudent = (
   memory: PersistedStudentMemory,
   identity: StudentIdentityLike | null | undefined,
 ): string | null => {
-  const key = studentIdentityKey(identity);
-  return key ? memory.get(key) ?? null : null;
+  const found = new Set<string>();
+  for (const key of studentIdentityKeys(identity)) {
+    const id = memory.get(key);
+    if (id) found.add(id);
+  }
+  if (found.size !== 1) return null;
+  return [...found][0];
 };
