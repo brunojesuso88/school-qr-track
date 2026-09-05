@@ -23,9 +23,8 @@ export interface ResolvedStudentIdentity {
 export interface DetectedLike {
   student_id?: string | null;
   matched_name?: string | null;
-  status?: string;
+  status?: unknown;
   conflicts: string[];
-  [key: string]: unknown;
 }
 
 /**
@@ -40,7 +39,7 @@ export const applyResolvedStudentToDetected = <T extends DetectedLike>(
   ...detected,
   student_id: identity.studentId,
   matched_name: identity.fullName,
-  status: 'matched',
+  status: 'matched' as T['status'],
   conflicts: (detected.conflicts ?? []).filter((c) => !REGISTRY_CONFLICTS.includes(c)),
 });
 
