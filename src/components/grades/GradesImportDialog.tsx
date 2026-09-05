@@ -371,7 +371,7 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
     setAutoRules(DEFAULT_AUTO_ACCEPT_RULES);
     setAutoApprovedPage(null);
     autoRunRef.current = null;
-    autoStudentRef.current = null;
+    autoStudentRef.current = { key: null, phase: 'idle' };
     cancelledRef.current = false;
     closePdfDocument(pdfDocRef.current);
     pdfDocRef.current = null;
