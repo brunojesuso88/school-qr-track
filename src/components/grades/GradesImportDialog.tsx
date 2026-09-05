@@ -32,7 +32,7 @@ import {
   decideStudentResolution, resolveBeforeCreate, StudentResolutionDecision,
 } from '@/lib/gradeImport/autoStudentResolution';
 import {
-  applyResolvedStudentToDetected, RegistrationLockState, shouldStartRegistration, stripRegistryRowFlags,
+  applyResolvedStudentToDetected, applyResolvedStudentToRows, RegistrationLockState, shouldStartRegistration,
 } from '@/lib/gradeImport/registrationResolution';
 
 import {
@@ -1201,6 +1201,7 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
   const unmatchedExceptionActive = Boolean(
     autoAccept
     && autoRules.auto_create_or_link_unmatched_student
+    && canEditRegistration
     && preview
     && !preview.detected.conflicts.includes('ambiguous_match')
     && !preview.detected.conflicts.includes('duplicate_link'),
@@ -1232,7 +1233,9 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
     });
     const nextPreview: PagePreview = { ...p, detected };
     setPreview(nextPreview);
-    setRows((prev) => stripRegistryRowFlags(prev));
+    setRows((prev) => applyResolvedStudentToRows(prev, {
+      studentId: identity.studentId, fullName: identity.fullName,
+    }));
     setPageAction('link');
     setLinkStudentId(identity.studentId);
     setOtherClassMatch(null);
@@ -1281,6 +1284,8 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
     decision: StudentResolutionDecision,
   ) => {
     if (!classItem) return;
+    // Guarda defensiva: sem permissão cadastral nada é criado, movido ou atualizado.
+    if (!canEditRegistration) return;
     const schoolId = assertActiveSchool(activeSchoolId);
     const detected = p.detected;
     const { data: userData } = await supabase.auth.getUser();
@@ -1372,7 +1377,7 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
     });
     toast.success(`${detected.pdf_name} cadastrado nesta turma pelo boletim.`);
     onImported?.();
-  }, [activeSchoolId, classItem, classStudents, effectiveName, otherClassMatch, adoptResolvedStudent, moveStudentToActiveClass, onImported]);
+  }, [activeSchoolId, canEditRegistration, classItem, classStudents, effectiveName, otherClassMatch, adoptResolvedStudent, moveStudentToActiveClass, onImported]);
 
   /**
    * Dispara a resolução cadastral IMEDIATAMENTE (independe de a página poder ser
@@ -2415,7 +2420,8 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
                     <Switch
                       id="rule-unmatched-student"
                       className="mt-0.5"
-                      checked={autoRules.auto_create_or_link_unmatched_student}
+                      checked={autoRules.auto_create_or_link_unmatched_student && canEditRegistration}
+                      disabled={!canEditRegistration}
                       onCheckedChange={(v) => handleToggleRule('auto_create_or_link_unmatched_student', v)}
                     />
                     <div>
@@ -2427,6 +2433,7 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
                         (movendo-o para esta turma, se estiver em outra) ou cria o cadastro com os dados do boletim.
                         Nunca vale para aluno ambíguo ou homônimo, e notas inválidas, fora da escala ou com
                         divergência continuam bloqueando a página.
+                        {!canEditRegistration && ' Disponível apenas para administração e direção.'}
                       </p>
                     </div>
                   </div>
