@@ -13,11 +13,17 @@
  *   2. `matchStudentInClass` com status `matched` (código completo ou nome exato).
  */
 import { matchStudentInClass, type MatchCandidate } from '@/lib/gradePageLocal/studentMatch';
-import { recallPersistedStudent, type PersistedStudentMemory, type StudentIdentityLike } from './persistedStudent';
+import {
+  inspectPersistedStudentRecall, type PersistedStudentMemory, type StudentIdentityLike,
+} from './persistedStudent';
 
 export interface RebindDetectedLike extends StudentIdentityLike {
   student_id?: string | null;
+  conflicts?: string[];
 }
+
+/** Conflitos que exigem escolha manual: nunca podem ser rebindados automaticamente. */
+export const MANUAL_ONLY_CONFLICTS = ['ambiguous_match', 'duplicate_link'];
 
 export type RebindSource = 'memory' | 'match';
 
@@ -44,12 +50,17 @@ export const rebindDetectedStudent = <T extends MatchCandidate>(
   if (!detected) return null;
   if (String(detected.student_id ?? '').trim()) return null; // já resolvido
 
+  // Ambiguidade/homônimo/vínculo duplicado permanecem 100% manuais.
+  if ((detected.conflicts ?? []).some((c) => MANUAL_ONLY_CONFLICTS.includes(c))) return null;
+
   const list = students ?? [];
 
   if (memory) {
-    const recalled = recallPersistedStudent(memory, detected);
-    const known = recalled ? list.find((s) => s.id === recalled) : undefined;
-    if (recalled && known) {
+    const recall = inspectPersistedStudentRecall(memory, detected);
+    // Chaves de memória inconsistentes: bloqueia TAMBÉM o fallback por match.
+    if (recall.status === 'conflict') return null;
+    const known = recall.studentId ? list.find((s) => s.id === recall.studentId) : undefined;
+    if (known) {
       return {
         studentId: known.id,
         fullName: known.full_name,

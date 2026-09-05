@@ -146,6 +146,32 @@ export const rememberPersistedStudent = (
   return next;
 };
 
+export type PersistedRecallStatus = 'none' | 'resolved' | 'conflict';
+
+export interface PersistedRecallInspection {
+  status: PersistedRecallStatus;
+  studentId: string | null;
+}
+
+/**
+ * Inspeção detalhada da memória: distingue "nada memorizado" de "chaves em
+ * CONFLITO" (código aponta para um aluno e nome para outro). Conflito NUNCA
+ * pode virar vínculo automático — a escolha volta a ser manual.
+ */
+export const inspectPersistedStudentRecall = (
+  memory: PersistedStudentMemory,
+  identity: StudentIdentityLike | null | undefined,
+): PersistedRecallInspection => {
+  const found = new Set<string>();
+  for (const key of studentIdentityKeys(identity)) {
+    const id = memory.get(key);
+    if (id) found.add(id);
+  }
+  if (found.size === 0) return { status: 'none', studentId: null };
+  if (found.size > 1) return { status: 'conflict', studentId: null };
+  return { status: 'resolved', studentId: [...found][0] };
+};
+
 /**
  * Recupera o ID gravado em página anterior do mesmo aluno.
  * Se as chaves da página apontarem para IDs DIFERENTES, devolve null: a escolha
@@ -154,12 +180,4 @@ export const rememberPersistedStudent = (
 export const recallPersistedStudent = (
   memory: PersistedStudentMemory,
   identity: StudentIdentityLike | null | undefined,
-): string | null => {
-  const found = new Set<string>();
-  for (const key of studentIdentityKeys(identity)) {
-    const id = memory.get(key);
-    if (id) found.add(id);
-  }
-  if (found.size !== 1) return null;
-  return [...found][0];
-};
+): string | null => inspectPersistedStudentRecall(memory, identity).studentId;
