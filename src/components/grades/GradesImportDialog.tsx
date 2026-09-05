@@ -1198,33 +1198,41 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
   );
 
   /**
-   * Resolução automática do aluno da página quando a exceção está ativa:
-   * move o candidato único de outra turma, vincula o sugerido ou cria pelo boletim.
-   * Erros reais de nota continuam bloqueando (nada é gravado aqui).
+   * Resolução CADASTRAL do aluno da página — independente da elegibilidade para
+   * gravar notas: erro de nota é resolvido na tabela, não muda quem é o aluno.
+   */
+  const studentResolution = useMemo(() => decideStudentResolution({
+    ruleActive: unmatchedExceptionActive,
+    conflicts: preview?.detected.conflicts ?? [],
+    pdfName: preview?.detected.pdf_name ?? null,
+    suggestedStudentId: preview?.detected.student_id ?? null,
+    otherClassStudentId: otherClassMatch?.id ?? null,
+  }), [unmatchedExceptionActive, preview, otherClassMatch]);
+
+  /**
+   * Aplica a resolução automática (nada é gravado no acadêmico aqui):
+   * move o candidato único de outra turma, vincula o sugerido ou marca "cadastrar".
    */
   useEffect(() => {
     if (step !== 'page' || !preview || !session) return;
-    if (!unmatchedExceptionActive) return;
-    if (!autoEval.eligible || canConfirmPage) return;
-    if (invalidCount > 0 || manualBlockers.length > 0) return;
+    if (studentResolution.action === 'manual') return;
+    if (linkStudentId) return;
     const key = `${session.id}:${preview.page}`;
     if (autoStudentRef.current === key) return;
     autoStudentRef.current = key;
-    if (otherClassMatch) {
+    if (studentResolution.action === 'move') {
       if (!movingStudent) void handleMoveStudentToClass();
       return;
     }
-    if (preview.detected.student_id) {
+    if (studentResolution.action === 'link') {
       setPageAction('link');
-      setLinkStudentId(preview.detected.student_id);
+      setLinkStudentId(studentResolution.studentId);
       return;
     }
     setPageAction('create');
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    step, preview, session, unmatchedExceptionActive, autoEval.eligible, canConfirmPage,
-    invalidCount, manualBlockers.length, otherClassMatch, movingStudent,
-  ]);
+  }, [step, preview, session, studentResolution, linkStudentId, movingStudent]);
+
 
   /** Ação contextual: adota a leitura local do boletim e retoma o fluxo automático. */
   const handleUseLocalReading = async () => {
