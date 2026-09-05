@@ -731,14 +731,25 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
   }, [readingMode]);
 
 
-  /** Encerra a sessão (todas as páginas resolvidas). */
+  /**
+   * Encerra a sessão. Só marca `completed` e limpa o PDF quando NÃO existe
+   * página pendente/erro: com falha pendente a sessão continua retomável, o PDF
+   * é preservado e `onImported` não é chamado.
+   */
   const finishSession = useCallback(async (sessionId: string) => {
+    const pending = failureQueueRef.current.pendingPages();
+    setPendingFailures(failureQueueRef.current.list());
+    if (!canFinishSession(pending)) {
+      setStep('summary');
+      return;
+    }
     await supabase.from('grade_import_sessions')
       .update({ status: 'completed', pdf_base64: null })
       .eq('id', sessionId);
     setStep('summary');
     onImported?.();
   }, [onImported]);
+
 
   /**
    * Página sem nenhuma disciplina reconhecida: ignorada em silêncio.
