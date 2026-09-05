@@ -25,8 +25,11 @@ import {
 } from './gradesAutoAccept';
 import { useAuth } from '@/contexts/AuthContext';
 import {
-  digitsOnly, findGlobalMatch, nameTokens, pickClassName, sanitizeSchoolCodeForStorage,
+  digitsOnly, findGlobalMatch, nameTokens, pickClassName, sameNormalizedName,
+  sanitizeSchoolCodeForStorage,
 } from '@/lib/gradePageLocal/studentMatch';
+import { decideStudentResolution, resolveBeforeCreate } from '@/lib/gradeImport/autoStudentResolution';
+
 import {
   closePdfDocument, extractPageTokens, LocalPdfDocument, openPdfDocument,
 } from '@/lib/gradePageLocal/pdfText';
