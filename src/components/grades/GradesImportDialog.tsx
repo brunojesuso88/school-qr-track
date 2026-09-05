@@ -1832,7 +1832,7 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
   /** Reprocessa ESTA página (a sessão está parada nela). */
   const handleRetryPage = async () => {
     if (!session) { setStep('select'); return; }
-    await processPage(session.id, failedPage ?? session.current_page || 1);
+    await processPage(session.id, failedPage ?? (session.current_page || 1));
   };
 
 
