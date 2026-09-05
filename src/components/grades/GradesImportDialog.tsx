@@ -2588,6 +2588,9 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
                   onClick={() => { setPageAction('create'); setLinkStudentId(null); }}>
                   Cadastrar novo aluno
                 </Button>
+                {resolvingRegistration && (
+                  <span className="text-[11px] text-muted-foreground">Resolvendo o cadastro do aluno...</span>
+                )}
                 {preview.detected.status !== 'unmatched' && (
                   <span className="text-[11px] text-muted-foreground">
                     Sugestão do sistema: {preview.detected.matched_name} ({(preview.detected.match_score * 100).toFixed(0)}%)
