@@ -73,11 +73,11 @@ describe('ASPECTOS CULTURAIS ... TURISMO DE EVENTOS em duas linhas', () => {
 
   it('mantém as notas nos períodos corretos', () => {
     const cellOf = (period: string) => result.cells.find((c) => c.subject === CANONICAL && c.period === period);
-    expect(cellOf('1º Período')?.raw).toBe('8,00');
-    expect(cellOf('2º Período')?.raw).toBe('7,50');
-    expect(cellOf('3º Período')?.raw).toBe('9,00');
-    expect(cellOf('4º Período')?.raw ?? null).toBeNull();
-    expect(result.cells.find((c) => c.subject === 'MARKETING EM EVENTOS' && c.period === '1º Período')?.raw).toBe('6,00');
+    expect(cellOf('1º Período')?.value).toBe(8);
+    expect(cellOf('2º Período')?.value).toBe(7.5);
+    expect(cellOf('3º Período')?.value).toBe(9);
+    expect(cellOf('4º Período')?.value ?? null).toBeNull();
+    expect(result.cells.find((c) => c.subject === 'MARKETING EM EVENTOS' && c.period === '1º Período')?.value).toBe(6);
   });
 
   it('não aciona a IA quando a página é conclusiva', () => {
