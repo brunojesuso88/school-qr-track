@@ -28,7 +28,12 @@ import {
   digitsOnly, findGlobalMatch, nameTokens, pickClassName, sameNormalizedName,
   sanitizeSchoolCodeForStorage,
 } from '@/lib/gradePageLocal/studentMatch';
-import { decideStudentResolution, resolveBeforeCreate } from '@/lib/gradeImport/autoStudentResolution';
+import {
+  decideStudentResolution, resolveBeforeCreate, StudentResolutionDecision,
+} from '@/lib/gradeImport/autoStudentResolution';
+import {
+  applyResolvedStudentToDetected, RegistrationLockState, shouldStartRegistration, stripRegistryRowFlags,
+} from '@/lib/gradeImport/registrationResolution';
 
 import {
   closePdfDocument, extractPageTokens, LocalPdfDocument, openPdfDocument,
