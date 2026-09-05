@@ -310,11 +310,14 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
   const targetCacheRef = useRef<ImportTargetCache>(new ImportTargetCache());
   /** Escopo obrigatório do cache de destinos: escola + turma + matriz. */
   const targetScopeRef = useRef<string | null>(null);
-  /** Páginas que falharam na leitura e serão reprocessadas ao final (sem abortar a sessão). */
+  /** Páginas que falharam na leitura: a sessão PARA nelas (nunca pula para a seguinte). */
   const failureQueueRef = useRef<PageFailureQueue>(new PageFailureQueue());
   const [pendingFailures, setPendingFailures] = useState<PageFailure[]>([]);
-  /** Estamos na rodada final de reprocessamento das páginas que falharam. */
+  /** Página bloqueada por falha de leitura (retry singular na tela). */
+  const [failedPage, setFailedPage] = useState<number | null>(null);
+  /** Estamos reprocessando uma falha já persistida (retomada de sessão antiga). */
   const reprocessingRef = useRef(false);
+
   /** Última leitura local disponível da página em processamento (reaproveitada no retry). */
   const lastLocalPreviewRef = useRef<unknown | null>(null);
   /** Ponteiro para a leitura local atual (usada pela fila de pré-leitura). */
