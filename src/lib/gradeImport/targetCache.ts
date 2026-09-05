@@ -122,3 +122,27 @@ export class ImportTargetCache {
     return { selects: this.selects, selectsSaved: this.saved, subjects: this.subjects.size, periods: this.periods.size };
   }
 }
+
+/**
+ * Períodos: só vão ao banco os que AINDA não existem no cache de destinos.
+ * `normalized_label` é a identidade do período na turma, então um período já
+ * conhecido reutiliza o ID direto, sem round-trip (nenhum campo acadêmico da
+ * disciplina é tocado aqui — período não guarda carga nem regra de IRA).
+ */
+export const splitPeriodPayload = <T extends { normalized_label: string }>(
+  payload: T[],
+  cachedIds: Map<string, string>,
+): { missing: T[]; reused: { normalized_label: string; id: string }[] } => {
+  const missing: T[] = [];
+  const reused: { normalized_label: string; id: string }[] = [];
+  const seen = new Set<string>();
+  payload.forEach((p) => {
+    if (seen.has(p.normalized_label)) return;
+    seen.add(p.normalized_label);
+    const id = cachedIds.get(p.normalized_label);
+    if (id) reused.push({ normalized_label: p.normalized_label, id });
+    else missing.push(p);
+  });
+  return { missing, reused };
+};
+
