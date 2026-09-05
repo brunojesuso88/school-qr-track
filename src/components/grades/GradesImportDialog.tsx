@@ -296,8 +296,9 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
   const [applyingLocalReading, setApplyingLocalReading] = useState(false);
   const [autoApprovedPage, setAutoApprovedPage] = useState<number | null>(null);
   const autoRunRef = useRef<string | null>(null);
-  /** Página já resolvida automaticamente pela exceção de aluno não identificado. */
-  const autoStudentRef = useRef<string | null>(null);
+  /** Lock da resolução cadastral automática por página (liberado em falha p/ retry). */
+  const autoStudentRef = useRef<RegistrationLockState>({ key: null, phase: 'idle' });
+  const [resolvingRegistration, setResolvingRegistration] = useState(false);
   const [readingMode, setReadingMode] = useState<ReadingMode>('local_ai');
   const pdfDocRef = useRef<LocalPdfDocument | null>(null);
   const localStudentsRef = useRef<LocalContextStudent[]>([]);
