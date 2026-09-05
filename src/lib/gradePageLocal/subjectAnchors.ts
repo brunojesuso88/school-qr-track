@@ -52,6 +52,11 @@ const containsWithoutExtraMeaning = (a: string, b: string): boolean => {
   return extra.length === 0;
 };
 
+/** Chave sem espaços: tolera nomes longos cujo espaço se perdeu na quebra de linha. */
+const compactKey = (value: string) => value.replace(/\s+/g, '');
+
+
+
 /** Constrói o índice de âncoras a partir das disciplinas esperadas da turma. */
 export function buildSubjectAnchors(expected: LocalExpectedSubject[]): SubjectAnchor[] {
   const byCanonical = new Map<string, SubjectAnchor>();
