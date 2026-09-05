@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { rebindDetectedStudent } from '../studentRebind';
 import {
-  recallPersistedStudent, rememberPersistedStudent, type PersistedStudentMemory,
+  inspectPersistedStudentRecall, recallPersistedStudent, rememberPersistedStudent,
+  type PersistedStudentMemory,
 } from '../persistedStudent';
 import { applyResolvedStudentToDetected, applyResolvedStudentToRows } from '../registrationResolution';
 
@@ -69,13 +70,25 @@ describe('rebind multipágina do mesmo aluno', () => {
     expect(rebound?.studentId).toBe('s1');
   });
 
-  it('D. chaves de memória conflitantes voltam a exigir escolha manual', () => {
+  it('D. chaves de memória conflitantes bloqueiam até o fallback por match', () => {
     let memory = rememberPersistedStudent(emptyMemory, detected({ pdf_name: null }), 's1');
     memory = rememberPersistedStudent(memory, detected({ pdf_code: null }), 's2');
     const page = detected();
     expect(recallPersistedStudent(memory, page)).toBeNull();
-    // Sem match seguro na turma, permanece manual.
-    expect(rebindDetectedStudent({ detected: page, students: [], memory })).toBeNull();
+    expect(inspectPersistedStudentRecall(memory, page)).toEqual({ status: 'conflict', studentId: null });
+    // A turma teria um match SEGURO por código + nome, mas o conflito de memória
+    // impede qualquer vínculo automático.
+    const students = [student('s1', 'MARIA DA SILVA SOUZA', '26123456')];
+    expect(rebindDetectedStudent({ detected: page, students, memory })).toBeNull();
+  });
+
+  it('conflitos manuais do cabeçalho nunca são rebindados', () => {
+    const students = [student('s1', 'MARIA DA SILVA SOUZA', '26123456')];
+    const memory = rememberPersistedStudent(emptyMemory, detected(), 's1');
+    for (const conflict of ['ambiguous_match', 'duplicate_link']) {
+      const page = detected({ conflicts: ['not_in_class', conflict] });
+      expect(rebindDetectedStudent({ detected: page, students, memory })).toBeNull();
+    }
   });
 
   it('E. flags acadêmicas sobrevivem ao rebind', () => {
