@@ -50,6 +50,21 @@ export const stripRegistryRowFlags = <T extends { flags?: string[] }>(rows: T[])
     flags: (row.flags ?? []).filter((f) => !REGISTRY_ROW_FLAGS.includes(f)),
   }));
 
+/**
+ * Sincroniza TODAS as linhas da prévia com o aluno resolvido: `student_id` e
+ * `matched_name` passam a apontar para ele e apenas as flags cadastrais saem.
+ * Flags acadêmicas (`invalid_value`, `out_of_scale`, `local_ai_divergence`,
+ * `reconciliation_divergence`, `existing_grade_conflict`, ...) ficam intactas.
+ */
+export const applyResolvedStudentToRows = <
+  T extends { flags?: string[]; student_id?: string | null; matched_name?: string | null },
+>(rows: T[], identity: ResolvedStudentIdentity): T[] =>
+  stripRegistryRowFlags(rows ?? []).map((row) => ({
+    ...row,
+    student_id: identity.studentId,
+    matched_name: identity.fullName,
+  }));
+
 export type RegistrationPhase = 'idle' | 'running' | 'resolved' | 'failed';
 
 export interface RegistrationLockState {
