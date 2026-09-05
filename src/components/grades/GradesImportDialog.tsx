@@ -643,23 +643,37 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
     setEditing(false);
     setConflictStrategy('keep');
     let detected = p.detected;
-    // Boletim multipágina: página seguinte do MESMO aluno (mesmo código/nome) sem match
-    // automático reutiliza o ID já gravado nesta sessão — nunca um rematch textual.
+    // Boletim multipágina: a prévia pode ter sido PRÉ-LIDA antes de a página
+    // anterior cadastrar/vincular o aluno. Reexecuta a identidade contra o
+    // contexto ATUAL (memória da sessão + match seguro por código/nome exato).
     if (!detected.student_id) {
-      const recalled = recallPersistedStudent(persistedStudentsRef.current, detected);
-      const known = recalled ? localStudentsRef.current.find((s) => s.id === recalled) : undefined;
-      if (recalled && known) {
-        detected = {
-          ...detected,
-          student_id: recalled,
-          matched_name: known.full_name,
-          status: 'matched',
-          conflicts: detected.conflicts.filter((c) => c !== 'not_in_class' && c !== 'ambiguous_match'),
+      const rebound = rebindDetectedStudent({
+        detected,
+        students: localStudentsRef.current,
+        memory: persistedStudentsRef.current,
+      });
+      if (rebound) {
+        detected = applyResolvedStudentToDetected(detected, {
+          studentId: rebound.studentId, fullName: rebound.fullName,
+        });
+        p = {
+          ...p,
+          detected,
+          rows: applyResolvedStudentToRows(p.rows || [], {
+            studentId: rebound.studentId, fullName: rebound.fullName,
+          }),
+          notes: [...(p.notes || []), rebound.source === 'memory'
+            ? 'Aluno reconhecido pela página anterior deste boletim.'
+            : 'Aluno reconhecido no cadastro atualizado da turma.'],
         };
-        p = { ...p, detected, notes: [...(p.notes || []), 'Aluno reconhecido pela página anterior deste boletim.'] };
         setPreview(p);
+        setRows((p.rows || []).map((r) => ({ ...r, flags: r.flags || [], source: r.source ?? 'import' })));
+        persistedStudentsRef.current = rememberPersistedStudent(
+          persistedStudentsRef.current, detected, rebound.studentId,
+        );
       }
     }
+
     // A sugestão automática apenas PRÉ-SELECIONA o campo da UI; a gravação usa só a seleção.
     setPageAction(detected.student_id ? 'link' : null);
     setLinkStudentId(detected.student_id ?? null);
