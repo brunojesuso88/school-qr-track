@@ -2008,26 +2008,30 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
           <div className="space-y-4">
             <Alert variant="destructive">
               <AlertTriangle className="w-4 h-4" />
-              <AlertTitle className="text-sm">Esta página não pôde ser lida</AlertTitle>
+              <AlertTitle className="text-sm">
+                {failedPage != null ? `A página ${failedPage} não pôde ser lida` : 'Esta página não pôde ser lida'}
+              </AlertTitle>
               <AlertDescription className="text-xs space-y-1">
                 <p>Causa: {error ?? 'erro desconhecido'}</p>
-                <p>Nenhuma nota foi gravada nesta página. As páginas já confirmadas permanecem salvas.</p>
+                <p>
+                  Nenhuma nota foi gravada nesta página e a importação parou aqui: as páginas seguintes só continuam
+                  depois que esta for resolvida. As páginas já confirmadas permanecem salvas.
+                </p>
               </AlertDescription>
             </Alert>
             <div className="flex flex-wrap gap-2">
-              <Button onClick={handleRetryPage}>Tentar ler novamente</Button>
+              <Button onClick={handleRetryPage} data-testid="retry-this-page">Reprocessar esta página</Button>
               {session && preview && (
                 <Button variant="outline" onClick={handleIgnorePage}>Ignorar esta página</Button>
               )}
-              {session && !preview && session.current_page < session.total_pages && (
-                <Button variant="outline" onClick={() => processPage(session.id, session.current_page + 1)}>
-                  Pular para a próxima página
-                </Button>
+              {session && !preview && failedPage != null && (
+                <Button variant="outline" onClick={handleIgnoreFailedPage}>Ignorar esta página</Button>
               )}
               <Button variant="ghost" onClick={handleCancelSession}>Encerrar importação</Button>
             </div>
           </div>
         )}
+
 
         {step === 'page' && preview && classItem && (
           <div className="space-y-4">
