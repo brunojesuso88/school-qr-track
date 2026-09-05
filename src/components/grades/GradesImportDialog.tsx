@@ -63,9 +63,13 @@ import { describeSaveError } from '@/lib/gradeImport/saveError';
 import { decideAiFallback, readingOriginLabel, readingUsedAi } from '@/lib/gradeImport/aiPolicy';
 import { contextCacheKey, ImportContextCache } from '@/lib/gradeImport/contextCache';
 import { formatReadingMetrics, resolveWeeklyClassesForUpsert, summarizeReadingMetrics } from '@/lib/gradeImport/readingMetrics';
-import { ImportTargetCache, targetCacheKey, type TargetSubjectRow } from '@/lib/gradeImport/targetCache';
+import { ImportTargetCache, splitPeriodPayload, targetCacheKey, type TargetSubjectRow } from '@/lib/gradeImport/targetCache';
 import { LocalPrefetchQueue } from '@/lib/gradeImport/prefetchQueue';
 import { formatPageFailures, PageFailure, PageFailureQueue } from '@/lib/gradeImport/failureQueue';
+import {
+  canFinishSession, failureFlow, failuresFromRows, firstUnresolvedPage, resolveAdvance,
+} from '@/lib/gradeImport/sequentialFlow';
+
 
 /** Contexto estático (matriz, catálogo, mapeamento) em cache por escola+turma+matriz durante a sessão do navegador. */
 interface StaticImportContext {
@@ -310,11 +314,14 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
   const targetCacheRef = useRef<ImportTargetCache>(new ImportTargetCache());
   /** Escopo obrigatório do cache de destinos: escola + turma + matriz. */
   const targetScopeRef = useRef<string | null>(null);
-  /** Páginas que falharam na leitura e serão reprocessadas ao final (sem abortar a sessão). */
+  /** Páginas que falharam na leitura: a sessão PARA nelas (nunca pula para a seguinte). */
   const failureQueueRef = useRef<PageFailureQueue>(new PageFailureQueue());
   const [pendingFailures, setPendingFailures] = useState<PageFailure[]>([]);
-  /** Estamos na rodada final de reprocessamento das páginas que falharam. */
+  /** Página bloqueada por falha de leitura (retry singular na tela). */
+  const [failedPage, setFailedPage] = useState<number | null>(null);
+  /** Estamos reprocessando uma falha já persistida (retomada de sessão antiga). */
   const reprocessingRef = useRef(false);
+
   /** Última leitura local disponível da página em processamento (reaproveitada no retry). */
   const lastLocalPreviewRef = useRef<unknown | null>(null);
   /** Ponteiro para a leitura local atual (usada pela fila de pré-leitura). */
@@ -724,14 +731,25 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
   }, [readingMode]);
 
 
-  /** Encerra a sessão (todas as páginas resolvidas). */
+  /**
+   * Encerra a sessão. Só marca `completed` e limpa o PDF quando NÃO existe
+   * página pendente/erro: com falha pendente a sessão continua retomável, o PDF
+   * é preservado e `onImported` não é chamado.
+   */
   const finishSession = useCallback(async (sessionId: string) => {
+    const pending = failureQueueRef.current.pendingPages();
+    setPendingFailures(failureQueueRef.current.list());
+    if (!canFinishSession(pending)) {
+      setStep('summary');
+      return;
+    }
     await supabase.from('grade_import_sessions')
       .update({ status: 'completed', pdf_base64: null })
       .eq('id', sessionId);
     setStep('summary');
     onImported?.();
   }, [onImported]);
+
 
   /**
    * Página sem nenhuma disciplina reconhecida: ignorada em silêncio.
@@ -762,7 +780,9 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
     setError(null);
     setStep('processing');
     setPreview(null);
+    setFailedPage(null);
     lastLocalPreviewRef.current = null;
+
     /** Página realmente em curso (o laço pode avançar sobre páginas sem disciplina). */
     let currentPage = pageNumber;
     try {
@@ -814,11 +834,17 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
         await persistPreview(sessionId, page, localPreview);
         setLocalSolvedPages((prev) => prev + 1);
         setSession((prev) => (prev ? { ...prev, current_page: page } : prev));
+        // Releitura bem-sucedida: a página deixa de ser falha (status volta ao normal).
+        failureQueueRef.current.resolve(page);
+        setPendingFailures(failureQueueRef.current.list());
+        reprocessingRef.current = false;
+        setFailedPage(null);
         await applyPreview(localPreview);
         // Enquanto o usuário confere esta página, as próximas já são lidas localmente.
         schedulePrefetch(page);
         return;
       }
+
 
       console.info(`[boletim] página ${page}: IA acionada (${decision.reason})`, decision.details);
       setAiPages((prev) => prev + 1);
@@ -861,42 +887,51 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
       }
 
       setSession((prev) => (prev ? { ...prev, current_page: page } : prev));
+      failureQueueRef.current.resolve(page);
+      setPendingFailures(failureQueueRef.current.list());
+      reprocessingRef.current = false;
+      setFailedPage(null);
       await applyPreview(finalPreview);
       schedulePrefetch(page);
       return;
       }
+
     } catch (e) {
       console.error(e);
       if (cancelledRef.current) return;
-      // Falha de leitura NÃO aborta a importação: a página entra na fila de
-      // reprocessamento e a sessão continua na página seguinte.
+      // ORDEM ESTRITA: falha na página N PARA a sessão em N. Nenhuma página
+      // posterior é lida, confirmada ou gravada por conta desta falha.
       const failure = failureQueueRef.current.record({
         page: currentPage, error: e, localPreview: lastLocalPreviewRef.current,
       });
       setPendingFailures(failureQueueRef.current.list());
-      const totalPages = sessionRef.current?.total_pages ?? pdfDocRef.current?.numPages ?? currentPage;
-      const isLastPage = currentPage >= totalPages;
-      const alreadyRetried = failure.attempts > 1;
-      if (isLastPage || alreadyRetried || reprocessingRef.current) {
-        const pending = failureQueueRef.current.pendingPages();
-        const nextPending = pending.find((p) => p !== currentPage);
-        if (reprocessingRef.current && nextPending != null) {
-          toast.error(`Página ${currentPage}: ${failure.message}`);
-          await processPageRef.current?.(sessionId, nextPending);
-          return;
-        }
-        if (isLastPage || reprocessingRef.current) {
-          reprocessingRef.current = false;
-          setError(failure.message);
-          setStep('summary');
-          onImported?.();
-          return;
-        }
+      failureFlow(currentPage);
+      // Falha persistida: sobrevive a refresh/retomada sem perder a prévia local.
+      try {
+        const persistedPreview = lastLocalPreviewRef.current ?? failure.localPreview ?? null;
+        await supabase.from('grade_import_session_pages')
+          .update({
+            status: 'error',
+            error: failure.message,
+            ...(persistedPreview ? { preview_json: persistedPreview as never } : {}),
+          })
+          .eq('session_id', sessionId).eq('page_number', currentPage);
+        await supabase.from('grade_import_sessions')
+          .update({ status: 'processing_page', current_page: currentPage })
+          .eq('id', sessionId);
+      } catch (persistErr) {
+        console.error('Não foi possível registrar a falha da página:', persistErr);
       }
-      toast.error(`Página ${currentPage} não pôde ser lida (${failure.message}). Ela ficará para reprocessar no final.`);
-      await processPageRef.current?.(sessionId, currentPage + 1);
+      sessionRef.current = sessionRef.current ? { ...sessionRef.current, current_page: currentPage } : sessionRef.current;
+      setSession((prev) => (prev ? { ...prev, current_page: currentPage } : prev));
+      setFailedPage(currentPage);
+      setError(failure.message);
+      setStep('failed');
+      reprocessingRef.current = false;
+      toast.error(`Página ${currentPage} não pôde ser lida (${failure.message}).`);
     }
-  }, [applyPreview, persistPreview, takeLocalReading, schedulePrefetch, readingMode, skipPageWithoutSubjects, finishSession, onImported]);
+  }, [applyPreview, persistPreview, takeLocalReading, schedulePrefetch, readingMode, skipPageWithoutSubjects, finishSession]);
+
 
 
   useEffect(() => { processPageRef.current = processPage; }, [processPage]);
@@ -1007,7 +1042,12 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
     }
   };
 
-  /** Retoma na primeira página ainda não confirmada/ignorada. */
+  /**
+   * Retoma na PRIMEIRA página ainda não confirmada/ignorada (inclusive páginas
+   * gravadas como `error`). A fila de falhas é reconstruída a partir do banco,
+   * então um refresh não perde o estado; páginas confirmadas/ignoradas ficam
+   * intocadas.
+   */
   const resumeSession = async (target: SessionState) => {
     cancelledRef.current = false;
     setStep('processing');
@@ -1015,23 +1055,30 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
       await loadContext();
       const { data: pages } = await supabase
         .from('grade_import_session_pages')
-        .select('page_number, status')
+        .select('page_number, status, error, preview_json')
         .eq('school_id', assertActiveSchool(activeSchoolId))
         .eq('session_id', target.id)
         .order('page_number');
-      const next = (pages || []).find((p: { status: string }) => !['confirmed', 'ignored'].includes(p.status));
+      const rows = (pages || []) as { page_number: number; status: string; error: string | null; preview_json: unknown }[];
+      const next = firstUnresolvedPage(rows);
       sessionRef.current = target;
       setSession(target);
       prefetchRef.current.setScope(target.id);
+      failureQueueRef.current.clear();
+      failuresFromRows(rows).forEach((f) => {
+        failureQueueRef.current.record({ page: f.page, error: f.message, localPreview: f.localPreview });
+      });
+      setPendingFailures(failureQueueRef.current.list());
       setResumable(null);
-      if (!next) { setStep('summary'); return; }
-      await processPage(target.id, next.page_number);
+      if (next == null) { await finishSession(target.id); return; }
+      await processPage(target.id, next);
     } catch (e) {
       console.error(e);
       setError(e instanceof Error ? e.message : 'Erro ao retomar a sessão.');
       setStep('failed');
     }
   };
+
 
   const discardSession = async (target: SessionState) => {
     await supabase.functions.invoke('parse-grade-page', { body: { action: 'cancel', session_id: target.id } });
@@ -1333,27 +1380,28 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
     }
   };
 
+  /**
+   * Avança SOMENTE depois de a página atual estar resolvida (confirmada/ignorada).
+   * Falha pendente anterior é reprocessada antes de seguir e impede a finalização:
+   * sem isso a sessão viraria `completed` e o PDF seria apagado com página em erro.
+   */
   const advance = useCallback(async (updated: SessionState) => {
-    // Rodada de reprocessamento: segue apenas pelas páginas que falharam.
-    if (reprocessingRef.current) {
-      const next = failureQueueRef.current.pendingPages()[0];
-      setPendingFailures(failureQueueRef.current.list());
-      if (next != null) { await processPage(updated.id, next); return; }
+    const pending = failureQueueRef.current.pendingPages();
+    setPendingFailures(failureQueueRef.current.list());
+    const decision = resolveAdvance({
+      currentPage: updated.current_page,
+      totalPages: updated.total_pages,
+      pendingFailurePages: pending,
+    });
+    if (decision.action === 'finish') {
       reprocessingRef.current = false;
-      setStep('summary');
-      onImported?.();
+      await finishSession(updated.id);
       return;
     }
-    if (updated.current_page >= updated.total_pages) {
-      await supabase.from('grade_import_sessions')
-        .update({ status: 'completed', pdf_base64: null })
-        .eq('id', updated.id);
-      setStep('summary');
-      onImported?.();
-      return;
-    }
-    await processPage(updated.id, updated.current_page + 1);
-  }, [processPage, onImported]);
+    if (decision.action === 'retry_pending') reprocessingRef.current = true;
+    await processPage(updated.id, decision.page);
+  }, [processPage, finishSession]);
+
 
   /** Salva SOMENTE a página atual e segue para a próxima. */
   const handleConfirmPage = async (mode: 'manual' | 'auto' = 'manual') => {
@@ -1453,10 +1501,13 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
         sort_order: p.sort_order,
       }));
       const periodIdByNorm = targetCacheRef.current.periodIdMap(targetScope);
-      if (periodPayload.length > 0) {
+      // Período já conhecido da turma reutiliza o ID do cache: nenhum round-trip.
+      // (Período não guarda carga semanal nem regra de IRA, então reusar é seguro.)
+      const periodSplit = splitPeriodPayload(periodPayload, periodIdByNorm);
+      if (periodSplit.missing.length > 0) {
         const { data: periodRows, error: periodError } = await supabase
           .from('grade_periods')
-          .upsert(periodPayload, { onConflict: 'class_id,normalized_label' })
+          .upsert(periodSplit.missing, { onConflict: 'class_id,normalized_label' })
           .select('id, normalized_label');
         if (periodError) throw periodError;
         (periodRows || []).forEach((p: { id: string; normalized_label: string }) => {
@@ -1464,6 +1515,7 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
           targetCacheRef.current.putPeriod(targetScope, p);
         });
       }
+
 
       type ExistingSubjectRow = TargetSubjectRow;
       const existingRows = targetCacheRef.current.subjectRows(targetScope);
@@ -1728,6 +1780,31 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
     await advance(updated);
   };
 
+  /**
+   * Página bloqueada por falha de leitura, ignorada por decisão explícita do
+   * usuário: nada acadêmico é gravado e só então a sessão pode seguir.
+   */
+  const handleIgnoreFailedPage = async () => {
+    if (!session || failedPage == null) return;
+    const page = failedPage;
+    const { data: userData } = await supabase.auth.getUser();
+    await supabase.from('grade_import_session_pages')
+      .update({
+        status: 'ignored', error: null,
+        confirmed_by: userData?.user?.id ?? null, confirmed_at: new Date().toISOString(),
+      })
+      .eq('session_id', session.id).eq('page_number', page);
+    const updated: SessionState = { ...session, current_page: page, ignored_pages: session.ignored_pages + 1 };
+    await supabase.from('grade_import_sessions').update({ ignored_pages: updated.ignored_pages }).eq('id', session.id);
+    setSession(updated);
+    setFailedPage(null);
+    failureQueueRef.current.resolve(page);
+    setPendingFailures(failureQueueRef.current.list());
+    toast.info(`Página ${page} ignorada — nada foi gravado.`);
+    await advance(updated);
+  };
+
+
   const handleCancelSession = async () => {
     autoRunRef.current = 'stopped';
     if (session) {
@@ -1738,7 +1815,11 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
     handleClose(false);
   };
 
-  /** Reprocessa somente as páginas que falharam na leitura (nada é regravado). */
+  /**
+   * Reprocessa as páginas que ficaram gravadas como erro (sessões retomadas),
+   * SEMPRE em ordem crescente e uma por vez. Nada é regravado e nenhuma página
+   * posterior é salva antes da falha atual.
+   */
   const handleReprocessFailures = async () => {
     if (!session) return;
     const pending = failureQueueRef.current.pendingPages();
@@ -1748,10 +1829,12 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
     await processPage(session.id, pending[0]);
   };
 
+  /** Reprocessa ESTA página (a sessão está parada nela). */
   const handleRetryPage = async () => {
     if (!session) { setStep('select'); return; }
-    await processPage(session.id, session.current_page || 1);
+    await processPage(session.id, failedPage ?? (session.current_page || 1));
   };
+
 
   /** Autoaceitação: grava e avança sozinho apenas quando a página é 100% elegível. */
   useEffect(() => {
@@ -1950,26 +2033,30 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
           <div className="space-y-4">
             <Alert variant="destructive">
               <AlertTriangle className="w-4 h-4" />
-              <AlertTitle className="text-sm">Esta página não pôde ser lida</AlertTitle>
+              <AlertTitle className="text-sm">
+                {failedPage != null ? `A página ${failedPage} não pôde ser lida` : 'Esta página não pôde ser lida'}
+              </AlertTitle>
               <AlertDescription className="text-xs space-y-1">
                 <p>Causa: {error ?? 'erro desconhecido'}</p>
-                <p>Nenhuma nota foi gravada nesta página. As páginas já confirmadas permanecem salvas.</p>
+                <p>
+                  Nenhuma nota foi gravada nesta página e a importação parou aqui: as páginas seguintes só continuam
+                  depois que esta for resolvida. As páginas já confirmadas permanecem salvas.
+                </p>
               </AlertDescription>
             </Alert>
             <div className="flex flex-wrap gap-2">
-              <Button onClick={handleRetryPage}>Tentar ler novamente</Button>
+              <Button onClick={handleRetryPage} data-testid="retry-this-page">Reprocessar esta página</Button>
               {session && preview && (
                 <Button variant="outline" onClick={handleIgnorePage}>Ignorar esta página</Button>
               )}
-              {session && !preview && session.current_page < session.total_pages && (
-                <Button variant="outline" onClick={() => processPage(session.id, session.current_page + 1)}>
-                  Pular para a próxima página
-                </Button>
+              {session && !preview && failedPage != null && (
+                <Button variant="outline" onClick={handleIgnoreFailedPage}>Ignorar esta página</Button>
               )}
               <Button variant="ghost" onClick={handleCancelSession}>Encerrar importação</Button>
             </div>
           </div>
         )}
+
 
         {step === 'page' && preview && classItem && (
           <div className="space-y-4">
