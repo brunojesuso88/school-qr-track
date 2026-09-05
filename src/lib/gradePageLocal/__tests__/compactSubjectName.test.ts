@@ -26,7 +26,7 @@ describe('nome longo quebrado em duas linhas (espaço perdido)', () => {
 
   it('a matriz oficial usa o nome com o espaço correto', () => {
     expect(INTEGRAL_MATRIX_BY_SERIES.eve2).toContain('ASPECTOS CULTURAIS E DIMENSOES DO TURISMO DE EVENTOS');
-    Object.values(INTEGRAL_MATRIX_BY_SERIES).forEach((names) => {
+    (Object.values(INTEGRAL_MATRIX_BY_SERIES) as string[][]).forEach((names) => {
       expect(names.some((n) => n.includes('DEEVENTOS'))).toBe(false);
     });
   });
