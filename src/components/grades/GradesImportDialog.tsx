@@ -834,11 +834,17 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
         await persistPreview(sessionId, page, localPreview);
         setLocalSolvedPages((prev) => prev + 1);
         setSession((prev) => (prev ? { ...prev, current_page: page } : prev));
+        // Releitura bem-sucedida: a página deixa de ser falha (status volta ao normal).
+        failureQueueRef.current.resolve(page);
+        setPendingFailures(failureQueueRef.current.list());
+        reprocessingRef.current = false;
+        setFailedPage(null);
         await applyPreview(localPreview);
         // Enquanto o usuário confere esta página, as próximas já são lidas localmente.
         schedulePrefetch(page);
         return;
       }
+
 
       console.info(`[boletim] página ${page}: IA acionada (${decision.reason})`, decision.details);
       setAiPages((prev) => prev + 1);
