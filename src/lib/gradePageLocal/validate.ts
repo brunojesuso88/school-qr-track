@@ -140,13 +140,18 @@ export function validateLocalPage(input: ValidateInput): LocalValidation {
   });
   if (conflictingDuplicates > 0) blockers.push('conflicting_duplicate');
 
+  // Leitura do CABEÇALHO x resolução CADASTRAL são coisas distintas:
+  //  - cabeçalho ilegível é falha de leitura (bloqueante, justifica IA);
+  //  - aluno legível mas ainda sem vínculo na turma é pendência de CADASTRO
+  //    (aviso), resolvida na tela — nunca motivo para chamar a IA de novo.
   if (!studentName) {
-    blockers.push('student_unmatched_or_ambiguous');
+    blockers.push('student_header_missing');
     detail.push('Aluno não identificado no cabeçalho');
   } else if (matchScore < MATCH_SCORE_CONFIDENT) {
-    blockers.push('student_unmatched_or_ambiguous');
-    detail.push('Aluno não casado com certeza na turma');
+    advisories.push('student_registry_unresolved');
+    detail.push('Aluno lido no cabeçalho ainda não vinculado a um cadastro desta turma');
   }
+
 
   // Conclusivo = a estrutura foi reconstruída de forma utilizável (mesmo que precise de IA).
   const conclusive = grid.columns.length > 0 && subjects.length > 0 &&
