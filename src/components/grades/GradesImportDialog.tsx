@@ -25,8 +25,11 @@ import {
 } from './gradesAutoAccept';
 import { useAuth } from '@/contexts/AuthContext';
 import {
-  digitsOnly, findGlobalMatch, nameTokens, pickClassName, sanitizeSchoolCodeForStorage,
+  digitsOnly, findGlobalMatch, nameTokens, pickClassName, sameNormalizedName,
+  sanitizeSchoolCodeForStorage,
 } from '@/lib/gradePageLocal/studentMatch';
+import { decideStudentResolution, resolveBeforeCreate } from '@/lib/gradeImport/autoStudentResolution';
+
 import {
   closePdfDocument, extractPageTokens, LocalPdfDocument, openPdfDocument,
 } from '@/lib/gradePageLocal/pdfText';
@@ -1198,33 +1201,41 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
   );
 
   /**
-   * Resolução automática do aluno da página quando a exceção está ativa:
-   * move o candidato único de outra turma, vincula o sugerido ou cria pelo boletim.
-   * Erros reais de nota continuam bloqueando (nada é gravado aqui).
+   * Resolução CADASTRAL do aluno da página — independente da elegibilidade para
+   * gravar notas: erro de nota é resolvido na tabela, não muda quem é o aluno.
+   */
+  const studentResolution = useMemo(() => decideStudentResolution({
+    ruleActive: unmatchedExceptionActive,
+    conflicts: preview?.detected.conflicts ?? [],
+    pdfName: preview?.detected.pdf_name ?? null,
+    suggestedStudentId: preview?.detected.student_id ?? null,
+    otherClassStudentId: otherClassMatch?.id ?? null,
+  }), [unmatchedExceptionActive, preview, otherClassMatch]);
+
+  /**
+   * Aplica a resolução automática (nada é gravado no acadêmico aqui):
+   * move o candidato único de outra turma, vincula o sugerido ou marca "cadastrar".
    */
   useEffect(() => {
     if (step !== 'page' || !preview || !session) return;
-    if (!unmatchedExceptionActive) return;
-    if (!autoEval.eligible || canConfirmPage) return;
-    if (invalidCount > 0 || manualBlockers.length > 0) return;
+    if (studentResolution.action === 'manual') return;
+    if (linkStudentId) return;
     const key = `${session.id}:${preview.page}`;
     if (autoStudentRef.current === key) return;
     autoStudentRef.current = key;
-    if (otherClassMatch) {
+    if (studentResolution.action === 'move') {
       if (!movingStudent) void handleMoveStudentToClass();
       return;
     }
-    if (preview.detected.student_id) {
+    if (studentResolution.action === 'link') {
       setPageAction('link');
-      setLinkStudentId(preview.detected.student_id);
+      setLinkStudentId(studentResolution.studentId);
       return;
     }
     setPageAction('create');
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    step, preview, session, unmatchedExceptionActive, autoEval.eligible, canConfirmPage,
-    invalidCount, manualBlockers.length, otherClassMatch, movingStudent,
-  ]);
+  }, [step, preview, session, studentResolution, linkStudentId, movingStudent]);
+
 
   /** Ação contextual: adota a leitura local do boletim e retoma o fluxo automático. */
   const handleUseLocalReading = async () => {
@@ -1416,6 +1427,59 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
 
       // Cadastro de aluno novo a partir do boletim
       if (pageAction === 'create') {
+        const targetClassName = effectiveNameRef.current || effectiveName || classItem.name;
+        // Reconsulta DEFENSIVA por identidade forte (código ou nome idêntico) na escola
+        // ativa: se o aluno já existe, vincula/move em vez de criar uma duplicata.
+        const nameTokenList = nameTokens(detected.pdf_name);
+        const code = digitsOnly(detected.pdf_code);
+        const existingRes = await supabase
+          .from('students')
+          .select('id, full_name, class, school_code')
+          .eq('school_id', assertActiveSchool(activeSchoolId))
+          .or([
+            code ? `school_code.ilike.%${code}%` : null,
+            nameTokenList.length > 0 ? `full_name.ilike.%${nameTokenList[0]}%` : null,
+          ].filter(Boolean).join(','))
+          .limit(200);
+        if (existingRes.error) throw existingRes.error;
+        const existing = (existingRes.data || []) as { id: string; full_name: string; class: string; school_code: string | null }[];
+        const guard = resolveBeforeCreate(
+          { name: detected.pdf_name, code: detected.pdf_code },
+          existing,
+          { sameCode: (a, b) => Boolean(digitsOnly(a)) && digitsOnly(a) === digitsOnly(b), sameName: sameNormalizedName },
+        );
+        if (guard.action === 'manual') {
+          throw new Error('Há mais de um aluno com essa identidade na escola. Escolha o aluno correto na lista antes de continuar.');
+        }
+        if (guard.action === 'link' && guard.studentId) {
+          const found = existing.find((s) => s.id === guard.studentId)!;
+          if (found.class !== targetClassName) {
+            const { error: moveError } = await supabase
+              .from('students').update({ class: targetClassName })
+              .eq('id', found.id).eq('school_id', assertActiveSchool(activeSchoolId));
+            if (moveError) throw moveError;
+            await supabase.from('audit_logs').insert({
+              user_id: userId,
+              action: 'UPDATE',
+              table_name: 'students',
+              record_id: found.id,
+              old_data: { class: found.class } as never,
+              new_data: { class: targetClassName, reason: 'Aluno já cadastrado, localizado na importação do boletim' } as never,
+            });
+          }
+          studentId = found.id;
+          setPageAction('link');
+          setLinkStudentId(found.id);
+          setClassStudents((prev) =>
+            prev.some((s) => s.id === found.id) ? prev : [...prev, { id: found.id, full_name: found.full_name }]);
+          if (!localStudentsRef.current.some((s) => s.id === found.id)) {
+            localStudentsRef.current = [...localStudentsRef.current, {
+              id: found.id, full_name: found.full_name, school_code: found.school_code,
+            } as LocalContextStudent];
+          }
+        }
+      }
+      if (pageAction === 'create' && !studentId) {
         const shiftCode = classItem.shift === 'morning' ? 'M' : classItem.shift === 'afternoon' ? 'T' : 'N';
         const initials = detected.pdf_name.trim().split(/\s+/).filter(Boolean).map((p) => p[0].toUpperCase()).join('');
         const { data: created, error: createError } = await supabase
@@ -1437,6 +1501,7 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
           .single();
         if (createError) throw createError;
         studentId = created.id;
+
         // Contexto local passa a conhecer o aluno recém-criado (páginas seguintes).
         setClassStudents((prev) =>
           prev.some((s) => s.id === created.id) ? prev : [...prev, { id: created.id, full_name: detected.pdf_name }]);

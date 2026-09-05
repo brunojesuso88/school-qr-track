@@ -24,13 +24,30 @@ export type AiDecisionReason =
 
 export type ReadingOrigin = 'local_conclusive' | 'local_validated' | 'ai_fallback' | 'ai_only';
 
+/**
+ * Bloqueantes de natureza CADASTRAL: o boletim foi lido, o que falta é o vínculo do
+ * aluno com um cadastro da turma. Resolver isso é papel da tela (vincular/mover/criar),
+ * nunca motivo para uma nova leitura por IA — a IA não conhece o cadastro.
+ */
+export const REGISTRY_ONLY_BLOCKERS = [
+  'student_unmatched_or_ambiguous',
+  'student_registry_unresolved',
+  'student_not_in_class',
+  'not_in_class',
+];
+
+/** Bloqueantes que realmente pedem uma segunda leitura. */
+export const blockersRequiringAi = (blockers: string[] | null | undefined) =>
+  (blockers ?? []).filter((b) => !REGISTRY_ONLY_BLOCKERS.includes(b));
+
 export interface LocalResultLike {
   ok: boolean;
   authoritative: boolean;
   preview: unknown | null;
-  validation?: { reasons?: string[]; score?: number };
+  validation?: { reasons?: string[]; score?: number; blockers?: string[]; conclusive?: boolean };
   reading?: { blockers?: string[] } | null;
 }
+
 
 export interface AiFallbackContext {
   mode: ReadingModeName;
@@ -66,7 +83,18 @@ export const decideAiFallback = (
     return { useAi: true, reason: 'local_failed', origin: 'ai_fallback', details };
   }
   const localOk = !!local && local.ok && local.preview != null;
-  const localAuthoritative = !!local && local.authoritative;
+  /**
+   * Pendência apenas cadastral não derruba a autoridade da leitura local:
+   * a página foi lida corretamente; falta escolher/criar o aluno na tela.
+   */
+  const registryOnly = localOk
+    && (local?.validation?.conclusive ?? true)
+    && blockersRequiringAi([
+      ...(local?.validation?.blockers ?? []),
+      ...(local?.reading?.blockers ?? []),
+    ]).length === 0;
+  const localAuthoritative = (!!local && local.authoritative) || registryOnly;
+
   if (context.mode === 'always_ai') {
     return {
       useAi: true,

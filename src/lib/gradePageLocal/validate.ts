@@ -42,7 +42,7 @@ const BLOCKER_MESSAGES: Record<string, string> = {
   ambiguous_geometry: 'Célula ambígua por geometria da página',
   orphan_grade_tokens: 'Valor com aparência de nota fora das colunas conhecidas',
   low_confidence_grade: 'Célula de nota com baixa confiança',
-  student_unmatched_or_ambiguous: 'Aluno não identificado com segurança na turma',
+  student_header_missing: 'Aluno não identificado no cabeçalho da página',
 };
 
 const ADVISORY_MESSAGES: Record<string, string> = {
@@ -51,7 +51,9 @@ const ADVISORY_MESSAGES: Record<string, string> = {
   subheader_missing: 'Subcolunas Nota/Faltas não identificadas (geometria das colunas resolvida)',
   unknown_period: 'Coluna de período não classificada',
   orphan_tokens: 'Tokens fora das colunas conhecidas que não são notas',
+  student_registry_unresolved: 'Aluno lido no cabeçalho ainda não vinculado a um cadastro da turma',
 };
+
 
 export function validateLocalPage(input: ValidateInput): LocalValidation {
   const blockers: string[] = [];
@@ -138,13 +140,18 @@ export function validateLocalPage(input: ValidateInput): LocalValidation {
   });
   if (conflictingDuplicates > 0) blockers.push('conflicting_duplicate');
 
+  // Leitura do CABEÇALHO x resolução CADASTRAL são coisas distintas:
+  //  - cabeçalho ilegível é falha de leitura (bloqueante, justifica IA);
+  //  - aluno legível mas ainda sem vínculo na turma é pendência de CADASTRO
+  //    (aviso), resolvida na tela — nunca motivo para chamar a IA de novo.
   if (!studentName) {
-    blockers.push('student_unmatched_or_ambiguous');
+    blockers.push('student_header_missing');
     detail.push('Aluno não identificado no cabeçalho');
   } else if (matchScore < MATCH_SCORE_CONFIDENT) {
-    blockers.push('student_unmatched_or_ambiguous');
-    detail.push('Aluno não casado com certeza na turma');
+    advisories.push('student_registry_unresolved');
+    detail.push('Aluno lido no cabeçalho ainda não vinculado a um cadastro desta turma');
   }
+
 
   // Conclusivo = a estrutura foi reconstruída de forma utilizável (mesmo que precise de IA).
   const conclusive = grid.columns.length > 0 && subjects.length > 0 &&
