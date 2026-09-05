@@ -1790,7 +1790,11 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
     handleClose(false);
   };
 
-  /** Reprocessa somente as páginas que falharam na leitura (nada é regravado). */
+  /**
+   * Reprocessa as páginas que ficaram gravadas como erro (sessões retomadas),
+   * SEMPRE em ordem crescente e uma por vez. Nada é regravado e nenhuma página
+   * posterior é salva antes da falha atual.
+   */
   const handleReprocessFailures = async () => {
     if (!session) return;
     const pending = failureQueueRef.current.pendingPages();
@@ -1800,10 +1804,12 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
     await processPage(session.id, pending[0]);
   };
 
+  /** Reprocessa ESTA página (a sessão está parada nela). */
   const handleRetryPage = async () => {
     if (!session) { setStep('select'); return; }
-    await processPage(session.id, session.current_page || 1);
+    await processPage(session.id, failedPage ?? session.current_page || 1);
   };
+
 
   /** Autoaceitação: grava e avança sozinho apenas quando a página é 100% elegível. */
   useEffect(() => {
