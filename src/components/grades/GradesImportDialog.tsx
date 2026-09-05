@@ -1380,27 +1380,28 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
     }
   };
 
+  /**
+   * Avança SOMENTE depois de a página atual estar resolvida (confirmada/ignorada).
+   * Falha pendente anterior é reprocessada antes de seguir e impede a finalização:
+   * sem isso a sessão viraria `completed` e o PDF seria apagado com página em erro.
+   */
   const advance = useCallback(async (updated: SessionState) => {
-    // Rodada de reprocessamento: segue apenas pelas páginas que falharam.
-    if (reprocessingRef.current) {
-      const next = failureQueueRef.current.pendingPages()[0];
-      setPendingFailures(failureQueueRef.current.list());
-      if (next != null) { await processPage(updated.id, next); return; }
+    const pending = failureQueueRef.current.pendingPages();
+    setPendingFailures(failureQueueRef.current.list());
+    const decision = resolveAdvance({
+      currentPage: updated.current_page,
+      totalPages: updated.total_pages,
+      pendingFailurePages: pending,
+    });
+    if (decision.action === 'finish') {
       reprocessingRef.current = false;
-      setStep('summary');
-      onImported?.();
+      await finishSession(updated.id);
       return;
     }
-    if (updated.current_page >= updated.total_pages) {
-      await supabase.from('grade_import_sessions')
-        .update({ status: 'completed', pdf_base64: null })
-        .eq('id', updated.id);
-      setStep('summary');
-      onImported?.();
-      return;
-    }
-    await processPage(updated.id, updated.current_page + 1);
-  }, [processPage, onImported]);
+    if (decision.action === 'retry_pending') reprocessingRef.current = true;
+    await processPage(updated.id, decision.page);
+  }, [processPage, finishSession]);
+
 
   /** Salva SOMENTE a página atual e segue para a próxima. */
   const handleConfirmPage = async (mode: 'manual' | 'auto' = 'manual') => {
