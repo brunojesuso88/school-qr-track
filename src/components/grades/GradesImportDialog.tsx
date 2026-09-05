@@ -1042,7 +1042,12 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
     }
   };
 
-  /** Retoma na primeira página ainda não confirmada/ignorada. */
+  /**
+   * Retoma na PRIMEIRA página ainda não confirmada/ignorada (inclusive páginas
+   * gravadas como `error`). A fila de falhas é reconstruída a partir do banco,
+   * então um refresh não perde o estado; páginas confirmadas/ignoradas ficam
+   * intocadas.
+   */
   const resumeSession = async (target: SessionState) => {
     cancelledRef.current = false;
     setStep('processing');
@@ -1050,23 +1055,30 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
       await loadContext();
       const { data: pages } = await supabase
         .from('grade_import_session_pages')
-        .select('page_number, status')
+        .select('page_number, status, error, preview_json')
         .eq('school_id', assertActiveSchool(activeSchoolId))
         .eq('session_id', target.id)
         .order('page_number');
-      const next = (pages || []).find((p: { status: string }) => !['confirmed', 'ignored'].includes(p.status));
+      const rows = (pages || []) as { page_number: number; status: string; error: string | null; preview_json: unknown }[];
+      const next = firstUnresolvedPage(rows);
       sessionRef.current = target;
       setSession(target);
       prefetchRef.current.setScope(target.id);
+      failureQueueRef.current.clear();
+      failuresFromRows(rows).forEach((f) => {
+        failureQueueRef.current.record({ page: f.page, error: f.message, localPreview: f.localPreview });
+      });
+      setPendingFailures(failureQueueRef.current.list());
       setResumable(null);
-      if (!next) { setStep('summary'); return; }
-      await processPage(target.id, next.page_number);
+      if (next == null) { await finishSession(target.id); return; }
+      await processPage(target.id, next);
     } catch (e) {
       console.error(e);
       setError(e instanceof Error ? e.message : 'Erro ao retomar a sessão.');
       setStep('failed');
     }
   };
+
 
   const discardSession = async (target: SessionState) => {
     await supabase.functions.invoke('parse-grade-page', { body: { action: 'cancel', session_id: target.id } });
