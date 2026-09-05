@@ -887,10 +887,15 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
       }
 
       setSession((prev) => (prev ? { ...prev, current_page: page } : prev));
+      failureQueueRef.current.resolve(page);
+      setPendingFailures(failureQueueRef.current.list());
+      reprocessingRef.current = false;
+      setFailedPage(null);
       await applyPreview(finalPreview);
       schedulePrefetch(page);
       return;
       }
+
     } catch (e) {
       console.error(e);
       if (cancelledRef.current) return;
