@@ -1780,6 +1780,31 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
     await advance(updated);
   };
 
+  /**
+   * Página bloqueada por falha de leitura, ignorada por decisão explícita do
+   * usuário: nada acadêmico é gravado e só então a sessão pode seguir.
+   */
+  const handleIgnoreFailedPage = async () => {
+    if (!session || failedPage == null) return;
+    const page = failedPage;
+    const { data: userData } = await supabase.auth.getUser();
+    await supabase.from('grade_import_session_pages')
+      .update({
+        status: 'ignored', error: null,
+        confirmed_by: userData?.user?.id ?? null, confirmed_at: new Date().toISOString(),
+      })
+      .eq('session_id', session.id).eq('page_number', page);
+    const updated: SessionState = { ...session, current_page: page, ignored_pages: session.ignored_pages + 1 };
+    await supabase.from('grade_import_sessions').update({ ignored_pages: updated.ignored_pages }).eq('id', session.id);
+    setSession(updated);
+    setFailedPage(null);
+    failureQueueRef.current.resolve(page);
+    setPendingFailures(failureQueueRef.current.list());
+    toast.info(`Página ${page} ignorada — nada foi gravado.`);
+    await advance(updated);
+  };
+
+
   const handleCancelSession = async () => {
     autoRunRef.current = 'stopped';
     if (session) {
