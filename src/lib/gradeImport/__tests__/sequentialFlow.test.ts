@@ -70,6 +70,6 @@ describe('reuso de períodos já conhecidos da turma', () => {
       known,
     );
     expect(split.missing.map((p) => p.normalized_label)).toEqual(['2 bimestre']);
-    expect(split.reused).toBe(1);
+    expect(split.reused).toEqual([{ normalized_label: '1 bimestre', id: 'p1' }]);
   });
 });
