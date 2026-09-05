@@ -106,10 +106,20 @@ export function matchSubjectAnchor(
   }
   if (exact.length > 1) return null;
 
+  // 1.5) igualdade SEM espaços: nomes longos quebrados em duas linhas do boletim
+  // perdem o espaço na junção ("... TURISMO DEEVENTOS" == "... TURISMO DE EVENTOS").
+  const compact = compactKey(norm);
+  if (compact.length >= 8) {
+    const compactHits = anchors.filter((a) => a.keys.some((k) => compactKey(k) === compact));
+    if (compactHits.length === 1) return { anchor: compactHits[0], kind: 'exact', score: 1 };
+    if (compactHits.length > 1) return null;
+  }
+
   // 2) abreviação (igualdade exata)
   const abbr = anchors.filter((a) => a.abbreviation && a.abbreviation === norm);
   if (abbr.length === 1) return { anchor: abbr[0], kind: 'abbreviation', score: 1 };
   if (abbr.length > 1) return null;
+
 
   // 3) prefixo / contém — só com candidato único e texto suficientemente longo
   if (norm.length >= 4) {
