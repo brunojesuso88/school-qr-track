@@ -1738,6 +1738,16 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
     handleClose(false);
   };
 
+  /** Reprocessa somente as páginas que falharam na leitura (nada é regravado). */
+  const handleReprocessFailures = async () => {
+    if (!session) return;
+    const pending = failureQueueRef.current.pendingPages();
+    if (pending.length === 0) { toast.info('Nenhuma página pendente de releitura.'); return; }
+    reprocessingRef.current = true;
+    setError(null);
+    await processPage(session.id, pending[0]);
+  };
+
   const handleRetryPage = async () => {
     if (!session) { setStep('select'); return; }
     await processPage(session.id, session.current_page || 1);
@@ -2397,6 +2407,21 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
                 timingsMs: localTimings,
               }))}
             </p>
+            {reusedPrefetchPages > 0 && (
+              <p className="text-xs text-muted-foreground">
+                {reusedPrefetchPages} página(s) já estavam lidas de antemão, sem espera.
+              </p>
+            )}
+            {pendingFailures.length > 0 && (
+              <div className="rounded-md border border-amber-300 bg-amber-50 p-2 space-y-2">
+                <p className="text-xs text-amber-800" data-testid="pending-failures">
+                  {formatPageFailures(pendingFailures)}
+                </p>
+                <Button size="sm" variant="outline" onClick={handleReprocessFailures}>
+                  Reprocessar páginas pendentes
+                </Button>
+              </div>
+            )}
             {skippedPages.length > 0 && (
               <p className="text-xs text-muted-foreground">
                 Página(s) sem nenhuma disciplina ignorada(s): {skippedPages.join(', ')}. Nada foi gravado por causa delas.
