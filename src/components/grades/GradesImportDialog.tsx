@@ -64,9 +64,10 @@ import {
   defaultRegistrationDecision, formatDate,
 } from './gradesConflicts';
 import {
-  assertPersistedStudent, PersistedStudentMemory, recallPersistedStudent, rememberPersistedStudent,
+  assertPersistedStudent, PersistedStudentMemory, rememberPersistedStudent,
   StudentScopeRow,
 } from '@/lib/gradeImport/persistedStudent';
+import { rebindDetectedStudent } from '@/lib/gradeImport/studentRebind';
 import { describeSaveError } from '@/lib/gradeImport/saveError';
 import { decideAiFallback, readingOriginLabel, readingUsedAi } from '@/lib/gradeImport/aiPolicy';
 import { contextCacheKey, ImportContextCache } from '@/lib/gradeImport/contextCache';
@@ -1263,6 +1264,11 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
         school_code: identity.schoolCode ?? null,
       } as LocalContextStudent];
     }
+    // Registro IMEDIATO na memória da sessão: elimina a janela de corrida com o
+    // prefetch das próximas páginas do MESMO aluno.
+    persistedStudentsRef.current = rememberPersistedStudent(
+      persistedStudentsRef.current, p.detected, identity.studentId,
+    );
     await loadPageConflicts(identity.studentId, nextPreview);
   }, [loadPageConflicts]);
 
