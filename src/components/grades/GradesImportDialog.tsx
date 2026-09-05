@@ -868,35 +868,39 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
     } catch (e) {
       console.error(e);
       if (cancelledRef.current) return;
-      // Falha de leitura NÃO aborta a importação: a página entra na fila de
-      // reprocessamento e a sessão continua na página seguinte.
+      // ORDEM ESTRITA: falha na página N PARA a sessão em N. Nenhuma página
+      // posterior é lida, confirmada ou gravada por conta desta falha.
       const failure = failureQueueRef.current.record({
         page: currentPage, error: e, localPreview: lastLocalPreviewRef.current,
       });
       setPendingFailures(failureQueueRef.current.list());
-      const totalPages = sessionRef.current?.total_pages ?? pdfDocRef.current?.numPages ?? currentPage;
-      const isLastPage = currentPage >= totalPages;
-      const alreadyRetried = failure.attempts > 1;
-      if (isLastPage || alreadyRetried || reprocessingRef.current) {
-        const pending = failureQueueRef.current.pendingPages();
-        const nextPending = pending.find((p) => p !== currentPage);
-        if (reprocessingRef.current && nextPending != null) {
-          toast.error(`Página ${currentPage}: ${failure.message}`);
-          await processPageRef.current?.(sessionId, nextPending);
-          return;
-        }
-        if (isLastPage || reprocessingRef.current) {
-          reprocessingRef.current = false;
-          setError(failure.message);
-          setStep('summary');
-          onImported?.();
-          return;
-        }
+      failureFlow(currentPage);
+      // Falha persistida: sobrevive a refresh/retomada sem perder a prévia local.
+      try {
+        const persistedPreview = lastLocalPreviewRef.current ?? failure.localPreview ?? null;
+        await supabase.from('grade_import_session_pages')
+          .update({
+            status: 'error',
+            error: failure.message,
+            ...(persistedPreview ? { preview_json: persistedPreview as never } : {}),
+          })
+          .eq('session_id', sessionId).eq('page_number', currentPage);
+        await supabase.from('grade_import_sessions')
+          .update({ status: 'processing_page', current_page: currentPage })
+          .eq('id', sessionId);
+      } catch (persistErr) {
+        console.error('Não foi possível registrar a falha da página:', persistErr);
       }
-      toast.error(`Página ${currentPage} não pôde ser lida (${failure.message}). Ela ficará para reprocessar no final.`);
-      await processPageRef.current?.(sessionId, currentPage + 1);
+      sessionRef.current = sessionRef.current ? { ...sessionRef.current, current_page: currentPage } : sessionRef.current;
+      setSession((prev) => (prev ? { ...prev, current_page: currentPage } : prev));
+      setFailedPage(currentPage);
+      setError(failure.message);
+      setStep('failed');
+      reprocessingRef.current = false;
+      toast.error(`Página ${currentPage} não pôde ser lida (${failure.message}).`);
     }
-  }, [applyPreview, persistPreview, takeLocalReading, schedulePrefetch, readingMode, skipPageWithoutSubjects, finishSession, onImported]);
+  }, [applyPreview, persistPreview, takeLocalReading, schedulePrefetch, readingMode, skipPageWithoutSubjects, finishSession]);
+
 
 
   useEffect(() => { processPageRef.current = processPage; }, [processPage]);
