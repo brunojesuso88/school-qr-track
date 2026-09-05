@@ -1501,10 +1501,13 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
         sort_order: p.sort_order,
       }));
       const periodIdByNorm = targetCacheRef.current.periodIdMap(targetScope);
-      if (periodPayload.length > 0) {
+      // Período já conhecido da turma reutiliza o ID do cache: nenhum round-trip.
+      // (Período não guarda carga semanal nem regra de IRA, então reusar é seguro.)
+      const periodSplit = splitPeriodPayload(periodPayload, periodIdByNorm);
+      if (periodSplit.missing.length > 0) {
         const { data: periodRows, error: periodError } = await supabase
           .from('grade_periods')
-          .upsert(periodPayload, { onConflict: 'class_id,normalized_label' })
+          .upsert(periodSplit.missing, { onConflict: 'class_id,normalized_label' })
           .select('id, normalized_label');
         if (periodError) throw periodError;
         (periodRows || []).forEach((p: { id: string; normalized_label: string }) => {
@@ -1512,6 +1515,7 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
           targetCacheRef.current.putPeriod(targetScope, p);
         });
       }
+
 
       type ExistingSubjectRow = TargetSubjectRow;
       const existingRows = targetCacheRef.current.subjectRows(targetScope);
