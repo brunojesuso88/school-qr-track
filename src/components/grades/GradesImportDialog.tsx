@@ -780,7 +780,9 @@ export const GradesImportDialog = ({ open, onOpenChange, classItem, onImported }
     setError(null);
     setStep('processing');
     setPreview(null);
+    setFailedPage(null);
     lastLocalPreviewRef.current = null;
+
     /** Página realmente em curso (o laço pode avançar sobre páginas sem disciplina). */
     let currentPage = pageNumber;
     try {
