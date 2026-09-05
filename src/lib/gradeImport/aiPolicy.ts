@@ -83,7 +83,18 @@ export const decideAiFallback = (
     return { useAi: true, reason: 'local_failed', origin: 'ai_fallback', details };
   }
   const localOk = !!local && local.ok && local.preview != null;
-  const localAuthoritative = !!local && local.authoritative;
+  /**
+   * Pendência apenas cadastral não derruba a autoridade da leitura local:
+   * a página foi lida corretamente; falta escolher/criar o aluno na tela.
+   */
+  const registryOnly = localOk
+    && (local?.validation?.conclusive ?? true)
+    && blockersRequiringAi([
+      ...(local?.validation?.blockers ?? []),
+      ...(local?.reading?.blockers ?? []),
+    ]).length === 0;
+  const localAuthoritative = (!!local && local.authoritative) || registryOnly;
+
   if (context.mode === 'always_ai') {
     return {
       useAi: true,
