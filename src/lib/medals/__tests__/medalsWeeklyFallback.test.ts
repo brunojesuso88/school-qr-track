@@ -10,7 +10,7 @@ import type { ClassGradesData } from '@/hooks/useStudentGrades';
 import { buildIraInputs, resolveIraPeriods, toPeriodRefs } from '@/hooks/useStudentGrades';
 import { calculateIraMultiPeriod } from '@/lib/ira';
 import { buildMatrixWeeklyByKey } from '@/lib/curriculumMatrixWeekly';
-import { buildMatrixIraWeightIndex } from '@/lib/curriculumMatrixIraWeight';
+import { buildMatrixIraWeightIndex, emptyIraWeightIndex } from '@/lib/curriculumMatrixIraWeight';
 import { computeAreaIra, computeMedals } from '../compute';
 
 const P1 = { id: 'p1', class_id: 'c1', label: '1º Período', normalized_label: '1º periodo', kind: 'period', sort_order: 1 };
