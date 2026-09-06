@@ -61,4 +61,25 @@ describe('matriz correspondente na criação da turma', () => {
     expect(r.candidates.map((m) => m.school_id)).toEqual(['escola-a']);
     expect(r.matrixId).toBe('a1');
   });
+
+  it('matriz OFICIAL da escola tem prioridade quando atende a série', () => {
+    const r = selectMatrixForSeries(
+      [matrix('m1', 'Matriz Original'), matrix('m2', 'Matriz Integral')],
+      { m1: 16, m2: 23 },
+      'm2',
+    );
+    expect(r.matrixId).toBe('m2');
+    expect(r.autoApply).toBe(true);
+    expect(r.needsChoice).toBe(false);
+  });
+
+  it('matriz oficial da escola sem componentes na série => volta a exigir escolha', () => {
+    const r = selectMatrixForSeries(
+      [matrix('m1', 'Matriz Original'), matrix('m2', 'Matriz Integral')],
+      { m1: 16, m2: 23 },
+      'm3',
+    );
+    expect(r.matrixId).toBeNull();
+    expect(r.needsChoice).toBe(true);
+  });
 });
