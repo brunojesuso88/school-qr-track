@@ -201,6 +201,40 @@ export function resolveWeight(
   return { weight: null, source: 'none' };
 }
 
+/**
+ * PURO — valor que o campo de peso da aba IRA deve exibir. Nunca vazio quando a
+ * matriz já define o peso: override da turma > peso da matriz > vazio (pendente).
+ */
+export function weightInputValue(subject: {
+  iraWeight?: number | null;
+  customWeight?: number | null;
+}): string {
+  const { weight } = resolveWeight({
+    iraWeight: subject.iraWeight ?? null,
+    customWeight: subject.customWeight ?? null,
+  });
+  return weight == null ? '' : String(weight);
+}
+
+/**
+ * PURO — patch de `custom_ira_weight` a partir do que o usuário digitou.
+ * Igual ao peso base (ou vazio) => volta a herdar a matriz (`null`).
+ */
+export function customWeightPatch(
+  raw: string,
+  baseWeight: number | null | undefined,
+): { custom_ira_weight: number | null } | null {
+  const trimmed = raw.trim();
+  if (trimmed === '') return { custom_ira_weight: null };
+  const value = Number(trimmed);
+  if (!Number.isFinite(value) || value <= 0) return null;
+  if (baseWeight != null && Number.isFinite(baseWeight) && value === baseWeight) {
+    return { custom_ira_weight: null };
+  }
+  return { custom_ira_weight: value };
+}
+
+
 export interface CalculateIraOptions {
   /** Motivo específico quando não há configuração (mensagem exibida no card). */
   notConfiguredReason?: string;
