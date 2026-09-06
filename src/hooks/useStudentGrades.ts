@@ -246,7 +246,10 @@ async function fetchClassGrades(
   const series = parseSeriesValue(classInfo?.series ?? null);
   // Carga/participação vêm da matriz efetivamente atribuída à turma.
   const matrixIds = classInfo?.curriculum_matrix_id ? [classInfo.curriculum_matrix_id] : undefined;
-  const matrixWeeklyByKey = await fetchMatrixWeeklyByKey([series], schoolId, matrixIds);
+  const [matrixWeeklyByKey, matrixIraWeightByKey] = await Promise.all([
+    fetchMatrixWeeklyByKey([series], schoolId, matrixIds),
+    fetchMatrixIraWeightByKey([series], schoolId, matrixIds),
+  ]);
 
   return {
     subjects,
@@ -255,8 +258,10 @@ async function fetchClassGrades(
     settings: (settingsRes.data as unknown as IraSettingsRow) ?? null,
     currentWeeklyClasses,
     matrixWeeklyByKey,
+    matrixIraWeightByKey,
   };
 }
+
 
 /** Carrega notas + configuração de IRA de uma turma inteira (em lote). */
 export function useClassGrades(classId: string | null, studentIds?: string[]) {
