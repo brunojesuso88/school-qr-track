@@ -71,7 +71,8 @@ export async function fetchSubjectIdsWithGrades(subjectIds: string[], schoolId: 
 
 /**
  * Matriz curricular efetiva da turma: a atribuída em `classes.curriculum_matrix_id`
- * ou, na ausência dela, a Matriz Original da escola.
+ * ou, na ausência dela, a MATRIZ OFICIAL DA ESCOLA (`schools.curriculum_matrix_id`);
+ * só em último caso a Matriz Original.
  */
 export async function resolveClassMatrix(
   classId: string,
@@ -90,6 +91,16 @@ export async function resolveClassMatrix(
   } | null;
   if (row?.curriculum_matrix_id) {
     return { id: row.curriculum_matrix_id, name: row.curriculum_matrices?.name ?? null };
+  }
+  const schoolMatrixId = await fetchSchoolMatrixId(schoolId);
+  if (schoolMatrixId) {
+    const { data: matrixRow } = await supabase
+      .from('curriculum_matrices')
+      .select('name')
+      .eq('school_id', schoolId)
+      .eq('id', schoolMatrixId)
+      .maybeSingle();
+    return { id: schoolMatrixId, name: (matrixRow as { name: string } | null)?.name ?? null };
   }
   const original = await fetchOriginalMatrixId(schoolId);
   return { id: original, name: original ? 'Matriz Original' : null };
