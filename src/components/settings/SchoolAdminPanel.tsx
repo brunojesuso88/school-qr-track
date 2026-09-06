@@ -1011,6 +1011,45 @@ const SchoolAdminPanel = () => {
                 </p>
               </div>
 
+              <div className="space-y-2 rounded-md border p-3">
+                <div className="flex items-center gap-2">
+                  <Label>Matriz curricular</Label>
+                  {matrixLoading && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
+                </div>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <Select value={matrixDraft} onValueChange={setMatrixDraft} disabled={matrixLoading}>
+                    <SelectTrigger className="flex-1">
+                      <SelectValue placeholder="Selecione a matriz curricular" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {matrixOptions.map((m) => (
+                        <SelectItem key={m.id} value={m.id}>
+                          {m.name}
+                          {m.id === currentMatrixId ? ' — matriz vigente' : ''}
+                          {' · '}{m.components} componentes
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    disabled={savingMatrix || !needsMatrixUpdate(currentMatrixId, matrixDraft)}
+                    onClick={() => saveCurriculumMatrix(manageSchool.school_id)}
+                  >
+                    {savingMatrix && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}Salvar
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Matriz vigente:{' '}
+                  <strong>
+                    {matrixOptions.find((m) => m.id === currentMatrixId)?.name ?? 'não definida'}
+                  </strong>
+                  . Ela é a fonte oficial das disciplinas e do peso do IRA desta escola. Trocar a matriz
+                  não altera notas já lançadas nem o histórico dos alunos.
+                </p>
+              </div>
+
+
+
               <div className="flex items-center justify-between gap-3 rounded-md border p-3">
                 <div>
                   <p className="text-sm font-medium">Aceitar novos cadastros automaticamente</p>
