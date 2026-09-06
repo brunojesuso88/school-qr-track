@@ -83,7 +83,7 @@ const emptyData: ClassGradesData = {
   settings: null,
   currentWeeklyClasses: {},
   matrixWeeklyByKey: {},
-};
+  matrixIraWeightByKey: {},
 
 /**
  * Resolve os períodos usados no IRA conforme a configuração da turma.
