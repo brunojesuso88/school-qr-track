@@ -64,8 +64,6 @@ const SubjectsContent = () => {
   });
 
   // Nova matriz
-  const [creatingMatrix, setCreatingMatrix] = useState(false);
-  const [matrixForm, setMatrixForm] = useState({ name: "", description: "", copyFrom: "none" });
 
   // Importar de outra matriz
   const [importOpen, setImportOpen] = useState(false);
