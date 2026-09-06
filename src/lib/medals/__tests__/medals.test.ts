@@ -8,6 +8,10 @@ const P1 = { id: 'p1', class_id: 'c1', label: '1º Período', normalized_label: 
 const P2 = { id: 'p2', class_id: 'c1', label: '2º Período', normalized_label: '2º periodo', kind: 'period', sort_order: 2 };
 const FINAL = { id: 'pf', class_id: 'c1', label: 'Final', normalized_label: 'final', kind: 'final', sort_order: 9 };
 
+/**
+ * Fixture: o peso do IRA é EXPLÍCITO (`ira_weight`). A carga semanal permanece
+ * como metadado acadêmico e nunca gera peso — por isso o factory define os dois.
+ */
 const subj = (id: string, name: string, weekly: number | null, extra: Partial<ClassGradesData['subjects'][number]> = {}) => ({
   id,
   class_id: 'c1',
@@ -15,11 +19,13 @@ const subj = (id: string, name: string, weekly: number | null, extra: Partial<Cl
   normalized_name: name.toLowerCase(),
   mapping_class_subject_id: null,
   weekly_classes: weekly,
+  ira_weight: weekly,
   include_in_ira: true,
   custom_ira_weight: null,
   sort_order: 1,
   ...extra,
 });
+
 
 const grade = (studentId: string, subjectId: string, periodId: string, value: number | null) => ({
   id: `${studentId}-${subjectId}-${periodId}`,
