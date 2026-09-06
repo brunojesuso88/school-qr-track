@@ -34,7 +34,7 @@ const classes: ClassMatrixRef[] = [
 
 const subj = (id: string, name: string) => ({
   id, class_id: 'c1', name, normalized_name: name.toLowerCase(),
-  mapping_class_subject_id: null, weekly_classes: null,
+  mapping_class_subject_id: null, weekly_classes: null, ira_weight: null,
   include_in_ira: true, custom_ira_weight: null, sort_order: 1,
 });
 
@@ -47,6 +47,8 @@ const grade = (studentId: string, subjectId: string, value: number) => ({
 const classData = (
   matrixWeeklyByKey: Record<string, number>,
   studentId = 'aluno',
+  /** Peso EXPLÍCITO herdado da matriz da turma (por padrão espelha a carga). */
+  matrixIraWeightByKey: Record<string, number> = matrixWeeklyByKey,
 ): ClassGradesData => ({
   subjects: [subj('pt', 'LINGUA PORTUGUESA'), subj('ef', 'EDUCACAO FISICA')],
   periods: [P1],
@@ -57,6 +59,7 @@ const classData = (
   },
   currentWeeklyClasses: {},
   matrixWeeklyByKey,
+  matrixIraWeightByKey,
 });
 
 describe('carga semanal por matriz da turma', () => {

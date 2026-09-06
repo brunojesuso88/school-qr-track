@@ -26,6 +26,8 @@ const subj = (id: string, name: string, weekly: number | null, slot = 1) => ({
   normalized_name: name.toLowerCase(),
   mapping_class_subject_id: null,
   weekly_classes: weekly,
+  // Peso EXPLÍCITO: carga 0/nula = peso não informado (pendente).
+  ira_weight: weekly && weekly > 0 ? weekly : null,
   include_in_ira: true,
   custom_ira_weight: null,
   sort_order: slot,
