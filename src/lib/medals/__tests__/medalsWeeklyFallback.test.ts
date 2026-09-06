@@ -75,7 +75,7 @@ function joaoData(over: Partial<ClassGradesData> = {}): ClassGradesData {
     },
     currentWeeklyClasses: {},
     matrixWeeklyByKey: MATRIX,
-    matrixIraWeightByKey: MATRIX_IRA,
+    matrixIraWeights: { byComponentId: {}, bySlotKey: {}, byKey: MATRIX_IRA },
     ...over,
   };
 }
@@ -88,7 +88,7 @@ describe('carga semanal oficial da matriz como fonte de verdade', () => {
   });
 
   it('sem a matriz, Português e Letramento ficam sem peso (bug original)', () => {
-    const area = computeAreaIra(joaoData({ matrixWeeklyByKey: {}, matrixIraWeightByKey: {} }), 'joao', getMedalArea('linguagens')!);
+    const area = computeAreaIra(joaoData({ matrixWeeklyByKey: {}, matrixIraWeights: { byComponentId: {}, bySlotKey: {}, byKey: {} } }), 'joao', getMedalArea('linguagens')!);
     expect(area.result.value).toBe(10);
     expect(area.subjects).toEqual(['EDUCACAO FISICA']);
   });
