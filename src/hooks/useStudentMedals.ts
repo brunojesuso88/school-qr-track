@@ -9,7 +9,7 @@ import { resolveSchoolMedalAreas } from '@/lib/medals/definitions';
 import { parseSeriesValue } from '@/lib/series';
 import { isPeriodKind, periodRank } from '@/lib/gradePageLocal/normalize';
 import { fetchMatrixWeeklyByClass } from '@/lib/curriculumMatrixWeekly';
-import { fetchMatrixIraWeightByClass } from '@/lib/curriculumMatrixIraWeight';
+import { emptyIraWeightIndex, fetchMatrixIraWeightByClass } from '@/lib/curriculumMatrixIraWeight';
 import { useActiveSchoolId } from '@/contexts/SchoolContext';
 
 const norm = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
@@ -127,7 +127,7 @@ export function useStudentMedals(visible: { id: string; class: string }[]) {
             settings: settings.find((s) => s.class_id === classId) ?? null,
             currentWeeklyClasses,
             matrixWeeklyByKey: weeklyByClass.get(classId) ?? {},
-            matrixIraWeightByKey: iraWeightByClass.get(classId) ?? {},
+            matrixIraWeights: iraWeightByClass.get(classId) ?? emptyIraWeightIndex(),
           });
         });
 

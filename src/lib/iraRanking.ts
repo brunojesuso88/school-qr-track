@@ -20,7 +20,7 @@ import {
   classSeriesLabel as classSeriesLabelFn, parseSeriesValue as parseSeriesValueFn,
 } from '@/lib/series';
 import { fetchMatrixWeeklyByClass } from '@/lib/curriculumMatrixWeekly';
-import { fetchMatrixIraWeightByClass } from '@/lib/curriculumMatrixIraWeight';
+import { emptyIraWeightIndex, fetchMatrixIraWeightByClass } from '@/lib/curriculumMatrixIraWeight';
 import mascotAsset from '@/assets/ira-ranking-mascote.jpg';
 
 export const RANKING_LIMIT = 15;
@@ -208,7 +208,7 @@ export async function buildIraRanking(classIds: string[], schoolId: string | nul
       settings: settings.find((s) => s.class_id === classId) ?? null,
       currentWeeklyClasses,
       matrixWeeklyByKey: weeklyByClass.get(classId) ?? {},
-            matrixIraWeightByKey: iraWeightByClass.get(classId) ?? {},
+            matrixIraWeights: iraWeightByClass.get(classId) ?? emptyIraWeightIndex(),
     });
   });
 

@@ -59,7 +59,8 @@ const classData = (
   },
   currentWeeklyClasses: {},
   matrixWeeklyByKey,
-  matrixIraWeightByKey,
+  // Índice seguro: correspondência canônica única por disciplina.
+  matrixIraWeights: { byComponentId: {}, bySlotKey: {}, byKey: matrixIraWeightByKey },
 });
 
 describe('carga semanal por matriz da turma', () => {

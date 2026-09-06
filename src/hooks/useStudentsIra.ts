@@ -6,7 +6,7 @@ import {
   computeIraForStudent, fetchGradesPaged,
 } from './useStudentGrades';
 import { fetchMatrixWeeklyByClass } from '@/lib/curriculumMatrixWeekly';
-import { fetchMatrixIraWeightByClass } from '@/lib/curriculumMatrixIraWeight';
+import { emptyIraWeightIndex, fetchMatrixIraWeightByClass } from '@/lib/curriculumMatrixIraWeight';
 import { parseSeriesValue } from '@/lib/series';
 import { useActiveSchoolId } from '@/contexts/SchoolContext';
 
@@ -144,7 +144,7 @@ export function useStudentsIra(students: { id: string; class: string }[]) {
             settings: settings.find((s) => s.class_id === classId) ?? null,
             currentWeeklyClasses,
             matrixWeeklyByKey: weeklyByClass.get(classId) ?? {},
-            matrixIraWeightByKey: iraWeightByClass.get(classId) ?? {},
+            matrixIraWeights: iraWeightByClass.get(classId) ?? emptyIraWeightIndex(),
           });
         });
 
