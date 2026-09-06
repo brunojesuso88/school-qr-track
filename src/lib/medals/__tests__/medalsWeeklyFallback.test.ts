@@ -23,6 +23,8 @@ const subj = (id: string, name: string, weekly: number | null) => ({
   normalized_name: name.toLowerCase(),
   mapping_class_subject_id: null,
   weekly_classes: weekly,
+  // Peso EXPLÍCITO da própria disciplina; nulo = herda o peso da matriz.
+  ira_weight: weekly,
   include_in_ira: true,
   custom_ira_weight: null,
   sort_order: 1,
