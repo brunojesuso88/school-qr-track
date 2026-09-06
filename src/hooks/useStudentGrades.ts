@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import {
   calculateIraMultiPeriod,
-  IraClassification, IraPeriodRef, IraResult, IraSubjectInput,
+  IraClassification, IraPeriodRef, IraResult, IraSubjectInput, weightForWeeklyClasses,
 } from '@/lib/ira';
 import { canonicalSubjectKey, isPeriodKind, periodRank } from '@/lib/gradePageLocal/normalize';
 import { fetchMatrixWeeklyByKey } from '@/lib/curriculumMatrixWeekly';
