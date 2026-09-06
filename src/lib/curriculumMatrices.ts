@@ -360,19 +360,37 @@ export async function repairSchoolCurricula(): Promise<{ schools: number; compon
   return (data ?? { schools: 0, components_created: 0 }) as { schools: number; components_created: number };
 }
 
+/** Matriz curricular OFICIAL da escola (`schools.curriculum_matrix_id`). */
+export async function fetchSchoolMatrixId(schoolId: string | null | undefined): Promise<string | null> {
+  if (!schoolId) return null;
+  const { data, error } = await supabase
+    .from('schools')
+    .select('curriculum_matrix_id')
+    .eq('id', schoolId)
+    .maybeSingle();
+  if (error) throw error;
+  return ((data as { curriculum_matrix_id: string | null } | null)?.curriculum_matrix_id) ?? null;
+}
+
 /**
  * PURO: decide qual matriz aplicar a uma turma nova a partir das matrizes da
  * escola ativa que TÊM componentes para a série escolhida.
  *
- * - exatamente uma => aplicada por padrão (`autoApply`);
- * - mais de uma => o usuário escolhe (nunca escolhemos em silêncio);
+ * - a MATRIZ DA ESCOLA é a fonte de verdade: quando ela atende a série, é aplicada;
+ * - exatamente uma candidata => aplicada por padrão (`autoApply`);
+ * - mais de uma sem matriz da escola => o usuário escolhe (nunca escolhemos em silêncio);
  * - nenhuma => aviso não destrutivo, criação da turma segue liberada.
  */
 export function selectMatrixForSeries(
   matrices: CurriculumMatrixRecord[],
   componentCountByMatrixId: Record<string, number>,
+  schoolMatrixId?: string | null,
 ): { candidates: CurriculumMatrixRecord[]; matrixId: string | null; autoApply: boolean; needsChoice: boolean } {
   const candidates = matrices.filter((m) => (componentCountByMatrixId[m.id] ?? 0) > 0);
+  const official = schoolMatrixId ? candidates.find((m) => m.id === schoolMatrixId) : undefined;
+  if (official) {
+    return { candidates, matrixId: official.id, autoApply: true, needsChoice: false };
+  }
   if (candidates.length === 1) {
     return { candidates, matrixId: candidates[0].id, autoApply: true, needsChoice: false };
   }
@@ -404,9 +422,10 @@ export async function fetchMatricesForSeries(
   series: HighSchoolSeries | null,
 ): Promise<{ candidates: CurriculumMatrixRecord[]; matrixId: string | null; autoApply: boolean; needsChoice: boolean }> {
   if (!schoolId || !series) return { candidates: [], matrixId: null, autoApply: false, needsChoice: false };
-  const [matrices, counts] = await Promise.all([
+  const [matrices, counts, schoolMatrixId] = await Promise.all([
     fetchSchoolMatrices(schoolId),
     fetchMatrixComponentCountsBySeries(schoolId, series),
+    fetchSchoolMatrixId(schoolId),
   ]);
-  return selectMatrixForSeries(matrices, counts);
+  return selectMatrixForSeries(matrices, counts, schoolMatrixId);
 }
