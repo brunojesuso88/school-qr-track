@@ -15,6 +15,7 @@ import { resolveSchoolMedalAreas } from '@/lib/medals/definitions';
 import { parseSeriesValue } from '@/lib/series';
 import { isPeriodKind, periodRank } from '@/lib/gradePageLocal/normalize';
 import { fetchMatrixWeeklyByClass } from '@/lib/curriculumMatrixWeekly';
+import { fetchMatrixIraWeightByClass } from '@/lib/curriculumMatrixIraWeight';
 import { IraSnapshotRow, SnapshotBuildInput, buildSnapshotRows, isDropout } from './core';
 import { NO_ACTIVE_SCHOOL_MESSAGE, assertActiveSchool } from '@/lib/schools/scope';
 
@@ -137,6 +138,12 @@ export async function recomputeIraScope(
     })),
     schoolId,
   );
+  const iraWeightByClass = await fetchMatrixIraWeightByClass(
+    scopeClasses.map((c) => ({
+      id: c.id, series: parseSeriesValue(c.series), curriculum_matrix_id: c.curriculum_matrix_id,
+    })),
+    schoolId,
+  );
 
 
   const dataByClass = new Map<string, ClassGradesData>();
@@ -149,6 +156,7 @@ export async function recomputeIraScope(
       settings: settings.find((s) => s.class_id === classId) ?? null,
       currentWeeklyClasses,
       matrixWeeklyByKey: weeklyByClass.get(classId) ?? {},
+            matrixIraWeightByKey: iraWeightByClass.get(classId) ?? {},
     });
   });
 

@@ -6,6 +6,7 @@ import {
   computeIraForStudent, fetchGradesPaged,
 } from './useStudentGrades';
 import { fetchMatrixWeeklyByClass } from '@/lib/curriculumMatrixWeekly';
+import { fetchMatrixIraWeightByClass } from '@/lib/curriculumMatrixIraWeight';
 import { parseSeriesValue } from '@/lib/series';
 import { useActiveSchoolId } from '@/contexts/SchoolContext';
 
@@ -123,6 +124,14 @@ export function useStudentsIra(students: { id: string; class: string }[]) {
           })),
           activeSchoolId,
         );
+        const iraWeightByClass = await fetchMatrixIraWeightByClass(
+          scoped.map((c) => ({
+            id: c.id,
+            series: parseSeriesValue(c.series),
+            curriculum_matrix_id: c.curriculum_matrix_id,
+          })),
+          activeSchoolId,
+        );
 
         // Uma estrutura por turma (calculada uma única vez) e o IRA mapeado por aluno.
         const dataByClass = new Map<string, ClassGradesData>();
@@ -135,6 +144,7 @@ export function useStudentsIra(students: { id: string; class: string }[]) {
             settings: settings.find((s) => s.class_id === classId) ?? null,
             currentWeeklyClasses,
             matrixWeeklyByKey: weeklyByClass.get(classId) ?? {},
+            matrixIraWeightByKey: iraWeightByClass.get(classId) ?? {},
           });
         });
 
