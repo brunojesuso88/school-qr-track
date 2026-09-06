@@ -77,7 +77,7 @@ function classData(values: Record<string, number>): ClassGradesData {
   return {
     subjects: [{
       id: 'sub-mat', class_id: 'c1', name: 'Matemática', normalized_name: 'matematica',
-      mapping_class_subject_id: null, weekly_classes: 4, include_in_ira: true,
+      mapping_class_subject_id: null, weekly_classes: 4, ira_weight: 4, include_in_ira: true,
       custom_ira_weight: null, sort_order: 0, legacy_excluded: false,
     } as never],
     periods: [{

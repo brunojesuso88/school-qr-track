@@ -9,6 +9,7 @@ import { resolveSchoolMedalAreas } from '@/lib/medals/definitions';
 import { parseSeriesValue } from '@/lib/series';
 import { isPeriodKind, periodRank } from '@/lib/gradePageLocal/normalize';
 import { fetchMatrixWeeklyByClass } from '@/lib/curriculumMatrixWeekly';
+import { fetchMatrixIraWeightByClass } from '@/lib/curriculumMatrixIraWeight';
 import { useActiveSchoolId } from '@/contexts/SchoolContext';
 
 const norm = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
@@ -109,6 +110,12 @@ export function useStudentMedals(visible: { id: string; class: string }[]) {
           })),
           activeSchoolId,
         );
+        const iraWeightByClass = await fetchMatrixIraWeightByClass(
+          scopeClasses.map((c) => ({
+            id: c.id, series: parseSeriesValue(c.series), curriculum_matrix_id: c.curriculum_matrix_id,
+          })),
+          activeSchoolId,
+        );
 
         const dataByClass = new Map<string, ClassGradesData>();
         classIds.forEach((classId) => {
@@ -120,6 +127,7 @@ export function useStudentMedals(visible: { id: string; class: string }[]) {
             settings: settings.find((s) => s.class_id === classId) ?? null,
             currentWeeklyClasses,
             matrixWeeklyByKey: weeklyByClass.get(classId) ?? {},
+            matrixIraWeightByKey: iraWeightByClass.get(classId) ?? {},
           });
         });
 

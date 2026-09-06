@@ -25,9 +25,10 @@ import {
 } from "@/lib/ira";
 import { matrixWeeklyTotal } from "@/lib/curriculumMatrixCore";
 import {
-  CurriculumMatrixRecord, MatrixComponentRow, countClassesUsingMatrix, createCurriculumMatrix,
-  ensureCatalogSubject, fetchMatrixComponents, fetchSchoolMatrices, importMatrixComponents,
+  CurriculumMatrixRecord, MatrixComponentRow,
+  ensureCatalogSubject, fetchMatrixComponents, importMatrixComponents,
 } from "@/lib/curriculumMatrices";
+import { fetchSchoolMatrixContext, preselectedMatrixId } from "@/lib/schools/currentMatrix";
 import { humanizeCurriculumError, syncClassCurriculum } from "@/lib/classCurriculum/sync";
 
 const parseAliases = (value: string) =>
@@ -64,8 +65,6 @@ const SubjectsContent = () => {
   });
 
   // Nova matriz
-  const [creatingMatrix, setCreatingMatrix] = useState(false);
-  const [matrixForm, setMatrixForm] = useState({ name: "", description: "", copyFrom: "none" });
 
   // Importar de outra matriz
   const [importOpen, setImportOpen] = useState(false);
@@ -79,21 +78,25 @@ const SubjectsContent = () => {
   const [classSelection, setClassSelection] = useState<Set<string>>(new Set());
 
   const activeMatrix = useMemo(() => matrices.find((m) => m.id === matrixId) ?? null, [matrices, matrixId]);
-  /** Matriz Original e matrizes padrão do sistema não podem ser excluídas. */
-  const matrixProtected = !!activeMatrix && (activeMatrix.is_original || !!activeMatrix.system_key);
 
+  /**
+   * A página edita SOMENTE a matriz vigente da escola (`schools.curriculum_matrix_id`).
+   * As demais matrizes continuam no banco e podem ser escolhidas em
+   * Configurações → Usuários e escola → Gerenciar escola.
+   */
   const loadMatrices = useCallback(async () => {
     if (!activeSchoolId) { setMatrices([]); setItems([]); setLoading(false); return; }
     try {
-      const list = await fetchSchoolMatrices(activeSchoolId);
+      const { currentMatrixId, matrices: list } = await fetchSchoolMatrixContext(activeSchoolId);
       setMatrices(list);
-      setMatrixId((current) => (list.some((m) => m.id === current) ? current : list[0]?.id ?? ""));
+      setMatrixId(preselectedMatrixId(list, activeSchoolId, currentMatrixId));
     } catch {
-      toast({ title: "Não foi possível carregar as matrizes curriculares", variant: "destructive" });
+      toast({ title: "Não foi possível carregar a matriz curricular vigente", variant: "destructive" });
     } finally {
       setLoading(false);
     }
   }, [activeSchoolId, toast]);
+
 
   const loadComponents = useCallback(async () => {
     if (!activeSchoolId || !matrixId) { setItems([]); return; }
@@ -265,65 +268,10 @@ const SubjectsContent = () => {
   };
 
   /* ----------------------------------- matrizes ----------------------------------- */
+  /* A criação/exclusão de matrizes saiu desta página: aqui só existe a matriz
+     vigente da escola. A escolha da matriz oficial é feita em
+     Configurações → Usuários e escola → Gerenciar escola. */
 
-  const handleCreateMatrix = async () => {
-    if (!activeSchoolId) return;
-    setSaving(true);
-    try {
-      const id = await createCurriculumMatrix({
-        schoolId: activeSchoolId,
-        name: matrixForm.name,
-        description: matrixForm.description,
-        copyFromMatrixId: matrixForm.copyFrom !== "none" ? matrixForm.copyFrom : null,
-      });
-      toast({ title: "Matriz curricular criada" });
-      setCreatingMatrix(false);
-      setMatrixForm({ name: "", description: "", copyFrom: "none" });
-      await loadMatrices();
-      setMatrixId(id);
-    } catch (error: unknown) {
-      toast({
-        title: "Erro ao criar matriz",
-        description: error instanceof Error ? error.message : undefined,
-        variant: "destructive",
-      });
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleDeleteMatrix = async () => {
-    if (!activeSchoolId || !activeMatrix || matrixProtected) return;
-    setSaving(true);
-    try {
-      const linked = await countClassesUsingMatrix(activeMatrix.id, activeSchoolId);
-      if (linked > 0) {
-        toast({
-          title: "Matriz em uso por turmas",
-          description: `${linked} turma(s) usam esta matriz. Sincronize essas turmas com outra matriz antes de excluí-la.`,
-          variant: "destructive",
-        });
-        return;
-      }
-      const { error } = await supabase
-        .from("curriculum_matrices")
-        .delete()
-        .eq("school_id", activeSchoolId)
-        .eq("id", activeMatrix.id);
-      if (error) throw error;
-      toast({ title: "Matriz curricular excluída" });
-      setMatrixId("");
-      await loadMatrices();
-    } catch (error: unknown) {
-      toast({
-        title: "Erro ao excluir matriz",
-        description: error instanceof Error ? error.message : undefined,
-        variant: "destructive",
-      });
-    } finally {
-      setSaving(false);
-    }
-  };
 
   /* ------------------------- importar componentes de outra matriz ------------------ */
 
@@ -474,41 +422,26 @@ const SubjectsContent = () => {
         <CardHeader className="gap-3">
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div className="space-y-1">
-              <Label className="text-xs text-muted-foreground">Matriz curricular</Label>
-              <Select value={matrixId} onValueChange={setMatrixId}>
-                <SelectTrigger className="w-full sm:w-[340px]">
-                  <SelectValue placeholder="Selecione a matriz" />
-                </SelectTrigger>
-                <SelectContent>
-                  {matrices.map((m) => (
-                    <SelectItem key={m.id} value={m.id}>
-                      {m.name}
-                      {m.is_original ? " (original)" : m.system_key ? " (padrão do sistema)" : ""}
-                      {" · "}{m.components} componentes
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label className="text-xs text-muted-foreground">Matriz curricular vigente</Label>
+              <p className="text-base font-semibold">
+                {activeMatrix?.name ?? "Nenhuma matriz vigente definida para esta escola"}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Definida em Configurações → Usuários e escola → Gerenciar escola.
+              </p>
             </div>
             {canEdit && (
               <div className="flex flex-wrap gap-2">
-                <Button size="sm" onClick={() => setCreatingMatrix(true)}>
-                  <Plus className="h-4 w-4 mr-2" /> Nova matriz curricular
-                </Button>
                 <Button size="sm" variant="outline" onClick={openImport} disabled={!matrixId || matrices.length < 2}>
                   <Download className="h-4 w-4 mr-2" /> Importar disciplinas de outra matriz
                 </Button>
                 <Button size="sm" variant="outline" onClick={openSync} disabled={!matrixId}>
                   <RefreshCw className="h-4 w-4 mr-2" /> Sincronizar com turma(s)
                 </Button>
-                {activeMatrix && !matrixProtected && (
-                  <Button size="sm" variant="ghost" className="text-destructive" onClick={handleDeleteMatrix} disabled={saving}>
-                    <Trash2 className="h-4 w-4 mr-2" /> Excluir matriz
-                  </Button>
-                )}
               </div>
             )}
           </div>
+
           {activeMatrix && (
             <CardDescription className="flex flex-wrap items-center gap-2">
               {activeMatrix.is_original && (
@@ -731,50 +664,8 @@ const SubjectsContent = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Nova matriz */}
-      <Dialog open={creatingMatrix} onOpenChange={setCreatingMatrix}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Nova matriz curricular</DialogTitle>
-            <DialogDescription>
-              A matriz pertence apenas a esta escola e pode começar vazia ou reaproveitar os
-              componentes de outra matriz da própria escola.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="matrix-name">Nome</Label>
-              <Input id="matrix-name" value={matrixForm.name}
-                onChange={(e) => setMatrixForm((f) => ({ ...f, name: e.target.value }))} />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="matrix-desc">Descrição (opcional)</Label>
-              <Textarea id="matrix-desc" rows={3} value={matrixForm.description}
-                onChange={(e) => setMatrixForm((f) => ({ ...f, description: e.target.value }))} />
-            </div>
-            <div className="space-y-2">
-              <Label>Começar a partir de</Label>
-              <Select value={matrixForm.copyFrom} onValueChange={(v) => setMatrixForm((f) => ({ ...f, copyFrom: v }))}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Matriz vazia</SelectItem>
-                  {matrices.map((m) => (
-                    <SelectItem key={m.id} value={m.id}>Copiar de: {m.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setCreatingMatrix(false)}>Cancelar</Button>
-            <Button onClick={handleCreateMatrix} disabled={saving}>
-              {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />} Criar matriz
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
       {/* Importar de outra matriz */}
+
       <Dialog open={importOpen} onOpenChange={setImportOpen}>
         <DialogContent className="max-w-lg">
           <DialogHeader>

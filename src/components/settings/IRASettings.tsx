@@ -14,7 +14,11 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Loader2, Calculator, AlertTriangle, Info, Medal } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import MedalsSettings from '@/components/settings/MedalsSettings';
-import { IRA_CLASSIFICATION_LABEL, IRA_MODE_LABEL, IraClassification, resolveWeight } from '@/lib/ira';
+import {
+  IRA_CLASSIFICATION_LABEL, IRA_MODE_LABEL, IraClassification, customWeightPatch, resolveWeight,
+  weightInputValue,
+} from '@/lib/ira';
+
 import { cn } from '@/lib/utils';
 import IraRankingExport from '@/components/settings/IraRankingExport';
 import { useAuth } from '@/contexts/AuthContext';
@@ -518,12 +522,16 @@ const IRASettings = () => {
                           step="0.5"
                           placeholder="peso"
                           className="h-8 w-20"
-                          value={subject.custom_ira_weight ?? ''}
+                          value={weightInputValue({
+                            iraWeight: subject.ira_weight,
+                            customWeight: subject.custom_ira_weight,
+                          })}
                           onChange={(e) => {
-                            const raw = e.target.value;
-                            updateSubject(subject, { custom_ira_weight: raw === '' ? null : Number(raw) });
+                            const patch = customWeightPatch(e.target.value, subject.ira_weight);
+                            if (patch) updateSubject(subject, patch);
                           }}
                         />
+
                       </div>
                     </div>
                   );

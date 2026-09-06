@@ -30,6 +30,10 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import { buildJoinUrl, type AppRole } from '@/lib/schools/registration';
 import { PREVIEW_LINK_WARNING, PUBLIC_URL_CHANGE_WARNING } from '@/lib/schools/publicUrl';
+import type { CurriculumMatrixRecord } from '@/lib/curriculumMatrices';
+import {
+  fetchSchoolMatrixContext, needsMatrixUpdate, preselectedMatrixId, setSchoolCurriculumMatrix,
+} from '@/lib/schools/currentMatrix';
 
 interface SchoolRow {
   school_id: string;
@@ -115,6 +119,13 @@ const SchoolAdminPanel = () => {
   const [renameDraft, setRenameDraft] = useState('');
   const [renaming, setRenaming] = useState(false);
   const [activeNameDraft, setActiveNameDraft] = useState('');
+  /** Matriz vigente da escola gerenciada + matrizes DELA (nunca de outra escola). */
+  const [matrixOptions, setMatrixOptions] = useState<CurriculumMatrixRecord[]>([]);
+  const [currentMatrixId, setCurrentMatrixId] = useState<string | null>(null);
+  const [matrixDraft, setMatrixDraft] = useState('');
+  const [matrixLoading, setMatrixLoading] = useState(false);
+  const [savingMatrix, setSavingMatrix] = useState(false);
+
   const [members, setMembers] = useState<MemberRow[]>([]);
   const [membersLoading, setMembersLoading] = useState(false);
   const [addUserId, setAddUserId] = useState<string>('');
@@ -162,12 +173,51 @@ const SchoolAdminPanel = () => {
 
   useEffect(() => setActiveNameDraft(activeSchool?.school_name ?? ''), [activeSchool?.school_name]);
 
+  /** Carrega a matriz vigente e as matrizes da própria escola gerenciada. */
+  const loadMatrixContext = useCallback(async (schoolId: string) => {
+    setMatrixLoading(true);
+    try {
+      const { currentMatrixId: current, matrices: options } = await fetchSchoolMatrixContext(schoolId);
+      setMatrixOptions(options);
+      setCurrentMatrixId(current);
+      setMatrixDraft(preselectedMatrixId(options, schoolId, current));
+    } catch {
+      setMatrixOptions([]);
+      setCurrentMatrixId(null);
+      setMatrixDraft('');
+      toast.error('Não foi possível carregar as matrizes curriculares desta escola');
+    } finally {
+      setMatrixLoading(false);
+    }
+  }, []);
+
   const openManage = async (school: SchoolRow) => {
     setManageSchool(school);
     setRenameDraft(school.name);
     setAddUserId('');
-    await loadMembers(school.school_id);
+    await Promise.all([loadMembers(school.school_id), loadMatrixContext(school.school_id)]);
   };
+
+  /**
+   * Troca a matriz VIGENTE da escola pela RPC segura. Não cria/copia matriz e
+   * não altera notas, alunos ou turmas.
+   */
+  const saveCurriculumMatrix = async (schoolId: string) => {
+    if (!needsMatrixUpdate(currentMatrixId, matrixDraft)) return;
+    setSavingMatrix(true);
+    try {
+      await setSchoolCurriculumMatrix(schoolId, matrixDraft);
+      setCurrentMatrixId(matrixDraft);
+      await refreshSchools();
+      toast.success('Matriz curricular vigente atualizada');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Não foi possível atualizar a matriz curricular');
+      await loadMatrixContext(schoolId);
+    } finally {
+      setSavingMatrix(false);
+    }
+  };
+
 
   /**
    * Renomeia a escola: `schools.name` é a fonte canônica e a RPC sincroniza
@@ -960,6 +1010,45 @@ const SchoolAdminPanel = () => {
                   O apelido (slug), o código e o link de cadastro permanecem os mesmos.
                 </p>
               </div>
+
+              <div className="space-y-2 rounded-md border p-3">
+                <div className="flex items-center gap-2">
+                  <Label>Matriz curricular</Label>
+                  {matrixLoading && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
+                </div>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <Select value={matrixDraft} onValueChange={setMatrixDraft} disabled={matrixLoading}>
+                    <SelectTrigger className="flex-1">
+                      <SelectValue placeholder="Selecione a matriz curricular" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {matrixOptions.map((m) => (
+                        <SelectItem key={m.id} value={m.id}>
+                          {m.name}
+                          {m.id === currentMatrixId ? ' — matriz vigente' : ''}
+                          {' · '}{m.components} componentes
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    disabled={savingMatrix || !needsMatrixUpdate(currentMatrixId, matrixDraft)}
+                    onClick={() => saveCurriculumMatrix(manageSchool.school_id)}
+                  >
+                    {savingMatrix && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}Salvar
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Matriz vigente:{' '}
+                  <strong>
+                    {matrixOptions.find((m) => m.id === currentMatrixId)?.name ?? 'não definida'}
+                  </strong>
+                  . Ela é a fonte oficial das disciplinas e do peso do IRA desta escola. Trocar a matriz
+                  não altera notas já lançadas nem o histórico dos alunos.
+                </p>
+              </div>
+
+
 
               <div className="flex items-center justify-between gap-3 rounded-md border p-3">
                 <div>

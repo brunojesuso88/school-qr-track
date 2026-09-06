@@ -2,10 +2,11 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import {
   calculateIraMultiPeriod,
-  IraClassification, IraPeriodRef, IraResult, IraSubjectInput, weightForWeeklyClasses,
+  IraClassification, IraPeriodRef, IraResult, IraSubjectInput,
 } from '@/lib/ira';
 import { canonicalSubjectKey, isPeriodKind, periodRank } from '@/lib/gradePageLocal/normalize';
 import { fetchMatrixWeeklyByKey } from '@/lib/curriculumMatrixWeekly';
+import { fetchMatrixIraWeightByKey } from '@/lib/curriculumMatrixIraWeight';
 import { parseSeriesValue } from '@/lib/series';
 import { useActiveSchoolId } from '@/contexts/SchoolContext';
 
@@ -68,6 +69,12 @@ export interface ClassGradesData {
    * sem isso a disciplina ficava sem peso e desaparecia silenciosamente do IRA.
    */
   matrixWeeklyByKey?: Record<string, number>;
+  /**
+   * PESO EXPLÍCITO do IRA (`curriculum_matrix_subjects.ira_weight`) por identidade
+   * canônica da disciplina. Usado quando `grade_subjects.ira_weight` está ausente:
+   * o peso é herdado do COMPONENTE da matriz, nunca da carga semanal.
+   */
+  matrixIraWeightByKey?: Record<string, number>;
 }
 
 const emptyData: ClassGradesData = {
@@ -77,7 +84,10 @@ const emptyData: ClassGradesData = {
   settings: null,
   currentWeeklyClasses: {},
   matrixWeeklyByKey: {},
+  matrixIraWeightByKey: {},
 };
+
+
 
 /**
  * Resolve os períodos usados no IRA conforme a configuração da turma.
@@ -114,7 +124,8 @@ export function buildIraInputs(
     const current = subject.mapping_class_subject_id
       ? data.currentWeeklyClasses[subject.mapping_class_subject_id]
       : undefined;
-    const fromMatrix = data.matrixWeeklyByKey?.[canonicalSubjectKey(subject.name)];
+    const canonical = canonicalSubjectKey(subject.name);
+    const fromMatrix = data.matrixWeeklyByKey?.[canonical];
     const weekly = current ?? subject.weekly_classes ?? fromMatrix ?? null;
     const valuesByPeriod: Record<string, number | null> = {};
     periodIds.forEach((periodId) => {
@@ -127,9 +138,9 @@ export function buildIraInputs(
       subjectId: subject.id,
       name: subject.name,
       weeklyClasses: weekly,
-      // Peso explícito da matriz é a fonte. Somente para linhas legadas ainda
-      // sem `ira_weight` mantemos a derivação histórica pela carga semanal.
-      iraWeight: subject.ira_weight ?? weightForWeeklyClasses(weekly),
+      // Peso EXPLÍCITO: da disciplina ou do componente equivalente da matriz.
+      // Ausente = pendente; a carga semanal jamais deriva peso.
+      iraWeight: subject.ira_weight ?? data.matrixIraWeightByKey?.[canonical] ?? null,
       classification: (subject.classification as IraClassification | null) ?? null,
       includeInIra: subject.include_in_ira,
       customWeight: subject.custom_ira_weight,
@@ -137,6 +148,7 @@ export function buildIraInputs(
     };
   });
 }
+
 
 /** Cálculo canônico do IRA de um aluno — usado pelo card e pelo detalhe. */
 export function computeIraForStudent(data: ClassGradesData, studentId: string): IraResult {
@@ -235,7 +247,10 @@ async function fetchClassGrades(
   const series = parseSeriesValue(classInfo?.series ?? null);
   // Carga/participação vêm da matriz efetivamente atribuída à turma.
   const matrixIds = classInfo?.curriculum_matrix_id ? [classInfo.curriculum_matrix_id] : undefined;
-  const matrixWeeklyByKey = await fetchMatrixWeeklyByKey([series], schoolId, matrixIds);
+  const [matrixWeeklyByKey, matrixIraWeightByKey] = await Promise.all([
+    fetchMatrixWeeklyByKey([series], schoolId, matrixIds),
+    fetchMatrixIraWeightByKey([series], schoolId, matrixIds),
+  ]);
 
   return {
     subjects,
@@ -244,8 +259,10 @@ async function fetchClassGrades(
     settings: (settingsRes.data as unknown as IraSettingsRow) ?? null,
     currentWeeklyClasses,
     matrixWeeklyByKey,
+    matrixIraWeightByKey,
   };
 }
+
 
 /** Carrega notas + configuração de IRA de uma turma inteira (em lote). */
 export function useClassGrades(classId: string | null, studentIds?: string[]) {

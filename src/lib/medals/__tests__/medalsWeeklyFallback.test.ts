@@ -10,6 +10,7 @@ import type { ClassGradesData } from '@/hooks/useStudentGrades';
 import { buildIraInputs, resolveIraPeriods, toPeriodRefs } from '@/hooks/useStudentGrades';
 import { calculateIraMultiPeriod } from '@/lib/ira';
 import { buildMatrixWeeklyByKey } from '@/lib/curriculumMatrixWeekly';
+import { buildMatrixIraWeightByKey } from '@/lib/curriculumMatrixIraWeight';
 import { computeAreaIra, computeMedals } from '../compute';
 
 const P1 = { id: 'p1', class_id: 'c1', label: '1º Período', normalized_label: '1º periodo', kind: 'period', sort_order: 1 };
@@ -22,6 +23,8 @@ const subj = (id: string, name: string, weekly: number | null) => ({
   normalized_name: name.toLowerCase(),
   mapping_class_subject_id: null,
   weekly_classes: weekly,
+  // Peso EXPLÍCITO da própria disciplina; nulo = herda o peso da matriz.
+  ira_weight: weekly,
   include_in_ira: true,
   custom_ira_weight: null,
   sort_order: 1,
@@ -46,6 +49,13 @@ const MATRIX = buildMatrixWeeklyByKey([
   { series: '1', weekly_classes: 1, name: 'EDUCACAO FISICA', aliases: ['Educação Física'] },
 ]);
 
+/** Peso EXPLÍCITO do IRA dos mesmos componentes (independente da carga semanal). */
+const MATRIX_IRA = buildMatrixIraWeightByKey([
+  { series: '1', ira_weight: 4, name: 'LINGUA PORTUGUESA', aliases: ['Língua Portuguesa', 'Português'] },
+  { series: '1', ira_weight: 1, name: 'LETRAMENTO EM LINGUA PORTUGUESA', aliases: [] },
+  { series: '1', ira_weight: 1, name: 'EDUCACAO FISICA', aliases: ['Educação Física'] },
+]);
+
 function joaoData(over: Partial<ClassGradesData> = {}): ClassGradesData {
   return {
     subjects: [
@@ -65,6 +75,7 @@ function joaoData(over: Partial<ClassGradesData> = {}): ClassGradesData {
     },
     currentWeeklyClasses: {},
     matrixWeeklyByKey: MATRIX,
+    matrixIraWeightByKey: MATRIX_IRA,
     ...over,
   };
 }
@@ -77,7 +88,7 @@ describe('carga semanal oficial da matriz como fonte de verdade', () => {
   });
 
   it('sem a matriz, Português e Letramento ficam sem peso (bug original)', () => {
-    const area = computeAreaIra(joaoData({ matrixWeeklyByKey: {} }), 'joao', getMedalArea('linguagens')!);
+    const area = computeAreaIra(joaoData({ matrixWeeklyByKey: {}, matrixIraWeightByKey: {} }), 'joao', getMedalArea('linguagens')!);
     expect(area.result.value).toBe(10);
     expect(area.subjects).toEqual(['EDUCACAO FISICA']);
   });
