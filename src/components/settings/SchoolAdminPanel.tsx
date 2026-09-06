@@ -115,6 +115,13 @@ const SchoolAdminPanel = () => {
   const [renameDraft, setRenameDraft] = useState('');
   const [renaming, setRenaming] = useState(false);
   const [activeNameDraft, setActiveNameDraft] = useState('');
+  /** Matriz vigente da escola gerenciada + matrizes DELA (nunca de outra escola). */
+  const [matrixOptions, setMatrixOptions] = useState<CurriculumMatrixRecord[]>([]);
+  const [currentMatrixId, setCurrentMatrixId] = useState<string | null>(null);
+  const [matrixDraft, setMatrixDraft] = useState('');
+  const [matrixLoading, setMatrixLoading] = useState(false);
+  const [savingMatrix, setSavingMatrix] = useState(false);
+
   const [members, setMembers] = useState<MemberRow[]>([]);
   const [membersLoading, setMembersLoading] = useState(false);
   const [addUserId, setAddUserId] = useState<string>('');
