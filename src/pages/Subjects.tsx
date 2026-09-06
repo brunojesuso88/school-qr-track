@@ -269,65 +269,10 @@ const SubjectsContent = () => {
   };
 
   /* ----------------------------------- matrizes ----------------------------------- */
+  /* A criação/exclusão de matrizes saiu desta página: aqui só existe a matriz
+     vigente da escola. A escolha da matriz oficial é feita em
+     Configurações → Usuários e escola → Gerenciar escola. */
 
-  const handleCreateMatrix = async () => {
-    if (!activeSchoolId) return;
-    setSaving(true);
-    try {
-      const id = await createCurriculumMatrix({
-        schoolId: activeSchoolId,
-        name: matrixForm.name,
-        description: matrixForm.description,
-        copyFromMatrixId: matrixForm.copyFrom !== "none" ? matrixForm.copyFrom : null,
-      });
-      toast({ title: "Matriz curricular criada" });
-      setCreatingMatrix(false);
-      setMatrixForm({ name: "", description: "", copyFrom: "none" });
-      await loadMatrices();
-      setMatrixId(id);
-    } catch (error: unknown) {
-      toast({
-        title: "Erro ao criar matriz",
-        description: error instanceof Error ? error.message : undefined,
-        variant: "destructive",
-      });
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleDeleteMatrix = async () => {
-    if (!activeSchoolId || !activeMatrix || matrixProtected) return;
-    setSaving(true);
-    try {
-      const linked = await countClassesUsingMatrix(activeMatrix.id, activeSchoolId);
-      if (linked > 0) {
-        toast({
-          title: "Matriz em uso por turmas",
-          description: `${linked} turma(s) usam esta matriz. Sincronize essas turmas com outra matriz antes de excluí-la.`,
-          variant: "destructive",
-        });
-        return;
-      }
-      const { error } = await supabase
-        .from("curriculum_matrices")
-        .delete()
-        .eq("school_id", activeSchoolId)
-        .eq("id", activeMatrix.id);
-      if (error) throw error;
-      toast({ title: "Matriz curricular excluída" });
-      setMatrixId("");
-      await loadMatrices();
-    } catch (error: unknown) {
-      toast({
-        title: "Erro ao excluir matriz",
-        description: error instanceof Error ? error.message : undefined,
-        variant: "destructive",
-      });
-    } finally {
-      setSaving(false);
-    }
-  };
 
   /* ------------------------- importar componentes de outra matriz ------------------ */
 
