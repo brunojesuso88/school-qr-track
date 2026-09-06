@@ -127,9 +127,10 @@ export function buildIraInputs(
       subjectId: subject.id,
       name: subject.name,
       weeklyClasses: weekly,
-      // Peso explícito da matriz é a fonte. Somente para linhas legadas ainda
-      // sem `ira_weight` mantemos a derivação histórica pela carga semanal.
-      iraWeight: subject.ira_weight ?? weightForWeeklyClasses(weekly),
+      // Peso explícito da matriz é a ÚNICA fonte. Ausente = pendente; a carga
+      // semanal jamais deriva peso.
+      iraWeight: subject.ira_weight ?? null,
+
       classification: (subject.classification as IraClassification | null) ?? null,
       includeInIra: subject.include_in_ira,
       customWeight: subject.custom_ira_weight,
