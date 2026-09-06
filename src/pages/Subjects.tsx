@@ -25,9 +25,10 @@ import {
 } from "@/lib/ira";
 import { matrixWeeklyTotal } from "@/lib/curriculumMatrixCore";
 import {
-  CurriculumMatrixRecord, MatrixComponentRow, countClassesUsingMatrix, createCurriculumMatrix,
-  ensureCatalogSubject, fetchMatrixComponents, fetchSchoolMatrices, importMatrixComponents,
+  CurriculumMatrixRecord, MatrixComponentRow,
+  ensureCatalogSubject, fetchMatrixComponents, importMatrixComponents,
 } from "@/lib/curriculumMatrices";
+import { fetchSchoolMatrixContext, preselectedMatrixId } from "@/lib/schools/currentMatrix";
 import { humanizeCurriculumError, syncClassCurriculum } from "@/lib/classCurriculum/sync";
 
 const parseAliases = (value: string) =>
