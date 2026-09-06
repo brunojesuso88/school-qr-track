@@ -123,7 +123,8 @@ export function buildIraInputs(
     const current = subject.mapping_class_subject_id
       ? data.currentWeeklyClasses[subject.mapping_class_subject_id]
       : undefined;
-    const fromMatrix = data.matrixWeeklyByKey?.[canonicalSubjectKey(subject.name)];
+    const canonical = canonicalSubjectKey(subject.name);
+    const fromMatrix = data.matrixWeeklyByKey?.[canonical];
     const weekly = current ?? subject.weekly_classes ?? fromMatrix ?? null;
     const valuesByPeriod: Record<string, number | null> = {};
     periodIds.forEach((periodId) => {
@@ -136,10 +137,9 @@ export function buildIraInputs(
       subjectId: subject.id,
       name: subject.name,
       weeklyClasses: weekly,
-      // Peso explícito da matriz é a ÚNICA fonte. Ausente = pendente; a carga
-      // semanal jamais deriva peso.
-      iraWeight: subject.ira_weight ?? null,
-
+      // Peso EXPLÍCITO: da disciplina ou do componente equivalente da matriz.
+      // Ausente = pendente; a carga semanal jamais deriva peso.
+      iraWeight: subject.ira_weight ?? data.matrixIraWeightByKey?.[canonical] ?? null,
       classification: (subject.classification as IraClassification | null) ?? null,
       includeInIra: subject.include_in_ira,
       customWeight: subject.custom_ira_weight,
@@ -147,6 +147,7 @@ export function buildIraInputs(
     };
   });
 }
+
 
 /** Cálculo canônico do IRA de um aluno — usado pelo card e pelo detalhe. */
 export function computeIraForStudent(data: ClassGradesData, studentId: string): IraResult {
