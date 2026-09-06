@@ -6,7 +6,9 @@ import {
 } from '@/lib/ira';
 import { canonicalSubjectKey, isPeriodKind, periodRank } from '@/lib/gradePageLocal/normalize';
 import { fetchMatrixWeeklyByKey } from '@/lib/curriculumMatrixWeekly';
-import { fetchMatrixIraWeightByKey } from '@/lib/curriculumMatrixIraWeight';
+import {
+  MatrixIraWeightIndex, emptyIraWeightIndex, fetchMatrixIraWeightIndex, resolveExplicitIraWeight,
+} from '@/lib/curriculumMatrixIraWeight';
 import { parseSeriesValue } from '@/lib/series';
 import { useActiveSchoolId } from '@/contexts/SchoolContext';
 
@@ -23,6 +25,8 @@ export interface GradeSubjectRow {
   ira_weight?: number | null;
   classification?: string | null;
   curriculum_matrix_subject_id?: string | null;
+  /** Posição do componente na matriz — desambigua nomes repetidos. */
+  slot_index?: number | null;
   sort_order: number;
 }
 
@@ -70,11 +74,12 @@ export interface ClassGradesData {
    */
   matrixWeeklyByKey?: Record<string, number>;
   /**
-   * PESO EXPLÍCITO do IRA (`curriculum_matrix_subjects.ira_weight`) por identidade
-   * canônica da disciplina. Usado quando `grade_subjects.ira_weight` está ausente:
-   * o peso é herdado do COMPONENTE da matriz, nunca da carga semanal.
+   * PESO EXPLÍCITO do IRA (`curriculum_matrix_subjects.ira_weight`) indexado por
+   * componente da matriz. Usado quando `grade_subjects.ira_weight` está ausente:
+   * o peso vem do COMPONENTE vinculado (nunca da carga semanal) e o fallback
+   * textual só vale para correspondência canônica ÚNICA.
    */
-  matrixIraWeightByKey?: Record<string, number>;
+  matrixIraWeights?: MatrixIraWeightIndex;
 }
 
 const emptyData: ClassGradesData = {
@@ -84,7 +89,7 @@ const emptyData: ClassGradesData = {
   settings: null,
   currentWeeklyClasses: {},
   matrixWeeklyByKey: {},
-  matrixIraWeightByKey: {},
+  matrixIraWeights: emptyIraWeightIndex(),
 };
 
 
@@ -140,7 +145,7 @@ export function buildIraInputs(
       weeklyClasses: weekly,
       // Peso EXPLÍCITO: da disciplina ou do componente equivalente da matriz.
       // Ausente = pendente; a carga semanal jamais deriva peso.
-      iraWeight: subject.ira_weight ?? data.matrixIraWeightByKey?.[canonical] ?? null,
+      iraWeight: resolveExplicitIraWeight(subject, data.matrixIraWeights),
       classification: (subject.classification as IraClassification | null) ?? null,
       includeInIra: subject.include_in_ira,
       customWeight: subject.custom_ira_weight,
@@ -247,9 +252,10 @@ async function fetchClassGrades(
   const series = parseSeriesValue(classInfo?.series ?? null);
   // Carga/participação vêm da matriz efetivamente atribuída à turma.
   const matrixIds = classInfo?.curriculum_matrix_id ? [classInfo.curriculum_matrix_id] : undefined;
-  const [matrixWeeklyByKey, matrixIraWeightByKey] = await Promise.all([
+  const [matrixWeeklyByKey, matrixIraWeights] = await Promise.all([
     fetchMatrixWeeklyByKey([series], schoolId, matrixIds),
-    fetchMatrixIraWeightByKey([series], schoolId, matrixIds),
+    // Sem matriz na turma: a VIGENTE DA ESCOLA (nunca a Original arbitrariamente).
+    fetchMatrixIraWeightIndex(series, schoolId, classInfo?.curriculum_matrix_id ?? null),
   ]);
 
   return {
@@ -259,7 +265,7 @@ async function fetchClassGrades(
     settings: (settingsRes.data as unknown as IraSettingsRow) ?? null,
     currentWeeklyClasses,
     matrixWeeklyByKey,
-    matrixIraWeightByKey,
+    matrixIraWeights,
   };
 }
 
