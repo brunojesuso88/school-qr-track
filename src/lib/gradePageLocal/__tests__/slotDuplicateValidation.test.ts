@@ -17,11 +17,13 @@ const cell = (slot: number, raw: string, value: number): LocalCell => ({
   value,
   confidence: 0.99,
   invalid: false,
+  period_kind: 'period',
+  ambiguous: false,
 });
 
 const tokens: TextToken[] = Array.from({ length: 60 }, (_, i) => ({
-  text: `t${i}`, x: i, y: i, width: 5, height: 5,
-} as TextToken));
+  text: `t${i}`, x: i, y: i, w: 5, h: 5,
+}));
 
 const grid = {
   columns: [{ label: '1º Período', kind: 'period', x0: 0, x1: 10 }],
