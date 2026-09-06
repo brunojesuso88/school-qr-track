@@ -262,9 +262,11 @@ export type Database = {
       }
       curriculum_matrix_subjects: {
         Row: {
+          classification: string
           created_at: string
           id: string
           include_in_ira: boolean
+          ira_weight: number
           matrix_id: string
           school_id: string
           series: string
@@ -275,9 +277,11 @@ export type Database = {
           weekly_classes: number | null
         }
         Insert: {
+          classification: string
           created_at?: string
           id?: string
           include_in_ira?: boolean
+          ira_weight: number
           matrix_id: string
           school_id: string
           series: string
@@ -288,9 +292,11 @@ export type Database = {
           weekly_classes?: number | null
         }
         Update: {
+          classification?: string
           created_at?: string
           id?: string
           include_in_ira?: boolean
+          ira_weight?: number
           matrix_id?: string
           school_id?: string
           series?: string
@@ -713,10 +719,13 @@ export type Database = {
       grade_subjects: {
         Row: {
           class_id: string
+          classification: string | null
           created_at: string
+          curriculum_matrix_subject_id: string | null
           custom_ira_weight: number | null
           id: string
           include_in_ira: boolean
+          ira_weight: number | null
           legacy_excluded: boolean
           mapping_class_subject_id: string | null
           name: string
@@ -729,10 +738,13 @@ export type Database = {
         }
         Insert: {
           class_id: string
+          classification?: string | null
           created_at?: string
+          curriculum_matrix_subject_id?: string | null
           custom_ira_weight?: number | null
           id?: string
           include_in_ira?: boolean
+          ira_weight?: number | null
           legacy_excluded?: boolean
           mapping_class_subject_id?: string | null
           name: string
@@ -745,10 +757,13 @@ export type Database = {
         }
         Update: {
           class_id?: string
+          classification?: string | null
           created_at?: string
+          curriculum_matrix_subject_id?: string | null
           custom_ira_weight?: number | null
           id?: string
           include_in_ira?: boolean
+          ira_weight?: number | null
           legacy_excluded?: boolean
           mapping_class_subject_id?: string | null
           name?: string
@@ -765,6 +780,13 @@ export type Database = {
             columns: ["class_id"]
             isOneToOne: false
             referencedRelation: "classes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "grade_subjects_curriculum_matrix_subject_id_fkey"
+            columns: ["curriculum_matrix_subject_id"]
+            isOneToOne: false
+            referencedRelation: "curriculum_matrix_subjects"
             referencedColumns: ["id"]
           },
           {
@@ -1207,6 +1229,99 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "mapping_teachers_school_id_fkey"
+            columns: ["school_id"]
+            isOneToOne: false
+            referencedRelation: "schools"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      medal_definition_subjects: {
+        Row: {
+          created_at: string
+          id: string
+          matrix_subject_id: string
+          medal_id: string
+          school_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          matrix_subject_id: string
+          medal_id: string
+          school_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          matrix_subject_id?: string
+          medal_id?: string
+          school_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "medal_definition_subjects_matrix_subject_id_fkey"
+            columns: ["matrix_subject_id"]
+            isOneToOne: false
+            referencedRelation: "curriculum_matrix_subjects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "medal_definition_subjects_medal_id_fkey"
+            columns: ["medal_id"]
+            isOneToOne: false
+            referencedRelation: "medal_definitions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "medal_definition_subjects_school_id_fkey"
+            columns: ["school_id"]
+            isOneToOne: false
+            referencedRelation: "schools"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      medal_definitions: {
+        Row: {
+          active: boolean
+          created_at: string
+          created_by: string | null
+          description: string | null
+          id: string
+          name: string
+          school_id: string
+          sort_order: number
+          symbol: string
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          name: string
+          school_id: string
+          sort_order?: number
+          symbol?: string
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          name?: string
+          school_id?: string
+          sort_order?: number
+          symbol?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "medal_definitions_school_id_fkey"
             columns: ["school_id"]
             isOneToOne: false
             referencedRelation: "schools"
@@ -1913,6 +2028,8 @@ export type Database = {
           code: string
           created_at: string
           created_by: string | null
+          curriculum_matrix_id: string | null
+          curriculum_matrix_pending: boolean
           hero_path: string | null
           id: string
           logo_path: string | null
@@ -1928,6 +2045,8 @@ export type Database = {
           code: string
           created_at?: string
           created_by?: string | null
+          curriculum_matrix_id?: string | null
+          curriculum_matrix_pending?: boolean
           hero_path?: string | null
           id?: string
           logo_path?: string | null
@@ -1943,6 +2062,8 @@ export type Database = {
           code?: string
           created_at?: string
           created_by?: string | null
+          curriculum_matrix_id?: string | null
+          curriculum_matrix_pending?: boolean
           hero_path?: string | null
           id?: string
           logo_path?: string | null
@@ -1952,7 +2073,15 @@ export type Database = {
           status?: string
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "schools_curriculum_matrix_id_fkey"
+            columns: ["curriculum_matrix_id"]
+            isOneToOne: false
+            referencedRelation: "curriculum_matrices"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       settings: {
         Row: {
@@ -2567,16 +2696,28 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      admin_create_school: {
-        Args: {
-          _auto_approve?: boolean
-          _city?: string
-          _code?: string
-          _name: string
-          _state?: string
-        }
-        Returns: string
-      }
+      admin_create_school:
+        | {
+            Args: {
+              _auto_approve?: boolean
+              _city?: string
+              _code?: string
+              _name: string
+              _state?: string
+            }
+            Returns: string
+          }
+        | {
+            Args: {
+              _auto_approve?: boolean
+              _base_key?: string
+              _city?: string
+              _code?: string
+              _name: string
+              _state?: string
+            }
+            Returns: string
+          }
       admin_delete_school: { Args: { _school_id: string }; Returns: Json }
       admin_list_users: {
         Args: never
@@ -2654,6 +2795,10 @@ export type Database = {
         Args: { _enabled: boolean; _school_id: string }
         Returns: undefined
       }
+      admin_set_school_curriculum_matrix: {
+        Args: { _matrix_id: string; _school_id: string }
+        Returns: undefined
+      }
       admin_set_school_permission: {
         Args: {
           _allowed: boolean
@@ -2686,6 +2831,14 @@ export type Database = {
         Returns: boolean
       }
       current_user_school_ids: { Args: never; Returns: string[] }
+      default_component_classification: {
+        Args: { _name: string }
+        Returns: string
+      }
+      default_component_ira_weight: {
+        Args: { _classification: string; _name: string }
+        Returns: number
+      }
       ensure_aprofundamento_axis_aliases: {
         Args: { _school_id?: string }
         Returns: number
@@ -2789,6 +2942,7 @@ export type Database = {
         Args: { _school_id: string }
         Returns: string
       }
+      seed_school_medals: { Args: { _school_id: string }; Returns: number }
       seed_school_permissions: {
         Args: { _school_id: string }
         Returns: undefined

@@ -68,7 +68,7 @@ describe('carga semanal 0 = não informada', () => {
     expect(hasWeeklyLoad(Number.NaN)).toBe(false);
     expect(hasWeeklyLoad(2)).toBe(true);
     expect(weightForWeeklyClasses(0)).toBeNull();
-    expect(resolveWeight({ weeklyClasses: 0, customWeight: null })).toEqual({ weight: null, source: 'none' });
+    expect(resolveWeight({ iraWeight: null, customWeight: null })).toEqual({ weight: null, source: 'none' });
   });
 
   it('soma de pesos 0 => resultado determinístico (null + no_grades), sem NaN/Infinity', () => {

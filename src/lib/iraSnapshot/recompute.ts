@@ -11,6 +11,7 @@ import {
   computeIraForStudent, fetchGradesPaged,
 } from '@/hooks/useStudentGrades';
 import { computeMedals, MedalStudentInput } from '@/lib/medals/compute';
+import { resolveSchoolMedalAreas } from '@/lib/medals/definitions';
 import { parseSeriesValue } from '@/lib/series';
 import { isPeriodKind, periodRank } from '@/lib/gradePageLocal/normalize';
 import { fetchMatrixWeeklyByClass } from '@/lib/curriculumMatrixWeekly';
@@ -164,7 +165,9 @@ export async function recomputeIraScope(
       data,
     });
   });
-  const medalsByStudent = computeMedals(medalInputs);
+  // Medalhas configuradas pela escola ativa (fallback: áreas padrão históricas).
+  const medalAreas = await resolveSchoolMedalAreas(schoolId);
+  const medalsByStudent = computeMedals(medalInputs, medalAreas);
 
   const computedAt = new Date().toISOString();
   const inputs: SnapshotBuildInput[] = studentRows.map((s) => {

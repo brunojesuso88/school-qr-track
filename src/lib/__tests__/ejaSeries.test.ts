@@ -103,7 +103,7 @@ describe('Matriz Original — etapas EJA', () => {
     const ap = officialMatrixForSeries('eja2').find((i) => i.name === 'APROFUNDAMENTO IF - I')!;
     const matrix: CurriculumMatrixItem[] = [{
       id: 'c1', subject_id: 's1', series: 'eja2', weekly_classes: ap.weekly_classes,
-      include_in_ira: true, name: ap.name, abbreviation: ap.abbreviation, aliases: ap.aliases,
+      include_in_ira: true, classification: 'fgb' as const, ira_weight: 2, name: ap.name, abbreviation: ap.abbreviation, aliases: ap.aliases,
     }];
     expect(selectMissingMatrixSubjects(matrix, [{ subject_name: 'APROFUNDAMENTO IF - SEA - I' }])).toHaveLength(0);
     expect(selectMissingMatrixSubjects(matrix, [{ subject_name: 'APROFUNDAMENTO IF - SEA - II' }])).toHaveLength(1);

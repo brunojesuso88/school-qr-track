@@ -16,12 +16,22 @@ interface Palette {
   symbol: string;
 }
 
-const PALETTES: Record<MedalAreaId, Palette> = {
+const PALETTES: Record<string, Palette> = {
   linguagens: { ribbon: '#1d4ed8', ribbonDark: '#1e3a8a', metal: '#dbeafe', metalDark: '#60a5fa', symbol: '#1e3a8a' },
   matematica: { ribbon: '#0f766e', ribbonDark: '#134e4a', metal: '#ccfbf1', metalDark: '#2dd4bf', symbol: '#134e4a' },
   humanas: { ribbon: '#b45309', ribbonDark: '#78350f', metal: '#fef3c7', metalDark: '#f59e0b', symbol: '#78350f' },
   natureza: { ribbon: '#15803d', ribbonDark: '#14532d', metal: '#dcfce7', metalDark: '#4ade80', symbol: '#14532d' },
   diversificada: { ribbon: '#6d28d9', ribbonDark: '#4c1d95', metal: '#ede9fe', metalDark: '#a78bfa', symbol: '#4c1d95' },
+};
+
+/** Paletas rotativas para medalhas configuradas pela escola (id arbitrário). */
+const FALLBACK_PALETTES: Palette[] = Object.values(PALETTES);
+
+const paletteFor = (areaId: MedalAreaId): Palette => {
+  if (PALETTES[areaId]) return PALETTES[areaId];
+  let hash = 0;
+  for (let i = 0; i < areaId.length; i += 1) hash = (hash * 31 + areaId.charCodeAt(i)) % 9973;
+  return FALLBACK_PALETTES[hash % FALLBACK_PALETTES.length];
 };
 
 function Symbol({ areaId, color }: { areaId: MedalAreaId; color: string }) {
@@ -77,12 +87,15 @@ export function AcademicMedal({
   areaId,
   size = 36,
   className,
+  symbol,
 }: {
   areaId: MedalAreaId;
   size?: number;
   className?: string;
+  /** Emoji configurado pela escola; quando ausente usa o símbolo desenhado. */
+  symbol?: string | null;
 }) {
-  const p = PALETTES[areaId];
+  const p = paletteFor(areaId);
   const gid = `medal-${areaId}`;
   return (
     <svg
@@ -107,9 +120,15 @@ export function AcademicMedal({
       <circle cx="16" cy="27" r="14" fill={p.ribbonDark} opacity="0.18" />
       <circle cx="16" cy="27" r="12.5" fill={`url(#${gid}-metal)`} stroke={p.ribbonDark} strokeWidth="1.4" />
       <circle cx="16" cy="27" r="9.8" fill="none" stroke={p.ribbonDark} strokeWidth="0.7" opacity="0.6" />
-      <g transform="translate(0, 11)">
-        <Symbol areaId={areaId} color={p.symbol} />
-      </g>
+      {symbol ? (
+        <text x="16" y="27" textAnchor="middle" dominantBaseline="central" fontSize="12">
+          {symbol}
+        </text>
+      ) : (
+        <g transform="translate(0, 11)">
+          <Symbol areaId={areaId} color={p.symbol} />
+        </g>
+      )}
     </svg>
   );
 }
@@ -125,12 +144,12 @@ function MedalBadge({ medal }: { medal: StudentMedal }) {
           title={label}
           className="shrink-0 rounded-md p-0.5 transition-transform hover:scale-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
-          <AcademicMedal areaId={medal.areaId} size={30} />
+          <AcademicMedal areaId={medal.areaId} size={30} symbol={medal.symbol} />
         </button>
       </PopoverTrigger>
       <PopoverContent className="w-64 text-xs" align="start">
         <div className="flex items-start gap-3">
-          <AcademicMedal areaId={medal.areaId} size={34} />
+          <AcademicMedal areaId={medal.areaId} size={34} symbol={medal.symbol} />
           <div className="space-y-1">
             <p className="text-sm font-medium leading-tight">{medal.title}</p>
             <p className="text-muted-foreground">{medal.seriesLabel}</p>

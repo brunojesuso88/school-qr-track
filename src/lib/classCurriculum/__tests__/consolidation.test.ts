@@ -10,13 +10,13 @@ import { normalizeText } from '@/lib/gradePageLocal/normalize';
 
 const item = (name: string, weekly: number): CurriculumMatrixItem => ({
   id: `m-${name}`, subject_id: `s-${name}`, series: '3', weekly_classes: weekly,
-  include_in_ira: true, name, abbreviation: null, aliases: [],
+  include_in_ira: true, classification: 'fgb' as const, ira_weight: 2, name, abbreviation: null, aliases: [],
 });
 
 const matrix3 = [item('APROFUNDAMENTO IF - I', 2), item('APROFUNDAMENTO IF - II', 2)];
 
 const gs = (id: string, name: string, extra: Partial<ExistingGradeSubject> = {}): ExistingGradeSubject => ({
-  id, name, weekly_classes: 2, include_in_ira: true, legacy_excluded: false, sort_order: null, ...extra,
+  id, name, weekly_classes: 2, include_in_ira: true, classification: 'fgb' as const, ira_weight: 2, legacy_excluded: false, sort_order: null, ...extra,
 });
 
 describe('duplicatas equivalentes de Aprofundamento IF', () => {

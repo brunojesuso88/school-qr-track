@@ -5,6 +5,7 @@ import {
   fetchGradesPaged,
 } from './useStudentGrades';
 import { computeMedals, MedalStudentInput, StudentMedal } from '@/lib/medals/compute';
+import { resolveSchoolMedalAreas } from '@/lib/medals/definitions';
 import { parseSeriesValue } from '@/lib/series';
 import { isPeriodKind, periodRank } from '@/lib/gradePageLocal/normalize';
 import { fetchMatrixWeeklyByClass } from '@/lib/curriculumMatrixWeekly';
@@ -130,7 +131,8 @@ export function useStudentMedals(visible: { id: string; class: string }[]) {
           inputs.push({ studentId: s.id, series: seriesByClassId.get(classId) ?? null, data });
         });
 
-        const result = computeMedals(inputs);
+        const medalAreas = await resolveSchoolMedalAreas(activeSchoolId);
+        const result = computeMedals(inputs, medalAreas);
         if (active) setMedalsByStudent(result);
       } catch (e) {
         console.error('Falha ao calcular medalhas por série:', e);

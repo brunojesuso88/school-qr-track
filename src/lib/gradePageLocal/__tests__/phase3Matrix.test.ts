@@ -272,7 +272,7 @@ describe('Matriz oficial — Aprofundamento com eixo (CHL/CNS/ETT)', () => {
   const officialAnchors = buildSubjectAnchors(
     matrixToExpectedSubjects(officialMatrixForSeries('2').map((s, i) => ({
       id: `m${i}`, subject_id: `s${i}`, series: '2' as const, weekly_classes: s.weekly_classes,
-      include_in_ira: true, name: s.name, abbreviation: s.abbreviation, aliases: s.aliases,
+      include_in_ira: true, classification: 'fgb' as const, ira_weight: 2, name: s.name, abbreviation: s.abbreviation, aliases: s.aliases,
     }))),
   );
 

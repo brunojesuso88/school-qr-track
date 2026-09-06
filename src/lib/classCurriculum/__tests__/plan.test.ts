@@ -4,7 +4,7 @@ import { CurriculumMatrixItem } from '@/lib/curriculumMatrixCore';
 
 const item = (name: string, weekly: number, aliases: string[] = []): CurriculumMatrixItem => ({
   id: `m-${name}`, subject_id: `s-${name}`, series: '2', weekly_classes: weekly,
-  include_in_ira: true, name, abbreviation: null, aliases,
+  include_in_ira: true, classification: 'fgb' as const, ira_weight: 2, name, abbreviation: null, aliases,
 });
 
 const matrix = [item('LINGUA PORTUGUESA', 4), item('MATEMATICA', 4), item('APROFUNDAMENTO IF - I', 2)];
@@ -22,7 +22,7 @@ describe('planClassCurriculumSync', () => {
     const plan = planClassCurriculumSync({
       matrix,
       gradeSubjects: [
-        { id: 'a', name: 'APROFUNDAMENTO IF - CHL - I', weekly_classes: null, include_in_ira: true, hasGrades: true },
+        { id: 'a', name: 'APROFUNDAMENTO IF - CHL - I', weekly_classes: null, include_in_ira: true, classification: 'fgb' as const, ira_weight: 2, hasGrades: true },
       ],
     });
     expect(plan.gradeCreate.map((g) => g.name)).not.toContain('APROFUNDAMENTO IF - I');
@@ -34,8 +34,8 @@ describe('planClassCurriculumSync', () => {
     const plan = planClassCurriculumSync({
       matrix,
       gradeSubjects: [
-        { id: 'sem', name: 'APROFUNDAMENTO IF - I', weekly_classes: 2, include_in_ira: true, hasGrades: false },
-        { id: 'com', name: 'APROFUNDAMENTO IF - CHL - I', weekly_classes: null, include_in_ira: true, hasGrades: true },
+        { id: 'sem', name: 'APROFUNDAMENTO IF - I', weekly_classes: 2, include_in_ira: true, classification: 'fgb' as const, ira_weight: 2, hasGrades: false },
+        { id: 'com', name: 'APROFUNDAMENTO IF - CHL - I', weekly_classes: null, include_in_ira: true, classification: 'fgb' as const, ira_weight: 2, hasGrades: true },
       ],
     });
     expect(plan.gradeEquivalentDuplicates).toEqual([
@@ -53,7 +53,7 @@ describe('planClassCurriculumSync', () => {
   it('marca disciplinas fora da matriz da série como legadas, preservando histórico', () => {
     const plan = planClassCurriculumSync({
       matrix,
-      gradeSubjects: [{ id: 'x', name: 'ELETIVA ANTIGA', weekly_classes: 1, include_in_ira: true, hasGrades: true }],
+      gradeSubjects: [{ id: 'x', name: 'ELETIVA ANTIGA', weekly_classes: 1, include_in_ira: true, classification: 'fgb' as const, ira_weight: 2, hasGrades: true }],
     });
     expect(plan.gradeLegacy).toEqual([{ id: 'x', name: 'ELETIVA ANTIGA', hasGrades: true }]);
     expect(plan.counts.excludedLegacy).toBe(1);
@@ -62,12 +62,12 @@ describe('planClassCurriculumSync', () => {
   it('é idempotente: turma já sincronizada não gera escritas', () => {
     const synced = matrix.map((m, i) => ({
       id: `g${i}`, name: m.name, weekly_classes: m.weekly_classes,
-      include_in_ira: true, legacy_excluded: false, sort_order: i,
+      include_in_ira: true, classification: 'fgb' as const, ira_weight: 2, legacy_excluded: false, sort_order: i,
     }));
     const ordered = [...matrix].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
     const rows = ordered.map((m, i) => ({
       id: `g-${m.name}`, name: m.name, weekly_classes: m.weekly_classes,
-      include_in_ira: true, legacy_excluded: false, sort_order: i,
+      include_in_ira: true, classification: 'fgb' as const, ira_weight: 2, legacy_excluded: false, sort_order: i,
     }));
     expect(synced.length).toBe(3);
     const mappingRows = ordered.map((m) => ({ id: `m-${m.name}`, subject_name: m.name, weekly_classes: m.weekly_classes }));
@@ -79,7 +79,7 @@ describe('planClassCurriculumSync', () => {
     const plan = planClassCurriculumSync({
       matrix: [item('EDUCACAO FISICA', 1)],
       mappingSubjects: [{ id: 'm1', subject_name: 'EDUCACAO FISICA', weekly_classes: 2 }],
-      gradeSubjects: [{ id: 'g1', name: 'EDUCACAO FISICA', weekly_classes: 2, include_in_ira: true, sort_order: 0 }],
+      gradeSubjects: [{ id: 'g1', name: 'EDUCACAO FISICA', weekly_classes: 2, include_in_ira: true, classification: 'fgb' as const, ira_weight: 2, sort_order: 0 }],
     });
     expect(plan.mappingUpdate).toEqual([{ id: 'm1', weekly_classes: 1 }]);
     expect(plan.gradeUpdate[0].weekly_classes).toBe(1);
@@ -101,7 +101,7 @@ describe('turma sem camada mapping (manageMapping=false)', () => {
       id: `g${i}`,
       name: g.name,
       weekly_classes: g.weekly_classes,
-      include_in_ira: true,
+      include_in_ira: true, classification: 'fgb' as const, ira_weight: 2,
       legacy_excluded: false,
       sort_order: g.sort_order,
     }));

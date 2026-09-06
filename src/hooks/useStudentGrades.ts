@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import {
   calculateIraMultiPeriod,
-  IraPeriodRef, IraResult, IraSubjectInput,
+  IraClassification, IraPeriodRef, IraResult, IraSubjectInput,
 } from '@/lib/ira';
 import { canonicalSubjectKey, isPeriodKind, periodRank } from '@/lib/gradePageLocal/normalize';
 import { fetchMatrixWeeklyByKey } from '@/lib/curriculumMatrixWeekly';
@@ -18,6 +18,10 @@ export interface GradeSubjectRow {
   weekly_classes: number | null;
   include_in_ira: boolean;
   custom_ira_weight: number | null;
+  /** Peso explícito do IRA herdado do componente da matriz (`null` = pendente). */
+  ira_weight?: number | null;
+  classification?: string | null;
+  curriculum_matrix_subject_id?: string | null;
   sort_order: number;
 }
 
@@ -123,6 +127,8 @@ export function buildIraInputs(
       subjectId: subject.id,
       name: subject.name,
       weeklyClasses: weekly,
+      iraWeight: subject.ira_weight ?? null,
+      classification: (subject.classification as IraClassification | null) ?? null,
       includeInIra: subject.include_in_ira,
       customWeight: subject.custom_ira_weight,
       valuesByPeriod,
