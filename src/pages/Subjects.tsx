@@ -79,21 +79,25 @@ const SubjectsContent = () => {
   const [classSelection, setClassSelection] = useState<Set<string>>(new Set());
 
   const activeMatrix = useMemo(() => matrices.find((m) => m.id === matrixId) ?? null, [matrices, matrixId]);
-  /** Matriz Original e matrizes padrão do sistema não podem ser excluídas. */
-  const matrixProtected = !!activeMatrix && (activeMatrix.is_original || !!activeMatrix.system_key);
 
+  /**
+   * A página edita SOMENTE a matriz vigente da escola (`schools.curriculum_matrix_id`).
+   * As demais matrizes continuam no banco e podem ser escolhidas em
+   * Configurações → Usuários e escola → Gerenciar escola.
+   */
   const loadMatrices = useCallback(async () => {
     if (!activeSchoolId) { setMatrices([]); setItems([]); setLoading(false); return; }
     try {
-      const list = await fetchSchoolMatrices(activeSchoolId);
+      const { currentMatrixId, matrices: list } = await fetchSchoolMatrixContext(activeSchoolId);
       setMatrices(list);
-      setMatrixId((current) => (list.some((m) => m.id === current) ? current : list[0]?.id ?? ""));
+      setMatrixId(preselectedMatrixId(list, activeSchoolId, currentMatrixId));
     } catch {
-      toast({ title: "Não foi possível carregar as matrizes curriculares", variant: "destructive" });
+      toast({ title: "Não foi possível carregar a matriz curricular vigente", variant: "destructive" });
     } finally {
       setLoading(false);
     }
   }, [activeSchoolId, toast]);
+
 
   const loadComponents = useCallback(async () => {
     if (!activeSchoolId || !matrixId) { setItems([]); return; }
