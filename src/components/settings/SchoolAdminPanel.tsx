@@ -169,12 +169,51 @@ const SchoolAdminPanel = () => {
 
   useEffect(() => setActiveNameDraft(activeSchool?.school_name ?? ''), [activeSchool?.school_name]);
 
+  /** Carrega a matriz vigente e as matrizes da própria escola gerenciada. */
+  const loadMatrixContext = useCallback(async (schoolId: string) => {
+    setMatrixLoading(true);
+    try {
+      const { currentMatrixId: current, matrices: options } = await fetchSchoolMatrixContext(schoolId);
+      setMatrixOptions(options);
+      setCurrentMatrixId(current);
+      setMatrixDraft(preselectedMatrixId(options, schoolId, current));
+    } catch {
+      setMatrixOptions([]);
+      setCurrentMatrixId(null);
+      setMatrixDraft('');
+      toast.error('Não foi possível carregar as matrizes curriculares desta escola');
+    } finally {
+      setMatrixLoading(false);
+    }
+  }, []);
+
   const openManage = async (school: SchoolRow) => {
     setManageSchool(school);
     setRenameDraft(school.name);
     setAddUserId('');
-    await loadMembers(school.school_id);
+    await Promise.all([loadMembers(school.school_id), loadMatrixContext(school.school_id)]);
   };
+
+  /**
+   * Troca a matriz VIGENTE da escola pela RPC segura. Não cria/copia matriz e
+   * não altera notas, alunos ou turmas.
+   */
+  const saveCurriculumMatrix = async (schoolId: string) => {
+    if (!needsMatrixUpdate(currentMatrixId, matrixDraft)) return;
+    setSavingMatrix(true);
+    try {
+      await setSchoolCurriculumMatrix(schoolId, matrixDraft);
+      setCurrentMatrixId(matrixDraft);
+      await refreshSchools();
+      toast.success('Matriz curricular vigente atualizada');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Não foi possível atualizar a matriz curricular');
+      await loadMatrixContext(schoolId);
+    } finally {
+      setSavingMatrix(false);
+    }
+  };
+
 
   /**
    * Renomeia a escola: `schools.name` é a fonte canônica e a RPC sincroniza
