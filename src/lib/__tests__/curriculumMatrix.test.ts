@@ -23,7 +23,7 @@ const weeklyOf = (series: HighSchoolSeries, name: string) =>
 const asItems = (series: HighSchoolSeries): CurriculumMatrixItem[] =>
   officialMatrixForSeries(series).map((s, i) => ({
     id: `m${i}`, subject_id: `s${i}`, series, weekly_classes: s.weekly_classes,
-    include_in_ira: true, name: s.name, abbreviation: s.abbreviation, aliases: s.aliases,
+    include_in_ira: true, classification: 'fgb' as const, ira_weight: 2, name: s.name, abbreviation: s.abbreviation, aliases: s.aliases,
   }));
 
 describe('matriz curricular oficial', () => {

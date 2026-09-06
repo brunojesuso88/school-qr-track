@@ -1,3 +1,4 @@
+import { getMedalArea } from '@/lib/medals/areas';
 import { describe, expect, it } from 'vitest';
 import { MEDAL_AREAS, areasForSubject, subjectBelongsToArea } from '../areas';
 import { computeAreaIra, computeMedals, MedalStudentInput } from '../compute';
@@ -83,8 +84,8 @@ describe('IRA por área', () => {
         grade('a1', 's-mat', 'p1', 5),
       ],
     });
-    expect(computeAreaIra(data, 'a1', 'linguagens').result.value).toBeCloseTo(10);
-    expect(computeAreaIra(data, 'a1', 'matematica').result.value).toBeCloseTo(5);
+    expect(computeAreaIra(data, 'a1', getMedalArea('linguagens')!).result.value).toBeCloseTo(10);
+    expect(computeAreaIra(data, 'a1', getMedalArea('matematica')!).result.value).toBeCloseTo(5);
   });
 
   it('média entre múltiplos períodos e nota ausente contando como 0', () => {
@@ -97,15 +98,15 @@ describe('IRA por área', () => {
       grades: [grade('a1', 's-fis', 'p1', 10)],
     });
     // (10 + 0) / 2 = 5
-    expect(computeAreaIra(data, 'a1', 'natureza').result.value).toBeCloseTo(5);
+    expect(computeAreaIra(data, 'a1', getMedalArea('natureza')!).result.value).toBeCloseTo(5);
   });
 
   it('nota 0 explícita equivale a ausente no cálculo, mas conta como dado existente', () => {
     const zero = makeData({ subjects: [subj('s-bio', 'Biologia', 2)], grades: [grade('a1', 's-bio', 'p1', 0)] });
     const missing = makeData({ subjects: [subj('s-bio', 'Biologia', 2)] });
-    expect(computeAreaIra(zero, 'a1', 'natureza').result.value).toBe(0);
-    expect(computeAreaIra(zero, 'a1', 'natureza').hasData).toBe(true);
-    expect(computeAreaIra(missing, 'a1', 'natureza').hasData).toBe(false);
+    expect(computeAreaIra(zero, 'a1', getMedalArea('natureza')!).result.value).toBe(0);
+    expect(computeAreaIra(zero, 'a1', getMedalArea('natureza')!).hasData).toBe(true);
+    expect(computeAreaIra(missing, 'a1', getMedalArea('natureza')!).hasData).toBe(false);
   });
 
   it('não usa períodos finais nem disciplinas fora do IRA', () => {
@@ -113,12 +114,12 @@ describe('IRA por área', () => {
       subjects: [subj('s-geo', 'Geografia', 2, { include_in_ira: false })],
       grades: [grade('a1', 's-geo', 'p1', 10), grade('a1', 's-geo', 'pf', 10)],
     });
-    expect(computeAreaIra(data, 'a1', 'humanas').hasData).toBe(false);
+    expect(computeAreaIra(data, 'a1', getMedalArea('humanas')!).hasData).toBe(false);
   });
 
   it('área sem disciplinas na turma não tem dados', () => {
     const data = makeData({ subjects: [subj('s-port', 'Português', 2)], grades: [grade('a1', 's-port', 'p1', 9)] });
-    expect(computeAreaIra(data, 'a1', 'natureza').hasData).toBe(false);
+    expect(computeAreaIra(data, 'a1', getMedalArea('natureza')!).hasData).toBe(false);
   });
 });
 

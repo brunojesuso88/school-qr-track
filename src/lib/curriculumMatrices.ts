@@ -7,6 +7,7 @@
  */
 import { supabase } from '@/integrations/supabase/client';
 import { HighSchoolSeries } from '@/lib/series';
+import { IraClassification, defaultIraWeight, suggestClassification } from '@/lib/ira';
 
 export interface CurriculumMatrixRecord {
   id: string;
@@ -28,6 +29,10 @@ export interface MatrixComponentRow {
   /** `null` quando a matriz não usa carga semanal (IRA aritmético). */
   weekly_classes: number | null;
   include_in_ira: boolean;
+  /** Classificação obrigatória (Formação Geral Básica | Itinerários Formativos). */
+  classification: IraClassification;
+  /** Peso explícito do componente no IRA (> 0). */
+  ira_weight: number;
   /** Ocorrência do componente na série (1 = única/primeira). */
   slot_index: number;
   name: string;
@@ -42,6 +47,8 @@ interface RawComponent {
   series: string;
   weekly_classes: number | null;
   include_in_ira: boolean;
+  classification: string | null;
+  ira_weight: number | null;
   slot_index: number | null;
   mapping_global_subjects: { name: string; abbreviation: string | null; aliases: string[] | null } | null;
 }
@@ -49,6 +56,21 @@ interface RawComponent {
 const rpcClient = supabase as unknown as {
   rpc: (fn: string, args?: Record<string, unknown>) => Promise<{ data: unknown; error: { message: string } | null }>;
 };
+
+/** Classificação persistida ou, na ausência dela, a sugerida pelo nome. */
+export const normalizeClassification = (
+  value: string | null | undefined,
+  name: string,
+): IraClassification =>
+  value === 'fgb' || value === 'itinerario' ? value : suggestClassification(name);
+
+/** Peso persistido positivo ou o padrão da classificação. */
+export const normalizeIraWeight = (
+  value: number | null | undefined,
+  classification: IraClassification,
+  name: string,
+): number =>
+  value != null && Number.isFinite(value) && value > 0 ? value : defaultIraWeight(classification, name);
 
 /** Chave de identidade de um componente dentro de uma matriz (inclui a ocorrência). */
 export const componentKey = (c: { subject_id: string; series: string; slot_index?: number | null }) =>
@@ -127,7 +149,7 @@ export async function fetchMatrixComponents(
 ): Promise<MatrixComponentRow[]> {
   const { data, error } = await supabase
     .from('curriculum_matrix_subjects')
-    .select('id, matrix_id, subject_id, series, weekly_classes, include_in_ira, slot_index, mapping_global_subjects(name, abbreviation, aliases)')
+    .select('id, matrix_id, subject_id, series, weekly_classes, include_in_ira, classification, ira_weight, slot_index, mapping_global_subjects(name, abbreviation, aliases)')
     .eq('school_id', schoolId)
     .eq('matrix_id', matrixId);
   if (error) throw error;
@@ -140,6 +162,12 @@ export async function fetchMatrixComponents(
       series: r.series as HighSchoolSeries,
       weekly_classes: r.weekly_classes,
       include_in_ira: r.include_in_ira,
+      classification: normalizeClassification(r.classification, r.mapping_global_subjects!.name),
+      ira_weight: normalizeIraWeight(
+        r.ira_weight,
+        normalizeClassification(r.classification, r.mapping_global_subjects!.name),
+        r.mapping_global_subjects!.name,
+      ),
       slot_index: r.slot_index ?? 1,
       name: r.mapping_global_subjects!.name,
       abbreviation: r.mapping_global_subjects!.abbreviation,
@@ -202,6 +230,7 @@ export async function importMatrixComponents(input: {
   components: {
     subject_id: string; series: string; weekly_classes: number | null;
     include_in_ira: boolean; slot_index?: number | null;
+    classification: IraClassification; ira_weight: number;
   }[];
 }): Promise<{ imported: number; skipped: number }> {
   await assertMatrixInSchool(input.targetMatrixId, input.schoolId);
@@ -216,6 +245,8 @@ export async function importMatrixComponents(input: {
         series: c.series,
         weekly_classes: c.weekly_classes,
         include_in_ira: c.include_in_ira,
+        classification: c.classification,
+        ira_weight: c.ira_weight,
         slot_index: c.slot_index ?? 1,
       })),
     );

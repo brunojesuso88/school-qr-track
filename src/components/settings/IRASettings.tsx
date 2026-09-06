@@ -11,8 +11,10 @@ import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Loader2, Calculator, AlertTriangle, Link2, Info } from 'lucide-react';
-import { isAutoWeightEligible, resolveWeight, weightForWeeklyClasses } from '@/lib/ira';
+import { Loader2, Calculator, AlertTriangle, Info, Medal } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import MedalsSettings from '@/components/settings/MedalsSettings';
+import { IRA_CLASSIFICATION_LABEL, IRA_MODE_LABEL, IraClassification, resolveWeight } from '@/lib/ira';
 import { cn } from '@/lib/utils';
 import IraRankingExport from '@/components/settings/IraRankingExport';
 import { useAuth } from '@/contexts/AuthContext';
@@ -43,6 +45,9 @@ interface SubjectRow {
   include_in_ira: boolean;
   custom_ira_weight: number | null;
   mapping_class_subject_id: string | null;
+  /** Peso explícito herdado do componente da matriz (`null` = pendente). */
+  ira_weight: number | null;
+  classification: string | null;
 }
 
 interface PeriodRow {
@@ -107,7 +112,7 @@ const IRASettings = () => {
   const loadClassData = useCallback(async (classId: string) => {
     setLoadingClass(true);
     const [subjRes, perRes, settingsRes] = await Promise.all([
-      scopeToSchool(supabase.from('grade_subjects').select('id, name, weekly_classes, include_in_ira, custom_ira_weight, mapping_class_subject_id'), activeSchoolId).eq('class_id', classId).eq('legacy_excluded', false).order('sort_order'),
+      scopeToSchool(supabase.from('grade_subjects').select('id, name, weekly_classes, include_in_ira, custom_ira_weight, mapping_class_subject_id, ira_weight, classification'), activeSchoolId).eq('class_id', classId).eq('legacy_excluded', false).order('sort_order'),
       scopeToSchool(supabase.from('grade_periods').select('id, label, kind, normalized_label'), activeSchoolId).eq('class_id', classId).order('sort_order'),
       scopeToSchool(supabase.from('ira_settings').select('*'), activeSchoolId).eq('class_id', classId).maybeSingle(),
     ]);
@@ -129,52 +134,6 @@ const IRASettings = () => {
   useEffect(() => {
     if (selectedClassId) loadClassData(selectedClassId);
   }, [selectedClassId, loadClassData]);
-
-  const suggestedMapping = useMemo(() => {
-    if (!selectedClass || selectedClass.mapping_class_id) return null;
-    return mappingClasses.find(
-      (m) => normalize(m.name) === normalize(selectedClass.name) && m.shift === selectedClass.shift,
-    ) ?? mappingClasses.find((m) => normalize(m.name) === normalize(selectedClass.name)) ?? null;
-  }, [selectedClass, mappingClasses]);
-
-  const confirmMapping = async (mappingClassId: string) => {
-    if (!selectedClass) return;
-    setSaving(true);
-    const { error } = await supabase.from('classes').update({ mapping_class_id: mappingClassId }).eq('id', selectedClass.id);
-    setSaving(false);
-    if (error) {
-      toast.error('Não foi possível vincular a turma.');
-      return;
-    }
-    setClasses((prev) => prev.map((c) => (c.id === selectedClass.id ? { ...c, mapping_class_id: mappingClassId } : c)));
-    toast.success('Turma vinculada ao mapeamento escolar.');
-    await syncWeeklyClasses(mappingClassId);
-  };
-
-  const syncWeeklyClasses = async (mappingClassId: string) => {
-    if (!selectedClassId) return;
-    const { data } = await scopeToSchool(
-      supabase.from('mapping_class_subjects').select('id, subject_name, weekly_classes'),
-      activeSchoolId,
-    ).eq('class_id', mappingClassId);
-    const mapping = (data || []) as { id: string; subject_name: string; weekly_classes: number }[];
-    if (mapping.length === 0 || subjects.length === 0) return;
-
-    const updates = subjects.map((s) => {
-      const match = mapping.find((m) => normalize(m.subject_name) === normalize(s.name));
-      if (!match) return null;
-      return { id: s.id, mapping_class_subject_id: match.id, weekly_classes: match.weekly_classes };
-    }).filter(Boolean) as { id: string; mapping_class_subject_id: string; weekly_classes: number }[];
-
-    await Promise.all(updates.map((u) =>
-      supabase.from('grade_subjects')
-        .update({ mapping_class_subject_id: u.mapping_class_subject_id, weekly_classes: u.weekly_classes })
-        .eq('id', u.id)));
-    if (updates.length > 0) {
-      toast.success(`${updates.length} disciplina(s) sincronizada(s) com a carga semanal atual.`);
-      loadClassData(selectedClassId);
-    }
-  };
 
   /** Salva a série estruturada da turma (apenas Admin/Direção). */
   const saveSeries = async (value: HighSchoolSeries) => {
@@ -340,7 +299,17 @@ const IRASettings = () => {
   }
 
   return (
-    <div className="space-y-4">
+    <Tabs defaultValue="config" className="space-y-4">
+      <TabsList>
+        <TabsTrigger value="config">
+          <Calculator className="w-4 h-4 mr-2" />Configuração do IRA
+        </TabsTrigger>
+        <TabsTrigger value="medals">
+          <Medal className="w-4 h-4 mr-2" />Medalhas de desempenho
+        </TabsTrigger>
+      </TabsList>
+
+      <TabsContent value="config" className="space-y-4">
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
@@ -349,7 +318,7 @@ const IRASettings = () => {
           </CardTitle>
           <CardDescription>
             Escolha a turma, as disciplinas participantes e o período/nota usada no cálculo.
-            Peso automático: 1 aula = 1, 2 aulas = 2, 4 aulas = 4. Alterações não apagam notas.
+            {' '}{IRA_MODE_LABEL}. Alterações não apagam notas.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -372,20 +341,6 @@ const IRASettings = () => {
               {[...classesWithGrades].filter((id) => configuredClasses.has(id)).length} com IRA configurado.
             </p>
           </div>
-
-          {selectedClass && (
-            <div className="flex items-center gap-2 text-sm">
-              <Link2 className="w-4 h-4 text-muted-foreground" />
-              {selectedClass.mapping_class_id ? (
-                <span className="text-muted-foreground">
-                  Vinculada ao mapeamento escolar:{' '}
-                  <strong>{mappingClasses.find((m) => m.id === selectedClass.mapping_class_id)?.name ?? 'turma do mapeamento'}</strong>
-                </span>
-              ) : (
-                <span className="text-amber-600">Turma sem vínculo com o mapeamento escolar</span>
-              )}
-            </div>
-          )}
 
           {selectedClass && (
             <div className="rounded-md border p-3 space-y-2 max-w-md">
@@ -441,38 +396,6 @@ const IRASettings = () => {
                 </div>
               )}
             </div>
-          )}
-
-          {selectedClass && !selectedClass.mapping_class_id && (
-            <Alert>
-              <Info className="w-4 h-4" />
-              <AlertTitle className="text-sm">Confirmar vínculo com o mapeamento escolar</AlertTitle>
-              <AlertDescription className="text-xs space-y-2">
-                {suggestedMapping ? (
-                  <>
-                    <p>
-                      Sugestão por nome e turno: <strong>{suggestedMapping.name}</strong> ({suggestedMapping.shift}).
-                      O vínculo só é criado após a sua confirmação.
-                    </p>
-                    <Button size="sm" disabled={saving} onClick={() => confirmMapping(suggestedMapping.id)}>
-                      Confirmar vínculo
-                    </Button>
-                  </>
-                ) : (
-                  <div className="space-y-2">
-                    <p>Nenhuma sugestão automática. Escolha manualmente a turma do mapeamento escolar:</p>
-                    <Select onValueChange={confirmMapping}>
-                      <SelectTrigger className="max-w-sm h-8"><SelectValue placeholder="Selecionar turma do mapeamento" /></SelectTrigger>
-                      <SelectContent>
-                        {mappingClasses.map((m) => (
-                          <SelectItem key={m.id} value={m.id}>{m.name} — {m.shift}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
-              </AlertDescription>
-            </Alert>
           )}
 
           {loadingClass && (
@@ -551,9 +474,11 @@ const IRASettings = () => {
 
               <div className="rounded-md border divide-y">
                 {subjects.map((subject) => {
-                  const autoEligible = isAutoWeightEligible(subject.weekly_classes);
+                  const classification = (subject.classification === 'fgb' || subject.classification === 'itinerario'
+                    ? subject.classification
+                    : null) as IraClassification | null;
                   const { weight, source } = resolveWeight({
-                    weeklyClasses: subject.weekly_classes,
+                    iraWeight: subject.ira_weight ?? null,
                     customWeight: subject.custom_ira_weight,
                   });
                   return (
@@ -566,12 +491,14 @@ const IRASettings = () => {
                         <div className="min-w-0">
                           <p className="font-medium truncate">{subject.name}</p>
                           <p className="text-xs text-muted-foreground">
-                            Carga semanal: {subject.weekly_classes != null ? `${subject.weekly_classes} aula(s)` : 'não informada'}
+                            {classification ? IRA_CLASSIFICATION_LABEL[classification] : 'Classificação pendente'}
                             {' · '}
                             Peso: {weight ?? '—'}
                             {source === 'custom' && ' (personalizado)'}
+                            {' · '}
+                            Carga semanal: {subject.weekly_classes != null ? `${subject.weekly_classes} aula(s)` : 'não informada'}
                           </p>
-                          {subject.include_in_ira && (
+                          {subject.include_in_ira && weight != null && (
                             <p className="text-[11px] text-amber-600 mt-0.5">
                               Participa do IRA · nota em branco em período selecionado = 0,00 no cálculo
                             </p>
@@ -579,36 +506,32 @@ const IRASettings = () => {
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
-                        {autoEligible ? (
-                          <Badge variant="outline">peso automático {weightForWeeklyClasses(subject.weekly_classes)}</Badge>
-                        ) : (
-                          <>
-                            <Badge variant="secondary" className="bg-amber-500/15 text-amber-600 text-[11px]">
-                              <AlertTriangle className="w-3 h-3 mr-1" />
-                              carga fora de 1/2/4
-                            </Badge>
-                            <Input
-                              type="number"
-                              min={0}
-                              step="0.5"
-                              placeholder="peso"
-                              className="h-8 w-20"
-                              value={subject.custom_ira_weight ?? ''}
-                              onChange={(e) => {
-                                const raw = e.target.value;
-                                updateSubject(subject, { custom_ira_weight: raw === '' ? null : Number(raw) });
-                              }}
-                            />
-                          </>
+                        {weight == null && (
+                          <Badge variant="secondary" className="bg-amber-500/15 text-amber-600 text-[11px]">
+                            <AlertTriangle className="w-3 h-3 mr-1" />
+                            peso não configurado
+                          </Badge>
                         )}
+                        <Input
+                          type="number"
+                          min={0}
+                          step="0.5"
+                          placeholder="peso"
+                          className="h-8 w-20"
+                          value={subject.custom_ira_weight ?? ''}
+                          onChange={(e) => {
+                            const raw = e.target.value;
+                            updateSubject(subject, { custom_ira_weight: raw === '' ? null : Number(raw) });
+                          }}
+                        />
                       </div>
                     </div>
                   );
                 })}
               </div>
               <p className="text-xs text-muted-foreground">
-                Disciplinas com carga diferente de 1, 2 ou 4 aulas não entram automaticamente: informe um
-                “peso personalizado” e marque “Participa do IRA” para incluí-las.
+                O peso vem da matriz curricular (classificação do componente). Para ajustar apenas nesta
+                turma, informe um “peso personalizado” — ele prevalece sobre o peso da matriz.
               </p>
             </>
           )}
@@ -616,7 +539,12 @@ const IRASettings = () => {
       </Card>
 
       <IraRankingExport classes={classes} classesWithGrades={classesWithGrades} />
-    </div>
+      </TabsContent>
+
+      <TabsContent value="medals">
+        <MedalsSettings />
+      </TabsContent>
+    </Tabs>
   );
 };
 

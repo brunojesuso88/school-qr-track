@@ -68,7 +68,7 @@ describe('carga semanal 0 = não informada', () => {
     expect(hasWeeklyLoad(Number.NaN)).toBe(false);
     expect(hasWeeklyLoad(2)).toBe(true);
     expect(weightForWeeklyClasses(0)).toBeNull();
-    expect(resolveWeight({ weeklyClasses: 0, customWeight: null })).toEqual({ weight: null, source: 'none' });
+    expect(resolveWeight({ iraWeight: null, customWeight: null })).toEqual({ weight: null, source: 'none' });
   });
 
   it('soma de pesos 0 => resultado determinístico (null + no_grades), sem NaN/Infinity', () => {
@@ -78,7 +78,7 @@ describe('carga semanal 0 = não informada', () => {
     expect(ira.totalWeight).toBe(0);
     expect(Number.isNaN(ira.totalProduct)).toBe(false);
     expect(ira.lines.every((l) => l.weight === null && l.weightSource === 'none')).toBe(true);
-    expect(ira.lines[0].reason).toContain('Carga semanal não informada');
+    expect(ira.lines[0].reason).toContain('Peso do IRA não configurado');
   });
 
   it('carga 0 não aumenta o denominador de quem tem carga válida', () => {
@@ -134,8 +134,8 @@ describe('carga semanal 0 = não informada', () => {
   it('regressão da Matriz Original: 8 (carga 4) + 3 (carga 1) => 7,00', () => {
     const ira = calculateIraMultiPeriod(
       [
-        { subjectId: 'a', name: 'MATEMATICA', weeklyClasses: 4, includeInIra: true, customWeight: null, valuesByPeriod: { p1: 8 } },
-        { subjectId: 'b', name: 'FILOSOFIA', weeklyClasses: 1, includeInIra: true, customWeight: null, valuesByPeriod: { p1: 3 } },
+        { subjectId: 'a', name: 'MATEMATICA', weeklyClasses: 4, iraWeight: 4, includeInIra: true, customWeight: null, valuesByPeriod: { p1: 8 } },
+        { subjectId: 'b', name: 'FILOSOFIA', weeklyClasses: 1, iraWeight: 1, includeInIra: true, customWeight: null, valuesByPeriod: { p1: 3 } },
       ],
       [{ id: 'p1', label: '1º Período' }],
     );

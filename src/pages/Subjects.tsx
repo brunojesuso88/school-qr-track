@@ -19,7 +19,10 @@ import { usePermissions } from "@/contexts/PermissionsContext";
 import { useActiveSchoolId, useSchoolScopeKey } from "@/contexts/SchoolContext";
 import { supabase } from "@/integrations/supabase/client";
 import { CLASS_SERIES_OPTIONS, HighSchoolSeries, classSeriesLabel, parseSeriesValue, seriesShortLabel, seriesSortIndex } from "@/lib/series";
-import { IRA_MODE_LABEL } from "@/lib/ira";
+import {
+  IRA_CLASSIFICATION_LABEL, IRA_CLASSIFICATION_SHORT, IRA_MODE_LABEL,
+  IraClassification, defaultIraWeight,
+} from "@/lib/ira";
 import { matrixWeeklyTotal } from "@/lib/curriculumMatrixCore";
 import {
   CurriculumMatrixRecord, MatrixComponentRow, countClassesUsingMatrix, createCurriculumMatrix,
@@ -55,7 +58,10 @@ const SubjectsContent = () => {
   // Componente (criar/editar)
   const [editing, setEditing] = useState<MatrixComponentRow | null>(null);
   const [creatingComponent, setCreatingComponent] = useState(false);
-  const [form, setForm] = useState({ name: "", abbreviation: "", aliases: "", weekly: "1", ira: true });
+  const [form, setForm] = useState({
+    name: "", abbreviation: "", aliases: "", weekly: "1", ira: true,
+    classification: "fgb" as IraClassification, iraWeight: "2",
+  });
 
   // Nova matriz
   const [creatingMatrix, setCreatingMatrix] = useState(false);
@@ -132,13 +138,18 @@ const SubjectsContent = () => {
       aliases: (item.aliases ?? []).join("\n"),
       weekly: item.weekly_classes == null ? "" : String(item.weekly_classes),
       ira: item.include_in_ira,
+      classification: item.classification,
+      iraWeight: String(item.ira_weight),
     });
   };
 
   const openCreateComponent = () => {
     setEditing(null);
     setCreatingComponent(true);
-    setForm({ name: "", abbreviation: "", aliases: "", weekly: "0", ira: true });
+    setForm({
+      name: "", abbreviation: "", aliases: "", weekly: "0", ira: true,
+      classification: "fgb", iraWeight: "2",
+    });
   };
 
   const handleSaveComponent = async () => {
@@ -151,6 +162,11 @@ const SubjectsContent = () => {
     }
     if (creatingComponent && !form.name.trim()) {
       toast({ title: "Informe o nome do componente", variant: "destructive" });
+      return;
+    }
+    const iraWeight = Number(form.iraWeight);
+    if (!Number.isFinite(iraWeight) || iraWeight <= 0) {
+      toast({ title: "O peso do IRA deve ser maior que zero", variant: "destructive" });
       return;
     }
     setSaving(true);
@@ -172,6 +188,8 @@ const SubjectsContent = () => {
           series,
           weekly_classes: weekly,
           include_in_ira: form.ira,
+          classification: form.classification,
+          ira_weight: iraWeight,
         });
         if (error) throw error;
         toast({
@@ -181,7 +199,12 @@ const SubjectsContent = () => {
       } else if (editing) {
         const [matrixRes, catalogRes] = await Promise.all([
           supabase.from("curriculum_matrix_subjects")
-            .update({ weekly_classes: weekly, include_in_ira: form.ira })
+            .update({
+              weekly_classes: weekly,
+              include_in_ira: form.ira,
+              classification: form.classification,
+              ira_weight: iraWeight,
+            })
             .eq("school_id", activeSchoolId)
             .eq("id", editing.id),
           supabase.from("mapping_global_subjects")
@@ -537,6 +560,8 @@ const SubjectsContent = () => {
                     <TableHeader>
                       <TableRow>
                         <TableHead>Disciplina</TableHead>
+                        <TableHead className="w-44">Classificação</TableHead>
+                        <TableHead className="w-24 text-center">Peso IRA</TableHead>
                         <TableHead className="w-32 text-center">Carga semanal</TableHead>
                         <TableHead className="w-32 text-center">Participa do IRA</TableHead>
                         <TableHead>Nomes reconhecidos</TableHead>
@@ -559,6 +584,12 @@ const SubjectsContent = () => {
                               )}
                             </div>
                           </TableCell>
+                          <TableCell>
+                            <Badge variant={item.classification === "fgb" ? "secondary" : "outline"}>
+                              {IRA_CLASSIFICATION_LABEL[item.classification]}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-center font-medium">{item.ira_weight}</TableCell>
                           <TableCell className="text-center">
                             {item.weekly_classes == null || item.weekly_classes === 0
                               ? "0 (não informada)"
@@ -593,7 +624,7 @@ const SubjectsContent = () => {
                       ))}
                       {bySeries.length === 0 && (
                         <TableRow>
-                          <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                          <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
                             Nenhum componente cadastrado nesta série.
                           </TableCell>
                         </TableRow>
@@ -646,8 +677,38 @@ const SubjectsContent = () => {
                 onChange={(e) => setForm((f) => ({ ...f, aliases: e.target.value }))} />
             </div>
             <div className="space-y-2">
+              <Label>Classificação (obrigatória)</Label>
+              <Select
+                value={form.classification}
+                onValueChange={(v) => setForm((f) => ({
+                  ...f,
+                  classification: v as IraClassification,
+                  // Mudar a classificação sugere o peso padrão; o usuário pode sobrescrever.
+                  iraWeight: String(defaultIraWeight(v as IraClassification, f.name || editing?.name || "")),
+                }))}
+              >
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {(["fgb", "itinerario"] as IraClassification[]).map((c) => (
+                    <SelectItem key={c} value={c}>
+                      {IRA_CLASSIFICATION_LABEL[c]} ({IRA_CLASSIFICATION_SHORT[c]})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="ira-weight">Peso no IRA (editável)</Label>
+              <Input id="ira-weight" type="number" min={0} step="0.5" value={form.iraWeight}
+                onChange={(e) => setForm((f) => ({ ...f, iraWeight: e.target.value }))} />
+              <p className="text-xs text-muted-foreground">
+                Padrão: Formação Geral Básica 2 (Matemática e Língua Portuguesa 4) ·
+                Itinerários Formativos 1.
+              </p>
+            </div>
+            <div className="space-y-2">
               <Label htmlFor="weekly">
-                Carga semanal nesta série (somente nesta matriz) — use 0 quando não informada
+                Carga semanal nesta série (metadado acadêmico — não define o peso do IRA)
               </Label>
               <Input id="weekly" type="number" min={0} value={form.weekly}
                 placeholder="0 = não informada" 
@@ -748,7 +809,9 @@ const SubjectsContent = () => {
                       />
                       <span className="flex-1">{row.name}</span>
                       <Badge variant="outline" className="text-[10px]">{seriesShortLabel(parseSeriesValue(row.series))}</Badge>
-                      <Badge variant="secondary" className="text-[10px]">{row.weekly_classes} aulas</Badge>
+                      <Badge variant="secondary" className="text-[10px]">
+                        {IRA_CLASSIFICATION_SHORT[row.classification]} · peso {row.ira_weight}
+                      </Badge>
                     </label>
                   ))}
                 </div>

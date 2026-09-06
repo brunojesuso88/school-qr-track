@@ -1,3 +1,4 @@
+import { getMedalArea } from '@/lib/medals/areas';
 /**
  * Regressão da causa raiz da medalha de Linguagens do 1º ano:
  * disciplinas SEM vínculo de mapeamento ficavam com `weekly_classes` nulo,
@@ -76,14 +77,14 @@ describe('carga semanal oficial da matriz como fonte de verdade', () => {
   });
 
   it('sem a matriz, Português e Letramento ficam sem peso (bug original)', () => {
-    const area = computeAreaIra(joaoData({ matrixWeeklyByKey: {} }), 'joao', 'linguagens');
+    const area = computeAreaIra(joaoData({ matrixWeeklyByKey: {} }), 'joao', getMedalArea('linguagens')!);
     expect(area.result.value).toBe(10);
     expect(area.subjects).toEqual(['EDUCACAO FISICA']);
   });
 
   it('com a matriz, a medalha bate com as notas da aba Notas', () => {
     const data = joaoData();
-    const area = computeAreaIra(data, 'joao', 'linguagens');
+    const area = computeAreaIra(data, 'joao', getMedalArea('linguagens')!);
     // PT (5,67+7)/2=6,335 × 4 | LET (6,50+0)/2=3,25 × 1 | EF 10 × 1 => /6
     const expected = (6.335 * 4 + 3.25 + 10) / 6;
     expect(area.result.value).toBeCloseTo(expected, 6);
@@ -103,7 +104,7 @@ describe('carga semanal oficial da matriz como fonte de verdade', () => {
       buildIraInputs(scoped, 'joao', periods.map((p) => p.id)),
       toPeriodRefs(periods),
     );
-    expect(computeAreaIra(data, 'joao', 'linguagens').result.value).toBeCloseTo(direct.value as number, 10);
+    expect(computeAreaIra(data, 'joao', getMedalArea('linguagens')!).result.value).toBeCloseTo(direct.value as number, 10);
   });
 
   it('não conta a mesma disciplina duas vezes quando há duplicata/alias histórico', () => {
@@ -119,14 +120,14 @@ describe('carga semanal oficial da matriz como fonte de verdade', () => {
         grade('joao', 'ef', 'p1', 10), grade('joao', 'ef', 'p2', 10),
       ],
     });
-    const area = computeAreaIra(data, 'joao', 'linguagens');
+    const area = computeAreaIra(data, 'joao', getMedalArea('linguagens')!);
     expect(area.subjects).toEqual(['LINGUA PORTUGUESA', 'EDUCACAO FISICA']);
     expect(area.result.value).toBeCloseTo((6.335 * 4 + 10) / 5, 6);
   });
 
   it('Letramento em Língua Portuguesa continua na Parte Diversificada', () => {
     const data = joaoData();
-    const diversificada = computeAreaIra(data, 'joao', 'diversificada');
+    const diversificada = computeAreaIra(data, 'joao', getMedalArea('diversificada')!);
     expect(diversificada.subjects).toContain('LETRAMENTO EM LINGUA PORTUGUESA');
   });
 

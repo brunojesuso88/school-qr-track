@@ -4,7 +4,7 @@
 import { HighSchoolSeries } from '@/lib/series';
 import { canonicalSubjectKey } from '@/lib/gradePageLocal/normalize';
 import { LocalExpectedSubject } from '@/lib/gradePageLocal/types';
-import { hasWeeklyLoad } from '@/lib/ira';
+import { hasWeeklyLoad, IraClassification } from '@/lib/ira';
 
 export interface CurriculumMatrixItem {
   id: string;
@@ -15,6 +15,10 @@ export interface CurriculumMatrixItem {
   /** `null` em matrizes sem carga semanal (ex. Matriz Integral, IRA aritmético). */
   weekly_classes: number | null;
   include_in_ira: boolean;
+  /** Classificação obrigatória do componente. */
+  classification: IraClassification;
+  /** Peso explícito do componente no IRA (> 0). */
+  ira_weight: number;
   /** Ocorrência do componente na série (1 = única/primeira; ausente equivale a 1). */
   slot_index?: number;
   name: string;

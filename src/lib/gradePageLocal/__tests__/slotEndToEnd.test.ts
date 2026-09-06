@@ -47,11 +47,11 @@ describe('slots do mesmo componente ponta a ponta', () => {
     const ira = calculateIraMultiPeriod(
       [
         {
-          subjectId: 'gs-slot-1', name: NAME, weeklyClasses: 1, includeInIra: true,
+          subjectId: 'gs-slot-1', name: NAME, weeklyClasses: 1, iraWeight: 1, includeInIra: true,
           customWeight: null, valuesByPeriod: { p1: 8 },
         },
         {
-          subjectId: 'gs-slot-2', name: NAME, weeklyClasses: 1, includeInIra: true,
+          subjectId: 'gs-slot-2', name: NAME, weeklyClasses: 1, iraWeight: 1, includeInIra: true,
           customWeight: null, valuesByPeriod: { p1: 6 },
         },
       ],

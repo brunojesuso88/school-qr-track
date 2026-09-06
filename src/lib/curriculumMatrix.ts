@@ -9,6 +9,7 @@
 import { supabase } from '@/integrations/supabase/client';
 import { HighSchoolSeries } from '@/lib/series';
 import { CurriculumMatrixItem } from '@/lib/curriculumMatrixCore';
+import { IraClassification, defaultIraWeight, suggestClassification } from '@/lib/ira';
 import { fetchOriginalMatrixId } from '@/lib/curriculumMatrices';
 
 export * from '@/lib/curriculumMatrixCore';
@@ -20,6 +21,8 @@ interface RawRow {
   series: string;
   weekly_classes: number | null;
   include_in_ira: boolean;
+  classification: string | null;
+  ira_weight: number | null;
   slot_index: number | null;
   mapping_global_subjects: {
     name: string; abbreviation: string | null; aliases: string[] | null;
@@ -40,7 +43,7 @@ export async function fetchCurriculumMatrix(
   if (!targetMatrix) return [];
   let query = supabase
     .from('curriculum_matrix_subjects')
-    .select('id, matrix_id, subject_id, series, weekly_classes, include_in_ira, slot_index, mapping_global_subjects(name, abbreviation, aliases)')
+    .select('id, matrix_id, subject_id, series, weekly_classes, include_in_ira, classification, ira_weight, slot_index, mapping_global_subjects(name, abbreviation, aliases)')
     .eq('school_id', schoolId)
     .eq('matrix_id', targetMatrix);
   if (series) query = query.eq('series', series);
@@ -55,6 +58,15 @@ export async function fetchCurriculumMatrix(
       series: r.series as HighSchoolSeries,
       weekly_classes: r.weekly_classes,
       include_in_ira: r.include_in_ira,
+      classification: (r.classification as IraClassification | null)
+        ?? suggestClassification(r.mapping_global_subjects!.name),
+      ira_weight: r.ira_weight && r.ira_weight > 0
+        ? r.ira_weight
+        : defaultIraWeight(
+            (r.classification as IraClassification | null)
+              ?? suggestClassification(r.mapping_global_subjects!.name),
+            r.mapping_global_subjects!.name,
+          ),
       slot_index: r.slot_index ?? 1,
       name: r.mapping_global_subjects!.name,
       abbreviation: r.mapping_global_subjects!.abbreviation,

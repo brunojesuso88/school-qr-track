@@ -7,14 +7,13 @@
  * 2) IRA = Σ(nota_representativa × peso) / Σ(peso).
  *
  * ALGORITMO ÚNICO para TODAS as matrizes (Original, Integral, personalizadas):
- * peso automático = carga semanal quando ela é 1, 2 ou 4 aulas. Cargas
- * diferentes (3, 5, 6...) são inelegíveis até o administrador definir
- * explicitamente um "peso personalizado".
+ * o peso vem do PESO EXPLÍCITO do componente da matriz (`ira_weight`), nunca da
+ * carga semanal. Padrões: Formação Geral Básica = 2 (Matemática e Língua
+ * Portuguesa = 4) e Itinerários Formativos = 1 — todos editáveis.
  *
- * Carga semanal 0 (ou null) significa "não informada": a disciplina fica
- * inelegível, NÃO entra no denominador e nunca gera NaN/Infinity. Quando a soma
- * dos pesos é 0 o resultado é determinístico: `value = null` com status
- * `no_grades` (mesmo comportamento histórico da Matriz Original).
+ * Sem peso configurado a disciplina fica PENDENTE: inelegível, fora do
+ * denominador, e nunca gera NaN/Infinity. Quando a soma dos pesos é 0 o
+ * resultado é determinístico: `value = null` com status `no_grades`.
  *
  * Função pura e determinística: mesmas entradas => mesmo resultado.
  */
@@ -24,7 +23,62 @@ export const AUTO_WEIGHTS = [1, 2, 4] as const;
 export type IraStatus = 'ok' | 'no_subjects' | 'no_grades' | 'not_configured';
 
 /** Rótulo único do algoritmo do IRA (não existe mais modo por matriz). */
-export const IRA_MODE_LABEL = 'IRA: média ponderada pela carga semanal (1/2/4)';
+export const IRA_MODE_LABEL =
+  'IRA: média ponderada pelo PESO do componente (Formação Geral Básica 2 · Matemática e Língua Portuguesa 4 · Itinerários Formativos 1)';
+
+/** Classificação obrigatória de todo componente curricular. */
+export type IraClassification = 'fgb' | 'itinerario';
+
+export const IRA_CLASSIFICATIONS: IraClassification[] = ['fgb', 'itinerario'];
+
+export const IRA_CLASSIFICATION_LABEL: Record<IraClassification, string> = {
+  fgb: 'Formação Geral Básica',
+  itinerario: 'Itinerários Formativos',
+};
+
+export const IRA_CLASSIFICATION_SHORT: Record<IraClassification, string> = {
+  fgb: 'FGB',
+  itinerario: 'IF',
+};
+
+/** `true` quando o nome é Matemática ou Língua Portuguesa (exceções de peso 4 na FGB). */
+export function isWeightFourSubject(name: string | null | undefined): boolean {
+  const key = (name ?? '')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  if (!key) return false;
+  if (/aprofundamento|itinerar|eletiva|trilha|tecnic|profission/.test(key)) return false;
+  return /(^|\s)matematica(\s|$)/.test(key)
+    || /lingua portuguesa/.test(key)
+    || /(^|\s)portugues(\s|$)/.test(key);
+}
+
+/**
+ * Peso PADRÃO do IRA a partir da classificação (regra oficial, sem exceção
+ * fora da FGB): FGB = 2, exceto Matemática e Língua Portuguesa = 4;
+ * Itinerários Formativos = 1 sempre.
+ */
+export function defaultIraWeight(
+  classification: IraClassification,
+  name?: string | null,
+): number {
+  if (classification !== 'fgb') return 1;
+  return isWeightFourSubject(name) ? 4 : 2;
+}
+
+/** Classificação padrão sugerida a partir do nome do componente. */
+export function suggestClassification(name: string | null | undefined): IraClassification {
+  const key = (name ?? '')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  if (/aprofundamento|projeto de vida|itinerar|eletiva|trilha|tecnic|profission|mundo do trabalho|estudo orientado|educacao digital|identidade e protagonismo|pratica|nucleo|empreendedor|robotica|informatica/.test(key)) {
+    return 'itinerario';
+  }
+  if (/lingua portuguesa|portugues|redacao|literatura|matematica|fisica|quimica|biologia|historia|geografia|filosofia|sociologia|arte|educacao fisica|lingua inglesa|ingles|espanhol|ciencias da natureza|ciencias humanas|linguagens/.test(key)) {
+    return 'fgb';
+  }
+  return 'itinerario';
+}
 
 /** `true` quando a carga semanal foi realmente informada (0 = não informada). */
 export const hasWeeklyLoad = (weeklyClasses: number | null | undefined): boolean =>
@@ -42,8 +96,15 @@ export interface IraPeriodRef {
 export interface IraSubjectInput {
   subjectId: string;
   name: string;
-  /** Carga semanal (mapping_class_subjects.weekly_classes ou snapshot). */
+  /** Carga semanal (metadado ACADÊMICO — não é mais fonte do peso do IRA). */
   weeklyClasses: number | null;
+  /**
+   * PESO EXPLÍCITO do componente no IRA (`ira_weight`). `null` = ainda não
+   * configurado: a disciplina fica pendente e não entra no denominador.
+   */
+  iraWeight?: number | null;
+  /** Classificação do componente, quando conhecida. */
+  classification?: IraClassification | null;
   includeInIra: boolean;
   /** Peso definido manualmente pelo administrador (carga fora de 1/2/4). */
   customWeight: number | null;
@@ -62,7 +123,7 @@ export interface IraPeriodValue {
   missing: boolean;
 }
 
-export type IraWeightSource = 'auto' | 'custom' | 'none';
+export type IraWeightSource = 'matrix' | 'custom' | 'none';
 
 export interface IraLine {
   subjectId: string;
@@ -118,17 +179,24 @@ export function isAutoWeightEligible(weeklyClasses: number | null | undefined): 
   return weightForWeeklyClasses(weeklyClasses) !== null;
 }
 
-/** Peso da disciplina: carga 1/2/4, senão peso personalizado positivo, senão nenhum. */
+/**
+ * Peso da disciplina no IRA. Fonte ÚNICA: o peso explícito do componente
+ * (`ira_weight`). Um peso personalizado da turma (`custom_ira_weight`) continua
+ * podendo sobrescrevê-lo. A carga semanal NÃO define mais peso.
+ */
 export function resolveWeight(
-  subject: Pick<IraSubjectInput, 'weeklyClasses' | 'customWeight'>,
+  subject: Pick<IraSubjectInput, 'iraWeight' | 'customWeight'>,
 ): {
   weight: number | null;
   source: IraWeightSource;
 } {
-  const auto = weightForWeeklyClasses(subject.weeklyClasses);
-  if (auto !== null) return { weight: auto, source: 'auto' };
-  if (subject.customWeight != null && Number.isFinite(subject.customWeight) && subject.customWeight > 0) {
-    return { weight: subject.customWeight, source: 'custom' };
+  const custom = subject.customWeight;
+  if (custom != null && Number.isFinite(custom) && custom > 0) {
+    return { weight: custom, source: 'custom' };
+  }
+  const explicit = subject.iraWeight;
+  if (explicit != null && Number.isFinite(explicit) && explicit > 0) {
+    return { weight: explicit, source: 'matrix' };
   }
   return { weight: null, source: 'none' };
 }
@@ -159,10 +227,7 @@ export function calculateIraMultiPeriod(
       reason = 'Disciplina não selecionada para o IRA';
     } else if (weight === null) {
       eligible = false;
-      reason =
-        !hasWeeklyLoad(subject.weeklyClasses)
-          ? 'Carga semanal não informada — informe 1, 2 ou 4 aulas ou um peso personalizado'
-          : `Carga semanal ${subject.weeklyClasses} não segue a regra 1/2/4 — defina um peso personalizado`;
+      reason = 'Peso do IRA não configurado — defina a classificação e o peso do componente na matriz curricular';
     }
 
     const periodValues: IraPeriodValue[] = periods.map((p) => {

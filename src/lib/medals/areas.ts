@@ -7,10 +7,16 @@
  */
 import { canonicalSubjectKey } from '@/lib/gradePageLocal/normalize';
 
-export type MedalAreaId = 'linguagens' | 'matematica' | 'humanas' | 'natureza' | 'diversificada';
+/**
+ * Identificador da medalha. Nas medalhas configuráveis por escola é o `id`
+ * de `medal_definitions`; nas medalhas padrão (fallback) é a chave legada.
+ */
+export type MedalAreaId = string;
 
 export interface MedalArea {
   id: MedalAreaId;
+  /** Símbolo/emoji configurado pela escola (opcional). */
+  symbol?: string | null;
   /** Nome curto exibido na medalha. */
   label: string;
   /** Nome completo da conquista (sem a série). */
@@ -60,12 +66,20 @@ export const MEDAL_AREAS: MedalArea[] = [
   },
 ];
 
+/** Conjunto canônico de disciplinas de uma área (aliases normalizados). */
+export const areaSubjectKeys = (area: MedalArea): Set<string> =>
+  new Set(area.aliases.map((n) => canonicalSubjectKey(n)));
+
+/** `true` quando o nome pertence à área informada (objeto, não chave legada). */
+export const subjectBelongsTo = (area: MedalArea, subjectName: string): boolean =>
+  areaSubjectKeys(area).has(canonicalSubjectKey(subjectName));
+
 const KEYS_BY_AREA = new Map<MedalAreaId, Set<string>>(
   MEDAL_AREAS.map((a) => [a.id, new Set(a.aliases.map((n) => canonicalSubjectKey(n)))]),
 );
 
-export const getMedalArea = (id: MedalAreaId): MedalArea =>
-  MEDAL_AREAS.find((a) => a.id === id) as MedalArea;
+export const getMedalArea = (id: MedalAreaId): MedalArea | undefined =>
+  MEDAL_AREAS.find((a) => a.id === id);
 
 /** `true` quando o nome da disciplina pertence à área. */
 export function subjectBelongsToArea(subjectName: string, areaId: MedalAreaId): boolean {

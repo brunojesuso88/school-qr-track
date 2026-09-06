@@ -5,7 +5,7 @@
 import { canonicalSubjectKey } from '@/lib/gradePageLocal/normalize';
 import { normalizeText } from '@/lib/gradePageLocal/normalize';
 import { CurriculumMatrixItem } from '@/lib/curriculumMatrixCore';
-import { hasWeeklyLoad } from '@/lib/ira';
+import { hasWeeklyLoad, IraClassification } from '@/lib/ira';
 
 export interface ExistingMappingSubject {
   id: string;
@@ -18,6 +18,9 @@ export interface ExistingGradeSubject {
   name: string;
   weekly_classes: number | null;
   include_in_ira: boolean;
+  classification?: string | null;
+  ira_weight?: number | null;
+  curriculum_matrix_subject_id?: string | null;
   /** Ocorrência do componente na turma (1 = única/primeira). */
   slot_index?: number | null;
   legacy_excluded?: boolean | null;
@@ -46,6 +49,9 @@ export interface ClassCurriculumPlan {
     include_in_ira: true;
     legacy_excluded: false;
     sort_order: number;
+    classification: IraClassification;
+    ira_weight: number;
+    curriculum_matrix_subject_id: string | null;
   }[];
   gradeUpdate: {
     id: string;
@@ -56,6 +62,9 @@ export interface ClassCurriculumPlan {
     include_in_ira: boolean;
     legacy_excluded: false;
     sort_order: number;
+    classification: IraClassification;
+    ira_weight: number;
+    curriculum_matrix_subject_id: string | null;
   }[];
   /**
    * Nomenclaturas históricas equivalentes (mesma identidade canônica) que devem
@@ -161,6 +170,9 @@ export function planClassCurriculumSync(input: {
         include_in_ira: true,
         legacy_excluded: false,
         sort_order: index,
+        classification: item.classification,
+        ira_weight: item.ira_weight,
+        curriculum_matrix_subject_id: item.id ?? null,
       });
       plan.counts.created += 1;
       return;
@@ -189,6 +201,9 @@ export function planClassCurriculumSync(input: {
       include_in_ira: item.include_in_ira ? true : chosen.include_in_ira,
       legacy_excluded: false as const,
       sort_order: index,
+      classification: item.classification,
+      ira_weight: item.ira_weight,
+      curriculum_matrix_subject_id: item.id ?? null,
     };
     const changed =
       chosen.name !== target.name ||
@@ -196,7 +211,10 @@ export function planClassCurriculumSync(input: {
       chosen.include_in_ira !== target.include_in_ira ||
       (chosen.slot_index ?? 1) !== slot ||
       Boolean(chosen.legacy_excluded) !== false ||
-      (chosen.sort_order ?? -1) !== target.sort_order;
+      (chosen.sort_order ?? -1) !== target.sort_order ||
+      (chosen.classification ?? null) !== target.classification ||
+      Number(chosen.ira_weight ?? 0) !== Number(target.ira_weight) ||
+      (chosen.curriculum_matrix_subject_id ?? null) !== target.curriculum_matrix_subject_id;
     if (changed) {
       plan.gradeUpdate.push({ id: chosen.id, ...target });
       plan.counts.updated += 1;

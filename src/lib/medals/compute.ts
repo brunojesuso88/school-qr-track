@@ -12,7 +12,7 @@ import {
   toPeriodRefs,
 } from '@/hooks/useStudentGrades';
 import { canonicalSubjectKey } from '@/lib/gradePageLocal/normalize';
-import { MEDAL_AREAS, MedalAreaId, subjectBelongsToArea } from './areas';
+import { MEDAL_AREAS, MedalArea, MedalAreaId, subjectBelongsTo } from './areas';
 import { parseSeriesValue, HighSchoolSeries, classSeriesLabel } from '@/lib/series';
 
 export interface AreaIra {
@@ -27,13 +27,13 @@ export interface AreaIra {
 export function computeAreaIra(
   data: ClassGradesData,
   studentId: string,
-  areaId: MedalAreaId,
+  area: MedalArea,
 ): AreaIra {
   // Matching determinístico por identidade canônica + deduplicação de
   // aliases/duplicatas históricas (a mesma disciplina nunca pesa duas vezes).
   const seen = new Set<string>();
   const areaSubjects = data.subjects
-    .filter((s) => subjectBelongsToArea(s.name, areaId))
+    .filter((s) => subjectBelongsTo(area, s.name))
     .filter((s) => {
       const key = canonicalSubjectKey(s.name);
       if (seen.has(key)) return false;
@@ -66,6 +66,8 @@ export interface MedalStudentInput {
 export interface StudentMedal {
   areaId: MedalAreaId;
   title: string;
+  /** Símbolo/emoji configurado pela escola (quando houver). */
+  symbol?: string | null;
   series: HighSchoolSeries;
   seriesLabel: string;
   /** IRA da área do aluno. */
@@ -80,7 +82,10 @@ export interface StudentMedal {
  * Medalhas de todos os alunos informados. Universo da disputa = SÉRIE
  * (todas as turmas da mesma série). Alunos sem série não participam.
  */
-export function computeMedals(students: MedalStudentInput[]): Record<string, StudentMedal[]> {
+export function computeMedals(
+  students: MedalStudentInput[],
+  areas: MedalArea[] = MEDAL_AREAS,
+): Record<string, StudentMedal[]> {
   const medals: Record<string, StudentMedal[]> = {};
   const bySeries = new Map<HighSchoolSeries, MedalStudentInput[]>();
   students.forEach((s) => {
@@ -90,9 +95,9 @@ export function computeMedals(students: MedalStudentInput[]): Record<string, Stu
   });
 
   bySeries.forEach((group, series) => {
-    MEDAL_AREAS.forEach((area) => {
+    areas.forEach((area) => {
       const scored = group
-        .map((s) => ({ student: s, area: computeAreaIra(s.data, s.studentId, area.id) }))
+        .map((s) => ({ student: s, area: computeAreaIra(s.data, s.studentId, area) }))
         .filter((r) => r.area.hasData && r.area.result.value != null);
       if (scored.length === 0) return;
       const best = Math.max(...scored.map((r) => r.area.result.value as number));
@@ -103,6 +108,7 @@ export function computeMedals(students: MedalStudentInput[]): Record<string, Stu
           {
             areaId: area.id,
             title: area.title,
+            symbol: area.symbol ?? null,
             series,
             seriesLabel: classSeriesLabel(series),
             value: best,
