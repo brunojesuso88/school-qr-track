@@ -30,6 +30,10 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import { buildJoinUrl, type AppRole } from '@/lib/schools/registration';
 import { PREVIEW_LINK_WARNING, PUBLIC_URL_CHANGE_WARNING } from '@/lib/schools/publicUrl';
+import type { CurriculumMatrixRecord } from '@/lib/curriculumMatrices';
+import {
+  fetchSchoolMatrixContext, needsMatrixUpdate, preselectedMatrixId, setSchoolCurriculumMatrix,
+} from '@/lib/schools/currentMatrix';
 
 interface SchoolRow {
   school_id: string;
