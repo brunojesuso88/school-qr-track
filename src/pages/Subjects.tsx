@@ -423,41 +423,26 @@ const SubjectsContent = () => {
         <CardHeader className="gap-3">
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div className="space-y-1">
-              <Label className="text-xs text-muted-foreground">Matriz curricular</Label>
-              <Select value={matrixId} onValueChange={setMatrixId}>
-                <SelectTrigger className="w-full sm:w-[340px]">
-                  <SelectValue placeholder="Selecione a matriz" />
-                </SelectTrigger>
-                <SelectContent>
-                  {matrices.map((m) => (
-                    <SelectItem key={m.id} value={m.id}>
-                      {m.name}
-                      {m.is_original ? " (original)" : m.system_key ? " (padrão do sistema)" : ""}
-                      {" · "}{m.components} componentes
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label className="text-xs text-muted-foreground">Matriz curricular vigente</Label>
+              <p className="text-base font-semibold">
+                {activeMatrix?.name ?? "Nenhuma matriz vigente definida para esta escola"}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Definida em Configurações → Usuários e escola → Gerenciar escola.
+              </p>
             </div>
             {canEdit && (
               <div className="flex flex-wrap gap-2">
-                <Button size="sm" onClick={() => setCreatingMatrix(true)}>
-                  <Plus className="h-4 w-4 mr-2" /> Nova matriz curricular
-                </Button>
                 <Button size="sm" variant="outline" onClick={openImport} disabled={!matrixId || matrices.length < 2}>
                   <Download className="h-4 w-4 mr-2" /> Importar disciplinas de outra matriz
                 </Button>
                 <Button size="sm" variant="outline" onClick={openSync} disabled={!matrixId}>
                   <RefreshCw className="h-4 w-4 mr-2" /> Sincronizar com turma(s)
                 </Button>
-                {activeMatrix && !matrixProtected && (
-                  <Button size="sm" variant="ghost" className="text-destructive" onClick={handleDeleteMatrix} disabled={saving}>
-                    <Trash2 className="h-4 w-4 mr-2" /> Excluir matriz
-                  </Button>
-                )}
               </div>
             )}
           </div>
+
           {activeMatrix && (
             <CardDescription className="flex flex-wrap items-center gap-2">
               {activeMatrix.is_original && (
