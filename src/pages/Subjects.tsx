@@ -665,50 +665,8 @@ const SubjectsContent = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Nova matriz */}
-      <Dialog open={creatingMatrix} onOpenChange={setCreatingMatrix}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Nova matriz curricular</DialogTitle>
-            <DialogDescription>
-              A matriz pertence apenas a esta escola e pode começar vazia ou reaproveitar os
-              componentes de outra matriz da própria escola.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="matrix-name">Nome</Label>
-              <Input id="matrix-name" value={matrixForm.name}
-                onChange={(e) => setMatrixForm((f) => ({ ...f, name: e.target.value }))} />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="matrix-desc">Descrição (opcional)</Label>
-              <Textarea id="matrix-desc" rows={3} value={matrixForm.description}
-                onChange={(e) => setMatrixForm((f) => ({ ...f, description: e.target.value }))} />
-            </div>
-            <div className="space-y-2">
-              <Label>Começar a partir de</Label>
-              <Select value={matrixForm.copyFrom} onValueChange={(v) => setMatrixForm((f) => ({ ...f, copyFrom: v }))}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Matriz vazia</SelectItem>
-                  {matrices.map((m) => (
-                    <SelectItem key={m.id} value={m.id}>Copiar de: {m.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setCreatingMatrix(false)}>Cancelar</Button>
-            <Button onClick={handleCreateMatrix} disabled={saving}>
-              {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />} Criar matriz
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
       {/* Importar de outra matriz */}
+
       <Dialog open={importOpen} onOpenChange={setImportOpen}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
