@@ -68,6 +68,12 @@ export interface ClassGradesData {
    * sem isso a disciplina ficava sem peso e desaparecia silenciosamente do IRA.
    */
   matrixWeeklyByKey?: Record<string, number>;
+  /**
+   * PESO EXPLÍCITO do IRA (`curriculum_matrix_subjects.ira_weight`) por identidade
+   * canônica da disciplina. Usado quando `grade_subjects.ira_weight` está ausente:
+   * o peso é herdado do COMPONENTE da matriz, nunca da carga semanal.
+   */
+  matrixIraWeightByKey?: Record<string, number>;
 }
 
 const emptyData: ClassGradesData = {
