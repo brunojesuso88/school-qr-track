@@ -62,12 +62,14 @@ describe('planClassCurriculumSync', () => {
   it('é idempotente: turma já sincronizada não gera escritas', () => {
     const synced = matrix.map((m, i) => ({
       id: `g${i}`, name: m.name, weekly_classes: m.weekly_classes,
-      include_in_ira: true, classification: 'fgb' as const, ira_weight: 2, legacy_excluded: false, sort_order: i,
+      include_in_ira: true, classification: 'fgb' as const, ira_weight: 2,
+      curriculum_matrix_subject_id: m.id, legacy_excluded: false, sort_order: i,
     }));
     const ordered = [...matrix].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
     const rows = ordered.map((m, i) => ({
       id: `g-${m.name}`, name: m.name, weekly_classes: m.weekly_classes,
-      include_in_ira: true, classification: 'fgb' as const, ira_weight: 2, legacy_excluded: false, sort_order: i,
+      include_in_ira: true, classification: 'fgb' as const, ira_weight: 2,
+      curriculum_matrix_subject_id: m.id, legacy_excluded: false, sort_order: i,
     }));
     expect(synced.length).toBe(3);
     const mappingRows = ordered.map((m) => ({ id: `m-${m.name}`, subject_name: m.name, weekly_classes: m.weekly_classes }));
@@ -102,6 +104,7 @@ describe('turma sem camada mapping (manageMapping=false)', () => {
       name: g.name,
       weekly_classes: g.weekly_classes,
       include_in_ira: true, classification: 'fgb' as const, ira_weight: 2,
+      curriculum_matrix_subject_id: g.curriculum_matrix_subject_id,
       legacy_excluded: false,
       sort_order: g.sort_order,
     }));
