@@ -134,7 +134,10 @@ export function validateLocalPage(input: ValidateInput): LocalValidation {
   const seen = new Map<string, string | null>();
   let conflictingDuplicates = 0;
   cells.forEach((c) => {
-    const key = `${canonicalSubjectKey(c.subject)}||${normalizeText(c.period)}`;
+    // A MESMA disciplina pode ocupar duas linhas legítimas (slots) na mesma etapa —
+    // Matriz Integral. A chave inclui o slot: só duplicidade DENTRO do mesmo slot é conflito.
+    const key = `${canonicalSubjectKey(c.subject)}#${c.slot ?? 1}||${normalizeText(c.period)}`;
+
     if (seen.has(key)) { if (seen.get(key) !== c.raw_value) conflictingDuplicates++; }
     else seen.set(key, c.raw_value);
   });
