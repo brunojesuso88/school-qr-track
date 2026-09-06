@@ -12,7 +12,9 @@ import { CurriculumMatrixItem } from '@/lib/curriculumMatrixCore';
 import {
   ClassCurriculumPlan, ExistingGradeSubject, ExistingMappingSubject, isPlanInSync, planClassCurriculumSync,
 } from '@/lib/classCurriculum/plan';
-import { assertMatrixInSchool, assignMatrixToClass, fetchOriginalMatrixId } from '@/lib/curriculumMatrices';
+import {
+  assertMatrixInSchool, assignMatrixToClass, fetchOriginalMatrixId, fetchSchoolMatrixId,
+} from '@/lib/curriculumMatrices';
 
 export * from '@/lib/classCurriculum/plan';
 
