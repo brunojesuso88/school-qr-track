@@ -100,6 +100,8 @@ const SchoolAdminPanel = () => {
   const [createOpen, setCreateOpen] = useState(false);
   const [newSchool, setNewSchool] = useState({
     name: '', city: '', state: '', code: '', autoApprove: false,
+    /** Matriz curricular base obrigatória da nova escola. */
+    baseKey: '' as '' | 'original' | 'integral',
   });
   const [autoApproveBusy, setAutoApproveBusy] = useState<string | null>(null);
   const [deleteSchool, setDeleteSchool] = useState<SchoolRow | null>(null);
@@ -228,6 +230,7 @@ const SchoolAdminPanel = () => {
 
   const createSchool = async () => {
     if (!newSchool.name.trim()) return toast.error('Informe o nome da escola');
+    if (!newSchool.baseKey) return toast.error('Escolha a matriz curricular da escola');
     setSaving(true);
     const { error } = await supabase.rpc('admin_create_school', {
       _name: newSchool.name.trim(),
@@ -235,12 +238,13 @@ const SchoolAdminPanel = () => {
       _state: newSchool.state.trim() || null,
       _code: newSchool.code.trim() || null,
       _auto_approve: newSchool.autoApprove,
+      _base_key: newSchool.baseKey,
     });
     setSaving(false);
     if (error) return toast.error(error.message);
     toast.success('Escola criada com link de cadastro ativo');
     setCreateOpen(false);
-    setNewSchool({ name: '', city: '', state: '', code: '', autoApprove: false });
+    setNewSchool({ name: '', city: '', state: '', code: '', autoApprove: false, baseKey: '' });
     await load();
   };
 
@@ -879,6 +883,23 @@ const SchoolAdminPanel = () => {
                 onChange={(e) => setNewSchool((p) => ({ ...p, code: e.target.value.toUpperCase() }))}
               />
             </div>
+            <div className="space-y-1">
+              <Label>Matriz curricular *</Label>
+              <Select
+                value={newSchool.baseKey || undefined}
+                onValueChange={(v) => setNewSchool((p) => ({ ...p, baseKey: v as 'original' | 'integral' }))}
+              >
+                <SelectTrigger><SelectValue placeholder="Escolha a matriz curricular da escola" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="original">Matriz Original (Ensino Médio regular e EJA)</SelectItem>
+                  <SelectItem value="integral">Matriz Integral (percursos EPT, EVE e SEC)</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                A matriz escolhida passa a ser a fonte de verdade das disciplinas, do IRA e das
+                medalhas da escola. Ela é criada como cópia própria da escola.
+              </p>
+            </div>
             <div className="flex items-center justify-between gap-3 rounded-md border p-3">
               <div>
                 <Label>Aceitar novos cadastros automaticamente</Label>
@@ -894,7 +915,7 @@ const SchoolAdminPanel = () => {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setCreateOpen(false)}>Cancelar</Button>
-            <Button onClick={createSchool} disabled={saving}>
+            <Button onClick={createSchool} disabled={saving || !newSchool.baseKey}>
               {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}Criar escola
             </Button>
           </DialogFooter>
