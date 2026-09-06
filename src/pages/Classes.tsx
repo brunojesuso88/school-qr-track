@@ -239,6 +239,7 @@ const Classes = () => {
 
     try {
       if (editingClass) {
+        const editedSeries = parseSeriesValue(formData.series || null);
         const { error } = await supabase
           .from('classes')
           .update({
@@ -247,8 +248,10 @@ const Classes = () => {
             description: validationData.description,
             photo_url: formData.photo_url,
             location: formData.location,
+            ...(editedSeries ? { series: editedSeries } : {}),
           })
           .eq('id', editingClass.id);
+
 
         if (error) throw error;
         toast.success('Turma atualizada com sucesso');
