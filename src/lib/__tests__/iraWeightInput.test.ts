@@ -29,16 +29,17 @@ describe('valor exibido no campo de peso', () => {
 
 describe('gravação do override', () => {
   it('valor diferente do base vira override da turma', () => {
-    expect(customWeightPatch({ iraWeight: 4, input: '2' })).toEqual({ custom_ira_weight: 2 });
+    expect(customWeightPatch('2', 4)).toEqual({ custom_ira_weight: 2 });
   });
 
   it('voltar ao peso base limpa o override', () => {
-    expect(customWeightPatch({ iraWeight: 4, input: '4' })).toEqual({ custom_ira_weight: null });
+    expect(customWeightPatch('4', 4)).toEqual({ custom_ira_weight: null });
   });
 
   it('campo vazio limpa o override', () => {
-    expect(customWeightPatch({ iraWeight: 2, input: '' })).toEqual({ custom_ira_weight: null });
+    expect(customWeightPatch('', 2)).toEqual({ custom_ira_weight: null });
   });
+
 });
 
 describe('carga semanal não influencia o peso', () => {
