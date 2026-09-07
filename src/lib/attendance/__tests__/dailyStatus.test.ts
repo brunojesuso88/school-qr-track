@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { localDateKey, countActiveStudents, buildDailyClassRows, summarizeDaily } from '../dailyStatus';
+import { localDateKey, countActiveStudents, buildDailyClassRows, summarizeDaily,
+  computeSchoolPresence,
+  formatPresencePercent,
+  formatSchoolPresence,
+} from '../dailyStatus';
 
 const classes = [
   { id: 'c1', name: '26RMM101', shift: 'morning' },
@@ -148,5 +152,52 @@ describe('persistência canônica compartilhada (Turmas e Frequência diária)',
     const closure = buildClosureRow('26RMM101', '2026-08-31', 'morning', counts, 'u1', 'ts', 'esc-1');
     const rows = buildDailyClassRows(classes, students, [closure], '2026-08-31');
     expect(rows.find((r) => r.name === '26RMM101')!.status).toBe('done');
+  });
+});
+
+describe('presença global da escola ("Presentes hoje: X de Y alunos — Z%")', () => {
+  const students = [
+    { id: 'a1', class: '1A', status: 'active' },
+    { id: 'a2', class: '1A', status: 'active' },
+    { id: 'a3', class: '2B', status: 'active' },
+    { id: 'a4', class: '2B', status: 'inactive' },
+    { id: 'a5', class: '3C', status: null }, // sem status = ativo
+  ];
+
+  it('conta apenas alunos ativos com registro present distinto na data', () => {
+    const p = computeSchoolPresence(students, [
+      { student_id: 'a1', status: 'present', date: '2026-08-31' },
+      { student_id: 'a1', status: 'present', date: '2026-08-31' }, // duplicado não conta duas vezes
+      { student_id: 'a2', status: 'absent', date: '2026-08-31' },
+      { student_id: 'a3', status: 'justified', date: '2026-08-31' },
+      { student_id: 'a4', status: 'present', date: '2026-08-31' }, // inativo: ignorado
+      { student_id: 'a5', status: 'present', date: '2026-08-30' }, // outra data: ignorado
+      { student_id: 'zz', status: 'present', date: '2026-08-31' }, // aluno de fora: ignorado
+    ], '2026-08-31');
+    expect(p).toEqual({ present: 1, total: 4, percent: 25 });
+    expect(formatSchoolPresence(p)).toBe('Presentes hoje: 1 de 4 alunos — 25%');
+  });
+
+  it('sem alunos ativos: total 0, percentual indefinido ("—") e nunca divide por zero', () => {
+    const p = computeSchoolPresence([{ id: 'x', class: '1A', status: 'inactive' }], [
+      { student_id: 'x', status: 'present' },
+    ]);
+    expect(p).toEqual({ present: 0, total: 0, percent: null });
+    expect(formatPresencePercent(p.percent)).toBe('—');
+    expect(formatSchoolPresence(p)).toBe('Presentes hoje: 0 de 0 alunos — —');
+  });
+
+  it('arredonda o percentual para inteiro e atinge 100% com todos presentes', () => {
+    const three = students.slice(0, 3);
+    expect(computeSchoolPresence(three, [{ student_id: 'a1', status: 'present' }]).percent).toBe(33);
+    expect(computeSchoolPresence(three, [{ student_id: 'a1', status: 'present' }, { student_id: 'a2', status: 'present' }]).percent).toBe(67);
+    expect(
+      computeSchoolPresence(three, three.map((s) => ({ student_id: s.id, status: 'present' }))),
+    ).toEqual({ present: 3, total: 3, percent: 100 });
+  });
+
+  it('sem dateKey aceita registros sem data (consulta já filtrada no banco)', () => {
+    const p = computeSchoolPresence(students, [{ student_id: 'a1', status: 'present' }]);
+    expect(p.present).toBe(1);
   });
 });
