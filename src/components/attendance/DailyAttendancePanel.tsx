@@ -394,7 +394,7 @@ const DailyAttendancePanel = () => {
           onOpenChange={(open) => !open && setSelected(null)}
           className={selected.name}
           shift={selected.shift}
-          onSaved={load}
+          onSaved={() => { void load(true); }}
         />
       )}
     </div>
