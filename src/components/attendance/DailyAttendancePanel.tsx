@@ -57,8 +57,9 @@ const DailyAttendancePanel = () => {
   const todayKey = localDateKey(today);
 
   /**
-   * Contador global da escola: alunos ativos × registros `present` de hoje.
-   * Consulta leve e isolada por `school_id` (RLS + filtro explícito).
+   * Contador global da escola: alunos ativos com turma válida × registros
+   * `present` de hoje. Consulta leve e isolada por `school_id` (RLS + filtro
+   * explícito) — usa SEMPRE a escola inteira, nunca a lista filtrada da tela.
    */
   const loadPresence = useCallback(async () => {
     if (!activeSchoolId) {
@@ -66,7 +67,8 @@ const DailyAttendancePanel = () => {
       return;
     }
     try {
-      const [studentsRes, presentRes] = await Promise.all([
+      const [classesRes, studentsRes, presentRes] = await Promise.all([
+        supabase.from('classes').select('name, status').eq('school_id', activeSchoolId),
         supabase.from('students').select('id, class, status').eq('school_id', activeSchoolId),
         supabase
           .from('attendance')
@@ -75,23 +77,36 @@ const DailyAttendancePanel = () => {
           .eq('date', todayKey)
           .eq('status', 'present'),
       ]);
+      if (classesRes.error) throw classesRes.error;
       if (studentsRes.error) throw studentsRes.error;
       if (presentRes.error) throw presentRes.error;
-      setPresence(computeSchoolPresence(studentsRes.data || [], presentRes.data || [], todayKey));
+      const validClassNames = (classesRes.data || [])
+        .filter((c) => (c.status ?? 'active') === 'active')
+        .map((c) => c.name);
+      setPresence(
+        computeSchoolPresence(studentsRes.data || [], presentRes.data || [], {
+          dateKey: todayKey,
+          validClassNames,
+        }),
+      );
     } catch {
       // Mantém o último valor conhecido; o card indica que pode estar desatualizado.
       setPresence((prev) => prev);
     }
   }, [activeSchoolId, todayKey]);
 
-  const load = useCallback(async () => {
+  /**
+   * Carrega turmas do dia + contador global. `silent` recarrega em segundo
+   * plano (após salvar uma chamada) sem trocar a tela por esqueletos.
+   */
+  const load = useCallback(async (silent = false) => {
     if (!activeSchoolId) {
       setRows([]);
       setPresence(null);
       setLoading(false);
       return;
     }
-    setLoading(true);
+    if (!silent) setLoading(true);
     setError(null);
     try {
       const [classesRes, studentsRes, closuresRes, presentRes] = await Promise.all([
@@ -113,16 +128,21 @@ const DailyAttendancePanel = () => {
       const activeClasses = (classesRes.data || []).filter((c) => (c.status ?? 'active') === 'active');
       const students = studentsRes.data || [];
       setRows(buildDailyClassRows(activeClasses, students, closuresRes.data || [], todayKey));
-      setPresence(computeSchoolPresence(students, presentRes.data || [], todayKey));
+      setPresence(
+        computeSchoolPresence(students, presentRes.data || [], {
+          dateKey: todayKey,
+          validClassNames: activeClasses.map((c) => c.name),
+        }),
+      );
     } catch (e) {
-      setError('Não foi possível carregar as turmas do dia. Tente novamente.');
+      if (!silent) setError('Não foi possível carregar as turmas do dia. Tente novamente.');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [todayKey, activeSchoolId]);
 
   useEffect(() => {
-    load();
+    void load();
   }, [load]);
 
   /**
