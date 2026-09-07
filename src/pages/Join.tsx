@@ -265,8 +265,8 @@ const Join = () => {
             <p className="text-sm text-muted-foreground">
               {registrationLinkErrorMessage(link?.reason)}
             </p>
-            <Button variant="outline" onClick={() => navigate('/auth')}>
-              Ir para o login
+            <Button variant="outline" onClick={() => navigate(user ? '/dashboard' : '/auth')}>
+              {user ? 'Voltar ao sistema' : 'Ir para o login'}
             </Button>
           </CardContent>
         </Card>
