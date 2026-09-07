@@ -225,7 +225,7 @@ const DailyAttendancePanel = () => {
                 className="h-9 w-full sm:w-48 bg-background"
                 aria-label="Buscar turma"
               />
-              <Button variant="outline" size="icon" className="h-9 w-9 shrink-0" onClick={load} aria-label="Atualizar lista">
+              <Button variant="outline" size="icon" className="h-9 w-9 shrink-0" onClick={() => { void load(); }} aria-label="Atualizar lista">
                 <RefreshCw className="w-4 h-4" />
               </Button>
             </div>
