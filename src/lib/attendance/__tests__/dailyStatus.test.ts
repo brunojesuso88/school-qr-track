@@ -1,8 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import { localDateKey, countActiveStudents, buildDailyClassRows, summarizeDaily,
+  activeClassNames,
   computeSchoolPresence,
+  filterRowsBySearch,
   formatPresencePercent,
   formatSchoolPresence,
+  presenceProgressValue,
+  validPresenceStudentIds,
 } from '../dailyStatus';
 
 const classes = [
