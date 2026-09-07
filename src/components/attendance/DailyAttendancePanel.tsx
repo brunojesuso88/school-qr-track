@@ -15,8 +15,10 @@ import { ptBR } from 'date-fns/locale';
 import { toast } from 'sonner';
 import DailyClassAttendanceDialog from './DailyClassAttendanceDialog';
 import {
+  activeClassNames,
   buildDailyClassRows,
   computeSchoolPresence,
+  filterRowsBySearch,
   formatPresencePercent,
   localDateKey,
   presenceProgressValue,
@@ -41,6 +43,34 @@ const shiftLabel = (shift?: string | null) => {
 
 /** Janela de agrupamento dos eventos realtime (várias leituras de QR em sequência). */
 const PRESENCE_REFRESH_DEBOUNCE_MS = 700;
+
+/**
+ * Dados da ESCOLA INTEIRA usados pelo contador global (e pela lista de turmas).
+ * Consulta leve e isolada por `school_id` (RLS + filtro explícito): turmas com
+ * status, alunos com turma/status e apenas os registros `present` da data local.
+ */
+const fetchSchoolPresenceInputs = async (schoolId: string, dateKey: string) => {
+  const [classesRes, studentsRes, presentRes] = await Promise.all([
+    supabase.from('classes').select('id, name, shift, status').eq('school_id', schoolId).order('name'),
+    supabase.from('students').select('id, class, status').eq('school_id', schoolId),
+    supabase
+      .from('attendance')
+      .select('student_id, status, date')
+      .eq('school_id', schoolId)
+      .eq('date', dateKey)
+      .eq('status', 'present'),
+  ]);
+  if (classesRes.error) throw classesRes.error;
+  if (studentsRes.error) throw studentsRes.error;
+  if (presentRes.error) throw presentRes.error;
+  const classes = classesRes.data || [];
+  const students = studentsRes.data || [];
+  const presence = computeSchoolPresence(students, presentRes.data || [], {
+    dateKey,
+    validClassNames: activeClassNames(classes),
+  });
+  return { classes, students, presence };
+};
 
 const DailyAttendancePanel = () => {
   const activeSchoolId = useActiveSchoolId();
