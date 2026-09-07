@@ -21,17 +21,20 @@ Continuação do commit parcial `bc486a08` (migration `20260907110118_ca0d452e�
 - [x] Testes de schoolPreferences ajustados
 
 ## 3) Frequência diária — contador em tempo real — CONCLUÍDO
-- [x] Helpers `computeSchoolPresence`, `formatPresencePercent`, `formatSchoolPresence`
+- [x] Helpers `computeSchoolPresence` (validClassNames obrigatório, trim/caixa), `activeClassNames`, `filterRowsBySearch`, `formatPresencePercent` pt-BR (0–1 casa), `presenceProgressValue`
+- [x] Y = ativos em turma ATIVA da escola; inativo/sem turma/turma inexistente ou inativa fora de X e Y; Y=0 ⇒ 0%
 - [x] Card "Presentes hoje: X de Y alunos — Z%" no topo, global da escola, com Progress e indicador "ao vivo"
-- [x] Realtime `attendance` (filtro por escola) com debounce 700 ms → recarga isolada
-- [x] Testes: dedup, inativo/órfão/outra escola, Y=0, %, data local
+- [x] Realtime `attendance` (filtro por escola) com debounce 700 ms → recarga isolada (consulta única compartilhada)
+- [x] Testes: dedup, ativo/inativo, sem turma, turma inexistente/inativa, absent/justified, outra data, Y=0, 33,3%/66,7%/50%/100%, X≤Y, barra 0..100, filtro visual, meia-noite
 
-## QA — CONCLUÍDO
-- [x] Vitest completo: 66 arquivos / 579 testes passando; tsgo limpo; build OK
-- [x] Diff auditado: nenhuma alteração em IRA/matriz/parser/student_grades
-- [x] Verificação no navegador: /join anônimo e autenticado, card de presença "ao vivo", Geral sem bimestre
+## QA — CONCLUÍDO (consolidação final)
+- [x] Vitest completo: 66 arquivos / 595 testes passando; tsgo limpo; build OK
+- [x] Diff auditado: nenhuma alteração em IRA/matriz/parser/student_grades; nenhuma migration nova além de `20260907110118`
+- [x] `admin_remove_membership` confirmado: apaga só `school_memberships` (identidade Auth intacta)
+- [x] Verificação no navegador: card "0 de 723 alunos — 0%" bate com a contagem do banco da escola ativa
 
 ## Próximos (prontos para iniciar)
 - [ ] Painel de administração: filtro de membros por status (ativo/pendente/encerrado) e ação "Reabrir vínculo" direta, sem exigir novo acesso ao link
 - [ ] Card de presença: detalhar por turno (Manhã/Tarde/Noite) ao passar o mouse/expandir, mantendo o total global
 - [ ] Notificação interna para a direção quando um vínculo encerrado é reaberto via link (event_type `membership_reopened`)
+- [ ] Contador diário: virar o dia automaticamente após a meia-noite local sem recarregar a página
