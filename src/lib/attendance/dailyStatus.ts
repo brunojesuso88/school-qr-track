@@ -104,10 +104,17 @@ export function summarizeDaily(rows: DailyClassRow[]): DailySummary {
 /* ------------------------------------------------------------------ *
  * Presença global da escola no dia ("Presentes hoje: X de Y alunos — Z%").
  *
- * - Y = alunos ATIVOS da escola (fonte: `students`, status active).
- * - X = alunos ativos distintos com registro `present` em `attendance` na data
- *   (QR code ou chamada de turma — qualquer origem). `justified`/`absent` não
- *   contam; registros de alunos inativos ou de outra data são ignorados.
+ * Conjunto VÁLIDO de alunos (Y): linhas de `students` da própria escola com
+ * status ativo e cuja `class` corresponde a uma turma válida da escola
+ * (`classes.name`). Inativos/transferidos, órfãos de turma ou alunos de outra
+ * escola ficam fora — tanto de Y quanto de X.
+ *
+ * X = alunos DISTINTOS desse conjunto com registro `present` em `attendance`
+ * na data local informada (QR code ou chamada de turma — qualquer origem).
+ * `justified`/`absent` não contam; vários registros do mesmo aluno = 1.
+ *
+ * O helper recebe SEMPRE os dados completos da escola — nunca a lista já
+ * filtrada pela busca/filtros visuais da tela.
  * ------------------------------------------------------------------ */
 
 export interface PresenceRecordLike {
@@ -119,34 +126,74 @@ export interface PresenceRecordLike {
 export interface SchoolPresence {
   present: number;
   total: number;
-  /** 0–100 inteiro; null quando não há alunos ativos. */
-  percent: number | null;
+  /** 0–100 (fração exata, sem arredondar); 0 quando não há alunos válidos. */
+  percent: number;
+}
+
+export interface SchoolPresenceOptions {
+  /** Data local (yyyy-MM-dd). Registros de outra data são ignorados. */
+  dateKey?: string | null;
+  /**
+   * Nomes das turmas válidas da escola. Quando informado, alunos cuja `class`
+   * não está na lista são excluídos do conjunto válido (órfãos). Quando
+   * omitido, não há filtro por turma.
+   */
+  validClassNames?: Iterable<string> | null;
+}
+
+/** Alunos válidos para o contador global (ativos e com turma válida). */
+export function validPresenceStudentIds(
+  students: StudentLike[],
+  validClassNames?: Iterable<string> | null,
+): Set<string> {
+  const classSet = validClassNames ? new Set(validClassNames) : null;
+  const ids = new Set<string>();
+  for (const s of students) {
+    if ((s.status ?? 'active') !== 'active') continue;
+    if (classSet && !classSet.has(s.class)) continue;
+    ids.add(s.id);
+  }
+  return ids;
 }
 
 export function computeSchoolPresence(
   students: StudentLike[],
   records: PresenceRecordLike[],
-  dateKey?: string,
+  options: SchoolPresenceOptions = {},
 ): SchoolPresence {
-  const activeIds = new Set<string>();
-  for (const s of students) {
-    if ((s.status ?? 'active') === 'active') activeIds.add(s.id);
-  }
+  const { dateKey, validClassNames } = options;
+  const validIds = validPresenceStudentIds(students, validClassNames);
   const presentIds = new Set<string>();
   for (const r of records) {
     if (r.status !== 'present') continue;
     if (dateKey && r.date && r.date !== dateKey) continue;
-    if (!activeIds.has(r.student_id)) continue;
+    if (!validIds.has(r.student_id)) continue;
     presentIds.add(r.student_id);
   }
-  const total = activeIds.size;
+  const total = validIds.size;
   const present = Math.min(presentIds.size, total);
-  const percent = total === 0 ? null : Math.round((present / total) * 100);
+  const percent = total === 0 ? 0 : (present / total) * 100;
   return { present, total, percent };
 }
 
-export function formatPresencePercent(percent: number | null): string {
-  return percent === null ? '—' : `${percent}%`;
+const percentFormatter = new Intl.NumberFormat('pt-BR', {
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 1,
+});
+
+/**
+ * Percentual amigável em pt-BR: inteiro quando exato ("25%", "100%"),
+ * uma casa decimal quando necessário ("33,3%"). Valores inválidos viram "0%".
+ */
+export function formatPresencePercent(percent: number | null | undefined): string {
+  const safe = Number.isFinite(percent) ? Math.max(0, percent as number) : 0;
+  return `${percentFormatter.format(safe)}%`;
+}
+
+/** Valor da barra de progresso: sempre dentro de 0..100, sem alterar o valor lógico. */
+export function presenceProgressValue(percent: number | null | undefined): number {
+  if (!Number.isFinite(percent)) return 0;
+  return Math.min(100, Math.max(0, percent as number));
 }
 
 /** Texto canônico do card: "Presentes hoje: X de Y alunos — Z%". */
