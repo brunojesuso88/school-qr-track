@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { toast } from 'sonner';
-import { clearPendingJoinToken, setPendingJoinToken } from '@/lib/schools/joinTokenStore';
+import { clearPendingJoinToken, getPendingJoinToken, setPendingJoinToken } from '@/lib/schools/joinTokenStore';
 import { setActiveSchoolIdStore } from '@/lib/schools/activeSchoolStore';
 import {
   CheckCircle2, Clock, KeyRound, Loader2, Lock, LogIn, Mail, MailCheck, RotateCcw, School,
