@@ -110,24 +110,6 @@ const GeneralSettings = () => {
               Entre {MIN_ACADEMIC_YEAR} e {MAX_ACADEMIC_YEAR}.
             </p>
           </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="current-bimester">Bimestre atual</Label>
-            <Select
-              value={String(form.current_bimester)}
-              onValueChange={(v) =>
-                setForm((p) => ({ ...p, current_bimester: Number(v) as SchoolPreferences['current_bimester'] }))
-              }
-            >
-              <SelectTrigger id="current-bimester"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {([1, 2, 3, 4] as const).map((b) => (
-                  <SelectItem key={b} value={String(b)}>{BIMESTER_LABELS[b]}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <p className="text-xs text-muted-foreground">Contexto operacional da escola.</p>
-          </div>
         </CardContent>
       </Card>
 
