@@ -60,6 +60,10 @@ const Auth = () => {
       const pending = (location.state as { joinToken?: string } | null)?.joinToken
         ?? getPendingJoinToken();
       if (pending) {
+        // O efeito pode disparar de novo enquanto o vínculo é concluído
+        // (refreshAccess altera userRole) — nunca repetir a chamada/navegação.
+        if (joinInFlight.current) return;
+        joinInFlight.current = true;
         // Conclui o vínculo escolar pendente antes de qualquer redirecionamento e
         // recarrega os vínculos para que /join mostre a situação REAL (ativo/pendente/reaberto).
         void (async () => {
@@ -74,7 +78,7 @@ const Auth = () => {
             } catch {
               /* a tela /join tem "Verificar novamente" */
             }
-            navigate(`/join/${pending}`, { replace: true });
+            navigate(`/join/${pending}`, { replace: true, state: null });
           }
         })();
         return;
