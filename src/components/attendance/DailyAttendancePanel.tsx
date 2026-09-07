@@ -19,6 +19,7 @@ import {
   computeSchoolPresence,
   formatPresencePercent,
   localDateKey,
+  presenceProgressValue,
   summarizeDaily,
   type DailyClassRow,
   type SchoolPresence,
