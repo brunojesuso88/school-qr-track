@@ -67,10 +67,31 @@ describe('ciclo remover vínculo → recadastrar (mesma identidade)', () => {
     expect(next).toEqual([{ user_id: U, school_id: B, role: 'teacher', status: 'active' }]);
   });
 
-  it('segunda escola nunca entra por aceite automático', () => {
-    const rows: MembershipRow[] = [{ user_id: U, school_id: B, role: 'teacher', status: 'active' }];
-    const { result } = join(rows, A, true);
-    expect(result).toMatchObject({ status: 'pending', second_school: true, requires_admin_approval: true });
+  it('vínculo ativo em B + novo pedido em A → pending com second_school, sem alterar B', () => {
+    const rows: MembershipRow[] = [{ user_id: U, school_id: B, role: 'direction', status: 'active' }];
+    const { rows: next, result } = join(rows, A, true);
+    expect(result).toMatchObject({
+      status: 'pending', second_school: true, requires_admin_approval: true, already_member: false, reopened: false,
+    });
+    // B permanece exatamente como estava (papel e status) e A entra como pendente.
+    expect(next.find((m) => m.school_id === B)).toEqual(rows[0]);
+    expect(next.find((m) => m.school_id === A)).toMatchObject({ user_id: U, role: 'teacher', status: 'pending' });
+    // Nunca duplica (school_id, user_id).
+    const keys = next.map((m) => `${m.school_id}|${m.user_id}`);
+    expect(new Set(keys).size).toBe(keys.length);
+    expect(next).toHaveLength(2);
+  });
+
+  it('vínculo ativo em B + vínculo encerrado em A → reabre A como pendente, B intacto', () => {
+    const rows: MembershipRow[] = [
+      { user_id: U, school_id: A, role: 'teacher', status: 'inactive' },
+      { user_id: U, school_id: B, role: 'teacher', status: 'active' },
+    ];
+    const { rows: next, result } = join(rows, A, true);
+    expect(result).toMatchObject({ status: 'pending', reopened: true, second_school: true });
+    expect(next).toHaveLength(2);
+    expect(next.find((m) => m.school_id === B)).toEqual(rows[1]);
+    expect(next.find((m) => m.school_id === A)!.status).toBe('pending');
   });
 
   it('perfis privilegiados nunca são aprovados automaticamente', () => {
