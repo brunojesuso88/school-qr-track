@@ -147,10 +147,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return { error: error as Error | null };
   };
 
-  const signUp = async (email: string, password: string, fullName: string) => {
+  const signUp = async (email: string, password: string, fullName: string): Promise<SignUpResult> => {
     const redirectUrl = `${window.location.origin}/`;
 
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
@@ -160,7 +160,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         },
       },
     });
-    return { error: error as Error | null };
+    // Conta já existente: nunca cria segunda identidade. O chamador deve exigir
+    // autenticação da conta existente (senha/recuperação) antes de qualquer vínculo.
+    const existingAccount = isExistingAccountSignUp(
+      error ? { message: error.message, code: (error as { code?: string }).code } : null,
+      data?.user ?? null,
+    );
+    if (existingAccount) {
+      return { error: null, existingAccount: true, hasSession: false };
+    }
+    return { error: error as Error | null, existingAccount: false, hasSession: !!data?.session };
   };
 
   const signOut = async () => {
