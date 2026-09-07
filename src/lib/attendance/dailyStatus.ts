@@ -101,20 +101,28 @@ export function summarizeDaily(rows: DailyClassRow[]): DailySummary {
   return { total: rows.length, done, pending: rows.length - done };
 }
 
+/** Filtro visual da lista de turmas (busca por nome). Nunca alimenta o contador global. */
+export function filterRowsBySearch(rows: DailyClassRow[], query: string): DailyClassRow[] {
+  const q = query.trim().toLowerCase();
+  if (!q) return rows;
+  return rows.filter((r) => r.name.toLowerCase().includes(q));
+}
+
 /* ------------------------------------------------------------------ *
  * Presença global da escola no dia ("Presentes hoje: X de Y alunos — Z%").
  *
  * Conjunto VÁLIDO de alunos (Y): linhas de `students` da própria escola com
- * status ativo e cuja `class` corresponde a uma turma válida da escola
- * (`classes.name`). Inativos/transferidos, órfãos de turma ou alunos de outra
- * escola ficam fora — tanto de Y quanto de X.
+ * status ativo e cuja `class` corresponde a uma turma VÁLIDA da escola
+ * (`classes.name` com status ativo). Inativos/transferidos, alunos sem turma,
+ * com turma inexistente/inativa ou de outra escola ficam fora — tanto de Y
+ * quanto de X.
  *
  * X = alunos DISTINTOS desse conjunto com registro `present` em `attendance`
  * na data local informada (QR code ou chamada de turma — qualquer origem).
  * `justified`/`absent` não contam; vários registros do mesmo aluno = 1.
  *
  * O helper recebe SEMPRE os dados completos da escola — nunca a lista já
- * filtrada pela busca/filtros visuais da tela.
+ * filtrada pela busca/filtros visuais da tela (ver `filterRowsBySearch`).
  * ------------------------------------------------------------------ */
 
 export interface PresenceRecordLike {
@@ -124,7 +132,9 @@ export interface PresenceRecordLike {
 }
 
 export interface SchoolPresence {
+  /** X — alunos válidos distintos com presença hoje. Sempre ≤ `total`. */
   present: number;
+  /** Y — alunos válidos (ativos e com turma válida). */
   total: number;
   /** 0–100 (fração exata, sem arredondar); 0 quando não há alunos válidos. */
   percent: number;
@@ -134,23 +144,41 @@ export interface SchoolPresenceOptions {
   /** Data local (yyyy-MM-dd). Registros de outra data são ignorados. */
   dateKey?: string | null;
   /**
-   * Nomes das turmas válidas da escola. Quando informado, alunos cuja `class`
-   * não está na lista são excluídos do conjunto válido (órfãos). Quando
-   * omitido, não há filtro por turma.
+   * Nomes das turmas VÁLIDAS da escola (ativas). Obrigatório: alunos cuja
+   * `class` não está na lista (sem turma, turma inexistente ou inativa) são
+   * excluídos do conjunto válido. Lista vazia ⇒ nenhum aluno válido (Y = 0).
    */
-  validClassNames?: Iterable<string> | null;
+  validClassNames: Iterable<string>;
+}
+
+/**
+ * Chave de comparação de nome de turma para o contador: igualdade exata,
+ * tolerando apenas espaços nas pontas e caixa. Nunca mistura turmas distintas.
+ */
+export function presenceClassKey(name: string | null | undefined): string {
+  return (name ?? '').trim().toLocaleUpperCase('pt-BR');
+}
+
+/** Nomes das turmas ativas (status ausente = ativa), prontos para `validClassNames`. */
+export function activeClassNames(classes: { name: string; status?: string | null }[]): string[] {
+  return classes.filter((c) => (c.status ?? 'active') === 'active').map((c) => c.name);
 }
 
 /** Alunos válidos para o contador global (ativos e com turma válida). */
 export function validPresenceStudentIds(
   students: StudentLike[],
-  validClassNames?: Iterable<string> | null,
+  validClassNames: Iterable<string>,
 ): Set<string> {
-  const classSet = validClassNames ? new Set(validClassNames) : null;
+  const classSet = new Set<string>();
+  for (const name of validClassNames) {
+    const key = presenceClassKey(name);
+    if (key) classSet.add(key);
+  }
   const ids = new Set<string>();
   for (const s of students) {
     if ((s.status ?? 'active') !== 'active') continue;
-    if (classSet && !classSet.has(s.class)) continue;
+    const key = presenceClassKey(s.class);
+    if (!key || !classSet.has(key)) continue;
     ids.add(s.id);
   }
   return ids;
@@ -159,7 +187,7 @@ export function validPresenceStudentIds(
 export function computeSchoolPresence(
   students: StudentLike[],
   records: PresenceRecordLike[],
-  options: SchoolPresenceOptions = {},
+  options: SchoolPresenceOptions,
 ): SchoolPresence {
   const { dateKey, validClassNames } = options;
   const validIds = validPresenceStudentIds(students, validClassNames);
@@ -172,6 +200,7 @@ export function computeSchoolPresence(
   }
   const total = validIds.size;
   const present = Math.min(presentIds.size, total);
+  // Y = 0 nunca divide por zero: percentual 0 e exibição "0%".
   const percent = total === 0 ? 0 : (present / total) * 100;
   return { present, total, percent };
 }
