@@ -60,7 +60,8 @@ const Auth = () => {
       const pending = (location.state as { joinToken?: string } | null)?.joinToken
         ?? getPendingJoinToken();
       if (pending) {
-        // Conclui o vínculo escolar pendente antes de qualquer redirecionamento.
+        // Conclui o vínculo escolar pendente antes de qualquer redirecionamento e
+        // recarrega os vínculos para que /join mostre a situação REAL (ativo/pendente/reaberto).
         void (async () => {
           try {
             await supabase.rpc('join_school_with_token', { _token: pending });
@@ -68,6 +69,11 @@ const Auth = () => {
             /* token inválido/expirado: a tela /join exibe o motivo */
           } finally {
             clearPendingJoinToken();
+            try {
+              await refreshAccess();
+            } catch {
+              /* a tela /join tem "Verificar novamente" */
+            }
             navigate(`/join/${pending}`, { replace: true });
           }
         })();
