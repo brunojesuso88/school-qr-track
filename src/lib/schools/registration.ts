@@ -93,6 +93,68 @@ export const isAwaitingApproval = (memberships: SchoolMembershipLike[]): boolean
   !memberships.some((m) => m.status === 'active') &&
   memberships.some((m) => m.status === 'pending');
 
+/** Situação do vínculo do usuário com UMA escola específica (`none` = nunca vinculado ou removido). */
+export type SchoolMembershipState = 'none' | MembershipStatus;
+
+export const membershipStateForSchool = (
+  memberships: SchoolMembershipLike[],
+  schoolId: string | null | undefined,
+): SchoolMembershipState => {
+  if (!schoolId) return 'none';
+  const found = memberships.find((m) => m.school_id === schoolId);
+  return found ? found.status : 'none';
+};
+
+/**
+ * Situação geral de acesso de uma conta autenticada (para o guard de rotas):
+ * - `active`: tem ao menos um vínculo ativo;
+ * - `pending`: nenhum ativo, mas há solicitação aguardando aprovação;
+ * - `closed`: só vínculos inativos/recusados (encerrados pela gestão);
+ * - `none`: conta existente sem nenhum vínculo escolar (ex.: vínculo removido).
+ */
+export type AccountAccessState = 'active' | 'pending' | 'closed' | 'none';
+
+export const describeAccountAccess = (memberships: SchoolMembershipLike[]): AccountAccessState => {
+  if (memberships.some((m) => m.status === 'active')) return 'active';
+  if (memberships.some((m) => m.status === 'pending')) return 'pending';
+  if (memberships.length > 0) return 'closed';
+  return 'none';
+};
+
+const JOIN_TOKEN_SHAPE = /^[A-Za-z0-9_-]{8,128}$/;
+
+/**
+ * Extrai o token de cadastro a partir de um link completo (`https://app/join/<token>`)
+ * ou do próprio token colado. Retorna null quando não reconhece nada seguro.
+ */
+export const extractJoinToken = (input: string | null | undefined): string | null => {
+  const raw = (input ?? '').trim();
+  if (!raw) return null;
+  const match = raw.match(/\/join\/([A-Za-z0-9_-]{8,128})(?:[/?#]|$)/);
+  if (match) return match[1];
+  if (JOIN_TOKEN_SHAPE.test(raw)) return raw;
+  return null;
+};
+
+/**
+ * Detecta cadastro com e-mail JÁ existente no Auth, cobrindo os dois comportamentos
+ * do provedor: erro explícito (`user_already_exists`) ou usuário "ofuscado" sem
+ * identidades (quando a confirmação de e-mail está ativa).
+ */
+export const isExistingAccountSignUp = (
+  error: { message?: string; code?: string } | null | undefined,
+  user: { identities?: unknown[] | null } | null | undefined,
+): boolean => {
+  if (error) {
+    const msg = (error.message ?? '').toLowerCase();
+    return error.code === 'user_already_exists'
+      || msg.includes('already registered')
+      || msg.includes('already been registered')
+      || msg.includes('already exists');
+  }
+  return !!user && Array.isArray(user.identities) && user.identities.length === 0;
+};
+
 /** Caminho school-scoped para novos uploads (branding, atestados, eventos...). */
 export const schoolStoragePath = (
   schoolId: string,
