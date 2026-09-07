@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -9,21 +9,34 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { toast } from 'sonner';
 import { clearPendingJoinToken, setPendingJoinToken } from '@/lib/schools/joinTokenStore';
 import { setActiveSchoolIdStore } from '@/lib/schools/activeSchoolStore';
-import { CheckCircle2, Loader2, Lock, Mail, School, ShieldAlert, User } from 'lucide-react';
 import {
+  CheckCircle2, Clock, KeyRound, Loader2, Lock, LogIn, Mail, MailCheck, RotateCcw, School,
+  ShieldAlert, User, UserCheck,
+} from 'lucide-react';
+import {
+  membershipStateForSchool,
   registrationLinkErrorMessage,
   type ResolvedRegistrationLink,
 } from '@/lib/schools/registration';
+import { planSignUp } from '@/lib/schools/membershipFlow';
 
 interface JoinResult {
   ok: boolean;
   status?: string;
   school_id?: string;
   already_member?: boolean;
+  /** Vínculo inativo/recusado foi reaberto como pendente. */
+  reopened?: boolean;
   requires_admin_approval?: boolean;
   /** Vínculo com uma segunda escola: aprovação do administrador é obrigatória. */
   second_school?: boolean;
 }
+
+/** Estados finais distintos após a ação do usuário. */
+type DoneState =
+  | { kind: 'active' }
+  | { kind: 'pending'; reopened: boolean; secondSchool: boolean; alreadyPending: boolean }
+  | { kind: 'confirm_email'; email: string };
 
 const SECOND_SCHOOL_MESSAGE =
   'Você já possui acesso a outra escola. O vínculo com uma segunda escola precisa ser aprovado pelo administrador.';
@@ -31,17 +44,18 @@ const SECOND_SCHOOL_MESSAGE =
 const Join = () => {
   const { token = '' } = useParams();
   const navigate = useNavigate();
-  const { user, signUp, refreshAccess } = useAuth();
+  const { user, memberships, loading: authLoading, signUp, signIn, refreshAccess, signOut } = useAuth();
 
   const [link, setLink] = useState<ResolvedRegistrationLink | null>(null);
   const [checking, setChecking] = useState(true);
   const [heroUrl, setHeroUrl] = useState<string | null>(null);
+  const [mode, setMode] = useState<'signup' | 'existing'>('signup');
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const [done, setDone] = useState<null | 'pending' | 'active'>(null);
-  const [secondSchool, setSecondSchool] = useState(false);
+  const [sendingRecovery, setSendingRecovery] = useState(false);
+  const [done, setDone] = useState<DoneState | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -84,6 +98,12 @@ const Join = () => {
     };
   }, [token, link?.valid]);
 
+  /** Situação REAL do vínculo da conta logada com a escola deste link. */
+  const membershipState = useMemo(
+    () => membershipStateForSchool(memberships, link?.school_id ?? null),
+    [memberships, link?.school_id],
+  );
+
   /**
    * Aplica o resultado do vínculo: quando o aceite é automático (status active),
    * a escola recém-vinculada já vira a escola ativa e o acesso é imediato.
@@ -93,22 +113,34 @@ const Join = () => {
     if (active && result?.school_id) setActiveSchoolIdStore(result.school_id);
     await refreshAccess();
     clearPendingJoinToken();
-    setSecondSchool(!active && result?.second_school === true);
-    setDone(active ? 'active' : 'pending');
+    if (active) {
+      setDone({ kind: 'active' });
+      return;
+    }
+    setDone({
+      kind: 'pending',
+      reopened: result?.reopened === true,
+      secondSchool: result?.second_school === true,
+      alreadyPending: result?.already_member === true && result?.status === 'pending',
+    });
   };
 
-  /** Usuário já logado: apenas solicita o vínculo com a escola do token. */
+  /** Executa o vínculo com a escola do token para a sessão atual (já autenticada). */
+  const joinWithCurrentSession = async () => {
+    const { data, error } = await supabase.rpc('join_school_with_token', { _token: token });
+    if (error) throw error;
+    const result = data as unknown as JoinResult;
+    if (!result?.ok) {
+      throw new Error('Link inválido ou expirado.');
+    }
+    await applyJoinResult(result);
+  };
+
+  /** Usuário já logado (sem vínculo, ou com vínculo encerrado): solicita/reabre o vínculo. */
   const requestMembership = async () => {
     setSubmitting(true);
     try {
-      const { data, error } = await supabase.rpc('join_school_with_token', { _token: token });
-      if (error) throw error;
-      const result = data as unknown as JoinResult;
-      if (!result?.ok) {
-        toast.error('Link inválido ou expirado.');
-        return;
-      }
-      await applyJoinResult(result);
+      await joinWithCurrentSession();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Não foi possível concluir a solicitação.');
     } finally {
@@ -124,13 +156,19 @@ const Join = () => {
     }
     setSubmitting(true);
     try {
-      const { error } = await signUp(email.trim(), password, fullName.trim());
-      if (error) {
-        if (error.message.includes('already registered')) {
-          toast.error('Este e-mail já possui conta. Entre com sua conta para concluir a solicitação.');
-        } else {
-          toast.error(error.message);
-        }
+      const result = await signUp(email.trim(), password, fullName.trim());
+      if (result.error) {
+        toast.error(result.error.message);
+        return;
+      }
+
+      const plan = planSignUp({ hasSession: false, accountExists: result.existingAccount });
+      if (plan === 'reuse_existing_account') {
+        // Conta já existe: exigir autenticação da conta existente antes do vínculo.
+        // Nunca associar identidade só por conhecer o e-mail.
+        setMode('existing');
+        setPassword('');
+        toast.info('Este e-mail já tem conta no EDUNEXUS. Entre com sua senha para solicitar o acesso.');
         return;
       }
 
@@ -140,10 +178,9 @@ const Join = () => {
       // Se a sessão já existir (confirmação automática), conclui o vínculo agora.
       const { data: sessionData } = await supabase.auth.getSession();
       if (sessionData.session) {
-        const { data } = await supabase.rpc('join_school_with_token', { _token: token });
-        await applyJoinResult((data ?? null) as unknown as JoinResult | null);
+        await joinWithCurrentSession();
       } else {
-        setDone('pending');
+        setDone({ kind: 'confirm_email', email: email.trim() });
       }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Não foi possível concluir o cadastro.');
@@ -152,7 +189,61 @@ const Join = () => {
     }
   };
 
-  if (checking) {
+  /** Conta existente: autentica e SÓ ENTÃO solicita/reabre o vínculo com a escola. */
+  const handleExistingLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSubmitting(true);
+    try {
+      const { error } = await signIn(email.trim(), password);
+      if (error) {
+        toast.error(
+          error.message.includes('Invalid login credentials')
+            ? 'E-mail ou senha incorretos. Se esqueceu a senha, use a recuperação abaixo.'
+            : error.message,
+        );
+        return;
+      }
+      await joinWithCurrentSession();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Não foi possível concluir a solicitação.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  /** Recuperação de senha da conta existente; o token fica guardado para concluir o vínculo depois. */
+  const handleRecovery = async () => {
+    const target = email.trim();
+    if (!target) {
+      toast.error('Informe o e-mail da conta.');
+      return;
+    }
+    setSendingRecovery(true);
+    try {
+      setPendingJoinToken(token);
+      await supabase.auth.resetPasswordForEmail(target, {
+        redirectTo: `${window.location.origin}/reset-password`,
+      });
+    } catch {
+      /* nunca expõe detalhes do provedor */
+    } finally {
+      setSendingRecovery(false);
+      toast.success('Se o e-mail estiver cadastrado, você receberá as instruções para redefinir sua senha.');
+    }
+  };
+
+  const enterSystem = () => {
+    if (link?.school_id) setActiveSchoolIdStore(link.school_id);
+    navigate('/dashboard', { replace: true });
+  };
+
+  const switchAccount = async () => {
+    setPendingJoinToken(token);
+    await signOut();
+    setMode('signup');
+  };
+
+  if (checking || authLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <Loader2 className="h-6 w-6 animate-spin text-primary" />
@@ -179,30 +270,165 @@ const Join = () => {
     );
   }
 
+  const schoolName = link.school_name ?? 'esta escola';
+
   if (done) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background p-4">
         <Card className="w-full max-w-md">
           <CardContent className="flex flex-col items-center text-center py-12 gap-3">
-            <CheckCircle2 className="h-12 w-12 text-primary" />
-            <h1 className="text-lg font-semibold">Solicitação registrada</h1>
-            <p className="text-sm text-muted-foreground">
-              {done === 'active'
-                ? `Seu acesso a ${link.school_name} já está liberado.`
-                : secondSchool
-                  ? SECOND_SCHOOL_MESSAGE
-                  : `Sua solicitação de acesso a ${link.school_name} foi enviada e aguarda aprovação da gestão.`}
-            </p>
-            {done === 'active' && user ? (
-              <Button onClick={() => navigate('/dashboard')}>Entrar no sistema</Button>
-            ) : (
-              <Button onClick={() => navigate('/auth')}>Ir para o login</Button>
+            {done.kind === 'active' && (
+              <>
+                <CheckCircle2 className="h-12 w-12 text-primary" />
+                <h1 className="text-lg font-semibold">Cadastro concluído — acesso liberado</h1>
+                <p className="text-sm text-muted-foreground">
+                  Seu vínculo com {schoolName} está ativo. Você já pode usar o sistema.
+                </p>
+                <Button onClick={enterSystem}>Entrar no sistema</Button>
+              </>
+            )}
+            {done.kind === 'pending' && (
+              <>
+                <Clock className="h-12 w-12 text-primary" />
+                <h1 className="text-lg font-semibold">
+                  {done.reopened
+                    ? 'Vínculo reaberto — aguardando aprovação'
+                    : done.alreadyPending
+                      ? 'Solicitação já registrada'
+                      : 'Solicitação enviada'}
+                </h1>
+                <p className="text-sm text-muted-foreground">
+                  {done.reopened
+                    ? `Seu vínculo anterior com ${schoolName} havia sido encerrado. A nova solicitação foi registrada e aguarda aprovação da gestão.`
+                    : done.secondSchool
+                      ? SECOND_SCHOOL_MESSAGE
+                      : done.alreadyPending
+                        ? `Sua solicitação de acesso a ${schoolName} já está registrada e aguarda aprovação da gestão. Não é preciso enviar outra.`
+                        : `Sua solicitação de acesso a ${schoolName} foi enviada e aguarda aprovação da gestão.`}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Assim que a gestão aprovar, basta entrar normalmente com este mesmo e-mail.
+                </p>
+                <Button variant="outline" onClick={() => navigate('/dashboard', { replace: true })}>
+                  Continuar
+                </Button>
+              </>
+            )}
+            {done.kind === 'confirm_email' && (
+              <>
+                <MailCheck className="h-12 w-12 text-primary" />
+                <h1 className="text-lg font-semibold">Confirme seu e-mail</h1>
+                <p className="text-sm text-muted-foreground">
+                  Enviamos um link de confirmação para <strong>{done.email}</strong>. Depois de confirmar,
+                  entre no sistema e o vínculo com {schoolName} será solicitado automaticamente.
+                </p>
+                <Button variant="outline" onClick={() => navigate('/auth')}>Ir para o login</Button>
+              </>
             )}
           </CardContent>
         </Card>
       </div>
     );
   }
+
+  /** Bloco para sessão já autenticada, conforme a situação REAL do vínculo com esta escola. */
+  const renderAuthenticated = () => {
+    const accountLine = (
+      <p className="text-xs text-muted-foreground">
+        Conectado como <strong>{user?.email}</strong>.{' '}
+        <button type="button" className="underline" onClick={() => { void switchAccount(); }}>
+          Não é você? Sair
+        </button>
+      </p>
+    );
+
+    if (membershipState === 'active') {
+      return (
+        <div className="space-y-4">
+          <div className="flex items-start gap-3 rounded-lg border border-primary/30 bg-primary/5 p-3">
+            <UserCheck className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
+            <div>
+              <p className="text-sm font-medium">Vínculo ativo</p>
+              <p className="text-sm text-muted-foreground">
+                Sua conta já tem acesso a {schoolName}. Não é necessário se cadastrar de novo.
+              </p>
+            </div>
+          </div>
+          <Button className="w-full" onClick={enterSystem}>
+            <LogIn className="mr-2 h-4 w-4" />
+            Entrar no sistema
+          </Button>
+          {accountLine}
+        </div>
+      );
+    }
+
+    if (membershipState === 'pending') {
+      return (
+        <div className="space-y-4">
+          <div className="flex items-start gap-3 rounded-lg border bg-muted/40 p-3">
+            <Clock className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
+            <div>
+              <p className="text-sm font-medium">Solicitação pendente</p>
+              <p className="text-sm text-muted-foreground">
+                Sua solicitação de acesso a {schoolName} já foi registrada e aguarda aprovação da gestão.
+              </p>
+            </div>
+          </div>
+          <Button variant="outline" className="w-full" disabled={submitting} onClick={async () => {
+            setSubmitting(true);
+            try { await refreshAccess(); } finally { setSubmitting(false); }
+          }}>
+            {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            Verificar novamente
+          </Button>
+          {accountLine}
+        </div>
+      );
+    }
+
+    if (membershipState === 'inactive' || membershipState === 'rejected') {
+      return (
+        <div className="space-y-4">
+          <div className="flex items-start gap-3 rounded-lg border border-amber-500/40 bg-amber-500/5 p-3">
+            <RotateCcw className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+            <div>
+              <p className="text-sm font-medium">Vínculo encerrado</p>
+              <p className="text-sm text-muted-foreground">
+                Seu vínculo anterior com {schoolName} foi {membershipState === 'rejected' ? 'recusado' : 'desativado'} pela gestão.
+                Você pode solicitar acesso novamente; a solicitação passará por nova aprovação.
+              </p>
+            </div>
+          </div>
+          <Button className="w-full" onClick={requestMembership} disabled={submitting}>
+            {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            Solicitar acesso novamente
+          </Button>
+          {accountLine}
+        </div>
+      );
+    }
+
+    // Conta existente sem vínculo com esta escola (nunca vinculada ou vínculo removido).
+    return (
+      <div className="space-y-4">
+        <div className="flex items-start gap-3 rounded-lg border bg-muted/40 p-3">
+          <User className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
+          <div>
+            <p className="text-sm font-medium">Conta existente sem vínculo com esta escola</p>
+            <p className="text-sm text-muted-foreground">
+              Sua conta será reaproveitada — nenhuma conta nova é criada. Basta solicitar o acesso a {schoolName}.
+            </p>
+          </div>
+        </div>
+        <Button className="w-full" onClick={requestMembership} disabled={submitting}>
+          {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+          Solicitar acesso a esta escola
+        </Button>
+        {accountLine}
+      </div>
+    );
+  };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
@@ -230,16 +456,73 @@ const Join = () => {
         </CardHeader>
         <CardContent>
           {user ? (
-            <div className="space-y-4">
-              <p className="text-sm text-muted-foreground">
-                Você já está autenticado. Podemos solicitar seu vínculo com esta escola sem criar
-                uma nova conta.
-              </p>
-              <Button className="w-full" onClick={requestMembership} disabled={submitting}>
+            renderAuthenticated()
+          ) : mode === 'existing' ? (
+            <form onSubmit={handleExistingLogin} className="space-y-4">
+              <div className="flex items-start gap-3 rounded-lg border bg-muted/40 p-3">
+                <KeyRound className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
+                <div>
+                  <p className="text-sm font-medium">Conta já existente — entre para solicitar acesso</p>
+                  <p className="text-sm text-muted-foreground">
+                    Este e-mail já possui conta no EDUNEXUS. Entre com sua senha e o vínculo com {schoolName} será
+                    solicitado em seguida. Nenhuma conta nova será criada.
+                  </p>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="join-existing-email">E-mail</Label>
+                <div className="relative">
+                  <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    id="join-existing-email"
+                    type="email"
+                    className="pl-9"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="join-existing-password">Senha</Label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    id="join-existing-password"
+                    type="password"
+                    className="pl-9"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                    autoFocus
+                  />
+                </div>
+              </div>
+              <Button type="submit" className="w-full" disabled={submitting}>
                 {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Solicitar acesso a esta escola
+                Entrar e solicitar acesso
               </Button>
-            </div>
+              <div className="flex flex-col gap-1 sm:flex-row sm:justify-between">
+                <Button
+                  type="button"
+                  variant="link"
+                  className="h-auto px-0 text-xs"
+                  disabled={sendingRecovery}
+                  onClick={() => { void handleRecovery(); }}
+                >
+                  {sendingRecovery && <Loader2 className="mr-1 h-3 w-3 animate-spin" />}
+                  Esqueci minha senha
+                </Button>
+                <Button
+                  type="button"
+                  variant="link"
+                  className="h-auto px-0 text-xs"
+                  onClick={() => { setMode('signup'); setPassword(''); }}
+                >
+                  Usar outro e-mail
+                </Button>
+              </div>
+            </form>
           ) : (
             <form onSubmit={handleSignUp} className="space-y-4">
               <div className="space-y-2">
@@ -292,10 +575,7 @@ const Join = () => {
                 type="button"
                 variant="ghost"
                 className="w-full"
-                onClick={() => {
-                  setPendingJoinToken(token);
-                  navigate('/auth', { state: { joinToken: token } });
-                }}
+                onClick={() => { setMode('existing'); setPassword(''); }}
               >
                 Já tenho conta
               </Button>
