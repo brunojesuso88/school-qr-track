@@ -295,7 +295,7 @@ const DailyAttendancePanel = () => {
         <Card>
           <CardContent className="p-6 text-center space-y-3">
             <p className="text-sm text-destructive">{error}</p>
-            <Button variant="outline" size="sm" onClick={load}>
+            <Button variant="outline" size="sm" onClick={() => { void load(); }}>
               Tentar novamente
             </Button>
           </CardContent>
