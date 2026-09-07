@@ -37,7 +37,7 @@ interface AuthContextType {
   canManageUsers: boolean;
   canAccessFullDashboard: boolean;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
-  signUp: (email: string, password: string, fullName: string) => Promise<{ error: Error | null }>;
+  signUp: (email: string, password: string, fullName: string) => Promise<SignUpResult>;
   signOut: () => Promise<void>;
 }
 
