@@ -268,7 +268,7 @@ const DailyAttendancePanel = () => {
                   <span className="font-semibold text-foreground">{formatPresencePercent(presence.percent)}</span>
                 </p>
                 <Progress
-                  value={presence.percent ?? 0}
+                  value={presenceProgressValue(presence.percent)}
                   className="h-2 bg-emerald-500/15 [&>div]:bg-emerald-600"
                   aria-label={`${formatPresencePercent(presence.percent)} dos alunos ativos presentes hoje`}
                 />
