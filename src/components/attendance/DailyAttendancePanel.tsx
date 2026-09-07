@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useActiveSchoolId } from '@/contexts/SchoolContext';
 import { Card, CardContent } from '@/components/ui/card';
@@ -6,14 +6,24 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
-import { CalendarCheck, Clock, Users, AlertCircle, CheckCircle2, ChevronRight, RefreshCw, Download } from 'lucide-react';
+import { Progress } from '@/components/ui/progress';
+import {
+  CalendarCheck, Clock, Users, AlertCircle, CheckCircle2, ChevronRight, RefreshCw, Download, UserCheck,
+} from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { toast } from 'sonner';
 import DailyClassAttendanceDialog from './DailyClassAttendanceDialog';
-import { buildDailyClassRows, summarizeDaily, localDateKey, type DailyClassRow } from '@/lib/attendance/dailyStatus';
+import {
+  buildDailyClassRows,
+  computeSchoolPresence,
+  formatPresencePercent,
+  localDateKey,
+  summarizeDaily,
+  type DailyClassRow,
+  type SchoolPresence,
+} from '@/lib/attendance/dailyStatus';
 import { exportAbsentStudents } from '@/lib/attendance/absentStudentsExport';
-
 
 const shiftLabel = (shift?: string | null) => {
   switch (shift) {
@@ -28,6 +38,9 @@ const shiftLabel = (shift?: string | null) => {
   }
 };
 
+/** Janela de agrupamento dos eventos realtime (várias leituras de QR em sequência). */
+const PRESENCE_REFRESH_DEBOUNCE_MS = 700;
+
 const DailyAttendancePanel = () => {
   const activeSchoolId = useActiveSchoolId();
   const [rows, setRows] = useState<DailyClassRow[]>([]);
@@ -35,30 +48,71 @@ const DailyAttendancePanel = () => {
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<DailyClassRow | null>(null);
+  const [presence, setPresence] = useState<SchoolPresence | null>(null);
+  const [presenceLive, setPresenceLive] = useState(false);
+  const presenceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const today = new Date();
   const todayKey = localDateKey(today);
 
+  /**
+   * Contador global da escola: alunos ativos × registros `present` de hoje.
+   * Consulta leve e isolada por `school_id` (RLS + filtro explícito).
+   */
+  const loadPresence = useCallback(async () => {
+    if (!activeSchoolId) {
+      setPresence(null);
+      return;
+    }
+    try {
+      const [studentsRes, presentRes] = await Promise.all([
+        supabase.from('students').select('id, class, status').eq('school_id', activeSchoolId),
+        supabase
+          .from('attendance')
+          .select('student_id, status, date')
+          .eq('school_id', activeSchoolId)
+          .eq('date', todayKey)
+          .eq('status', 'present'),
+      ]);
+      if (studentsRes.error) throw studentsRes.error;
+      if (presentRes.error) throw presentRes.error;
+      setPresence(computeSchoolPresence(studentsRes.data || [], presentRes.data || [], todayKey));
+    } catch {
+      // Mantém o último valor conhecido; o card indica que pode estar desatualizado.
+      setPresence((prev) => prev);
+    }
+  }, [activeSchoolId, todayKey]);
+
   const load = useCallback(async () => {
     if (!activeSchoolId) {
       setRows([]);
+      setPresence(null);
       setLoading(false);
       return;
     }
     setLoading(true);
     setError(null);
     try {
-      const [classesRes, studentsRes, closuresRes] = await Promise.all([
+      const [classesRes, studentsRes, closuresRes, presentRes] = await Promise.all([
         supabase.from('classes').select('id, name, shift, status').eq('school_id', activeSchoolId).order('name'),
         supabase.from('students').select('id, class, status').eq('school_id', activeSchoolId),
         supabase.from('daily_attendance_closures').select('class_name, date, present_count, absent_count, updated_at').eq('school_id', activeSchoolId).eq('date', todayKey),
+        supabase
+          .from('attendance')
+          .select('student_id, status, date')
+          .eq('school_id', activeSchoolId)
+          .eq('date', todayKey)
+          .eq('status', 'present'),
       ]);
       if (classesRes.error) throw classesRes.error;
       if (studentsRes.error) throw studentsRes.error;
       if (closuresRes.error) throw closuresRes.error;
+      if (presentRes.error) throw presentRes.error;
 
       const activeClasses = (classesRes.data || []).filter((c) => (c.status ?? 'active') === 'active');
-      setRows(buildDailyClassRows(activeClasses, studentsRes.data || [], closuresRes.data || [], todayKey));
+      const students = studentsRes.data || [];
+      setRows(buildDailyClassRows(activeClasses, students, closuresRes.data || [], todayKey));
+      setPresence(computeSchoolPresence(students, presentRes.data || [], todayKey));
     } catch (e) {
       setError('Não foi possível carregar as turmas do dia. Tente novamente.');
     } finally {
@@ -70,6 +124,40 @@ const DailyAttendancePanel = () => {
     load();
   }, [load]);
 
+  /**
+   * Atualização em tempo real do contador: qualquer mudança em `attendance`
+   * da escola (QR code, chamada de turma, ajuste manual) reagenda a recontagem
+   * com debounce — nunca uma consulta por evento.
+   */
+  useEffect(() => {
+    if (!activeSchoolId) return;
+    const channel = supabase
+      .channel(`daily-presence:${activeSchoolId}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'attendance', filter: `school_id=eq.${activeSchoolId}` },
+        () => {
+          if (presenceTimer.current) clearTimeout(presenceTimer.current);
+          presenceTimer.current = setTimeout(() => {
+            presenceTimer.current = null;
+            void loadPresence();
+          }, PRESENCE_REFRESH_DEBOUNCE_MS);
+        },
+      )
+      .subscribe((status) => {
+        setPresenceLive(status === 'SUBSCRIBED');
+      });
+
+    return () => {
+      if (presenceTimer.current) {
+        clearTimeout(presenceTimer.current);
+        presenceTimer.current = null;
+      }
+      setPresenceLive(false);
+      supabase.removeChannel(channel);
+    };
+  }, [activeSchoolId, loadPresence]);
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return rows;
@@ -79,7 +167,6 @@ const DailyAttendancePanel = () => {
   const summary = summarizeDaily(rows);
 
   const handleDownloadAbsentStudents = async (name: string) => {
-    const todayDisplay = format(today, "dd 'de' MMMM 'de' yyyy", { locale: ptBR });
     try {
       const result = await exportAbsentStudents(name, activeSchoolId, today);
       if (result.status === 'empty') {
@@ -92,37 +179,90 @@ const DailyAttendancePanel = () => {
     }
   };
 
-
   return (
     <div className="space-y-4">
-      <Card className="border-primary/30 bg-primary/5">
-        <CardContent className="p-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="space-y-1">
-            <p className="flex items-center gap-2 text-sm font-medium">
-              <CalendarCheck className="w-4 h-4 text-primary" />
-              {format(today, "EEEE, dd 'de' MMMM", { locale: ptBR })}
-            </p>
-            <p className="text-sm text-muted-foreground">
-              <span className="font-semibold text-foreground">{summary.done}</span> de{' '}
-              <span className="font-semibold text-foreground">{summary.total}</span> turmas com frequência realizada
-              {' · '}
-              <span className="font-semibold text-foreground">{summary.pending}</span> pendentes
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <Input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Buscar turma..."
-              className="h-9 w-full sm:w-48 bg-background"
-              aria-label="Buscar turma"
-            />
-            <Button variant="outline" size="icon" className="h-9 w-9 shrink-0" onClick={load} aria-label="Atualizar lista">
-              <RefreshCw className="w-4 h-4" />
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+      <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+        <Card className="border-primary/30 bg-primary/5">
+          <CardContent className="p-4 flex h-full flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="space-y-1">
+              <p className="flex items-center gap-2 text-sm font-medium">
+                <CalendarCheck className="w-4 h-4 text-primary" />
+                {format(today, "EEEE, dd 'de' MMMM", { locale: ptBR })}
+              </p>
+              <p className="text-sm text-muted-foreground">
+                <span className="font-semibold text-foreground">{summary.done}</span> de{' '}
+                <span className="font-semibold text-foreground">{summary.total}</span> turmas com frequência realizada
+                {' · '}
+                <span className="font-semibold text-foreground">{summary.pending}</span> pendentes
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Buscar turma..."
+                className="h-9 w-full sm:w-48 bg-background"
+                aria-label="Buscar turma"
+              />
+              <Button variant="outline" size="icon" className="h-9 w-9 shrink-0" onClick={load} aria-label="Atualizar lista">
+                <RefreshCw className="w-4 h-4" />
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card
+          className="border-emerald-500/40 bg-emerald-500/5"
+          role="status"
+          aria-live="polite"
+          aria-label="Presença global da escola hoje"
+          data-testid="school-presence-card"
+        >
+          <CardContent className="p-4 flex h-full flex-col justify-center gap-2">
+            <div className="flex items-start justify-between gap-3">
+              <p className="flex items-center gap-2 text-sm font-medium">
+                <UserCheck className="w-4 h-4 text-emerald-600" />
+                Presentes hoje
+              </p>
+              {presenceLive && (
+                <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
+                  <span className="relative flex h-2 w-2">
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-500/60" />
+                    <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-600" />
+                  </span>
+                  ao vivo
+                </span>
+              )}
+            </div>
+
+            {loading && !presence ? (
+              <Skeleton className="h-8 w-56" />
+            ) : presence ? (
+              <>
+                <p className="text-sm text-muted-foreground">
+                  <span className="text-2xl font-bold tabular-nums text-foreground">{presence.present}</span>
+                  {' '}de{' '}
+                  <span className="font-semibold text-foreground">{presence.total}</span> alunos
+                  {' — '}
+                  <span className="font-semibold text-foreground">{formatPresencePercent(presence.percent)}</span>
+                </p>
+                <Progress
+                  value={presence.percent ?? 0}
+                  className="h-2 bg-emerald-500/15 [&>div]:bg-emerald-600"
+                  aria-label={`${formatPresencePercent(presence.percent)} dos alunos ativos presentes hoje`}
+                />
+                <p className="text-[11px] text-muted-foreground">
+                  {presence.total === 0
+                    ? 'Nenhum aluno ativo cadastrado nesta escola.'
+                    : 'Alunos ativos da escola com presença registrada hoje (QR code ou chamada de turma).'}
+                </p>
+              </>
+            ) : (
+              <p className="text-sm text-muted-foreground">Contador indisponível no momento.</p>
+            )}
+          </CardContent>
+        </Card>
+      </div>
 
       {loading ? (
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
@@ -221,7 +361,6 @@ const DailyAttendancePanel = () => {
                     </Button>
                   )}
                 </CardContent>
-
               </Card>
             );
           })}
