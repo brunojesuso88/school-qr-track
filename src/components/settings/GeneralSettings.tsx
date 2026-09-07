@@ -12,7 +12,6 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useSchoolPreferences } from '@/hooks/useSchoolPreferences';
 import {
-  BIMESTER_LABELS,
   isValidAcademicYear,
   MAX_ACADEMIC_YEAR,
   MIN_ACADEMIC_YEAR,
@@ -24,8 +23,9 @@ import {
 
 /**
  * Preferências gerais da escola ativa (por `school_id`, nunca globais).
- * Horários limite por turno e sons de notificação não são mais expostos aqui;
- * as chaves legadas (`cutoff_*`, `realtime_sound_enabled`) permanecem no banco.
+ * Horários limite por turno, sons de notificação e "Bimestre atual" não são mais
+ * expostos aqui; as chaves legadas (`cutoff_*`, `realtime_sound_enabled`,
+ * `current_bimester`) permanecem no banco sem uso — nenhuma migration destrutiva.
  */
 const GeneralSettings = () => {
   const activeSchoolId = useActiveSchoolId();
@@ -47,7 +47,6 @@ const GeneralSettings = () => {
       const schoolId = assertActiveSchool(activeSchoolId);
       const rows = [
         { key: 'academic_year', value: Number(form.academic_year) },
-        { key: 'current_bimester', value: form.current_bimester },
         { key: 'show_inactive_students', value: form.show_inactive_students },
         { key: 'default_student_sort', value: form.default_student_sort },
       ].map((r) => ({ school_id: schoolId, key: r.key, value: r.value as never }));
