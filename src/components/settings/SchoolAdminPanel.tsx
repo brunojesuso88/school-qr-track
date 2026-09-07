@@ -481,7 +481,13 @@ const SchoolAdminPanel = () => {
 
 
   /** Card de membro reutilizado nos dois modos (global e escola ativa). */
-  const renderMember = (schoolId: string, m: MemberRow, allowAccountDeletion: boolean) => (
+  const renderMember = (schoolId: string, m: MemberRow, allowAccountDeletion: boolean) => {
+    // Vínculos em OUTRAS escolas: bloqueiam a exclusão global a partir desta escola.
+    const otherMemberships = users.find((u) => u.user_id === m.user_id)?.memberships ?? [];
+    const deletionBlocked = allowAccountDeletion
+      ? accountDeletionBlockReason(otherMemberships, schoolId)
+      : null;
+    return (
     <div key={m.user_id} className="rounded-lg border p-3 space-y-2">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
@@ -536,7 +542,8 @@ const SchoolAdminPanel = () => {
                 size="sm"
                 variant="ghost"
                 className="text-destructive"
-                disabled={m.user_id === user?.id || deletingUserId === m.user_id}
+                disabled={m.user_id === user?.id || deletingUserId === m.user_id || !!deletionBlocked}
+                title={deletionBlocked ?? undefined}
               >
                 {deletingUserId === m.user_id
                   ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
@@ -566,8 +573,12 @@ const SchoolAdminPanel = () => {
           </AlertDialog>
         )}
       </div>
+      {deletionBlocked && (
+        <p className="text-[11px] text-muted-foreground">{deletionBlocked}</p>
+      )}
     </div>
-  );
+    );
+  };
 
   if (!isGlobalAdmin && !isSchoolAdmin) {
     return (
