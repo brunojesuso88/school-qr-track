@@ -29,6 +29,7 @@ import {
 } from 'lucide-react';
 import { Textarea } from '@/components/ui/textarea';
 import { buildJoinUrl, type AppRole } from '@/lib/schools/registration';
+import { accountDeletionBlockReason } from '@/lib/schools/membershipFlow';
 import { PREVIEW_LINK_WARNING, PUBLIC_URL_CHANGE_WARNING } from '@/lib/schools/publicUrl';
 import type { CurriculumMatrixRecord } from '@/lib/curriculumMatrices';
 import {
