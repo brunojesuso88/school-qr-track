@@ -49,6 +49,7 @@ const Auth = () => {
   const { signIn, user, loading, userRole, refreshAccess } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const joinInFlight = useRef(false);
 
   useEffect(() => {
     // Modo recovery: nunca redirecionar automaticamente (evita loop e perda do token).
