@@ -88,9 +88,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  /**
+   * Recarrega vínculos/papéis. Não depende do `user` do estado React: logo após
+   * um login inline (ex.: /join) a sessão já existe no cliente antes do re-render.
+   */
   const refreshAccess = async () => {
-    if (!user) return;
-    setAccess(await fetchAccess(user.id));
+    let userId = user?.id ?? null;
+    if (!userId) {
+      const { data } = await supabase.auth.getSession();
+      userId = data.session?.user?.id ?? null;
+    }
+    if (!userId) return;
+    setAccess(await fetchAccess(userId));
   };
 
   useEffect(() => {
