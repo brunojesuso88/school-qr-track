@@ -4,6 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 import {
   hasSchoolAccess as computeSchoolAccess,
   isAwaitingApproval,
+  isExistingAccountSignUp,
   resolveEffectiveRole,
   type SchoolMembershipLike,
 } from '@/lib/schools/registration';
@@ -16,6 +17,14 @@ type AppRole = 'admin' | 'direction' | 'teacher' | 'staff';
 
 export interface SchoolMembership extends SchoolMembershipLike {
   school_name: string;
+}
+
+export interface SignUpResult {
+  error: Error | null;
+  /** O e-mail já possui conta: reutilizar a identidade existente (login), nunca criar outra. */
+  existingAccount: boolean;
+  /** Sessão criada imediatamente (confirmação automática de e-mail). */
+  hasSession: boolean;
 }
 
 interface AuthContextType {
