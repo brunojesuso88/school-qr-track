@@ -87,9 +87,9 @@ const DailyAttendancePanel = () => {
   const todayKey = localDateKey(today);
 
   /**
-   * Contador global da escola: alunos ativos com turma válida × registros
-   * `present` de hoje. Consulta leve e isolada por `school_id` (RLS + filtro
-   * explícito) — usa SEMPRE a escola inteira, nunca a lista filtrada da tela.
+   * Recontagem isolada do contador global (eventos realtime). Usa SEMPRE a
+   * escola inteira, nunca a lista filtrada da tela. Em falha, mantém o último
+   * valor conhecido.
    */
   const loadPresence = useCallback(async () => {
     if (!activeSchoolId) {
@@ -97,31 +97,10 @@ const DailyAttendancePanel = () => {
       return;
     }
     try {
-      const [classesRes, studentsRes, presentRes] = await Promise.all([
-        supabase.from('classes').select('name, status').eq('school_id', activeSchoolId),
-        supabase.from('students').select('id, class, status').eq('school_id', activeSchoolId),
-        supabase
-          .from('attendance')
-          .select('student_id, status, date')
-          .eq('school_id', activeSchoolId)
-          .eq('date', todayKey)
-          .eq('status', 'present'),
-      ]);
-      if (classesRes.error) throw classesRes.error;
-      if (studentsRes.error) throw studentsRes.error;
-      if (presentRes.error) throw presentRes.error;
-      const validClassNames = (classesRes.data || [])
-        .filter((c) => (c.status ?? 'active') === 'active')
-        .map((c) => c.name);
-      setPresence(
-        computeSchoolPresence(studentsRes.data || [], presentRes.data || [], {
-          dateKey: todayKey,
-          validClassNames,
-        }),
-      );
+      const { presence: next } = await fetchSchoolPresenceInputs(activeSchoolId, todayKey);
+      setPresence(next);
     } catch {
-      // Mantém o último valor conhecido; o card indica que pode estar desatualizado.
-      setPresence((prev) => prev);
+      /* mantém o último valor conhecido */
     }
   }, [activeSchoolId, todayKey]);
 
@@ -139,32 +118,20 @@ const DailyAttendancePanel = () => {
     if (!silent) setLoading(true);
     setError(null);
     try {
-      const [classesRes, studentsRes, closuresRes, presentRes] = await Promise.all([
-        supabase.from('classes').select('id, name, shift, status').eq('school_id', activeSchoolId).order('name'),
-        supabase.from('students').select('id, class, status').eq('school_id', activeSchoolId),
-        supabase.from('daily_attendance_closures').select('class_name, date, present_count, absent_count, updated_at').eq('school_id', activeSchoolId).eq('date', todayKey),
+      const [inputs, closuresRes] = await Promise.all([
+        fetchSchoolPresenceInputs(activeSchoolId, todayKey),
         supabase
-          .from('attendance')
-          .select('student_id, status, date')
+          .from('daily_attendance_closures')
+          .select('class_name, date, present_count, absent_count, updated_at')
           .eq('school_id', activeSchoolId)
-          .eq('date', todayKey)
-          .eq('status', 'present'),
+          .eq('date', todayKey),
       ]);
-      if (classesRes.error) throw classesRes.error;
-      if (studentsRes.error) throw studentsRes.error;
       if (closuresRes.error) throw closuresRes.error;
-      if (presentRes.error) throw presentRes.error;
 
-      const activeClasses = (classesRes.data || []).filter((c) => (c.status ?? 'active') === 'active');
-      const students = studentsRes.data || [];
-      setRows(buildDailyClassRows(activeClasses, students, closuresRes.data || [], todayKey));
-      setPresence(
-        computeSchoolPresence(students, presentRes.data || [], {
-          dateKey: todayKey,
-          validClassNames: activeClasses.map((c) => c.name),
-        }),
-      );
-    } catch (e) {
+      const activeClasses = inputs.classes.filter((c) => (c.status ?? 'active') === 'active');
+      setRows(buildDailyClassRows(activeClasses, inputs.students, closuresRes.data || [], todayKey));
+      setPresence(inputs.presence);
+    } catch {
       if (!silent) setError('Não foi possível carregar as turmas do dia. Tente novamente.');
     } finally {
       if (!silent) setLoading(false);
