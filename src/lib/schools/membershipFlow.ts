@@ -109,11 +109,17 @@ export const removeMembership = (
   userId: string,
 ): MembershipRow[] => rows.filter((m) => !(m.school_id === schoolId && m.user_id === userId));
 
+/** Vínculo mínimo (a listagem administrativa devolve `status` como texto livre). */
+export interface SchoolScopedLike {
+  school_id: string;
+  status: string;
+}
+
 /** Vínculos do usuário em escolas diferentes da informada (qualquer status). */
-export const membershipsOutsideSchool = (
-  memberships: SchoolMembershipLike[],
+export const membershipsOutsideSchool = <T extends SchoolScopedLike>(
+  memberships: T[],
   schoolId: string,
-): SchoolMembershipLike[] => memberships.filter((m) => m.school_id !== schoolId);
+): T[] => memberships.filter((m) => m.school_id !== schoolId);
 
 /**
  * Exclusão DEFINITIVA da conta (identidade Auth) a partir do contexto de uma escola
@@ -121,7 +127,7 @@ export const membershipsOutsideSchool = (
  * do bloqueio ou null quando pode prosseguir.
  */
 export const accountDeletionBlockReason = (
-  memberships: SchoolMembershipLike[],
+  memberships: SchoolScopedLike[],
   contextSchoolId: string | null,
 ): string | null => {
   if (!contextSchoolId) return null; // admin global fora de contexto escolar decide sozinho
