@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { toast } from 'sonner';
-import { clearPendingJoinToken, setPendingJoinToken } from '@/lib/schools/joinTokenStore';
+import { clearPendingJoinToken, getPendingJoinToken, setPendingJoinToken } from '@/lib/schools/joinTokenStore';
 import { setActiveSchoolIdStore } from '@/lib/schools/activeSchoolStore';
 import {
   CheckCircle2, Clock, KeyRound, Loader2, Lock, LogIn, Mail, MailCheck, RotateCcw, School,
@@ -62,10 +62,14 @@ const Join = () => {
     (async () => {
       const { data, error } = await supabase.rpc('resolve_registration_link', { _token: token });
       if (cancelled) return;
-      if (error) {
-        setLink({ valid: false, reason: 'not_found' });
-      } else {
-        setLink(data as unknown as ResolvedRegistrationLink);
+      const resolved: ResolvedRegistrationLink = error
+        ? { valid: false, reason: 'not_found' }
+        : (data as unknown as ResolvedRegistrationLink);
+      setLink(resolved);
+      // Link inválido nunca pode ficar "pendente" no navegador — senão o
+      // usuário seria devolvido a esta tela a cada login/entrada no sistema.
+      if (!resolved.valid && getPendingJoinToken() === token) {
+        clearPendingJoinToken();
       }
       setChecking(false);
     })();
@@ -261,8 +265,8 @@ const Join = () => {
             <p className="text-sm text-muted-foreground">
               {registrationLinkErrorMessage(link?.reason)}
             </p>
-            <Button variant="outline" onClick={() => navigate('/auth')}>
-              Ir para o login
+            <Button variant="outline" onClick={() => navigate(user ? '/dashboard' : '/auth')}>
+              {user ? 'Voltar ao sistema' : 'Ir para o login'}
             </Button>
           </CardContent>
         </Card>
