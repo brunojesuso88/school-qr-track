@@ -46,7 +46,7 @@ const Auth = () => {
   const [isForgotOpen, setIsForgotOpen] = useState(false);
   const [recoveryEmail, setRecoveryEmail] = useState('');
   const [sendingRecovery, setSendingRecovery] = useState(false);
-  const { signIn, user, loading, userRole } = useAuth();
+  const { signIn, user, loading, userRole, refreshAccess } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
