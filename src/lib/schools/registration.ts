@@ -17,6 +17,8 @@ export interface SchoolMembershipLike {
 export interface ResolvedRegistrationLink {
   valid: boolean;
   reason?: 'not_found' | 'revoked' | 'expired' | 'exhausted' | 'school_inactive';
+  /** Id da escola do link (dado público: permite mostrar a situação REAL do vínculo da conta logada). */
+  school_id?: string;
   school_name?: string;
   city?: string | null;
   state?: string | null;
