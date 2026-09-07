@@ -54,12 +54,45 @@ Deno.serve(async (req) => {
     }
 
     const body = await req.json().catch(() => ({}))
+    const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
     const userId = typeof body?.userId === 'string' ? body.userId.trim() : ''
-    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId)) {
+    if (!UUID.test(userId)) {
       return json({ error: 'userId inválido' }, 400)
     }
     if (userId === currentUserId) {
       return json({ error: 'Não é possível excluir a própria conta' }, 400)
+    }
+
+    // Contexto escolar OPCIONAL: quando a exclusão é disparada de dentro de
+    // "Gerenciar escola", a identidade global só pode ser apagada se o usuário
+    // não tiver vínculo com NENHUMA outra escola. Fora de contexto (aba
+    // "Todos os usuários"), o administrador global decide conscientemente.
+    const schoolIdRaw = typeof body?.schoolId === 'string' ? body.schoolId.trim() : ''
+    if (schoolIdRaw && !UUID.test(schoolIdRaw)) {
+      return json({ error: 'schoolId inválido' }, 400)
+    }
+    const contextSchoolId = schoolIdRaw || null
+
+    const { data: memberships, error: membershipsError } = await adminClient
+      .from('school_memberships')
+      .select('school_id, status')
+      .eq('user_id', userId)
+    if (membershipsError) {
+      console.error('Membership lookup failed:', membershipsError.message)
+      return json({ error: 'Falha ao verificar vínculos do usuário' }, 500)
+    }
+
+    if (contextSchoolId) {
+      const others = (memberships ?? []).filter((m) => m.school_id !== contextSchoolId)
+      if (others.length > 0) {
+        return json({
+          error: others.length === 1
+            ? 'Este usuário tem vínculo com outra escola. Remova apenas o vínculo desta escola.'
+            : `Este usuário tem vínculo com outras ${others.length} escolas. Remova apenas o vínculo desta escola.`,
+          code: 'has_other_memberships',
+          other_schools: others.length,
+        }, 409)
+      }
     }
 
     const { error: deleteError } = await adminClient.auth.admin.deleteUser(userId)
@@ -68,7 +101,11 @@ Deno.serve(async (req) => {
       return json({ error: 'Falha ao excluir usuário', details: deleteError.message }, 500)
     }
 
-    return json({ success: true, message: 'Usuário excluído com sucesso' })
+    return json({
+      success: true,
+      message: 'Usuário excluído com sucesso',
+      removed_memberships: (memberships ?? []).length,
+    })
   } catch (error) {
     console.error('Unexpected error:', error instanceof Error ? error.message : 'unknown')
     return json({ error: 'Erro interno do servidor' }, 500)

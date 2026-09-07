@@ -4,6 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 import {
   hasSchoolAccess as computeSchoolAccess,
   isAwaitingApproval,
+  isExistingAccountSignUp,
   resolveEffectiveRole,
   type SchoolMembershipLike,
 } from '@/lib/schools/registration';
@@ -16,6 +17,14 @@ type AppRole = 'admin' | 'direction' | 'teacher' | 'staff';
 
 export interface SchoolMembership extends SchoolMembershipLike {
   school_name: string;
+}
+
+export interface SignUpResult {
+  error: Error | null;
+  /** O e-mail já possui conta: reutilizar a identidade existente (login), nunca criar outra. */
+  existingAccount: boolean;
+  /** Sessão criada imediatamente (confirmação automática de e-mail). */
+  hasSession: boolean;
 }
 
 interface AuthContextType {
@@ -37,7 +46,7 @@ interface AuthContextType {
   canManageUsers: boolean;
   canAccessFullDashboard: boolean;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
-  signUp: (email: string, password: string, fullName: string) => Promise<{ error: Error | null }>;
+  signUp: (email: string, password: string, fullName: string) => Promise<SignUpResult>;
   signOut: () => Promise<void>;
 }
 
@@ -88,9 +97,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  /**
+   * Recarrega vínculos/papéis. Não depende do `user` do estado React: logo após
+   * um login inline (ex.: /join) a sessão já existe no cliente antes do re-render.
+   */
   const refreshAccess = async () => {
-    if (!user) return;
-    setAccess(await fetchAccess(user.id));
+    let userId = user?.id ?? null;
+    if (!userId) {
+      const { data } = await supabase.auth.getSession();
+      userId = data.session?.user?.id ?? null;
+    }
+    if (!userId) return;
+    setAccess(await fetchAccess(userId));
   };
 
   useEffect(() => {
@@ -138,10 +156,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return { error: error as Error | null };
   };
 
-  const signUp = async (email: string, password: string, fullName: string) => {
+  const signUp = async (email: string, password: string, fullName: string): Promise<SignUpResult> => {
     const redirectUrl = `${window.location.origin}/`;
 
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
@@ -151,7 +169,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         },
       },
     });
-    return { error: error as Error | null };
+    // Conta já existente: nunca cria segunda identidade. O chamador deve exigir
+    // autenticação da conta existente (senha/recuperação) antes de qualquer vínculo.
+    const existingAccount = isExistingAccountSignUp(
+      error ? { message: error.message, code: (error as { code?: string }).code } : null,
+      data?.user ?? null,
+    );
+    if (existingAccount) {
+      return { error: null, existingAccount: true, hasSession: false };
+    }
+    return { error: error as Error | null, existingAccount: false, hasSession: !!data?.session };
   };
 
   const signOut = async () => {

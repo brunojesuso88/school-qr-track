@@ -29,6 +29,7 @@ import {
 } from 'lucide-react';
 import { Textarea } from '@/components/ui/textarea';
 import { buildJoinUrl, type AppRole } from '@/lib/schools/registration';
+import { accountDeletionBlockReason } from '@/lib/schools/membershipFlow';
 import { PREVIEW_LINK_WARNING, PUBLIC_URL_CHANGE_WARNING } from '@/lib/schools/publicUrl';
 import type { CurriculumMatrixRecord } from '@/lib/curriculumMatrices';
 import {
@@ -362,8 +363,20 @@ const SchoolAdminPanel = () => {
     }
   };
 
-  /** Exclusão da CONTA inteira: exclusiva do administrador global. */
+  /**
+   * Exclusão da CONTA inteira: exclusiva do administrador global.
+   * Com `schoolId` (contexto "Gerenciar escola"), o backend recusa apagar a
+   * identidade se houver vínculo em outra escola — aqui só antecipamos a mensagem.
+   */
   const deleteAccount = async (schoolId: string | null, userId: string) => {
+    if (schoolId) {
+      const known = users.find((u) => u.user_id === userId)?.memberships ?? [];
+      const blocked = accountDeletionBlockReason(known, schoolId);
+      if (blocked) {
+        toast.error(blocked);
+        return;
+      }
+    }
     setDeletingUserId(userId);
     try {
       const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
@@ -373,10 +386,17 @@ const SchoolAdminPanel = () => {
       }
 
       const response = await supabase.functions.invoke('delete-user', {
-        body: { userId },
+        body: schoolId ? { userId, schoolId } : { userId },
         headers: { Authorization: `Bearer ${accessToken}` },
       });
-      const payload = response.data as { error?: string; details?: string } | null;
+      // Erros HTTP (409 etc.) chegam em `response.error` com o corpo JSON dentro do contexto.
+      let payload = response.data as { error?: string; details?: string; code?: string } | null;
+      if (!payload && response.error) {
+        const ctx = (response.error as { context?: Response }).context;
+        if (ctx && typeof ctx.json === 'function') {
+          payload = await ctx.clone().json().catch(() => null);
+        }
+      }
       if (response.error || payload?.error) {
         throw new Error(payload?.details ?? payload?.error ?? response.error?.message ?? 'Falha ao excluir conta');
       }
@@ -462,7 +482,13 @@ const SchoolAdminPanel = () => {
 
 
   /** Card de membro reutilizado nos dois modos (global e escola ativa). */
-  const renderMember = (schoolId: string, m: MemberRow, allowAccountDeletion: boolean) => (
+  const renderMember = (schoolId: string, m: MemberRow, allowAccountDeletion: boolean) => {
+    // Vínculos em OUTRAS escolas: bloqueiam a exclusão global a partir desta escola.
+    const otherMemberships = users.find((u) => u.user_id === m.user_id)?.memberships ?? [];
+    const deletionBlocked = allowAccountDeletion
+      ? accountDeletionBlockReason(otherMemberships, schoolId)
+      : null;
+    return (
     <div key={m.user_id} className="rounded-lg border p-3 space-y-2">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
@@ -517,7 +543,8 @@ const SchoolAdminPanel = () => {
                 size="sm"
                 variant="ghost"
                 className="text-destructive"
-                disabled={m.user_id === user?.id || deletingUserId === m.user_id}
+                disabled={m.user_id === user?.id || deletingUserId === m.user_id || !!deletionBlocked}
+                title={deletionBlocked ?? undefined}
               >
                 {deletingUserId === m.user_id
                   ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
@@ -547,8 +574,12 @@ const SchoolAdminPanel = () => {
           </AlertDialog>
         )}
       </div>
+      {deletionBlocked && (
+        <p className="text-[11px] text-muted-foreground">{deletionBlocked}</p>
+      )}
     </div>
-  );
+    );
+  };
 
   if (!isGlobalAdmin && !isSchoolAdmin) {
     return (
