@@ -176,11 +176,8 @@ const DailyAttendancePanel = () => {
     };
   }, [activeSchoolId, loadPresence]);
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return rows;
-    return rows.filter((r) => r.name.toLowerCase().includes(q));
-  }, [rows, search]);
+  // Filtro apenas visual da lista de turmas — o contador global não passa por aqui.
+  const filtered = useMemo(() => filterRowsBySearch(rows, search), [rows, search]);
 
   const summary = summarizeDaily(rows);
 
