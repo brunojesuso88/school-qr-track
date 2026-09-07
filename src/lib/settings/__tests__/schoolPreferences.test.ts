@@ -18,13 +18,11 @@ describe('parseSchoolPreferences', () => {
     expect(
       parseSchoolPreferences({
         academic_year: 2027,
-        current_bimester: 3,
         show_inactive_students: false,
         default_student_sort: 'ira-desc',
       }),
     ).toEqual({
       academic_year: 2027,
-      current_bimester: 3,
       show_inactive_students: false,
       default_student_sort: 'ira-desc',
     });
@@ -44,10 +42,16 @@ describe('parseSchoolPreferences', () => {
   it('ignora valores inválidos', () => {
     const prefs = parseSchoolPreferences({
       academic_year: 1990,
-      current_bimester: 9,
       default_student_sort: 'random',
     });
     expect(prefs).toEqual(defaultSchoolPreferences());
+  });
+
+  it('ignora a chave legada current_bimester sem reintroduzi-la no estado', () => {
+    const prefs = parseSchoolPreferences({ academic_year: 2026, current_bimester: 3 });
+    expect(prefs.academic_year).toBe(2026);
+    expect('current_bimester' in prefs).toBe(false);
+    expect(Object.keys(defaultSchoolPreferences())).not.toContain('current_bimester');
   });
 });
 

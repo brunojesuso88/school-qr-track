@@ -3,7 +3,6 @@ import DashboardLayout from '@/components/DashboardLayout';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSchoolProfile } from '@/hooks/useSchoolProfile';
 import { useSchoolPreferences } from '@/hooks/useSchoolPreferences';
-import { BIMESTER_LABELS } from '@/lib/settings/schoolPreferences';
 import { useUserFullName } from '@/hooks/useUserFullName';
 import { allNavigation, NAV_GROUPS, type NavItem } from '@/lib/navigation';
 import { usePermissions } from '@/contexts/PermissionsContext';
@@ -86,7 +85,7 @@ const Dashboard = () => {
                       : 'border border-border bg-background/70 text-muted-foreground',
                   )}
                 >
-                  Ano letivo {preferences.academic_year} · {BIMESTER_LABELS[preferences.current_bimester]}
+                  Ano letivo {preferences.academic_year}
                 </span>
               )}
             </div>
