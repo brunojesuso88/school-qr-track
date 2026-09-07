@@ -102,6 +102,59 @@ export function summarizeDaily(rows: DailyClassRow[]): DailySummary {
 }
 
 /* ------------------------------------------------------------------ *
+ * Presença global da escola no dia ("Presentes hoje: X de Y alunos — Z%").
+ *
+ * - Y = alunos ATIVOS da escola (fonte: `students`, status active).
+ * - X = alunos ativos distintos com registro `present` em `attendance` na data
+ *   (QR code ou chamada de turma — qualquer origem). `justified`/`absent` não
+ *   contam; registros de alunos inativos ou de outra data são ignorados.
+ * ------------------------------------------------------------------ */
+
+export interface PresenceRecordLike {
+  student_id: string;
+  status: string;
+  date?: string | null;
+}
+
+export interface SchoolPresence {
+  present: number;
+  total: number;
+  /** 0–100 inteiro; null quando não há alunos ativos. */
+  percent: number | null;
+}
+
+export function computeSchoolPresence(
+  students: StudentLike[],
+  records: PresenceRecordLike[],
+  dateKey?: string,
+): SchoolPresence {
+  const activeIds = new Set<string>();
+  for (const s of students) {
+    if ((s.status ?? 'active') === 'active') activeIds.add(s.id);
+  }
+  const presentIds = new Set<string>();
+  for (const r of records) {
+    if (r.status !== 'present') continue;
+    if (dateKey && r.date && r.date !== dateKey) continue;
+    if (!activeIds.has(r.student_id)) continue;
+    presentIds.add(r.student_id);
+  }
+  const total = activeIds.size;
+  const present = Math.min(presentIds.size, total);
+  const percent = total === 0 ? null : Math.round((present / total) * 100);
+  return { present, total, percent };
+}
+
+export function formatPresencePercent(percent: number | null): string {
+  return percent === null ? '—' : `${percent}%`;
+}
+
+/** Texto canônico do card: "Presentes hoje: X de Y alunos — Z%". */
+export function formatSchoolPresence(p: SchoolPresence): string {
+  return `Presentes hoje: ${p.present} de ${p.total} alunos — ${formatPresencePercent(p.percent)}`;
+}
+
+/* ------------------------------------------------------------------ *
  * Persistência canônica da chamada de turma (usada em Turmas e em
  * Frequência > Frequência diária — mesma fonte de verdade).
  * ------------------------------------------------------------------ */
