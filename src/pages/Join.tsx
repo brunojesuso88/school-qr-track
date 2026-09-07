@@ -62,10 +62,14 @@ const Join = () => {
     (async () => {
       const { data, error } = await supabase.rpc('resolve_registration_link', { _token: token });
       if (cancelled) return;
-      if (error) {
-        setLink({ valid: false, reason: 'not_found' });
-      } else {
-        setLink(data as unknown as ResolvedRegistrationLink);
+      const resolved: ResolvedRegistrationLink = error
+        ? { valid: false, reason: 'not_found' }
+        : (data as unknown as ResolvedRegistrationLink);
+      setLink(resolved);
+      // Link inválido nunca pode ficar "pendente" no navegador — senão o
+      // usuário seria devolvido a esta tela a cada login/entrada no sistema.
+      if (!resolved.valid && getPendingJoinToken() === token) {
+        clearPendingJoinToken();
       }
       setChecking(false);
     })();
