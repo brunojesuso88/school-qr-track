@@ -22,6 +22,7 @@ import { ptBR } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { StudentReportModal } from '@/components/StudentReportModal';
 import { studentSchema, occurrenceSchema, formatPhone } from '@/lib/validations';
+import { canEditGeneralOccurrence, buildGeneralOccurrenceUpdate } from '@/lib/occurrences/generalEdit';
 import { useAuth } from '@/contexts/AuthContext';
 import { StudentPhoto } from '@/components/StudentPhoto';
 import { useSignedPhotoUrl, clearPhotoUrlCache } from '@/hooks/useSignedPhotoUrl';
@@ -119,7 +120,7 @@ const Students = () => {
   const canEditOccurrences = can('occurrences.edit');
   /** Autor da ocorrência (ou quem já tem permissão de edição) pode editar. */
   const canEditOccurrence = (occurrence: Occurrence) =>
-    canEditOccurrences || (!!user?.id && occurrence.created_by === user.id);
+    canEditGeneralOccurrence(occurrence, user?.id, canEditOccurrences);
 
   
   const [students, setStudents] = useState<Student[]>([]);
@@ -647,12 +648,14 @@ const Students = () => {
         // preservados pelo backend (trigger + policy do autor).
         const { error } = await supabase
           .from('occurrences')
-          .update({
-            type: insertData.type,
-            description: insertData.description,
-            date: insertData.date,
-            end_date: insertData.end_date ?? null,
-          })
+          .update(
+            buildGeneralOccurrenceUpdate({
+              type: insertData.type,
+              description: insertData.description,
+              date: insertData.date,
+              endDate: insertData.end_date ?? null,
+            }),
+          )
           .eq('id', editingOccurrenceId);
         if (error) throw error;
         toast.success('Ocorrência atualizada com sucesso');
