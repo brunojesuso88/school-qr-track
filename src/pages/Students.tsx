@@ -1616,7 +1616,13 @@ const Students = () => {
         </Dialog>
 
         {/* Add Occurrence Dialog */}
-        <Dialog open={isOccurrenceDialogOpen} onOpenChange={setIsOccurrenceDialogOpen}>
+        <Dialog
+          open={isOccurrenceDialogOpen}
+          onOpenChange={(open) => {
+            setIsOccurrenceDialogOpen(open);
+            if (!open) resetOccurrenceForm();
+          }}
+        >
           <DialogContent className="max-w-md flex flex-col max-h-[90vh] p-0 gap-0 overflow-hidden">
             <DialogHeader className="shrink-0 px-6 pt-6 pb-3 border-b">
               <DialogTitle className="pr-8">
@@ -1647,7 +1653,9 @@ const Students = () => {
                     <SelectValue placeholder="Selecione o tipo" />
                   </SelectTrigger>
                   <SelectContent>
-                    {OCCURRENCE_TYPES.map((type) => (
+                    {OCCURRENCE_TYPES.filter(
+                      (t) => !editingOccurrenceId || t.value !== CLASS_COUNCIL_TYPE,
+                    ).map((type) => (
                       <SelectItem key={type.value} value={type.value}>
                         {type.label}
                       </SelectItem>
