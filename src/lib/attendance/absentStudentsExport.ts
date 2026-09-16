@@ -9,7 +9,7 @@
 import { supabase } from '@/integrations/supabase/client';
 import { fetchCoverage } from '@/hooks/useCertificateCoverage';
 import { isCovered, type CoverageMap } from '@/lib/medicalCertificates/status';
-import { localDateKey } from '@/lib/attendance/dailyStatus';
+import { localDateKey, isAbsenceMark } from '@/lib/attendance/dailyStatus';
 import { fetchSchoolBranding, loadImageSafe } from '@/lib/school/brandingFetch';
 import { documentSchoolName } from '@/lib/school/documentBranding';
 import {
@@ -32,6 +32,22 @@ export function buildAbsentLines(rows: AbsentRow[], coverage: CoverageMap, dateK
     .map((r) => (isCovered(coverage, r.id, dateKey) ? `${r.name} — Atestado` : r.name));
 }
 
+export interface AttendanceRowLike {
+  student_id: string;
+  status: string;
+  students?: { full_name: string; class: string } | null;
+}
+
+/**
+ * Faltosos da turma a partir dos registros do dia: apenas `absent`.
+ * `justified` NÃO é falta e nunca entra na lista (regra única `isAbsenceMark`).
+ */
+export function absentRowsFromAttendance(rows: AttendanceRowLike[], className: string): AbsentRow[] {
+  return rows
+    .filter((a) => isAbsenceMark(a.status) && a.students?.class === className)
+    .map((a) => ({ id: a.student_id, name: a.students!.full_name }));
+}
+
 /** Busca os faltosos da turma na data (mesma definição usada em Turmas). */
 export async function fetchAbsentRows(
   className: string,
@@ -48,9 +64,7 @@ export async function fetchAbsentRows(
 
   if (error) throw error;
 
-  return (data || [])
-    .filter((a: any) => a.students?.class === className)
-    .map((a: any) => ({ id: a.student_id as string, name: a.students.full_name as string }));
+  return absentRowsFromAttendance((data || []) as unknown as AttendanceRowLike[], className);
 }
 
 const WIDTH = 1080;
