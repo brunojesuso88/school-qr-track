@@ -6,7 +6,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
-import { Loader2, CheckCircle2, XCircle, ClipboardList } from 'lucide-react';
+import { Loader2, CheckCircle2, XCircle, ClipboardList, FileCheck2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import {
@@ -106,6 +106,7 @@ const DailyClassAttendanceDialog = ({ open, onOpenChange, className, shift, onSa
   const counts = countMarks(students, attendance);
   const presentCount = counts.present;
   const absentCount = counts.absent;
+  const justifiedCount = counts.justified;
 
 
   const handleSave = async () => {
@@ -132,7 +133,7 @@ const DailyClassAttendanceDialog = ({ open, onOpenChange, className, shift, onSa
       if (closeErr) throw closeErr;
 
       toast.success(
-        `Frequência de ${className} registrada (${presentCount}P / ${absentCount}A)`,
+        `Frequência de ${className} registrada (${presentCount}P / ${absentCount}A / ${justifiedCount}J)`,
       );
       onSaved?.();
       onOpenChange(false);
@@ -154,16 +155,21 @@ const DailyClassAttendanceDialog = ({ open, onOpenChange, className, shift, onSa
           <DialogDescription>{todayLabel}</DialogDescription>
         </DialogHeader>
 
-        <div className="flex items-center gap-4 text-sm py-2 border-b shrink-0">
+        <div className="flex items-center gap-4 text-sm py-2 border-b shrink-0 flex-wrap">
           <span className="flex items-center gap-1 text-emerald-600">
             <CheckCircle2 className="w-4 h-4" /> {presentCount} presentes
           </span>
           <span className="flex items-center gap-1 text-destructive">
             <XCircle className="w-4 h-4" /> {absentCount} ausentes
           </span>
+          <span className="flex items-center gap-1 text-amber-600">
+            <FileCheck2 className="w-4 h-4" /> {justifiedCount} justificadas
+          </span>
         </div>
 
-        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain space-y-1 py-2">
+        {/* Rolagem vertical na lista + rolagem horizontal real quando a linha
+            (nome + 3 status) exigir mais largura do que a viewport. */}
+        <div className="flex-1 min-h-0 overflow-y-auto overflow-x-auto overscroll-contain py-2">
           {loading ? (
             <div className="flex items-center justify-center py-12">
               <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
@@ -173,38 +179,54 @@ const DailyClassAttendanceDialog = ({ open, onOpenChange, className, shift, onSa
           ) : students.length === 0 ? (
             <p className="text-center text-muted-foreground py-8">Nenhum aluno ativo nesta turma</p>
           ) : (
-            students.map((student) => {
-              const status = attendance[student.id] ?? 'present';
-              return (
-                <div
-                  key={student.id}
-                  className="flex items-center justify-between px-3 py-2.5 rounded-lg hover:bg-muted/50 transition-colors"
-                >
-                  <span className="text-sm font-medium truncate flex-1 mr-3">{student.full_name}</span>
-                  <div className="flex gap-1.5 shrink-0">
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant={status === 'present' ? 'default' : 'outline'}
-                      aria-pressed={status === 'present'}
-                      onClick={() => setStatus(student.id, 'present')}
-                    >
-                      <CheckCircle2 className="w-3.5 h-3.5 mr-1" />P
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant={status === 'absent' ? 'destructive' : 'outline'}
-                      aria-pressed={status === 'absent'}
-                      onClick={() => setStatus(student.id, 'absent')}
-                    >
-                      <XCircle className="w-3.5 h-3.5 mr-1" />A
-                    </Button>
+            <div className="space-y-1 min-w-[420px]">
+              {students.map((student) => {
+                const status = attendance[student.id] ?? 'present';
+                return (
+                  <div
+                    key={student.id}
+                    className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-muted/50 transition-colors"
+                  >
+                    <span className="text-sm font-medium truncate flex-1 min-w-[160px]">
+                      {student.full_name}
+                    </span>
+                    <div className="flex gap-1.5 shrink-0">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant={status === 'present' ? 'default' : 'outline'}
+                        aria-pressed={status === 'present'}
+                        aria-label={`Presente — ${student.full_name}`}
+                        onClick={() => setStatus(student.id, 'present')}
+                      >
+                        <CheckCircle2 className="w-3.5 h-3.5 mr-1" />P
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant={status === 'absent' ? 'destructive' : 'outline'}
+                        aria-pressed={status === 'absent'}
+                        aria-label={`Falta — ${student.full_name}`}
+                        onClick={() => setStatus(student.id, 'absent')}
+                      >
+                        <XCircle className="w-3.5 h-3.5 mr-1" />A
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant={status === 'justified' ? 'secondary' : 'outline'}
+                        aria-pressed={status === 'justified'}
+                        aria-label={`Justificada — ${student.full_name}`}
+                        className={status === 'justified' ? 'bg-amber-500/20 text-amber-700 dark:text-amber-400' : undefined}
+                        onClick={() => setStatus(student.id, 'justified')}
+                      >
+                        <FileCheck2 className="w-3.5 h-3.5 mr-1" />J
+                      </Button>
+                    </div>
                   </div>
-
-                </div>
-              );
-            })
+                );
+              })}
+            </div>
           )}
         </div>
 
