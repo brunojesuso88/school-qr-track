@@ -3,7 +3,7 @@
  *
  * Fonte única usada tanto na página Turmas quanto em Frequência > Frequência diária.
  * Regra de faltoso: registros de `attendance` com status `absent` na data local
- * (registros legados `justified` também contam como falta, por compatibilidade).
+ * (`justified` NÃO é falta e nunca entra nesta lista).
  * Alunos com atestado ativo na data recebem o sufixo "— Atestado" (não são removidos).
  */
 import { supabase } from '@/integrations/supabase/client';

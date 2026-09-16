@@ -235,13 +235,22 @@ export function formatSchoolPresence(p: SchoolPresence): string {
  * Frequência > Frequência diária — mesma fonte de verdade).
  * ------------------------------------------------------------------ */
 
-/** Contrato da chamada diária: apenas Presente ou Ausente. */
-export type AttendanceMark = 'present' | 'absent';
+/**
+ * Contrato da chamada diária: Presente, Ausente (falta real) ou Justificada.
+ * `justified` é gravado com o próprio status canônico do schema: NÃO conta como
+ * falta do aluno e também NÃO conta como presença real (contador global).
+ */
+export type AttendanceMark = 'present' | 'absent' | 'justified';
+
+/** `justified` nunca é falta; helper único usado por contagens e listas. */
+export function isAbsenceMark(status: string | null | undefined): boolean {
+  return status === 'absent';
+}
 
 /**
  * Estado inicial da chamada: todos presentes por padrão.
- * Registros legados `justified` são exibidos como Ausente (histórico é preservado
- * no banco; ao salvar de novo a chamada passa a gravar `absent`).
+ * Registros existentes preservam o próprio status, inclusive `justified`
+ * (reabrir a chamada não transforma justificada em falta).
  */
 export function mergeExistingStatuses(
   students: { id: string }[],
@@ -251,7 +260,8 @@ export function mergeExistingStatuses(
   const out: Record<string, AttendanceMark> = {};
   for (const s of students) {
     const current = map.get(s.id);
-    out[s.id] = current === 'absent' || current === 'justified' ? 'absent' : 'present';
+    out[s.id] =
+      current === 'absent' ? 'absent' : current === 'justified' ? 'justified' : 'present';
   }
   return out;
 }
@@ -259,11 +269,14 @@ export function mergeExistingStatuses(
 export function countMarks(students: { id: string }[], marks: Record<string, AttendanceMark>) {
   let present = 0;
   let absent = 0;
+  let justified = 0;
   for (const s of students) {
-    if ((marks[s.id] ?? 'present') === 'absent') absent++;
+    const mark = marks[s.id] ?? 'present';
+    if (mark === 'absent') absent++;
+    else if (mark === 'justified') justified++;
     else present++;
   }
-  return { present, absent, total: students.length };
+  return { present, absent, justified, total: students.length };
 }
 
 
