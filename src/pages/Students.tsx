@@ -87,6 +87,7 @@ interface Occurrence {
   teacher_name: string | null;
   council_items: string[] | null;
   created_at: string;
+  created_by: string | null;
 }
 
 const OCCURRENCE_TYPES = [
@@ -115,6 +116,10 @@ const Students = () => {
   const canEditStudents = can('students.edit');
   const canCreateOccurrences = can('occurrences.create');
   const canDeleteOccurrences = can('occurrences.delete');
+  const canEditOccurrences = can('occurrences.edit');
+  /** Autor da ocorrência (ou quem já tem permissão de edição) pode editar. */
+  const canEditOccurrence = (occurrence: Occurrence) =>
+    canEditOccurrences || (!!user?.id && occurrence.created_by === user.id);
 
   
   const [students, setStudents] = useState<Student[]>([]);
@@ -182,6 +187,8 @@ const Students = () => {
   });
   // Edição / duplicidade de registro de Conselho de Classe
   const [editingCouncilId, setEditingCouncilId] = useState<string | null>(null);
+  // Edição de ocorrência GERAL (fluxo separado do Conselho de Classe)
+  const [editingOccurrenceId, setEditingOccurrenceId] = useState<string | null>(null);
   const [councilDuplicate, setCouncilDuplicate] = useState<Occurrence | null>(null);
   const [currentUserName, setCurrentUserName] = useState<string | null>(null);
 
@@ -493,7 +500,23 @@ const Students = () => {
   const resetOccurrenceForm = () => {
     setOccurrenceForm({ type: '', description: '', date: new Date(), endDate: null, councilItems: [] });
     setEditingCouncilId(null);
+    setEditingOccurrenceId(null);
     setCouncilDuplicate(null);
+  };
+
+  /** Abre o formulário de ocorrência geral em modo edição, com os dados atuais. */
+  const handleEditOccurrence = (occurrence: Occurrence) => {
+    setCouncilDuplicate(null);
+    setEditingCouncilId(null);
+    setEditingOccurrenceId(occurrence.id);
+    setOccurrenceForm({
+      type: occurrence.type,
+      description: occurrence.description || '',
+      date: parse(occurrence.date, 'yyyy-MM-dd', new Date()),
+      endDate: occurrence.end_date ? parse(occurrence.end_date, 'yyyy-MM-dd', new Date()) : null,
+      councilItems: [],
+    });
+    setIsOccurrenceDialogOpen(true);
   };
 
   /** Abre o formulário rápido já preenchido com um registro de conselho existente. */
@@ -555,6 +578,7 @@ const Students = () => {
           school_id: assertActiveSchool(activeSchoolId),
           student_id: occurrencesStudent.id,
           teacher_name: currentUserName,
+          created_by: user?.id ?? null,
         });
         if (error) throw error;
         toast.success('Registro do conselho salvo');
@@ -610,6 +634,7 @@ const Students = () => {
         description: occurrenceForm.description?.substring(0, 1000) || null,
         date: format(occurrenceForm.date, 'yyyy-MM-dd'),
         teacher_name: currentUserName,
+        created_by: user?.id ?? null,
       };
 
       // Add end_date for medical certificate
@@ -617,19 +642,34 @@ const Students = () => {
         insertData.end_date = format(occurrenceForm.endDate, 'yyyy-MM-dd');
       }
 
-      const { error } = await supabase
-        .from('occurrences')
-        .insert(insertData);
-
-      if (error) throw error;
-      toast.success('Ocorrência registrada com sucesso');
+      if (editingOccurrenceId) {
+        // Edição: apenas campos editáveis. id/autor/escola/aluno/created_at são
+        // preservados pelo backend (trigger + policy do autor).
+        const { error } = await supabase
+          .from('occurrences')
+          .update({
+            type: insertData.type,
+            description: insertData.description,
+            date: insertData.date,
+            end_date: insertData.end_date ?? null,
+          })
+          .eq('id', editingOccurrenceId);
+        if (error) throw error;
+        toast.success('Ocorrência atualizada com sucesso');
+      } else {
+        const { error } = await supabase
+          .from('occurrences')
+          .insert(insertData);
+        if (error) throw error;
+        toast.success('Ocorrência registrada com sucesso');
+      }
       setIsOccurrenceDialogOpen(false);
       resetOccurrenceForm();
       fetchOccurrences(occurrencesStudent.id);
       fetchOccurrenceMap();
     } catch (error) {
-      console.error('Error adding occurrence:', error);
-      toast.error('Falha ao registrar ocorrência');
+      console.error('Error saving occurrence:', error);
+      toast.error(editingOccurrenceId ? 'Falha ao atualizar ocorrência' : 'Falha ao registrar ocorrência');
     }
   };
 
@@ -1540,15 +1580,28 @@ const Students = () => {
                                 </p>
                               )}
                             </div>
-                            {canDeleteOccurrences && (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleDeleteOccurrence(occurrence.id)}
-                              >
-                                <Trash2 className="w-3 h-3 text-destructive" />
-                              </Button>
-                            )}
+                            <div className="flex items-center gap-1 shrink-0">
+                              {canEditOccurrence(occurrence) && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  aria-label="Editar ocorrência"
+                                  onClick={() => handleEditOccurrence(occurrence)}
+                                >
+                                  <Pencil className="w-3 h-3" />
+                                </Button>
+                              )}
+                              {canDeleteOccurrences && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  aria-label="Excluir ocorrência"
+                                  onClick={() => handleDeleteOccurrence(occurrence.id)}
+                                >
+                                  <Trash2 className="w-3 h-3 text-destructive" />
+                                </Button>
+                              )}
+                            </div>
                           </div>
                         </CardContent>
                       </Card>
@@ -1566,9 +1619,13 @@ const Students = () => {
         <Dialog open={isOccurrenceDialogOpen} onOpenChange={setIsOccurrenceDialogOpen}>
           <DialogContent className="max-w-md flex flex-col max-h-[90vh] p-0 gap-0 overflow-hidden">
             <DialogHeader className="shrink-0 px-6 pt-6 pb-3 border-b">
-              <DialogTitle className="pr-8">Nova Ocorrência</DialogTitle>
+              <DialogTitle className="pr-8">
+                {editingOccurrenceId ? 'Editar Ocorrência' : 'Nova Ocorrência'}
+              </DialogTitle>
               <DialogDescription>
-                Registrar nova ocorrência para {occurrencesStudent?.full_name}
+                {editingOccurrenceId
+                  ? `Editar ocorrência de ${occurrencesStudent?.full_name ?? ''}`
+                  : `Registrar nova ocorrência para ${occurrencesStudent?.full_name ?? ''}`}
               </DialogDescription>
             </DialogHeader>
             <form onSubmit={handleAddOccurrence} className="flex flex-col flex-1 min-h-0">
@@ -1710,7 +1767,7 @@ const Students = () => {
                 >
                   {occurrenceForm.type === CLASS_COUNCIL_TYPE
                     ? (editingCouncilId ? 'Salvar alterações do conselho' : 'Registrar Conselho de Classe')
-                    : 'Registrar Ocorrência'}
+                    : editingOccurrenceId ? 'Salvar alterações' : 'Registrar Ocorrência'}
                 </Button>
               </div>
             </form>
