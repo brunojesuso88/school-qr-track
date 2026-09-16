@@ -44,7 +44,7 @@ export async function fetchAbsentRows(
     .select('student_id, status, students!inner(full_name, class)')
     .eq('school_id', schoolId)
     .eq('date', dateKey)
-    .in('status', ['absent', 'justified']);
+    .eq('status', 'absent');
 
   if (error) throw error;
 
