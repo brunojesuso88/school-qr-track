@@ -517,16 +517,26 @@ const IRASettings = () => {
                           </Badge>
                         )}
                         <Input
+                          // Edição local: o valor só é gravado ao sair do campo (blur/Enter).
+                          // Isso evita salvar a cada tecla (concatenação "2"+"3"=23) e permite
+                          // limpar a caixa antes de digitar um novo peso.
+                          key={`${subject.id}-${weightInputValue({
+                            iraWeight: subject.ira_weight,
+                            customWeight: subject.custom_ira_weight,
+                          })}`}
                           type="number"
                           min={0}
                           step="0.5"
                           placeholder="peso"
                           className="h-8 w-20"
-                          value={weightInputValue({
+                          defaultValue={weightInputValue({
                             iraWeight: subject.ira_weight,
                             customWeight: subject.custom_ira_weight,
                           })}
-                          onChange={(e) => {
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                          }}
+                          onBlur={(e) => {
                             const patch = customWeightPatch(e.target.value, subject.ira_weight);
                             if (patch) updateSubject(subject, patch);
                           }}
