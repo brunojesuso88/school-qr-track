@@ -179,7 +179,7 @@ const DailyClassAttendanceDialog = ({ open, onOpenChange, className, shift, onSa
           ) : students.length === 0 ? (
             <p className="text-center text-muted-foreground py-8">Nenhum aluno ativo nesta turma</p>
           ) : (
-            <div className="space-y-1 min-w-[420px]">
+            <div className="space-y-1 min-w-[330px]">
               {students.map((student) => {
                 const status = attendance[student.id] ?? 'present';
                 return (
@@ -187,7 +187,7 @@ const DailyClassAttendanceDialog = ({ open, onOpenChange, className, shift, onSa
                     key={student.id}
                     className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-muted/50 transition-colors"
                   >
-                    <span className="text-sm font-medium truncate flex-1 min-w-[160px]">
+                    <span className="text-sm font-medium truncate flex-1 min-w-[120px]">
                       {student.full_name}
                     </span>
                     <div className="flex gap-1.5 shrink-0">
