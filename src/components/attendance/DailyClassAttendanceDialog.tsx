@@ -179,7 +179,7 @@ const DailyClassAttendanceDialog = ({ open, onOpenChange, className, shift, onSa
           ) : students.length === 0 ? (
             <p className="text-center text-muted-foreground py-8">Nenhum aluno ativo nesta turma</p>
           ) : (
-            <div className="space-y-1 min-w-[330px]">
+            <div className="space-y-1 min-w-[260px]">
               {students.map((student) => {
                 const status = attendance[student.id] ?? 'present';
                 return (
@@ -199,7 +199,7 @@ const DailyClassAttendanceDialog = ({ open, onOpenChange, className, shift, onSa
                         aria-label={`Presente — ${student.full_name}`}
                         onClick={() => setStatus(student.id, 'present')}
                       >
-                        <CheckCircle2 className="w-3.5 h-3.5 mr-1" />P
+                        <CheckCircle2 className="w-3.5 h-3.5 mr-1 hidden sm:inline" />P
                       </Button>
                       <Button
                         type="button"
@@ -209,7 +209,7 @@ const DailyClassAttendanceDialog = ({ open, onOpenChange, className, shift, onSa
                         aria-label={`Falta — ${student.full_name}`}
                         onClick={() => setStatus(student.id, 'absent')}
                       >
-                        <XCircle className="w-3.5 h-3.5 mr-1" />A
+                        <XCircle className="w-3.5 h-3.5 mr-1 hidden sm:inline" />A
                       </Button>
                       <Button
                         type="button"
@@ -220,7 +220,7 @@ const DailyClassAttendanceDialog = ({ open, onOpenChange, className, shift, onSa
                         className={status === 'justified' ? 'bg-amber-500/20 text-amber-700 dark:text-amber-400' : undefined}
                         onClick={() => setStatus(student.id, 'justified')}
                       >
-                        <FileCheck2 className="w-3.5 h-3.5 mr-1" />J
+                        <FileCheck2 className="w-3.5 h-3.5 mr-1 hidden sm:inline" />J
                       </Button>
                     </div>
                   </div>
