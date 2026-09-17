@@ -283,10 +283,10 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
       </aside>
 
       {/* Main content */}
-      <div className="flex-1 flex flex-col min-h-screen">
+      <div className="min-w-0 flex-1 flex flex-col min-h-screen">
         {/* Top bar */}
         <header className="sticky top-0 z-30 bg-background/80 backdrop-blur-sm border-b border-border px-4 py-3 lg:px-6">
-          <div className="flex items-center gap-4">
+          <div className="flex min-w-0 items-center gap-2 sm:gap-4">
             <button
               className="lg:hidden p-2 -ml-2 text-foreground"
               onClick={() => setSidebarOpen(true)}
@@ -295,10 +295,10 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
             </button>
             
             {/* Breadcrumb */}
-            <div className="flex items-center gap-2 text-sm">
-              <span className="text-muted-foreground">EDUNEXUS</span>
+            <div className="flex min-w-0 items-center gap-2 text-sm">
+              <span className="hidden text-muted-foreground sm:inline">EDUNEXUS</span>
               <ChevronRight className="w-4 h-4 text-muted-foreground" />
-              <span className="font-medium">{getCurrentPageName()}</span>
+              <span className="truncate font-medium">{getCurrentPageName()}</span>
             </div>
 
             <div className="flex-1" />
