@@ -40,7 +40,7 @@ Continuação do commit parcial `bc486a08` (migration `20260907110118_ca0d452e�
 - [ ] Contador diário: virar o dia automaticamente após a meia-noite local sem recarregar a página
 
 # Patch — atalho de atualização e filtros de Alunos
-- [ ] Adicionar atalho no topo reutilizando `handleForceUpdate`
-- [ ] Reorganizar filtros de Alunos para desktop/mobile e remover filtro de status
-- [ ] Validar limpar filtros, ausência de filtro invisível e layout em desktop/360 px
-- [ ] Rodar testes completos, typecheck, build e auditar diff restrito
+- [x] Adicionar atalho no topo reutilizando `handleForceUpdate`
+- [x] Reorganizar filtros de Alunos para desktop/mobile e remover filtro de status
+- [x] Validar limpar filtros, ausência de filtro invisível e layout em desktop/360 px
+- [x] Rodar testes completos, typecheck, build e auditar diff restrito
