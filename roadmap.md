@@ -38,3 +38,9 @@ Continuação do commit parcial `bc486a08` (migration `20260907110118_ca0d452e�
 - [ ] Card de presença: detalhar por turno (Manhã/Tarde/Noite) ao passar o mouse/expandir, mantendo o total global
 - [ ] Notificação interna para a direção quando um vínculo encerrado é reaberto via link (event_type `membership_reopened`)
 - [ ] Contador diário: virar o dia automaticamente após a meia-noite local sem recarregar a página
+
+# Patch — atalho de atualização e filtros de Alunos
+- [ ] Adicionar atalho no topo reutilizando `handleForceUpdate`
+- [ ] Reorganizar filtros de Alunos para desktop/mobile e remover filtro de status
+- [ ] Validar limpar filtros, ausência de filtro invisível e layout em desktop/360 px
+- [ ] Rodar testes completos, typecheck, build e auditar diff restrito
