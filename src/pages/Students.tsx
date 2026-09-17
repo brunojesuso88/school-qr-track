@@ -14,8 +14,10 @@ import { Textarea } from '@/components/ui/textarea';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { toast } from 'sonner';
-import { Plus, Search, QrCode, Edit2, Pencil, Trash2, Download, User, Users, CalendarIcon, FileText, Upload, Camera, X, Loader2, RefreshCw, AlertTriangle } from 'lucide-react';
+import { Plus, Search, QrCode, Edit2, Pencil, Trash2, Download, User, Users, CalendarIcon, FileText, Upload, Camera, X, Loader2, RefreshCw, AlertTriangle, SlidersHorizontal, ChevronDown } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Badge } from '@/components/ui/badge';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { QRCodeSVG } from 'qrcode.react';
 import { format, parse } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -35,7 +37,6 @@ import type { StudentMedal } from '@/lib/medals/compute';
 
 import { classOptionsForShift, hasMedals, isClassValidForShift } from '@/lib/students/filters';
 import { useSchoolPreferences } from '@/hooks/useSchoolPreferences';
-import { initialStudentStatusFilter, type StudentStatusFilter } from '@/lib/settings/schoolPreferences';
 import {
   CLASS_COUNCIL_TYPE,
   validateCouncilDraft,
@@ -141,20 +142,19 @@ const Students = () => {
   const [filterOccurrences, setFilterOccurrences] = useState(false);
   const [filterCouncil, setFilterCouncil] = useState(false);
   const [filterMedals, setFilterMedals] = useState(false);
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
 
   // occurrenceMap: SOMENTE ocorrências gerais (class_council é contabilizado à parte)
   const [occurrenceMap, setOccurrenceMap] = useState<Map<string, string>>(new Map());
   const [councilMap, setCouncilMap] = useState<Map<string, string>>(new Map());
   const [absenceCountMap, setAbsenceCountMap] = useState<Map<string, number>>(new Map());
   const [sortBy, setSortBy] = useState<SortOption>('none');
-  const [filterStatus, setFilterStatus] = useState<StudentStatusFilter>('all');
   const [recomputingIra, setRecomputingIra] = useState(false);
 
   // Preferências gerais da escola ativa definem os padrões iniciais da listagem.
   const { preferences: schoolPreferences, loading: preferencesLoading } = useSchoolPreferences();
   useEffect(() => {
     if (preferencesLoading) return;
-    setFilterStatus(initialStudentStatusFilter(schoolPreferences.show_inactive_students));
     setSortBy(schoolPreferences.default_student_sort as SortOption);
   }, [preferencesLoading, schoolPreferences, schoolScopeKey]);
 
@@ -804,10 +804,7 @@ const Students = () => {
     // "Alunos com ocorrência" ignora class_council (contabilizado no filtro próprio)
     const matchesOccurrence = !filterOccurrences || occurrenceMap.has(student.id);
     const matchesCouncil = !filterCouncil || councilMap.has(student.id);
-    // Preferência da escola define o valor inicial; o usuário pode trocar no filtro.
-    const studentStatus = student.status || 'active';
-    const matchesStatus = filterStatus === 'all' || studentStatus === filterStatus;
-    return matchesSearch && matchesClass && matchesShift && matchesOccurrence && matchesCouncil && matchesStatus;
+    return matchesSearch && matchesClass && matchesShift && matchesOccurrence && matchesCouncil;
   }).sort((a, b) => {
     if (sortBy === 'name-asc') {
       return a.full_name.localeCompare(b.full_name, 'pt-BR', { sensitivity: 'base' });
@@ -888,6 +885,25 @@ const Students = () => {
 
   // Turmas disponíveis conforme o turno selecionado (fonte canônica: classes)
   const uniqueClasses = classOptionsForShift(classes, students, filterShift);
+  const activeSecondaryFilterCount = [
+    filterClass !== 'all',
+    filterShift !== 'all',
+    sortBy !== 'none',
+    filterOccurrences,
+    filterCouncil,
+    filterMedals,
+  ].filter(Boolean).length;
+  const hasActiveFilters = searchTerm.trim() !== '' || activeSecondaryFilterCount > 0;
+
+  const clearFilters = () => {
+    setSearchTerm('');
+    setFilterClass('all');
+    setFilterShift('all');
+    setSortBy('none');
+    setFilterOccurrences(false);
+    setFilterCouncil(false);
+    setFilterMedals(false);
+  };
 
 
   const getOccurrenceTypeLabel = (type: string) => {
@@ -1192,102 +1208,114 @@ const Students = () => {
 
         {/* Filters */}
         <Card>
-          <CardContent className="p-4">
-            <div className="flex flex-col sm:flex-row gap-4">
-              <div className="flex-1 relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <CardContent className="p-4 space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="student-search" className="text-sm font-medium">Buscar aluno</Label>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-primary" />
                 <Input
-                  placeholder="Buscar por nome ou ID..."
+                  id="student-search"
+                  placeholder="Buscar aluno por nome ou código..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10"
+                  className="h-11 pl-11 text-base"
                 />
               </div>
-              <Select value={filterClass} onValueChange={setFilterClass}>
-                <SelectTrigger className="w-full sm:w-40">
-                  <SelectValue placeholder="Todas as Turmas" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todas as Turmas</SelectItem>
-                  {uniqueClasses.map((c) => (
-                    <SelectItem key={c} value={c}>{c}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select
-                value={filterShift}
-                onValueChange={(v) => {
-                  setFilterShift(v);
-                  if (!isClassValidForShift(classes, students, v, filterClass)) {
-                    setFilterClass('all');
-                  }
-                }}
-              >
-                <SelectTrigger className="w-full sm:w-36">
-                  <SelectValue placeholder="Todos os Turnos" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos os Turnos</SelectItem>
-                  <SelectItem value="morning">Manhã</SelectItem>
-                  <SelectItem value="afternoon">Tarde</SelectItem>
-                  <SelectItem value="evening">Noite</SelectItem>
-                </SelectContent>
-              </Select>
-              <Select value={filterStatus} onValueChange={(v) => setFilterStatus(v as StudentStatusFilter)}>
-                <SelectTrigger className="w-full sm:w-40">
-                  <SelectValue placeholder="Status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos os status</SelectItem>
-                  <SelectItem value="active">Ativos</SelectItem>
-                  <SelectItem value="inactive">Desistentes</SelectItem>
-                </SelectContent>
-              </Select>
-              <Select value={sortBy} onValueChange={(v) => setSortBy(v as SortOption)}>
-                <SelectTrigger className="w-full sm:w-48">
-                  <SelectValue placeholder="Ordenar por" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Sem ordenação</SelectItem>
-                  <SelectItem value="name-asc">Nome A–Z</SelectItem>
-                  <SelectItem value="absences-desc">Mais faltas primeiro</SelectItem>
-                  <SelectItem value="absences-asc">Menos faltas primeiro</SelectItem>
-                  <SelectItem value="ira-desc">Maior IRA primeiro</SelectItem>
-                  <SelectItem value="ira-asc">Menor IRA primeiro</SelectItem>
-                </SelectContent>
-              </Select>
-              <div className="flex items-center gap-2 mt-3 sm:mt-0">
-                <Checkbox
-                  id="filterOccurrences"
-                  checked={filterOccurrences}
-                  onCheckedChange={(checked) => setFilterOccurrences(!!checked)}
-                />
-                <Label htmlFor="filterOccurrences" className="text-sm cursor-pointer whitespace-nowrap">
-                  Alunos com ocorrência
-                </Label>
-              </div>
-              <div className="flex items-center gap-2 mt-3 sm:mt-0">
-                <Checkbox
-                  id="filterCouncil"
-                  checked={filterCouncil}
-                  onCheckedChange={(checked) => setFilterCouncil(!!checked)}
-                />
-                <Label htmlFor="filterCouncil" className="text-sm cursor-pointer whitespace-nowrap">
-                  Com registro de Conselho
-                </Label>
-              </div>
-              <div className="flex items-center gap-2 mt-3 sm:mt-0">
-                <Checkbox
-                  id="filterMedals"
-                  checked={filterMedals}
-                  onCheckedChange={(checked) => setFilterMedals(!!checked)}
-                />
-                <Label htmlFor="filterMedals" className="text-sm cursor-pointer whitespace-nowrap">
-                  Alunos com medalhas
-                </Label>
+            </div>
+
+            <Collapsible open={mobileFiltersOpen} onOpenChange={setMobileFiltersOpen}>
+              <div className="flex items-center justify-between gap-3 md:hidden">
+                <CollapsibleTrigger asChild>
+                  <Button variant="outline" className="flex-1 justify-between" aria-label="Mostrar filtros de alunos">
+                    <span className="flex items-center gap-2">
+                      <SlidersHorizontal className="h-4 w-4" />
+                      Filtros
+                      {activeSecondaryFilterCount > 0 && <Badge className="px-2">{activeSecondaryFilterCount}</Badge>}
+                    </span>
+                    <ChevronDown className={cn('h-4 w-4 transition-transform', mobileFiltersOpen && 'rotate-180')} />
+                  </Button>
+                </CollapsibleTrigger>
+                {hasActiveFilters && (
+                  <Button variant="ghost" size="sm" onClick={clearFilters} className="shrink-0 px-2">
+                    Limpar filtros
+                  </Button>
+                )}
               </div>
 
-            </div>
+              <CollapsibleContent forceMount className="data-[state=closed]:hidden md:!block">
+                <div className="space-y-4 border-t pt-4 md:border-0 md:pt-0">
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                    <div className="space-y-2">
+                      <Label htmlFor="student-class-filter">Turma</Label>
+                      <Select value={filterClass} onValueChange={setFilterClass}>
+                        <SelectTrigger id="student-class-filter" className="w-full">
+                          <SelectValue placeholder="Todas as turmas" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">Todas as turmas</SelectItem>
+                          {uniqueClasses.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="student-shift-filter">Turno</Label>
+                      <Select value={filterShift} onValueChange={(v) => {
+                        setFilterShift(v);
+                        if (!isClassValidForShift(classes, students, v, filterClass)) setFilterClass('all');
+                      }}>
+                        <SelectTrigger id="student-shift-filter" className="w-full">
+                          <SelectValue placeholder="Todos os turnos" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">Todos os turnos</SelectItem>
+                          <SelectItem value="morning">Manhã</SelectItem>
+                          <SelectItem value="afternoon">Tarde</SelectItem>
+                          <SelectItem value="evening">Noite</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="student-sort-filter">Ordenar</Label>
+                      <Select value={sortBy} onValueChange={(v) => setSortBy(v as SortOption)}>
+                        <SelectTrigger id="student-sort-filter" className="w-full">
+                          <SelectValue placeholder="Sem ordenação" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">Sem ordenação</SelectItem>
+                          <SelectItem value="name-asc">Nome A–Z</SelectItem>
+                          <SelectItem value="absences-desc">Mais faltas primeiro</SelectItem>
+                          <SelectItem value="absences-asc">Menos faltas primeiro</SelectItem>
+                          <SelectItem value="ira-desc">Maior IRA primeiro</SelectItem>
+                          <SelectItem value="ira-asc">Menor IRA primeiro</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                    {[
+                      { id: 'filterOccurrences', checked: filterOccurrences, set: setFilterOccurrences, label: 'Alunos com ocorrência' },
+                      { id: 'filterCouncil', checked: filterCouncil, set: setFilterCouncil, label: 'Com registro de Conselho' },
+                      { id: 'filterMedals', checked: filterMedals, set: setFilterMedals, label: 'Alunos com medalhas' },
+                    ].map((filter) => (
+                      <div key={filter.id} className="flex min-h-11 items-center gap-3 rounded-md border px-3 py-2">
+                        <Checkbox id={filter.id} checked={filter.checked} onCheckedChange={(checked) => filter.set(!!checked)} />
+                        <Label htmlFor={filter.id} className="flex-1 cursor-pointer text-sm leading-snug">{filter.label}</Label>
+                      </div>
+                    ))}
+                  </div>
+
+                  {hasActiveFilters && (
+                    <div className="hidden justify-end md:flex">
+                      <Button variant="ghost" size="sm" onClick={clearFilters}>
+                        <X className="h-4 w-4" />
+                        Limpar filtros
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
           </CardContent>
         </Card>
 

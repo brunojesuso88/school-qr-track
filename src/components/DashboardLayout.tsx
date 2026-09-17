@@ -309,6 +309,16 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
               {!isAdminRole && <SchoolSwitcher />}
 
               <ThemeToggle />
+               <Button
+                 variant="ghost"
+                 size="icon"
+                 className="h-9 w-9"
+                 onClick={handleForceUpdate}
+                 aria-label="Forçar atualização"
+                 title="Forçar atualização"
+               >
+                 <RefreshCw className="h-4 w-4" />
+               </Button>
               <NotificationBell />
             </div>
 
